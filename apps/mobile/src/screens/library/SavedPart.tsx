@@ -1,0 +1,392 @@
+import { PLANNED_WORKOUT_LIMITS, type PhoneLibraryEntry } from "@app/shared";
+import { useState } from "react";
+import { Image, Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from "react-native";
+import { Button } from "../../look/Button";
+import { colours, sizes } from "../../look/colours";
+import { Field } from "../../look/Field";
+import { Icon } from "../../look/Icon";
+import { pictures } from "../../look/pictures";
+import { Sheet } from "../../look/Sheet";
+import { fonts, Txt } from "../../look/Txt";
+import { fromSaved, NAME_MOST } from "../../library/myWorkout";
+import { exercisePicture } from "../../library/pictures";
+import { sameWorkout, type Planned, type ShownSaved } from "../../library/savedWorkouts";
+import type { MyWorkoutHook } from "./useLibrary";
+import { useWorkoutLayer } from "../workout/WorkoutLayer";
+
+// Saved workouts on My Workout (ROADMAP Stage 5 64a-iv, as drawn): Save workout under Start workout, the person's saved
+// workouts under it, the newest three and See all; a press loads one, asking first where My Workout holds what is not
+// saved; the bin deletes one, asking first.
+
+/** Shown on the page; the rest are under See all. */
+export const SAVED_SHOWN = 3;
+const SETS_MOST = PLANNED_WORKOUT_LIMITS.setsMost;
+
+const plural = (n: number, one: string): string => `${String(n)} ${n === 1 ? one : `${one}s`}`;
+
+/** Where My Workout stands against the saved workout it holds. */
+export interface SavedState {
+  /** The saved workout My Workout holds, as the list shows it; null for none. */
+  linked: ShownSaved | null;
+  /** My Workout is exactly that saved workout. */
+  same: boolean;
+}
+
+export function savedState(mine: MyWorkoutHook | null, list: readonly ShownSaved[], planned: Planned): SavedState {
+  const from = mine?.workout.from ?? null;
+  const linked = from === null ? null : (list.find((e) => e.id === from) ?? null);
+  const same = linked !== null && linked.whole !== null && sameWorkout(mine?.workout.name ?? "", planned.exercises, linked.name, linked.whole);
+  return { linked, same };
+}
+
+type Box = { kind: "save" } | { kind: "load"; id: string } | { kind: "delete"; id: string } | { kind: "all"; asking: string | null };
+type Said = { text: string; bad: boolean } | null;
+
+interface Props {
+  mine: MyWorkoutHook;
+  planned: Planned;
+  entryOf: (id: string) => PhoneLibraryEntry | null;
+}
+
+/** The line under Start workout, the saved workouts under it, and their boxes. */
+export function SavedPart({ mine, planned, entryOf }: Props) {
+  const saved = useWorkoutLayer()?.saved ?? null;
+  const { height } = useWindowDimensions();
+  const [box, setBox] = useState<Box | null>(null);
+  const [said, setSaid] = useState<Said>(null);
+  const [boxSaid, setBoxSaid] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  if (saved === null) return null;
+  const { view, store } = saved;
+  const list = view.list;
+  const count = mine.workout.items.length;
+  const { linked, same } = savedState(mine, list, planned);
+  const unsaved = count > 0 && !same;
+  const nameOf = (id: string) => list.find((e) => e.id === id)?.name ?? "This workout";
+
+  const close = () => {
+    setBox(null);
+    setBoxSaid(null);
+  };
+
+  const keep = async (savedId: string | null) => {
+    setBusy(true);
+    const result = await store.save({ savedId, name: mine.workout.name, exercises: planned.exercises });
+    setBusy(false);
+    if (result.kept === "lost") {
+      setBoxSaid("This workout couldn't be kept on this phone. Try again in a moment.");
+      return;
+    }
+    mine.link(result.savedId);
+    setSaid(null);
+    close();
+  };
+
+  const load = async (id: string) => {
+    const name = nameOf(id);
+    setBusy(true);
+    const got = await store.whole(id);
+    setBusy(false);
+    close();
+    if (got.kind === "ok") {
+      mine.load(fromSaved(id, got.name, got.exercises));
+      setSaid({ text: `${got.name} is in My Workout.`, bad: false });
+    } else if (got.kind === "gone") setSaid({ text: `${name} is no longer in your saved workouts.`, bad: true });
+    else setSaid({ text: `Couldn't load ${name}. Check your internet connection and try again.`, bad: true });
+  };
+
+  const pressRow = (id: string) => {
+    if (linked?.id === id && same) setSaid({ text: `${nameOf(id)} is in My Workout.`, bad: false });
+    else if (unsaved) setBox({ kind: "load", id });
+    else void load(id);
+  };
+
+  const remove = async (id: string) => {
+    const name = nameOf(id);
+    setBusy(true);
+    const kept = await store.remove(id);
+    setBusy(false);
+    const inAll = box?.kind === "all";
+    if (kept === "lost") {
+      setSaid({ text: `${name} couldn't be deleted on this phone. Try again in a moment.`, bad: true });
+    } else {
+      if (mine.workout.from === id) mine.link(null);
+      setSaid({ text: `${name} was deleted.`, bad: false });
+    }
+    if (inAll) setBox({ kind: "all", asking: null });
+    else close();
+  };
+
+  const rows = (shown: readonly ShownSaved[]) => (
+    <View style={styles.rows}>
+      {shown.map((e) => (
+        <SavedRow key={e.id} entry={e} inMine={linked?.id === e.id} entryOf={entryOf} busy={busy} onLoad={() => { pressRow(e.id); }} onDelete={() => { setBox(box?.kind === "all" ? { kind: "all", asking: e.id } : { kind: "delete", id: e.id }); }} />
+      ))}
+    </View>
+  );
+
+  const saidLine = (s: Said) =>
+    s === null ? null : (
+      <View style={[styles.said, s.bad ? styles.saidBad : null]}>
+        <Txt kind="body" colour={s.bad ? "badText" : "text"}>
+          {s.text}
+        </Txt>
+      </View>
+    );
+
+  return (
+    <>
+      {count === 0 ? null : <SaveLine linked={linked} same={same} held={view.held} onSave={() => { setSaid(null); setBox({ kind: "save" }); }} />}
+      {view.refused.map((r) => (
+        <View key={r.id} style={styles.refused}>
+          <Icon name="warn" size={18} colour="badText" />
+          <Txt kind="body" colour="badText" style={styles.grow}>
+            {`${r.name === "" ? "A workout" : r.name} couldn't be saved. ${r.message === "This workout couldn't be saved." ? "" : r.message}`.trim()}
+          </Txt>
+          <Button label="OK" kind="link" onPress={() => { store.dismiss(r.id); }} />
+        </View>
+      ))}
+      {list.length === 0 && said === null ? null : (
+        <View style={styles.section}>
+          {list.length === 0 ? null : (
+            <View style={styles.head}>
+              <Txt kind="h3">Saved workouts</Txt>
+              {list.length > SAVED_SHOWN ? <Button label={`See all ${String(list.length)}`} kind="link" onPress={() => { setSaid(null); setBox({ kind: "all", asking: null }); }} /> : null}
+            </View>
+          )}
+          {saidLine(said)}
+          {rows(list.slice(0, SAVED_SHOWN))}
+        </View>
+      )}
+
+      <Sheet open={box?.kind === "save"} title={linked === null ? "Save workout" : "Save changes?"} onClose={close}>
+        {box?.kind === "save" ? (
+          <SaveBox
+            mine={mine}
+            planned={planned}
+            linked={linked}
+            full={list.length >= view.most && view.most > 0}
+            most={view.most}
+            busy={busy}
+            said={boxSaid}
+            onSave={(savedId) => {
+              void keep(savedId);
+            }}
+            onSeeAll={() => {
+              setBoxSaid(null);
+              setBox({ kind: "all", asking: null });
+            }}
+          />
+        ) : null}
+      </Sheet>
+
+      <Sheet open={box?.kind === "load"} title={box?.kind === "load" ? `Load ${nameOf(box.id)}?` : ""} onClose={close}>
+        {box?.kind === "load" ? (
+          <View style={styles.boxBody}>
+            <Txt kind="body">{`${linked === null ? (mine.workout.name.trim() === "" ? "Your workout isn't saved." : `${mine.workout.name.trim()} isn't saved.`) : `Your changes to ${linked.name} aren't saved.`} ${nameOf(box.id)} takes its place in My Workout.`}</Txt>
+            <View style={styles.two}>
+              <Button label="Keep mine" kind="plain" style={styles.half} onPress={close} />
+              <Button label={`Load ${nameOf(box.id)}`} style={styles.half} disabled={busy} onPress={() => { void load(box.id); }} />
+            </View>
+          </View>
+        ) : null}
+      </Sheet>
+
+      <Sheet open={box?.kind === "delete"} title={box?.kind === "delete" ? `Delete ${nameOf(box.id)}?` : ""} onClose={close}>
+        {box?.kind === "delete" ? <DeleteAsk id={box.id} inMine={mine.workout.from === box.id} busy={busy} onKeep={close} onDelete={() => { void remove(box.id); }} /> : null}
+      </Sheet>
+
+      <Sheet
+        open={box?.kind === "all"}
+        title={box?.kind === "all" && box.asking !== null ? `Delete ${nameOf(box.asking)}?` : "Saved workouts"}
+        onClose={close}
+        onBack={() => {
+          if (box?.kind !== "all" || box.asking === null) return false;
+          setBox({ kind: "all", asking: null });
+          return true;
+        }}
+      >
+        {box?.kind !== "all" ? null : box.asking !== null ? (
+          <DeleteAsk
+            id={box.asking}
+            inMine={mine.workout.from === box.asking}
+            busy={busy}
+            onKeep={() => { setBox({ kind: "all", asking: null }); }}
+            onDelete={() => { void remove(box.asking ?? ""); }}
+          />
+        ) : (
+          <ScrollView style={{ maxHeight: height * 0.7 }} contentContainerStyle={styles.boxBody}>
+            {saidLine(said)}
+            {rows(list)}
+            <Txt kind="small" style={styles.centre}>{`${plural(list.length, "saved workout")} of ${String(view.most)}`}</Txt>
+          </ScrollView>
+        )}
+      </Sheet>
+    </>
+  );
+}
+
+/** Under Start workout: Save workout, Save changes, or that it is saved. */
+function SaveLine({ linked, same, held, onSave }: { linked: ShownSaved | null; same: boolean; held: boolean; onSave: () => void }) {
+  if (linked !== null && same) {
+    const onPhone = linked.onPhone && held;
+    return (
+      <View style={styles.savedLine} accessible accessibilityLabel={onPhone ? "Saved on this phone. It goes to your account as soon as it can." : "Saved"}>
+        <View style={styles.savedRow}>
+          <Icon name="check" size={15} colour="good" />
+          <Txt kind="small" colour="good" style={styles.bold}>
+            {onPhone ? "Saved on this phone." : "Saved"}
+          </Txt>
+        </View>
+        {onPhone ? <Txt kind="small" style={styles.centre}>It goes to your account as soon as it can.</Txt> : null}
+      </View>
+    );
+  }
+  return <Button label={linked === null ? "Save workout" : "Save changes"} kind="link" icon="save" style={styles.saveLink} onPress={onSave} />;
+}
+
+interface SaveBoxProps {
+  mine: MyWorkoutHook;
+  planned: Planned;
+  linked: ShownSaved | null;
+  full: boolean;
+  most: number;
+  busy: boolean;
+  said: string | null;
+  onSave: (savedId: string | null) => void;
+  onSeeAll: () => void;
+}
+
+/** The box Save workout opens: the name, once, and what is saved. */
+function SaveBox({ mine, planned, linked, full, most, busy, said, onSave, onSeeAll }: SaveBoxProps) {
+  const named = mine.workout.name.trim() !== "";
+  const tooMany = planned.sets > SETS_MOST;
+  const can = named && !tooMany && planned.exercises.length > 0 && !busy;
+  const fullLine = `You have ${String(most)} saved workouts, the most you can keep. Delete one to save this one.`;
+  return (
+    <View style={styles.boxBody}>
+      <Field label="Name" value={mine.workout.name} onChange={mine.rename} placeholder="Name this workout" maxLength={NAME_MOST} />
+      <Txt kind="body">{`${plural(planned.exercises.length, "exercise")} · ${plural(planned.sets, "set")}`}</Txt>
+      {named ? null : <Txt kind="small">Name this workout to save it.</Txt>}
+      {planned.left.length === 0 ? null : (
+        <Txt kind="small">{`${plural(planned.left.length, "exercise")} no longer in the Library ${planned.left.length === 1 ? "isn't" : "aren't"} saved.`}</Txt>
+      )}
+      {tooMany ? <Txt kind="small" colour="badText">{`A saved workout holds up to ${String(SETS_MOST)} sets. This one has ${String(planned.sets)}.`}</Txt> : null}
+      {said === null ? null : <Txt kind="small" colour="badText">{said}</Txt>}
+      {linked !== null ? (
+        <>
+          <Button label={`Save changes to ${linked.name}`} wide raised disabled={!can} onPress={() => { onSave(linked.id); }} />
+          {full ? <Txt kind="small">{fullLine}</Txt> : null}
+          <Button label="Save as a new workout" kind="link" style={styles.self} disabled={!can || full} onPress={() => { onSave(null); }} />
+        </>
+      ) : full ? (
+        <>
+          <Txt kind="body">{fullLine}</Txt>
+          <Button label="Save" wide disabled onPress={() => undefined} />
+          <Button label="See saved workouts" kind="link" style={styles.self} onPress={onSeeAll} />
+        </>
+      ) : (
+        <Button label="Save" wide raised disabled={!can} onPress={() => { onSave(null); }} />
+      )}
+    </View>
+  );
+}
+
+function DeleteAsk({ inMine, busy, onKeep, onDelete }: { id: string; inMine: boolean; busy: boolean; onKeep: () => void; onDelete: () => void }) {
+  return (
+    <View style={styles.boxBody}>
+      <Txt kind="body">{`It's removed from your saved workouts.${inMine ? " My Workout keeps its exercises." : ""}`}</Txt>
+      <View style={styles.two}>
+        <Button label="Keep it" kind="plain" style={styles.half} onPress={onKeep} />
+        <Button label="Delete" kind="danger" icon="trash" style={styles.half} disabled={busy} onPress={onDelete} />
+      </View>
+    </View>
+  );
+}
+
+interface RowProps {
+  entry: ShownSaved;
+  inMine: boolean;
+  entryOf: (id: string) => PhoneLibraryEntry | null;
+  busy: boolean;
+  onLoad: () => void;
+  onDelete: () => void;
+}
+
+/** One saved workout: its first exercise's picture, its name, how many exercises and sets, their names. A press loads
+ *  it; the one My Workout holds says so. */
+function SavedRow({ entry, inMine, entryOf, busy, onLoad, onDelete }: RowProps) {
+  const first = entry.exercises[0] === undefined ? null : entryOf(entry.exercises[0]);
+  const names = entry.exercises.map((id) => entryOf(id)?.text.en.name ?? id).join(", ");
+  return (
+    <View style={styles.row}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`Load ${entry.name}, ${plural(entry.exercises.length, "exercise")}, ${plural(entry.setsCount, "set")}${inMine ? ", in My Workout" : ""}`}
+        disabled={busy}
+        onPress={onLoad}
+        style={({ pressed }) => [styles.rowMain, pressed ? styles.pressed : null]}
+      >
+        <View style={styles.thumb}>
+          {first === null ? (
+            <Icon name="dumbbell" size={20} colour="textFaint" />
+          ) : (
+            <Image source={pictures[exercisePicture(first.id, first.kind)]} resizeMode="contain" style={styles.thumbPicture} accessible={false} />
+          )}
+        </View>
+        <View style={styles.grow}>
+          <Txt kind="strong" numberOfLines={1}>
+            {entry.name}
+          </Txt>
+          <Txt kind="small" numberOfLines={1}>
+            {`${plural(entry.exercises.length, "exercise")} · ${plural(entry.setsCount, "set")}`}
+          </Txt>
+          <Txt kind="small" colour="textFaint" numberOfLines={1}>
+            {names}
+          </Txt>
+        </View>
+        {inMine ? (
+          <View style={styles.tag}>
+            <Txt kind="tiny" colour="orange" style={styles.bold}>
+              In My Workout
+            </Txt>
+          </View>
+        ) : (
+          <Txt kind="body" colour="orange" style={styles.bold}>
+            Load
+          </Txt>
+        )}
+      </Pressable>
+      <Pressable accessibilityRole="button" accessibilityLabel={`Delete ${entry.name}`} onPress={onDelete} style={styles.icon} hitSlop={6}>
+        <Icon name="trash" size={18} colour="textSoft" />
+      </Pressable>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  grow: { flex: 1 },
+  pressed: { opacity: 0.85 },
+  bold: { fontFamily: fonts.semibold },
+  centre: { textAlign: "center" },
+  self: { alignSelf: "center" },
+  // Under Start workout, closer to it than the page's own gap.
+  savedLine: { alignItems: "center", gap: 2, paddingVertical: 6, marginTop: -8 },
+  saveLink: { alignSelf: "center", marginTop: -8 },
+  savedRow: { flexDirection: "row", alignItems: "center", gap: 6 },
+  section: { gap: 10, marginTop: 10 },
+  head: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", minHeight: sizes.press },
+  said: { paddingVertical: 10, paddingHorizontal: 12, borderRadius: 14, borderWidth: 1, borderColor: colours.line, backgroundColor: colours.fill },
+  saidBad: { borderColor: colours.badLine, backgroundColor: colours.badFill },
+  refused: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 4, paddingHorizontal: 12, borderRadius: 16, borderWidth: 1, borderColor: colours.badLine, backgroundColor: colours.badFill },
+  rows: { gap: 8 },
+  row: { flexDirection: "row", alignItems: "center", gap: 4, paddingVertical: 8, paddingLeft: 10, paddingRight: 4, borderRadius: 16, borderWidth: 1, borderColor: colours.line, backgroundColor: colours.raised },
+  rowMain: { flex: 1, flexDirection: "row", alignItems: "center", gap: 12 },
+  thumb: { width: 52, height: 52, borderRadius: 12, overflow: "hidden", alignItems: "center", justifyContent: "center", backgroundColor: colours.box },
+  thumbPicture: { width: "100%", height: "100%" },
+  tag: { paddingVertical: 3, paddingHorizontal: 8, borderRadius: sizes.round, borderWidth: 1, borderColor: colours.orangeLine, backgroundColor: colours.orangeFill },
+  icon: { width: sizes.press, height: sizes.press, alignItems: "center", justifyContent: "center" },
+  boxBody: { gap: 12 },
+  two: { flexDirection: "row", gap: 10 },
+  half: { flex: 1 },
+});

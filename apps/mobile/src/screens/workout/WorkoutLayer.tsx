@@ -8,7 +8,8 @@ import { BottomRoom, useBottomRoom } from "../../look/BottomRoom";
 import { colours, shadows, sizes } from "../../look/colours";
 import { Modal } from "../../look/Modal";
 import { fonts, Txt } from "../../look/Txt";
-import { effortWaitingFile, workoutRunFile, workoutsWaitingFile } from "../../library/files";
+import { effortWaitingFile, savedCopyFile, savedWaitingFile, workoutRunFile, workoutsWaitingFile } from "../../library/files";
+import { createSavedStore, type SavedStore, type SavedView } from "../../library/savedWorkouts";
 import { effortSender, effortWaiting, type EffortWaiting } from "../../library/effortSaving";
 import type { Units } from "../../library/records";
 import { newWorkoutId } from "../../library/workoutId";
@@ -40,9 +41,11 @@ export interface WorkoutLayerValue {
   finished: Finished | null;
   waiting: WaitingView<WorkoutSave, RefusedWorkout>;
   /** Starts a workout and opens its screen: "busy" where one is going on, or the last one is still being kept. */
-  start: (name: string, exercises: readonly RunExercise[]) => StartResult;
+  start: (name: string, exercises: readonly RunExercise[], startedFrom?: "saved" | "none") => StartResult;
   open: () => void;
   dismissRefused: (id: string) => void;
+  /** The person's saved workouts (64a-iv): what the list shows, and the store that saves, loads and deletes. */
+  saved: { view: SavedView; store: SavedStore } | null;
 }
 
 const NONE_WAITING: WaitingView<WorkoutSave, RefusedWorkout> = { waiting: [], refused: [], sent: [], held: false, unsaved: false };
@@ -55,9 +58,12 @@ export interface WorkoutFiles {
   run: (userId: string) => TextStore;
   waiting: (userId: string) => TextStore;
   effort: (userId: string) => TextStore;
+  savedCopy: (userId: string) => TextStore;
+  savedWaiting: (userId: string) => TextStore;
 }
 
-const PHONE_FILES: WorkoutFiles = { run: workoutRunFile, waiting: workoutsWaitingFile, effort: effortWaitingFile };
+const PHONE_FILES: WorkoutFiles = { run: workoutRunFile, waiting: workoutsWaitingFile, effort: effortWaitingFile, savedCopy: savedCopyFile, savedWaiting: savedWaitingFile };
+const NONE_SAVED: SavedView = { list: [], most: 0, known: false, refused: [], held: false };
 const NONE_EFFORT: WaitingView<WaitingEffort, WaitingEffort> = { waiting: [], refused: [], sent: [], held: false, unsaved: false };
 
 /** The stars of a finished workout, on its last screen: what waits for the server, and a press. */
@@ -72,7 +78,7 @@ export function WorkoutLayerProvider({ children, files = PHONE_FILES, onNewWorko
   const { session, state } = useSession();
   const me = state.kind === "in" ? state.user.id : null;
   const units: Units = (state.kind === "in" ? accountUnits(state.user.units) : null) ?? "metric";
-  const [made, setMade] = useState<{ store: RunStore; waiting: WorkoutWaiting; effort: EffortWaiting } | null>(null);
+  const [made, setMade] = useState<{ store: RunStore; waiting: WorkoutWaiting; effort: EffortWaiting; saved: SavedStore } | null>(null);
   const [shown, setShown] = useState(false);
   const [now, setNow] = useState(() => Date.now());
 
@@ -87,7 +93,13 @@ export function WorkoutLayerProvider({ children, files = PHONE_FILES, onNewWorko
       effortSender((request, shape) => session.signedIn(request, shape)),
       (id) => store.keeping() === id || waiting.view().waiting.some((w) => w.workoutId === id),
     );
-    setMade({ store, waiting, effort });
+    // Saved workouts' saves and deletes go from here too, whichever page is on screen.
+    const saved = createSavedStore({ copy: files.savedCopy(me), waiting: files.savedWaiting(me), signedIn: (request, shape) => session.signedIn(request, shape), newId: newWorkoutId });
+    setMade({ store, waiting, effort, saved });
+    void saved.ready.then(() => {
+      void saved.send(true);
+      void saved.refresh();
+    });
     void waiting.start().then(() => waiting.send(true));
     void effort.start().then(() => effort.send(true));
     const sendStars = () => {
@@ -98,6 +110,7 @@ export function WorkoutLayerProvider({ children, files = PHONE_FILES, onNewWorko
       store.retry();
       if (waiting.view().waiting.length > 0 || waiting.view().unsaved) void waiting.send();
       if (effort.view().waiting.length > 0 || effort.view().unsaved) void effort.send();
+      void saved.send();
     }, SEND_AGAIN_MS);
     const heard = AppState.addEventListener("change", (next) => {
       if (next !== "active") return;
@@ -105,10 +118,13 @@ export function WorkoutLayerProvider({ children, files = PHONE_FILES, onNewWorko
       store.retry();
       void waiting.send(true);
       void effort.send(true);
+      void saved.send(true);
+      void saved.refresh();
     });
     return () => {
       waiting.stop();
       effort.stop();
+      saved.stop();
       unheard();
       clearInterval(timer);
       heard.remove();
@@ -126,6 +142,8 @@ export function WorkoutLayerProvider({ children, files = PHONE_FILES, onNewWorko
   const waiting = useSyncExternalStore(listen, () => made?.waiting.view() ?? NONE_WAITING);
   const listenStars = useCallback((told: () => void) => made?.effort.subscribe(told) ?? (() => undefined), [made]);
   const stars = useSyncExternalStore(listenStars, () => made?.effort.view() ?? NONE_EFFORT);
+  const listenSaved = useCallback((told: () => void) => made?.saved.watch(told) ?? (() => undefined), [made]);
+  const savedView = useSyncExternalStore(listenSaved, () => made?.saved.view() ?? NONE_SAVED);
   const pressed = useRef(0);
   const effortHand = useMemo<EffortHand>(
     () => ({
@@ -181,10 +199,10 @@ export function WorkoutLayerProvider({ children, files = PHONE_FILES, onNewWorko
       run,
       finished,
       waiting,
-      start: (name, exercises) => {
+      start: (name, exercises, startedFrom = "none") => {
         if (store === null) return "busy";
         const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-        const result = store.start({ workoutId: newWorkoutId(), name, now: Date.now(), timeZone: zone === "" ? "UTC" : zone, exercises });
+        const result = store.start({ workoutId: newWorkoutId(), name, now: Date.now(), timeZone: zone === "" ? "UTC" : zone, exercises, startedFrom });
         if (result === "started") setShown(true);
         return result;
       },
@@ -194,8 +212,9 @@ export function WorkoutLayerProvider({ children, files = PHONE_FILES, onNewWorko
       dismissRefused: (id) => {
         made?.waiting.dismiss(id);
       },
+      saved: made === null ? null : { view: savedView, store: made.saved },
     }),
-    [run, finished, waiting, store, made],
+    [run, finished, waiting, store, made, savedView],
   );
 
   const press = useCallback(

@@ -19,7 +19,7 @@ export const LEGAL_PATHS = {
 } as const;
 
 /** The day the words below last changed, `YYYY-MM-DD`. */
-export const LEGAL_UPDATED_ON = "2026-11-19";
+export const LEGAL_UPDATED_ON = "2026-11-22";
 
 /** Who runs KWAZO (Kd, 2026-11-08: his full name; a sole proprietorship, RULINGS 2026-09-15). */
 export const LEGAL_OWNER = "Kautilya Darshan Baruah";
@@ -305,6 +305,7 @@ export function privacyPolicy(facts: LegalFacts = LEGAL_FACTS): LegalDocument {
             "Participation in challenges.",
           ),
           p("The exercises you add to My Workout, the name you give it and the sets, reps, times, weights and rests you set for each exercise are kept on your device, so that your workout is there without an internet connection, and they are removed from your device when you delete your account."),
+          p("A copy of the workouts you save to do again is kept on your device, so that you can see and open them without an internet connection, and a workout you save or delete is kept there until the change reaches our servers. Both are removed from your device when you delete your account."),
           p("A workout you are doing is kept on your device at every step, and a workout you finish, with the effort you give it, is kept there until it reaches our servers, so that nothing you did is lost when the app closes or there is no internet connection. Both are removed from your device when you delete your account."),
           h3("3.6. Camera-Based Exercise Analysis"),
           p("Certain KWAZO features use your device's camera to analyze exercise movements and provide feedback."),

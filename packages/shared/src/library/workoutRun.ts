@@ -57,6 +57,8 @@ export const workoutRunSchema = z
     activeMs: ms,
     seenAt: z.number().int().min(0),
     done: z.array(savedSetSchema).max(W.setsMost),
+    /** "saved": started from one of the person's saved workouts (64a-iv); absent for nothing, as a file kept before it. */
+    startedFrom: z.literal("saved").optional(),
   })
   .strict()
   .refine((r) => r.ex < r.exercises.length && r.set < (r.exercises[r.ex]?.sets.length ?? 0), { message: "where the workout is", path: ["set"] })

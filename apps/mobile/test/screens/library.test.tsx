@@ -123,7 +123,7 @@ const openExercise = async (name: RegExp) => {
 
 beforeEach(() => {
   // The phone's files outlive a test in the stand-in: each test starts on a phone that never opened the Library.
-  for (const one of Paths.document.list()) if (one.name.startsWith("library-") || one.name.startsWith("figure-") || one.name.startsWith("my-workout-") || one.name.startsWith("workout")) one.delete();
+  for (const one of Paths.document.list()) if (one.name.startsWith("library-") || one.name.startsWith("figure-") || one.name.startsWith("my-workout-") || one.name.startsWith("workout") || one.name.startsWith("saved-")) one.delete();
   forgetStores();
 });
 
@@ -1191,5 +1191,202 @@ describe("doing a workout (64a-ii)", () => {
     expect(await screen.findByText("This workout couldn't be saved.")).toBeTruthy();
     expect(screen.getByText("This workout wasn't saved, so it earns no XP or records.")).toBeTruthy();
     expect(screen.queryByText("How hard was it?")).toBeNull();
+  });
+});
+
+describe("saved workouts (64a-iv)", () => {
+  const SQUAT_SETS = [{ target: 2, weightGrams: null, restSeconds: null }];
+  const PUSH = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+  /** My Workout as the phone keeps it. */
+  const keptWorkout = (name: string, items: unknown[], from: string | null = null) => {
+    const file = new File(Paths.document, `my-workout-${RAVI.id}.json`);
+    if (file.exists) file.delete();
+    file.create();
+    file.write(JSON.stringify({ v: 2, name, items, from }));
+  };
+  type Held = { name: string; editedAt: string; exercises: { exercise: string; measuredIn: string; sets: unknown[] }[] };
+  /** The server's saved workouts, as 61c's routes keep them; `state.online` false is no internet. Workouts done are kept too. */
+  function withSaved(start: Record<string, Held> = {}, library = libraryServer()) {
+    const account = new Map<string, Held>(Object.entries(start));
+    const changes: { method: string; id: string; body: unknown }[] = [];
+    const workouts: { startedFrom: string }[] = [];
+    const state = { online: true };
+    const ask: Ask = async (url, init) => {
+      const path = new URL(url).pathname;
+      if (path === "/v1/workouts" && init.method === "POST") {
+        const body = JSON.parse(init.body ?? "{}") as { workoutId: string; startedFrom: string };
+        workouts.push(body);
+        return { ok: true, status: 201, json: () => Promise.resolve({ workoutId: body.workoutId, status: "created" }) };
+      }
+      if (!path.startsWith("/v1/training/saved")) return library.ask(url, init);
+      if (!state.online) throw new Error("Network request failed");
+      const id = path.split("/")[4];
+      const answer = (status: number, body: unknown) => ({ ok: status < 300, status, json: () => (status === 204 ? Promise.reject(new Error("no body")) : Promise.resolve(body)) });
+      if (id === undefined) {
+        const list = [...account.entries()]
+          .sort((x, y) => y[1].editedAt.localeCompare(x[1].editedAt))
+          .map(([key, w]) => ({ id: key, name: w.name, editedAt: w.editedAt, exercises: [...new Set(w.exercises.map((e) => e.exercise))], setsCount: w.exercises.reduce((n, e) => n + e.sets.length, 0) }));
+        return answer(200, { savedWorkouts: list, most: 50 });
+      }
+      if (init.method === "PUT") {
+        const body = JSON.parse(init.body ?? "{}") as Held;
+        changes.push({ method: "PUT", id, body });
+        const had = account.has(id);
+        account.set(id, body);
+        return answer(had ? 200 : 201, { id, status: had ? "updated" : "created", editedAt: body.editedAt });
+      }
+      if (init.method === "DELETE") {
+        changes.push({ method: "DELETE", id, body: null });
+        account.delete(id);
+        return answer(204, null);
+      }
+      const held = account.get(id);
+      return held === undefined ? answer(404, { error: "not_found", message: "saved workout not found" }) : answer(200, { id, ...held });
+    };
+    return { ask, account, changes, workouts, state };
+  }
+  const push: Held = { name: "Push day", editedAt: "2026-11-20T10:00:00.000Z", exercises: [{ exercise: "barbell_curl", measuredIn: "reps", sets: [{ target: 8, weightGrams: 25_000, restSeconds: 60 }] }] };
+  const openMine = async () => {
+    await fireEvent.press(await screen.findByRole("button", { name: /^My Workout/ }));
+  };
+
+  it("the worst thing: saved with no signal, it is kept on the phone, and reaches the account once the app opens with signal", async () => {
+    keptWorkout("Legs", [{ id: "squat", plan: { measuredIn: "reps", sets: SQUAT_SETS } }]);
+    const server = withSaved();
+    server.state.online = false;
+    await openLibrary(server.ask);
+    await openMine();
+    await fireEvent.press(await screen.findByRole("button", { name: "Save workout" }));
+    expect(await screen.findByText("1 exercise · 1 set")).toBeTruthy();
+    await fireEvent.press(screen.getByRole("button", { name: "Save" }));
+    expect(await screen.findByText("Saved on this phone.")).toBeTruthy();
+    expect(screen.getByText("It goes to your account as soon as it can.")).toBeTruthy();
+    expect(screen.getByRole("button", { name: /^Load Legs/ })).toBeTruthy();
+    expect(server.account.size).toBe(0);
+    await settle(50);
+    await screen.unmount();
+    forgetStores();
+
+    server.state.online = true;
+    await openLibrary(server.ask);
+    await openMine();
+    await waitFor(() => {
+      expect(server.account.size).toBe(1);
+    });
+    const [held] = [...server.account.values()];
+    expect(held?.name).toBe("Legs");
+    expect(held?.exercises).toEqual([{ exercise: "squat", measuredIn: "reps", sets: SQUAT_SETS }]);
+    expect(await screen.findByText("Saved")).toBeTruthy();
+    expect(screen.queryByText("Saved on this phone.")).toBeNull();
+  });
+
+  it("a change to the saved workout reads Save changes; it saves over the same one, or as a new one", async () => {
+    keptWorkout("Legs", [{ id: "squat", plan: { measuredIn: "reps", sets: SQUAT_SETS } }]);
+    const server = withSaved();
+    await openLibrary(server.ask);
+    await openMine();
+    await fireEvent.press(await screen.findByRole("button", { name: "Save workout" }));
+    await fireEvent.press(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => {
+      expect(server.account.size).toBe(1);
+    });
+    expect(await screen.findByText("Saved")).toBeTruthy();
+    expect(screen.getByText("In My Workout")).toBeTruthy();
+    // Removing the squat's own set-up is a change: here the name, which the saved workout holds too.
+    await fireEvent.changeText(screen.getByLabelText("Workout name"), "Legs B");
+    await fireEvent.press(await screen.findByRole("button", { name: "Save changes" }));
+    expect(await screen.findByText("Save changes?")).toBeTruthy();
+    await fireEvent.press(screen.getByRole("button", { name: "Save changes to Legs" }));
+    await waitFor(() => {
+      expect(server.changes.filter((c) => c.method === "PUT")).toHaveLength(2);
+    });
+    expect([...server.account.values()].map((w) => w.name)).toEqual(["Legs B"]);
+    expect(await screen.findByText("Saved")).toBeTruthy();
+    // Renamed again and saved as a new one: both kept.
+    await fireEvent.changeText(screen.getByLabelText("Workout name"), "Legs C");
+    await fireEvent.press(await screen.findByRole("button", { name: "Save changes" }));
+    await fireEvent.press(screen.getByRole("button", { name: "Save as a new workout" }));
+    await waitFor(() => {
+      expect(server.account.size).toBe(2);
+    });
+    expect([...server.account.values()].map((w) => w.name).sort()).toEqual(["Legs B", "Legs C"]);
+  });
+
+  it("loading over a workout that isn't saved asks first; Keep mine keeps it; Load puts it in My Workout, and a workout done from it says so", async () => {
+    keptWorkout("Legs", [{ id: "squat", plan: { measuredIn: "reps", sets: SQUAT_SETS } }]);
+    const server = withSaved({ [PUSH]: { ...push, exercises: [{ exercise: "squat", measuredIn: "reps", sets: [{ target: 1, weightGrams: null, restSeconds: null }] }] } });
+    await openLibrary(server.ask);
+    await openMine();
+    await fireEvent.press(await screen.findByRole("button", { name: /^Load Push day/ }));
+    expect(await screen.findByText("Load Push day?")).toBeTruthy();
+    expect(screen.getByText("Legs isn't saved. Push day takes its place in My Workout.")).toBeTruthy();
+    await fireEvent.press(screen.getByRole("button", { name: "Keep mine" }));
+    expect((screen.getByLabelText("Workout name").props as { value: string }).value).toBe("Legs");
+    await fireEvent.press(screen.getByRole("button", { name: /^Load Push day/ }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Load Push day" }));
+    expect(await screen.findByText("Push day is in My Workout.")).toBeTruthy();
+    expect((screen.getByLabelText("Workout name").props as { value: string }).value).toBe("Push day");
+    expect(screen.getByText("Saved")).toBeTruthy();
+    await fireEvent.press(screen.getByRole("button", { name: "Start workout" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "One rep more" }));
+    await waitFor(() => {
+      expect(server.workouts.map((w) => w.startedFrom)).toEqual(["saved"]);
+    });
+  });
+
+  it("with nothing to lose it loads with no question; one this phone never held needs the internet, and says so", async () => {
+    const server = withSaved({ [PUSH]: push });
+    await openLibrary(server.ask);
+    await openMine();
+    expect(await screen.findByText("No exercises yet")).toBeTruthy();
+    expect(await screen.findByText("Saved workouts")).toBeTruthy();
+    server.state.online = false;
+    await fireEvent.press(await screen.findByRole("button", { name: /^Load Push day/ }));
+    expect(await screen.findByText("Couldn't load Push day. Check your internet connection and try again.")).toBeTruthy();
+    server.state.online = true;
+    await fireEvent.press(screen.getByRole("button", { name: /^Load Push day/ }));
+    expect(await screen.findByText("Push day is in My Workout.")).toBeTruthy();
+    expect(screen.queryByText("Load Push day?")).toBeNull();
+    expect(screen.getByRole("button", { name: /^Barbell Curl/ })).toBeTruthy();
+  });
+
+  it("the bin asks first; Keep it keeps it; Delete deletes it, and My Workout keeps the exercises of the one it held", async () => {
+    keptWorkout("Push day", [{ id: "barbell_curl", plan: { measuredIn: "reps", sets: push.exercises[0]?.sets } }], PUSH);
+    const server = withSaved({ [PUSH]: push });
+    await openLibrary(server.ask);
+    await openMine();
+    await fireEvent.press(await screen.findByRole("button", { name: "Delete Push day" }));
+    expect(await screen.findByText("Delete Push day?")).toBeTruthy();
+    expect(screen.getByText("It's removed from your saved workouts. My Workout keeps its exercises.")).toBeTruthy();
+    await fireEvent.press(screen.getByRole("button", { name: "Keep it" }));
+    expect(server.changes).toEqual([]);
+    await fireEvent.press(screen.getByRole("button", { name: "Delete Push day" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Delete" }));
+    expect(await screen.findByText("Push day was deleted.")).toBeTruthy();
+    await waitFor(() => {
+      expect(server.changes).toEqual([{ method: "DELETE", id: PUSH, body: null }]);
+    });
+    expect(screen.queryByRole("button", { name: /^Load Push day/ })).toBeNull();
+    expect(screen.getByRole("button", { name: /^Barbell Curl/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Save workout" })).toBeTruthy();
+  });
+
+  it("the newest three are on the page; See all opens every one", async () => {
+    const at = (day: number) => `2026-11-${String(day).padStart(2, "0")}T10:00:00.000Z`;
+    const server = withSaved({
+      [PUSH]: { ...push, editedAt: at(10) },
+      "cccccccc-cccc-4ccc-8ccc-cccccccccccc": { ...push, name: "Core", editedAt: at(11) },
+      "dddddddd-dddd-4ddd-8ddd-dddddddddddd": { ...push, name: "Arms", editedAt: at(12) },
+      "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee": { ...push, name: "Legs", editedAt: at(13) },
+    });
+    await openLibrary(server.ask);
+    await openMine();
+    const loads = () => screen.getAllByRole("button", { name: /^Load / }).map((b) => (b.props as { accessibilityLabel: string }).accessibilityLabel.split(",")[0]);
+    await waitFor(() => {
+      expect(loads()).toEqual(["Load Legs", "Load Arms", "Load Core"]);
+    });
+    await fireEvent.press(screen.getByRole("button", { name: "See all 4" }));
+    expect(await screen.findByText("4 saved workouts of 50")).toBeTruthy();
+    expect(loads()).toEqual(["Load Legs", "Load Arms", "Load Core", "Load Legs", "Load Arms", "Load Core", "Load Push day"]);
   });
 });

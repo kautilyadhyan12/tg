@@ -1,10 +1,10 @@
-import { exerciseIdSchema, PLANNED_WORKOUT_LIMITS, plannedExerciseSchema, type PlannedSet } from "@app/shared";
+import { exerciseIdSchema, keptSavedEntrySchema, PLANNED_WORKOUT_LIMITS, plannedExerciseSchema, type PlannedExercise, type PlannedSet } from "@app/shared";
 
 // My Workout (ROADMAP Stage 5 63c, 64a-i): the workout a person is putting together from the Library. Its name and its
 // exercises in order, no repeats, each with the sets the person set up (64a-i), kept on this phone in a file of their
 // own (`my-workout-<id>.json`) so it is there with no internet and is removed with their account
 // (`forgetPersonFiles`). One store for each person, so the tab's count and every page's Add to workout read the same
-// list. Doing the workout comes with job 64a-ii.
+// list. It also names the saved workout it holds (64a-iv), loaded or saved, until Clear or another is loaded.
 
 /** As many as a saved workout holds. */
 export const MY_WORKOUT_MOST = PLANNED_WORKOUT_LIMITS.exercisesMost;
@@ -29,9 +29,11 @@ export interface MyWorkout {
   /** As typed; empty until the person names it. */
   name: string;
   items: readonly Item[];
+  /** The id of the person's saved workout it holds (64a-iv): the one it was loaded from or saved as; null for none. */
+  from: string | null;
 }
 
-export const EMPTY: MyWorkout = { name: "", items: [] };
+export const EMPTY: MyWorkout = { name: "", items: [], from: null };
 
 export interface ListFile {
   read: () => Promise<string | null>;
@@ -78,7 +80,20 @@ export function readWorkout(text: string | null): MyWorkout {
     items.push({ id: id.data, plan: planFrom(id.data, planRaw) });
   }
   const name = "name" in raw && typeof raw.name === "string" ? nameOf(raw.name) : "";
-  return { name, items };
+  const from = "from" in raw ? keptSavedEntrySchema.shape.id.safeParse(raw.from) : null;
+  return { name, items, from: from?.success === true ? from.data : null };
+}
+
+/** A saved workout as My Workout holds it (64a-iv): its name, and each exercise once with its sets, its first
+ *  `SETS_MOST`; an exercise twice keeps its first place (My Workout holds an exercise once), and one past the most
+ *  My Workout holds is left out. */
+export function fromSaved(savedId: string, name: string, exercises: readonly PlannedExercise[]): MyWorkout {
+  const items: Item[] = [];
+  for (const e of exercises) {
+    if (items.some((i) => i.id === e.exercise) || items.length >= MY_WORKOUT_MOST) continue;
+    items.push({ id: e.exercise, plan: planFrom(e.exercise, { measuredIn: e.measuredIn, sets: e.sets.slice(0, SETS_MOST) }) });
+  }
+  return { name: nameOf(name), items, from: savedId };
 }
 
 /** The exercises' ids, in order. */
@@ -115,8 +130,11 @@ export function planned(w: MyWorkout, id: string, plan: Plan): MyWorkout {
 
 export const renamed = (w: MyWorkout, name: string): MyWorkout => (nameOf(name) === w.name ? w : { ...w, name: nameOf(name) });
 
-/** Every exercise out; the name kept. */
-export const cleared = (w: MyWorkout): MyWorkout => (w.items.length === 0 ? w : { ...w, items: [] });
+/** Every exercise out; the name kept. It no longer holds a saved workout. */
+export const cleared = (w: MyWorkout): MyWorkout => (w.items.length === 0 && w.from === null ? w : { ...w, items: [], from: null });
+
+/** Which saved workout it holds: the one just saved, or none after that one was deleted. */
+export const linked = (w: MyWorkout, from: string | null): MyWorkout => (w.from === from ? w : { ...w, from });
 
 export interface MyWorkoutStore {
   /** Read from the phone once; until then the workout is empty. */
@@ -130,6 +148,9 @@ export interface MyWorkoutStore {
   plan: (id: string, plan: Plan) => void;
   rename: (name: string) => void;
   clear: () => void;
+  /** Takes the place of the whole workout: a saved workout loaded (64a-iv). */
+  load: (w: MyWorkout) => void;
+  link: (from: string | null) => void;
   /** Told after each change; returns the way to stop. */
   watch: (told: () => void) => () => void;
 }
@@ -140,7 +161,9 @@ type Step =
   | { move: string; by: -1 | 1 }
   | { plan: string; to: Plan }
   | { rename: string }
-  | { clear: true };
+  | { clear: true }
+  | { load: MyWorkout }
+  | { link: string | null };
 
 function take(w: MyWorkout, step: Step): MyWorkout {
   if ("add" in step) return added(w, step.add);
@@ -148,6 +171,8 @@ function take(w: MyWorkout, step: Step): MyWorkout {
   if ("move" in step) return moved(w, step.move, step.by);
   if ("plan" in step) return planned(w, step.plan, step.to);
   if ("rename" in step) return renamed(w, step.rename);
+  if ("load" in step) return step.load;
+  if ("link" in step) return linked(w, step.link);
   return cleared(w);
 }
 
@@ -171,7 +196,7 @@ function makeStore(file: ListFile): MyWorkoutStore {
   };
   const write = () => {
     if (read !== "done") return;
-    const text = JSON.stringify({ v: 2, name: workout.name, items: workout.items });
+    const text = JSON.stringify({ v: 2, name: workout.name, items: workout.items, from: workout.from });
     writing = writing.then(() => file.write(text)).catch(() => undefined);
   };
   const step = (s: Step) => {
@@ -215,6 +240,12 @@ function makeStore(file: ListFile): MyWorkoutStore {
     },
     clear: () => {
       step({ clear: true });
+    },
+    load: (w) => {
+      step({ load: w });
+    },
+    link: (from) => {
+      step({ link: from });
     },
     watch: (told) => {
       watchers.add(told);

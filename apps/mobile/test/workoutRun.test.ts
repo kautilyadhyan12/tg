@@ -163,6 +163,19 @@ describe("the workout as the server takes it", () => {
     expect(save?.sets.map((s) => s.counted)).toEqual(["hand", "hand", "timer", "timer"]);
   });
 
+  it.each<[string, "saved" | "none" | undefined, string]>([
+    ["started from a saved workout (64a-iv)", "saved", "saved"],
+    ["started from nothing", "none", "none"],
+    ["a workout kept before 64a-iv, with no mark", undefined, "none"],
+  ])("what it was started from: %s", (_, startedFrom, want) => {
+    const run = startRun({ workoutId: ID, name: "Legs", now: T0, timeZone: "UTC", exercises: [squat], ...(startedFrom === undefined ? {} : { startedFrom }) });
+    if (run === null) throw new Error("no run");
+    expect(workoutRunSchema.safeParse(run).success).toBe(true);
+    const out = press(run, { kind: "main" }, T0 + 1000);
+    if (out.kind !== "on") throw new Error("gone");
+    expect(toSave(out.run, "android", "x")?.startedFrom).toBe(want);
+  });
+
   it("an unnamed workout is sent with no name, and nothing done sends nothing", () => {
     const run = startRun({ workoutId: ID, name: "  ", now: T0, timeZone: "UTC", exercises: [squat] });
     if (run === null) throw new Error("no run");

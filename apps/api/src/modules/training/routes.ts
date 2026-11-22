@@ -11,6 +11,7 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { Sql } from "postgres";
 import {
+  SAVED_EDITED_AHEAD,
   WORKOUT_NOT_ENDED,
   WORKOUT_SAVE_LIMITS,
   exerciseIdSchema,
@@ -205,7 +206,9 @@ export function registerTrainingRoutes(
         const full: SavedWorkoutsFull = { error: "saved_workouts_full", most: PLANNED_WORKOUT_LIMITS.savedMost, requestId: req.id };
         return reply.status(409).send(full);
       }
-      if (err instanceof FutureEditError) return validationError(req, reply, "editedAt: later than the server's clock");
+      if (err instanceof FutureEditError) {
+        return reply.status(400).send({ error: SAVED_EDITED_AHEAD, message: "editedAt: later than the server's clock", requestId: req.id });
+      }
       throw err;
     }
   });

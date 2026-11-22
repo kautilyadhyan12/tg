@@ -18,7 +18,9 @@ import { estimate, planLine, planOf, summaryLine } from "../../library/workoutSe
 import { clock } from "../workout/words";
 import { useWorkoutLayer } from "../workout/WorkoutLayer";
 import { ProgressPage } from "../progress/ProgressPage";
+import { toPlanned } from "../../library/savedWorkouts";
 import { ExercisePage } from "./ExercisePage";
+import { SavedPart, savedState } from "./SavedPart";
 import { SetUpSheet } from "./SetUpSheet";
 import { useLibrary, useMyWorkout, useSetupFacts } from "./useLibrary";
 
@@ -61,6 +63,9 @@ export function MyWorkoutPart({ parts, units, onBrowse, file }: { parts: ReactNo
     return [{ exercise: entry.id, name: entry.text.en.name, kind: entry.kind, measuredIn: plan.measuredIn, barbell: entry.equipment.includes("barbell"), sets: plan.sets.slice(0, RUN_SETS_MOST) }];
   });
   const setCount = toDo.reduce((n, e) => n + e.sets.length, 0);
+  // As a saved workout holds it (64a-iv), and whether My Workout is one of the person's saved workouts.
+  const planned = toPlanned(mine?.workout ?? { name: "", items: [], from: null }, liveOf);
+  const fromSaved = savedState(mine, layer?.saved?.view.list ?? [], planned).linked !== null;
 
   const top = (
     <PictureTop
@@ -186,7 +191,7 @@ export function MyWorkoutPart({ parts, units, onBrowse, file }: { parts: ReactNo
                 raised
                 disabled={layer === null || toDo.length === 0}
                 onPress={() => {
-                  setBusy(layer?.start(mine?.workout.name ?? "", toDo) === "busy");
+                  setBusy(layer?.start(mine?.workout.name ?? "", toDo, fromSaved ? "saved" : "none") === "busy");
                 }}
               />
             ) : (
@@ -200,6 +205,8 @@ export function MyWorkoutPart({ parts, units, onBrowse, file }: { parts: ReactNo
           </View>
         </>
       )}
+      {/* One place on the page whatever My Workout holds, so what it last said stays when a workout is loaded. */}
+      {mine === null ? null : <SavedPart mine={mine} planned={planned} entryOf={entryOf} />}
       {settingUp === null || settingPlan === null || setUp === null ? null : (
         <SetUpSheet
           entry={settingUp}
