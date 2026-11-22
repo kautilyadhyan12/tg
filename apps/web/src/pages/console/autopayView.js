@@ -7,19 +7,19 @@ import { dayWords } from './memberListView';
 export const AUTOPAY_NAMES_SHOWN = 5;
 
 /** The line while it stands, on the page of whoever pays. */
-export const autopayPausedLine = (on) => `Automatic payments paused on ${dayWords(on)}.`;
+export const autopayPausedLine = (on) => `Autopay paused on ${dayWords(on)}.`;
 
 /** The line on the page of somebody whose payer paused them. */
-export const autopayPayerPausedLine = (payerName) => `Automatic payments are paused on ${payerName}'s card.`;
+export const autopayPayerPausedLine = (payerName) => `Autopay is paused on ${payerName}'s card.`;
 
 const peopleOf = (preview) => preview.people.map((p) => (p.what === '' ? p.name : `${p.name} · ${p.what}`));
 
-/** The box under Pause automatic payments. */
+/** The box under Pause autopay. */
 export function autopayPauseBox(preview) {
   const card = preview.card === null ? 'The card' : cardName(preview.card);
   const people = peopleOf(preview);
   return {
-    title: 'Pause automatic payments?',
+    title: 'Pause autopay?',
     lead: people.length === 0 ? 'Nobody this card pays for has a renewing membership, so nothing is charged automatically now.' : `${card} won't be charged automatically for:`,
     people,
     more: preview.more,
@@ -29,20 +29,20 @@ export function autopayPauseBox(preview) {
 }
 
 /** What is said in that place once paused. */
-export const autopayPausedWords = (preview) => `Automatic payments paused. ${preview.card === null ? 'The card' : cardName(preview.card)} stays saved.`;
+export const autopayPausedWords = (preview) => `Autopay paused. ${preview.card === null ? 'The card' : cardName(preview.card)} stays saved.`;
 
-/** The box under Resume automatic payments. */
+/** The box under Resume autopay. */
 export function autopayResumeBox(preview) {
   const card = preview.card === null ? null : cardName(preview.card);
   const people = peopleOf(preview);
   let lead;
-  if (preview.chargebackStops) lead = people.length === 0 ? 'A chargeback still pauses automatic payments until it is closed.' : 'A chargeback still pauses automatic payments, so nothing will be charged until it is closed. This applies to:';
+  if (preview.chargebackStops) lead = people.length === 0 ? 'A chargeback still pauses autopay until it is closed.' : 'A chargeback still pauses autopay, so nothing will be charged until it is closed. This applies to:';
   else if (people.length === 0) lead = 'Nobody this card pays for has a renewing membership, so nothing will be charged.';
   else if (preview.squareConnected === false) lead = 'Square is not connected, so nothing will be charged until it is connected again. This applies to:';
   else if (card === null) lead = 'No card is on file, so nothing will be charged until one is added. This applies to:';
   else lead = `${card} will be charged automatically for:`;
   return {
-    title: 'Resume automatic payments?',
+    title: 'Resume autopay?',
     lead,
     people,
     more: preview.more,
@@ -53,9 +53,9 @@ export function autopayResumeBox(preview) {
 
 /** What is said in that place once resumed. */
 export function autopayResumedWords(preview) {
-  if (preview.chargebackStops) return 'Automatic payments resumed. A chargeback still pauses them until it is closed.';
-  if (preview.people.length === 0) return 'Automatic payments resumed. Nobody this card pays for has a renewing membership, so nothing will be charged.';
-  if (preview.squareConnected === false) return 'Automatic payments resumed. Nothing will be charged until Square is connected again.';
-  if (preview.card === null) return 'Automatic payments resumed. Nothing will be charged until a card is on file.';
-  return `Automatic payments resumed. ${cardName(preview.card)} will be charged when bills are due.`;
+  if (preview.chargebackStops) return 'Autopay resumed. A chargeback still pauses it until it is closed.';
+  if (preview.people.length === 0) return 'Autopay resumed. Nobody this card pays for has a renewing membership, so nothing will be charged.';
+  if (preview.squareConnected === false) return 'Autopay resumed. Nothing will be charged until Square is connected again.';
+  if (preview.card === null) return 'Autopay resumed. Nothing will be charged until a card is on file.';
+  return `Autopay resumed. ${cardName(preview.card)} will be charged when bills are due.`;
 }

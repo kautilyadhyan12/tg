@@ -2201,3 +2201,157 @@
   .c-pay-tiles { grid-template-columns: minmax(0, 1fr); }
   .c-pay-where { display: none; }
 }
+
+/* ── A member's page (V2a; spec Part 3 §17.11, the Person board) ──
+   A page of its own beside the menu: the way back, the head with the name, its buttons and the
+   next step, then three columns (who they are · what they have · who pays and their card) where
+   the page is wide enough, two below that, one on a phone. Measured on the page's own width, so a
+   folding phone opened, a tablet and a laptop zoomed in each get what fits. */
+.c-person {
+  padding: 16px 16px 32px;
+}
+@media (min-width: 768px) {
+  .c-person { padding: 20px 32px 40px; }
+}
+.c-person-in {
+  container-type: inline-size;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-width: 1600px;
+  margin: 0 auto;
+}
+.c-person-back {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 0 4px;
+  border-radius: 999px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--link);
+}
+.c-person-head {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 20px;
+}
+@media (min-width: 768px) {
+  .c-person-head { padding: 24px; }
+}
+.c-avatar-lg {
+  width: 64px;
+  height: 64px;
+  font-size: 22px;
+}
+.c-person-cols {
+  display: grid;
+  gap: 16px;
+  align-items: start;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas: 'who' 'have' 'pays';
+}
+.c-person-col {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+.c-person-who { grid-area: who; }
+.c-person-have { grid-area: have; }
+.c-person-pays { grid-area: pays; }
+@container (min-width: 700px) {
+  .c-person-cols {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-rows: auto 1fr;
+    grid-template-areas: 'who have' 'pays have';
+  }
+}
+@container (min-width: 960px) {
+  .c-person-cols {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-rows: auto;
+    grid-template-areas: 'who have pays';
+  }
+}
+/* A box drawn inside a column has the column's width, never more. */
+.c-person-col > * { min-width: 0; }
+
+/* The next step under the name: quiet for normal, colour for what needs doing. */
+.c-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 16px;
+  padding: 14px 18px;
+  border-radius: 16px;
+  color: var(--t1);
+}
+.c-strip-warn { background: var(--warn-bg); }
+.c-strip-bad { background: var(--bad-bg); }
+.c-strip-good { background: var(--good-bg); }
+.c-strip-plain { background: var(--raise); }
+.c-strip-words {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1 1 220px;
+  min-width: min(100%, 200px);
+}
+.c-strip-warn .c-strip-detail { color: var(--warn); }
+.c-strip-bad .c-strip-detail { color: var(--bad); }
+.c-strip-good .c-strip-detail { color: var(--good); }
+.c-strip-plain .c-strip-detail { color: var(--t2); }
+.c-strip-good .c-strip-title { color: var(--good); }
+/* A form or a question on a member's page keeps a form's width. */
+.c-person-narrow { width: 100%; max-width: 720px; }
+/* Drawn outside the console (a test drawing it alone): over the whole window. */
+.c-page-over { background: var(--page); }
+/* On a narrow phone (a folding phone's cover screen) a button's words wrap inside it rather than
+   run past the edge: "Sell a product to Maya Fernandes". */
+@media (max-width: 479px) {
+  .c-person .c-btn {
+    max-width: 100%;
+    height: auto;
+    min-height: 44px;
+    padding-top: 8px;
+    padding-bottom: 8px;
+    white-space: normal;
+    text-align: center;
+  }
+}
+/* On a touch screen, a tablet or an opened folding phone too, every button is 44 px to touch. */
+@media (pointer: coarse) {
+  .c-person .c-btn,
+  .c-person .c-person-back {
+    height: auto;
+    min-height: 44px;
+  }
+}
+/* A member's page sets its boxes in columns narrower than the window: a button or a choice is never
+   wider than its box, and its words wrap inside it rather than run past the edge ("A parent or
+   guardian, for someone under 18"). One line still keeps each button's own height. */
+.c-person .c-btn,
+.c-person .c-chip {
+  max-width: 100%;
+  height: auto;
+  white-space: normal;
+}
+.c-person .c-btn { min-height: 40px; }
+.c-person .c-btn-lg { min-height: 48px; }
+.c-person .c-btn-sm { min-height: 32px; }
+.c-person .c-btn-xs { min-height: 28px; }
+.c-person .c-chip { min-height: 36px; padding-top: 6px; padding-bottom: 6px; }
+@media (pointer: coarse) {
+  .c-person .c-btn,
+  .c-person .c-chip { min-height: 44px; }
+}
+.c-person .c-btn-link,
+.c-person .c-btn-quiet { min-height: 32px; }
+@media (pointer: coarse) {
+  .c-person .c-btn-link,
+  .c-person .c-btn-quiet { min-height: 44px; }
+}

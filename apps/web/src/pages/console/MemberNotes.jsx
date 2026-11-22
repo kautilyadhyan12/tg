@@ -329,7 +329,7 @@ export default function MemberNotes({ gymId, entryId, name, readOnly, timeZone =
               <li key={note.id} className="py-3 flex flex-col gap-1" style={{ borderTop: '1px solid var(--line)' }} data-testid="member-note">
                 <p className="c-s14 c-t1 m-0 whitespace-pre-wrap break-words">{note.body}</p>
                 <div className="flex items-center gap-3 flex-wrap">
-                  <span className="c-s13 c-t3">
+                  <span className="c-s14 c-t3">
                     {note.authorName ?? MEMBER_NOTE_NO_AUTHOR_WORDS} · {noteDay(note.createdAt, timeZone)}
                   </span>
                   {readOnly || deleting === note.id ? null : (

@@ -109,7 +109,7 @@ describe('a receipt', () => {
     expect(printHtml).toHaveBeenCalledTimes(1);
     const html = printHtml.mock.calls[0][0];
     for (const words of ['Iron House', '12 High Street', 'Receipt no.', '>7<', '15 Oct 2026', 'Maya Patel', '2 × Water at $2.50 each', '$4.33', 'Paid by cash', 'Thank you.']) expect(html).toContain(words);
-    for (const console of ['View receipt', 'Bought at the desk', 'Close', 'c-btn']) expect(html).not.toContain(console);
+    for (const console of ['View receipt', 'Purchases', 'Close', 'c-btn']) expect(html).not.toContain(console);
   });
 
   it('a sale voided reads Voided on its receipt', async () => {
