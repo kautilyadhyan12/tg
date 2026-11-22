@@ -2221,7 +2221,8 @@ the squat's numbers are as they were; every other movement counts 0 as before, b
 each sumo squat loses one, one foot's heel and toes set apart by its noise and the other foot alone reading 4.5 and 5.1 cm (the
 heel-and-toe rule off, 29); the phone's own runs, 92 of 100 sets the same (his squats 19 of 22, as before). The floor view, judged
 against his five floor sets, still does not read as his floor at any lean and stays shown (`movementFloorView.test.ts` pins
-each lean and fold again); at the replay's lean the hips below standing now go past his floor's (0.088 of a leg redrawn, his
+each lean and fold again; with his first shiny set left out of the wander, 7 of his 10 raised squats, 8 before round one's
+fix); at the replay's lean the hips below standing now go past his floor's (0.088 of a leg redrawn, his
 floor 0.073, his raised phone 0.063); jumps drawn on his raised sets seen from the floor, 4 of 150 counted (14 before), none
 from the raised phone itself (12 before). **Tried and not kept,
 each measured:** a jump read against where the feet were just before and just after it (his squats right but one rep under
