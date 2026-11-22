@@ -145,9 +145,11 @@ describe("the worst thing: no other movement is ever counted as a squat", () => 
     expect(deep.map((r) => [r.verdict, r.rule])).toEqual(deep.map(() => ["other", "feet stay in place"]));
   });
 
-  it("no other movement is given a word, but the one written on its video: nothing short, nothing said", () => {
+  it("no other movement is given a word as filmed, but the one written on its video: nothing short, nothing said", () => {
+    // Round one: every word counted, what the camera could not see included (under some replays an unseen dip speaks:
+    // movementReplaysOthers1 and 2).
     for (const r of others.filter((x) => x.entry.told === undefined)) {
-      expect([r.label, r.reps.filter((x) => x.verdict === "short" || (x.verdict !== "unseen" && x.reason !== null)).length]).toEqual([r.label, 0]);
+      expect([r.label, r.reps.filter((x) => x.verdict === "short" || x.reason !== null).map((x) => x.reason)]).toEqual([r.label, []]);
     }
   });
 
@@ -281,8 +283,8 @@ describe("the camera must see enough, or nothing is decided", () => {
     const long = runMovement(SQUAT, hiddenFor(220));
     expect(long.count).toBe(1);
     expect(long.reps.filter((r) => r.verdict === "unseen").map((r) => [r.rule, r.reason])).toEqual([
-      ["feet stay down", "Keep your feet in view."],
-      ["feet stay down", "Keep your feet in view."],
+      ["feet stay down", "Keep your whole body in view."],
+      ["feet stay down", "Keep your whole body in view."],
     ]);
   });
 

@@ -2245,18 +2245,20 @@ hip height, under his first set's and his last raised pair's 5 to 6 cm.
 form standard (`standard` in the movement's file): the standard's own line, moved the forgiving way by the camera's own room
 on that reading where it has one, and `movement-check` writes where each came from. *The knees:* a quarter squat bends them
 to an inner angle of 110° to 140°, a half squat to 80° to 100°, a parallel squat to 60° to 70° (Front. Sports Act. Living
-2024, a scoping review of the deep squat, PMC11618833; Kd's research file asks for about 90°), so a rep counts only past the
-quarter squat; the camera's room is how much the same rep's bottom knee reads differently between a video as filmed and each
-replay that sets numbers, 2.78° in 99 reps of 100 (303 reps paired; 95 in 100 within 0.81°, the most 10.9°): 113° (112° to
-116° with one person left out). *The hips:* a hip stands no higher above its ankle than a leg bent so allows, thigh and
-shin of equal length (Drillis and Contini, as Winter gives them: 0.245 and 0.246 of the height), so at the knees' 113°
-they have sunk at least 1 − sin 56.5° = 0.166 of a leg; that is already the least the body allows, so it has no room of
+2024, a scoping review of the deep squat, PMC11618833; Kd's research file asks for about 90°), so the line is the quarter
+squat's deepest end, 110°, less the camera's own room: how much the same rep's bottom knee reads differently between a video
+as filmed and each replay that sets numbers, each replayed rep paired with the filmed rep it overlaps most in time, 3.88° in
+99 reps of 100 (313 reps paired; paired by their order, 2.78° on 303): a rep read at 114° or deeper counts (113° to 116° with
+one person left out). *The hips:* a hip stands no higher above its ankle than a leg bent so allows, thigh and shin of equal
+length (Drillis and Contini, as Winter gives them: 0.245 and 0.246 of the height), so at the knees' 114° they have sunk at
+least 1 − sin 57° = 0.161 of a leg; that is already the least the body allows, so it has no room of
 its own: 0.16 in every fold (0.16 to 0.23 with one person left out before, and the lines a rep starts and is back up at
 moved with it). *Measured:* every proper squat of the 23 squat sets with a count by eye reads its knees at 107.4° or deeper,
 as filmed and under every held replay; all 23 count by eye; none is told to go lower, as filmed, under any held replay or
 in the phone's own runs. The kettlebell push press counts 0 (3 of its 4 dips before; its knees 120° to 127°); its dips that
 went three quarters of the way are told "Go lower to count.": the squat's movement does not read the arms, so to the camera
-they are a quarter squat, told as a quarter squat is (written on its video, `told`; every other movement says nothing).
+they are a quarter squat, told as a quarter squat is (written on its video, `told`; no other movement is told to go lower,
+and as filmed none says anything).
 Kd's ruling after five ways of telling it apart were measured and none kept every proper squat (its knees, its speed, the
 hands' rise, the arm pointing up, the last two together; the rulings file has each number): keep it. The
 shallowest man of the nine counts his 3 with his own videos left out, and so done twice as slowly (2 before). **Back up once
@@ -2273,16 +2275,19 @@ second, 0.9 s). Through the floor view, shown only and still read as his floor a
 10 at 14.3° to 14.5° (9 before), his pair at 22 s with his videos left out 2 (1 before), 3 of 150 drawn jumps on his
 raised sets (4 before), and his raised sets' foot wander reads 1.7 cm across (2.5 before: the half second before that
 squat, its foot's reference, had not been his standing). **What the camera saw decides first.** A rep's verdict, in order: a
-rule seen and broken that says what kind of movement it was, or a dip that never tried, makes it another movement, silent,
-whatever the camera could not see; only then does a rule the camera must see and could not leave it undecided, with that
-rule's words; then a count rule not reached makes it short, with its words. A rep whose hips were lost from view on its way
+dip whose seen readings make it another movement (a rule seen and broken that says what kind of movement it was), or that
+never tried, says nothing, whatever else the camera could not see; only then does a rule the camera must see and could not
+leave it undecided, saying what it could not see; then a count rule not reached makes it short, with its words. So a dip of
+another movement the camera could not judge says what it could not see: under the held replays 13 dips of 6 such videos say
+"Keep your whole body in view." (none as filmed), since the rule that would show them another movement is the one unseen. A rep whose hips were lost from view on its way
 is judged on what was seen of it the same way, otherwise undecided by the depth's own rule; a rep longer than 15 s is
 another movement. Counting is the same in every order. The five other movements whose dips one side called "the camera
 could not see" (52a-iii, 52a-ii-b-i: a barbell Romanian deadlift, a barbell lunge, a man turning round three times) are
 silent on both, and the phone's own runs are the same as the laptop's on 97 of 100 sets (92 before), the three left his
 floor squats, each written for job 53. **The words for the screen**, in the movement's file, one short whole sentence
 each, the file refused without them: a count rule says "Go lower to count." when a rep that tried falls short of it; a rule
-the camera must see says "Keep your feet in view." (the feet's two rules) or "Keep your whole body in view." (the others).
+the camera must see says "Keep your whole body in view.", the feet's two rules too (a passer-by hides the whole body, and
+"Keep your feet in view." would have told him so at the bottom of every one of the 23 squat sets).
 `RepResult.reason` carries them; another movement and a dip that never tried carry none. **Open, each written on its
 video:** a squat jack done 1.5 or 2 times as slowly counts 2 and 1 (52c): the standing before each is taken as his feet
 jump out, both feet moving 3.9 to 4.1 cm in that 0.2 s, where a real squat's feet move up to 3.8 cm in the standing taken

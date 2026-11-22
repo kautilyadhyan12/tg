@@ -9,7 +9,7 @@
 //     why, in the rule's own words (`short`: "Go lower to count.");
 //   - "match": what kind of movement it was. A rep that breaks one is another movement (a jump, a lunge, a deadlift):
 //     no count and no word (Kd, 2026-11-16: "count only what matches").
-// A rule the camera must see says what to do when it could not (`unseen`: "Keep your feet in view.").
+// A rule the camera must see says what to do when it could not (`unseen`: "Keep your whole body in view.").
 import { z } from "zod";
 
 export const MOVEMENT_FORMAT = 1;

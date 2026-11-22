@@ -142,7 +142,7 @@ export interface RepResult {
   /** The rule that decided a rep not counted; null when counted, or for a rep longer than any rep of its kind. */
   readonly rule: string | null;
   /** What the screen says about a rep not counted, in the rule's own words: why a rep that tried fell short ("Go lower
-   *  to count."), or what the camera could not see ("Keep your feet in view."). Null when counted, and for another
+   *  to count."), or what the camera could not see ("Keep your whole body in view."). Null when counted, and for another
    *  movement or a dip that never tried, which say nothing (§12.1). */
   readonly reason: string | null;
   /** Every rule's reading of this rep, null where not seen. */

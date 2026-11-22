@@ -15,11 +15,15 @@ describe("the worst thing: no other movement is counted as a squat however the w
     expect(ROWS.length).toBeGreaterThanOrEqual(30 * REPLAYS.length);
   });
 
-  it.each(ROWS.filter((r) => r.tried && !openRow(r)).map((r) => [`${r.replay.name}: ${r.label}`, r] as const))("%s counts 0 and says nothing", (_name, r) => {
+  it.each(ROWS.filter((r) => r.tried && !openRow(r)).map((r) => [`${r.replay.name}: ${r.label}`, r] as const))("%s counts 0, is never told to go lower, and says only what the camera could not see", (_name, r) => {
     expect(r.count).toBe(0);
     // The push press's dips, a quarter squat to the camera, are told to go lower as a quarter squat is (its video says so).
     if (r.entry.told === undefined) expect(r.reps.filter((x) => x.verdict === "short").length).toBe(0);
     else expect([...new Set(r.reps.filter((x) => x.verdict === "short").map((x) => x.reason))]).toEqual(["Go lower to count."]);
+    // Round one: a dip the camera could not judge says what it could not see; whatever else another movement does says
+    // nothing (13 dips of 6 videos under all the held replays speak so, none as filmed: movementMatcher.test.ts).
+    const spoken = r.reps.filter((x) => x.reason !== null && !(r.entry.told !== undefined && x.verdict === "short"));
+    expect(spoken.map((x) => [x.verdict, x.reason])).toEqual(spoken.map(() => ["unseen", "Keep your whole body in view."]));
   });
 
   it("the rows open today are listed here, each with the job that closes it, and say nothing", () => {

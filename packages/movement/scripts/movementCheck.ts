@@ -179,7 +179,8 @@ export function repsOf(movement: Movement, videos: readonly ProofVideo[]): RepRe
   return videos.flatMap((v) => {
     // The deepest dips first, as many as were counted, and only then those the camera could not judge left out: a rep
     // that could not be judged is never replaced by a smaller dip.
-    const dips = dipsOf(measuring, v.video);
+    // A dip longer than any rep of its kind (`judgeLong`: another movement, with no rule) is no rep either (round one).
+    const dips = dipsOf(measuring, v.video).filter((r) => !(r.verdict === "other" && r.rule === null));
     const deepest = [...dips].sort((a, b) => depthOf(b) - depthOf(a)).slice(0, v.entry.reps ?? 0);
     return dips.filter((r) => deepest.includes(r) && r.verdict !== "unseen");
   });
@@ -221,19 +222,28 @@ export interface Fitted {
   readonly room?: { readonly size: number; readonly pairs: number };
 }
 
+/** How long two reps overlap in time, ms (0 when they do not). */
+const overlap = (a: RepResult, b: RepResult): number => Math.max(0, Math.min(a.end, b.end) - Math.max(a.start, b.start));
+
 /** How much one rule's reading of the same rep changes between each video as filmed and each replay that sets numbers,
  *  the way a rule's bound must move to keep it (up for "at most", down for "at least"), never below 0: the camera's room
- *  on that reading, in `STANDARD_SHARE` of the reps. Reps are paired in order, only where the replay found as many. */
+ *  on that reading, in `STANDARD_SHARE` of the reps. The same rep is the one it overlaps most in time (every replay that
+ *  sets numbers keeps the video's own clock), and a replayed rep that overlaps none, or no filmed rep that is its own
+ *  best, is left out: never two different reps paired by their order (round one: a replay that lost one rep and gained
+ *  another would have paired them). */
 export function roomOf(movement: Movement, rule: MovementRule, videos: readonly ProofVideo[]): { size: number; pairs: number } {
-  const byStart = (a: RepResult, b: RepResult): number => a.start - b.start;
+  const best = (r: RepResult, among: readonly RepResult[]): RepResult | undefined =>
+    among.reduce<RepResult | undefined>((top, x) => (overlap(r, x) > (top === undefined ? 0 : overlap(r, top)) ? x : top), undefined);
   const changes = videos.flatMap((v) => {
-    const filmed = repsOf(movement, [v]).sort(byStart);
+    const filmed = repsOf(movement, [v]);
     return asReplayed(v).flatMap((replay) => {
-      const again = repsOf(movement, [replay]).sort(byStart);
-      if (again.length !== filmed.length) return [];
-      return again.flatMap((r, k) => {
+      const again = repsOf(movement, [replay]);
+      return again.flatMap((r) => {
+        const own = best(r, filmed);
+        // Paired only both ways: the filmed rep's own best among the replayed reps is this one.
+        if (own === undefined || best(own, again) !== r) return [];
         const a = r.readings[rule.name] ?? null;
-        const b = filmed[k]?.readings[rule.name] ?? null;
+        const b = own.readings[rule.name] ?? null;
         return a === null || b === null ? [] : [rule.atMost !== undefined ? a - b : b - a];
       });
     });

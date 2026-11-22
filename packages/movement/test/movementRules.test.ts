@@ -162,7 +162,7 @@ describe("each rep not counted says why in the movement's own words, and what wa
     ["counted: nothing to say", undefined, ["counted", null, null]],
     ["the hips not deep enough: go lower", (_t, p, b) => (b.hips = 1.15 - bound("depth") * 0.8 * p), ["short", "depth", "Go lower to count."]],
     ["the knees not bent enough: go lower", (_t, p, b) => ((b.knee = 175 - (175 - bound("knees bent") - 12) * p), (b.hipAngle = b.knee - 8)), ["short", "knees bent", "Go lower to count."]],
-    ["the feet hidden all through a good rep: keep them in view", HIDE_FEET, ["unseen", "feet stay down", "Keep your feet in view."]],
+    ["the feet hidden all through a good rep: keep the whole body in view (a passer-by hides more than the feet)", HIDE_FEET, ["unseen", "feet stay down", "Keep your whole body in view."]],
     ["the knees hidden all through a good rep: keep the whole body in view", (t, _p, b) => (b.kneesSeen = !(t > 1400 && t < 3700)), ["unseen", "knees bent", "Keep your whole body in view."]],
     ["a deadlift (the hips bend far more than the knees): nothing", (_t, p, b) => (b.hipAngle = 168 - (85 + bound("hips and knees together") + 15) * p), ["other", "hips and knees together", null]],
   ];
@@ -183,7 +183,7 @@ describe("each rep not counted says why in the movement's own words, and what wa
 
   it("a rep that falls short with its feet hidden is not told to go lower: what the camera could not see leaves it undecided", () => {
     const shallow: Change = (_t, p, b) => ((b.knee = 175 - (175 - bound("knees bent") - 12) * p), (b.hipAngle = b.knee - 8));
-    expect(said(both(shallow, HIDE_FEET))).toEqual([["unseen", "feet stay down", "Keep your feet in view."]]);
+    expect(said(both(shallow, HIDE_FEET))).toEqual([["unseen", "feet stay down", "Keep your whole body in view."]]);
   });
 
   it("back up once standing tall, however low the hips read against the first standing: the rep counts", () => {
