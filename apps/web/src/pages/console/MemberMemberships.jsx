@@ -1082,9 +1082,9 @@ export default function MemberMemberships({
     const SPLIT = { borderTop: '1px solid var(--line)' };
     return (
       <div className="flex flex-col gap-2 pt-2" data-testid="held-fees">
-        <h4 className="c-h3">
+        <h5 className="c-h3">
           Fees
-        </h4>
+        </h5>
         <ul className="m-0 p-0 list-none flex flex-col gap-2">
           {fees.map((fee) => {
             const row = feeRow(fee, m.currency, today);
@@ -1786,9 +1786,9 @@ export default function MemberMemberships({
     const SPLIT = { borderTop: '1px solid var(--line)' };
     return (
       <div className="flex flex-col gap-2 pt-2" data-testid="held-bills">
-        <h4 className="c-h3">
+        <h5 className="c-h3">
           Bills
-        </h4>
+        </h5>
         <ul className="m-0 p-0 list-none flex flex-col gap-2">
           {rows.map((row) => {
             const pays = acts && payHere && billing.pay !== null && billing.pay.periodIndex === row.periodIndex;
@@ -2384,7 +2384,7 @@ export default function MemberMemberships({
     return (
       <li key={m.id} className="py-3 flex flex-col gap-1.5" style={{ borderTop: '1px solid var(--line)' }} data-testid="held-membership" data-held-id={m.id}>
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-          <span className="c-s16 c-w6 c-t1 break-words min-w-0">{m.typeName}</span>
+          <h4 className="m-0 c-s16 c-w6 c-t1 tracking-normal break-words min-w-0">{m.typeName}</h4>
           <span className={`c-tag ${TAG_TONES[tag.tone]} whitespace-nowrap`}>{tag.tag}</span>
         </div>
         {/* Its price, its dates and its payment, side by side where they fit (the Person board). */}

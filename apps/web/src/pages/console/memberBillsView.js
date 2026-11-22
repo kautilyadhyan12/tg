@@ -582,7 +582,7 @@ export function paymentWords(m, name, today) {
   const left = formatMinor(pay.leftMinor, m.currency);
   const what = pay.covers === null ? '' : ` for ${dayWords(pay.covers.from)} to ${dayWords(pay.covers.to)}`;
   const early = paysEarly(m, today) ? ` It is not due until ${dayWords(pay.dueOn)}.` : '';
-  const leftWords = `${left} due${what}.${early}`;
+  const leftWords = `${left} is due${what}.${early}`;
   return {
     title: `Record a payment for ${name}'s ${m.typeName}`,
     detail: `${leftWords} This only writes it in your records: no money is taken.`,

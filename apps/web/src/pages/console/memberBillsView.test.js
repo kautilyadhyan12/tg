@@ -108,10 +108,21 @@ describe('V2a-ii: a bill still due never reads as paid, and says the amounts the
     }
   });
 
+  // Written out by hand, so a fault in the money formatting itself cannot pass the sweep above.
+  it.each([
+    ['GBP', 4999, '£49.99 is due.'],
+    ['JPY', 2500, '¥2,500 is due.'],
+    ['INR', 2500, '₹25.00 is due.'],
+    ['USD', 9282, '$92.82 is due.'],
+  ])('%s %i reads %s', (currency, amountMinor, words) => {
+    const m = membership({ currency }, { bills: [bill({ amountMinor, paidMinor: 0 })], pay: { periodIndex: 0, covers: null, leftMinor: amountMinor, dueOn: TODAY, state: 'due' } });
+    expect(paymentWords(m, 'Ada', TODAY).left).toBe(words);
+  });
+
   it.each(cases.filter((c) => c.state === 'due' || c.state === 'overdue'))('recording against %o', ({ currency, amountMinor, paidMinor }) => {
     const leftMinor = amountMinor - paidMinor;
     const m = membership({ currency }, { bills: [bill({ amountMinor, paidMinor })], pay: { periodIndex: 0, covers: null, leftMinor, dueOn: TODAY, state: 'due' } });
-    expect(paymentWords(m, 'Ada', TODAY).left).toBe(`${formatMinor(leftMinor, currency)} due.`);
+    expect(paymentWords(m, 'Ada', TODAY).left).toBe(`${formatMinor(leftMinor, currency)} is due.`);
     // Recording all of it says the bill is paid; anything less says what is still due, to the penny.
     expect(paidWords(m, leftMinor)).toBe(`${formatMinor(leftMinor, currency)} recorded. That bill is paid.`);
     if (leftMinor > 1) expect(paidWords(m, 1)).toBe(`${formatMinor(1, currency)} recorded. ${formatMinor(leftMinor - 1, currency)} is still due.`);
@@ -193,10 +204,10 @@ describe('the amount typed is the amount sent', () => {
     expect(paymentDraft(m, () => 'key-1')).toEqual({ requestKey: 'key-1', amount: '49.99', method: '' });
     expect(paymentWords(m, 'Ada Lovelace', TODAY)).toEqual({
       title: "Record a payment for Ada Lovelace's Gold Monthly",
-      detail: '£49.99 due for 4 October 2026 to 3 November 2026. This only writes it in your records: no money is taken.',
+      detail: '£49.99 is due for 4 October 2026 to 3 November 2026. This only writes it in your records: no money is taken.',
       // Card on Terminal takes the money (18d-vi-a): its box keeps what is left and drops the last sentence.
       takeTitle: "Take a payment for Ada Lovelace's Gold Monthly",
-      left: '£49.99 due for 4 October 2026 to 3 November 2026.',
+      left: '£49.99 is due for 4 October 2026 to 3 November 2026.',
     });
     expect(payLabel(m, TODAY)).toBe('Record payment');
   });
@@ -205,7 +216,7 @@ describe('the amount typed is the amount sent', () => {
     const next = membership({}, { pay: { periodIndex: 1, covers: { from: '2026-11-04', to: '2026-12-03' }, leftMinor: 4999, dueOn: '2026-11-04', state: 'due' } });
     expect(payLabel(next, TODAY)).toBe('Record payment early');
     expect(paymentWords(next, 'Ada Lovelace', TODAY).detail).toBe(
-      '£49.99 due for 4 November 2026 to 3 December 2026. It is not due until 4 November 2026. This only writes it in your records: no money is taken.',
+      '£49.99 is due for 4 November 2026 to 3 December 2026. It is not due until 4 November 2026. This only writes it in your records: no money is taken.',
     );
     // Due today is not early.
     expect(payLabel(next, '2026-11-04')).toBe('Record payment');

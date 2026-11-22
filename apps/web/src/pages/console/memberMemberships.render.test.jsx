@@ -196,12 +196,17 @@ describe('whose membership is on screen', () => {
     const goldRow = rows.find((r) => within(r).queryByText('Gold Monthly') !== null);
     expect(within(packRow).getByTestId('held-payment').textContent).toBe('Overdue since 10 October 2026');
     expect(within(goldRow).getByTestId('held-payment').textContent).toBe('Paid · next payment due 4 November 2026');
+    // The panel's colour says it too: red for overdue, plain for paid.
+    expect([...within(packRow).getByTestId('held-payment').parentElement.classList].filter((c) => c.startsWith('c-held-fact-'))).toEqual(['c-held-fact-bad']);
+    expect([...within(goldRow).getByTestId('held-payment').parentElement.classList].filter((c) => c.startsWith('c-held-fact-'))).toEqual([]);
+    // Each membership's name is the heading its Bills sit under.
+    expect(within(packRow).getByRole('heading', { level: 4, name: '10 classes' })).toBeTruthy();
 
     fireEvent.click(within(packRow).getByRole('button', { name: 'Record payment' }));
     // The form is under the pack, names Ada, and Gold keeps its own buttons.
     const form = within(packRow).getByTestId('held-pay');
     expect(within(form).getByText("Record a payment for Ada Lovelace's 10 classes")).toBeTruthy();
-    expect(within(form).getByText('£90.00 due. This only writes it in your records: no money is taken.')).toBeTruthy();
+    expect(within(form).getByText('£90.00 is due. This only writes it in your records: no money is taken.')).toBeTruthy();
     expect(within(goldRow).queryByTestId('held-pay')).toBeNull();
     // Gold is paid up to 4 November: its next payment can be recorded, and the button says it is early.
     expect(within(goldRow).getByRole('button', { name: 'Record payment early' })).toBeTruthy();

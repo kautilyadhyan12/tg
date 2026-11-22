@@ -72,7 +72,7 @@ export function owedItems(held, today) {
         kind: 'bill',
         membership: m,
         title: pay.covers === null ? m.typeName : `${m.typeName} · ${billDays(pay.covers)}`,
-        amount: `${formatMinor(pay.leftMinor, m.currency)} left`,
+        amount: `${formatMinor(pay.leftMinor, m.currency)} due`,
         tag: pay.state === 'overdue' ? 'Overdue' : 'Payment due',
         overdue: pay.state === 'overdue',
       });

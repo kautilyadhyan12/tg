@@ -213,7 +213,7 @@ describe('what the bills show', () => {
     expect(billsOf(row)).toEqual(['Whole membership£90.00OverdueDue 10 October 2026£40.00 paid · £50.00 due£40.00Bank transfer · 12 Oct 2026View receiptRecord payment']);
     fireEvent.click(within(row).getByRole('button', { name: 'Record payment' }));
     expect(within(row).getByLabelText('Amount paid (GBP)').value).toBe('50.00');
-    expect(within(row).getByText('£50.00 due. This only writes it in your records: no money is taken.')).toBeTruthy();
+    expect(within(row).getByText('£50.00 is due. This only writes it in your records: no money is taken.')).toBeTruthy();
   });
 
   it('shows the two newest bills, and the rest behind one line', async () => {
@@ -363,6 +363,7 @@ describe('staff without the payments tick', () => {
     render(draw());
     const [row] = await rowsSoon();
     expect(within(row).getByTestId('held-payment').textContent).toBe('Payment due since 10 October 2026');
+    expect([...within(row).getByTestId('held-payment').parentElement.classList].filter((c) => c.startsWith('c-held-fact-'))).toEqual(['c-held-fact-warn']);
     expect(within(row).queryByTestId('held-bills')).toBeNull();
     expect(within(row).getAllByRole('button').map((b) => b.textContent)).toEqual(['Freeze', 'Cancel membership']);
     expect(within(row).getByTestId('held-no-payments').textContent).toBe(`You can't record payments. Ask the owner to turn on "Record members' payments" for you.`);
