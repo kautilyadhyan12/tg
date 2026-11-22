@@ -40,7 +40,7 @@ function withoutRep(frames: readonly MovementFrame[], rep: { start: number; end:
 }
 
 /** A rep at a time in the video (`start`, `end` in ms of the video), as a run holds it after its lead-in. */
-const rep = (start: number, end: number, verdict: RepResult["verdict"], rule: string | null = null): RepResult => ({ start: start + LEAD_IN, end: end + LEAD_IN, verdict, rule, readings: {}, standing: {} });
+const rep = (start: number, end: number, verdict: RepResult["verdict"], rule: string | null = null): RepResult => ({ start: start + LEAD_IN, end: end + LEAD_IN, verdict, rule, reason: null, readings: {}, standing: {} });
 
 describe("the worst thing: a phone that counts or speaks differently is never the same", () => {
   const entry = entryOf("squat_reference");
@@ -161,19 +161,11 @@ describe("every proof video, as the phone's chosen set-up read it (51b-ii; kept 
     expect(allSame(rows)).toBe(false);
   });
 
-  it("the open cases are eight, and on the phone no other movement is counted", () => {
+  it("the open cases are three, a man's own floor squats, and on the phone no other movement is counted", () => {
     const open = rows.filter((r) => r.entry.phoneOpen !== undefined);
-    expect(open.map((r) => r.label).sort()).toEqual([
-      "floor_phone_test 0-12 s",
-      "floor_phone_test 13.9-21.1 s",
-      "fresh_lunge_forward_barbell_2",
-      "romanian_deadlift_barbell",
-      "usual_v03",
-      "usual_v04 9.8-17.5 s",
-      "usual_v12",
-      "usual_v14",
-    ]);
-    for (const r of rows.filter((x) => x.entry.movement === null && x.entry.open === undefined)) expect([r.label, r.phone?.count]).toEqual([r.label, 0]);
+    expect(open.map((r) => r.label).sort()).toEqual(["floor_phone_test 0-12 s", "floor_phone_test 13.9-21.1 s", "usual_v04 9.8-17.5 s"]);
+    for (const r of rows.filter((x) => x.entry.movement === null)) expect([r.label, r.phone?.count]).toEqual([r.label, 0]);
+    expect(rows.filter((r) => r.verdict === "same").length).toBe(97);
   });
 
   it("the sumo squat nobody could count by eye now counts the same on both", () => {
@@ -191,29 +183,15 @@ describe("every proof video, as the phone's chosen set-up read it (51b-ii; kept 
     }
   });
 
-  it("in every open case of another movement both sides count 0 and call nothing short", () => {
-    const open = rows.filter((r) => r.entry.phoneOpen !== undefined && r.entry.movement === null);
-    expect(open).toHaveLength(5);
-    for (const r of open) {
-      expect([r.label, r.laptop.count, r.phone?.count]).toEqual([r.label, 0, 0]);
-      expect([...r.laptop.reps, ...(r.phone?.reps ?? [])].filter((x) => x.verdict === "short" || x.verdict === "counted")).toEqual([]);
-    }
-  });
-
-  it("in the deadlift's and the lunge's open cases one side marks one dip unseen, and the other side says nothing there: no rep, or a silent one", () => {
-    const open = rows.filter((r) => ["romanian_deadlift_barbell", "fresh_lunge_forward_barbell_2"].includes(r.label));
-    expect(open).toHaveLength(2);
-    for (const r of open) {
-      expect([r.label, r.laptop.count, r.phone?.count]).toEqual([r.label, 0, 0]);
-      const sides = [r.laptop.reps, r.phone?.reps ?? []];
-      const unseen = sides.map((reps) => reps.filter((x) => x.verdict === "unseen"));
-      // Exactly one side holds exactly one unseen dip.
-      expect([r.label, unseen.map((u) => u.length).sort()]).toEqual([r.label, [0, 1]]);
-      const mark = unseen.flat()[0];
-      const otherSide = sides[unseen[0]?.length === 1 ? 1 : 0] ?? [];
-      const there = otherSide.filter((x) => mark !== undefined && x.start < mark.end && mark.start < x.end);
-      expect([r.label, there.every((x) => x.verdict === "other")]).toEqual([r.label, true]);
-      expect([...sides.flat()].filter((x) => x.verdict === "short" || x.verdict === "counted")).toEqual([]);
+  it("the five other movements whose dips one side called unseen until 52b-i are silent on both: what was seen made them another movement", () => {
+    // 52a-iii and 52a-ii-b-i: a Romanian deadlift's and a kettlebell deadlift's hips and knees 54 to 79 degrees apart, a
+    // step-up's knees straight, a lunge's feet far from where they stood, a man turning round; the feet's rule read
+    // nothing on one side, and it said "the camera could not see".
+    const five = rows.filter((r) => ["romanian_deadlift_barbell", "fresh_lunge_forward_barbell_2", "usual_v03", "usual_v12", "usual_v14"].includes(r.label));
+    expect(five).toHaveLength(5);
+    for (const r of five) {
+      expect([r.label, r.verdict, r.laptop.count, r.phone?.count]).toEqual([r.label, "same", 0, 0]);
+      expect([r.label, [...r.laptop.reps, ...(r.phone?.reps ?? [])].filter((x) => x.verdict !== "other").map((x) => x.verdict)]).toEqual([r.label, []]);
     }
   });
 });
