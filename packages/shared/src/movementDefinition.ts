@@ -129,3 +129,99 @@ export type MovementRead = z.infer<typeof movementReadSchema>;
 export type MovementRule = z.infer<typeof movementRuleSchema>;
 export type MovementReady = z.infer<typeof movementReadySchema>;
 export type Movement = z.infer<typeof movementSchema>;
+
+// ── An exercise's camera file (spec Part 2 §12.3): the movement it uses, and its mistakes ─────────────────────────────
+// Every common mistake of the exercise, from its research file and a proper source, is in the list, each marked one of:
+//   - "checked": the camera checks it, inside a counted rep only, where the phone's place shows it, and says nothing
+//     where it does not ("the camera cannot see this from here" for that rep);
+//   - "counting": the movement's own rule (`rule`) already refuses it: a quarter squat is not counted, and says "Go
+//     lower to count.";
+//   - "cannot see": the camera cannot see it from where the phone stands, with why, measured where it can be;
+//   - "not checked": not checked by the camera yet, with why and the job that will (a wide stance is a sumo squat's own).
+// The engine reads only the picture for a mistake: a 3D reading alone never gives advice (§12.1: advice is strict).
+
+export const EXERCISE_CAMERA_FORMAT = 1;
+
+/** What a mistake reads, frame by frame, on the picture only. */
+export const mistakeReadSchema = z.discriminatedUnion("kind", [
+  /** The mean of the measures the picture gives. */
+  z.object({ kind: z.literal("value"), measures }).strict(),
+  /** Pair by pair, `from` less `less`, the mean of the pairs the picture gives. */
+  z
+    .object({ kind: z.literal("gap"), from: measures, less: measures })
+    .strict()
+    .refine((g) => g.from.length === g.less.length, { message: "a gap pairs its measures one to one" }),
+]);
+
+/** An exercise's own id word, as its Library file names it (spec §13.2). */
+const idWord = z
+  .string()
+  .min(1)
+  .max(40)
+  .regex(/^[a-z][a-z0-9_]*$/);
+
+/** A mistake's name, as a coach says it ("Leaning too far forward"). */
+const mistakeName = z
+  .string()
+  .min(2)
+  .max(80)
+  .regex(/^[A-Z][^\n]*[^.\n]$/);
+
+const mistakeBase = {
+  id: idWord,
+  name: mistakeName,
+  /** Where the mistake comes from: the research file's words, and a proper source where one says it. */
+  source: from,
+};
+
+export const checkedMistakeSchema = z
+  .object({
+    ...mistakeBase,
+    camera: z.literal("checked"),
+    read: mistakeReadSchema,
+    /** Read at the bottom of the rep (the middle of the frames nearest the deepest), on the way up from it (the most it
+     *  reaches there), or over the whole rep wherever the picture gives it (its furthest). */
+    at: z.enum(["bottom", "way up", "rep"]),
+    /** Where the picture shows it: "side", only in frames where the body stands side on to the phone (a lean forward
+     *  from the front points at the phone, and the picture shows a knee moving sideways as if it moved forward);
+     *  "any", wherever its measures are given. */
+    view: z.enum(["side", "any"]),
+    /** What the reading is taken against: nothing (the reading itself), the same reading while the person stood ready
+     *  before the rep (their own body), or, on the way up, the reading at the bottom. */
+    against: z.enum(["nothing", "standing", "bottom"]),
+    atLeast: z.number().optional(),
+    atMost: z.number().optional(),
+    /** The form standard's own line, where a proper source gives one: the line is never nearer than it, moved by the
+     *  camera's own room, nor nearer than any proper rep of the videos (movement-check sets it). */
+    standard: z.object({ at: z.number(), source: from }).strict().optional(),
+    from,
+  })
+  .strict()
+  .refine((m) => (m.atLeast === undefined) !== (m.atMost === undefined), { message: "a mistake has exactly one bound" })
+  .refine((m) => (m.against === "bottom") === (m.at === "way up"), { message: "a reading on the way up is taken against the bottom, and only it" });
+
+export const exerciseMistakeSchema = z.union([
+  checkedMistakeSchema,
+  z.object({ ...mistakeBase, camera: z.literal("counting"), rule: z.string().min(1).max(60) }).strict(),
+  z.object({ ...mistakeBase, camera: z.literal("cannot see"), why: from }).strict(),
+  z.object({ ...mistakeBase, camera: z.literal("not checked"), why: from }).strict(),
+]);
+
+export const exerciseCameraSchema = z
+  .object({
+    format: z.literal(EXERCISE_CAMERA_FORMAT),
+    /** The exercise's id word, its Library file's own. */
+    id: idWord,
+    /** The movement it uses (`packages/movement/movements/<movement>.json`). */
+    movement: z.string().min(1).max(60),
+    /** Where its form comes from: the research file, named. */
+    research: from,
+    mistakes: z.array(exerciseMistakeSchema).min(1).max(24),
+  })
+  .strict()
+  .refine((e) => new Set(e.mistakes.map((m) => m.id)).size === e.mistakes.length, { message: "every mistake has its own id" });
+
+export type MistakeRead = z.infer<typeof mistakeReadSchema>;
+export type CheckedMistake = z.infer<typeof checkedMistakeSchema>;
+export type ExerciseMistake = z.infer<typeof exerciseMistakeSchema>;
+export type ExerciseCamera = z.infer<typeof exerciseCameraSchema>;

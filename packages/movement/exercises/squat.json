@@ -1,0 +1,123 @@
+{
+  "format": 1,
+  "id": "squat",
+  "movement": "squat",
+  "research": "Kd's research file, \"Normal Squat (Bodyweight Squat) Guide\" (his folder, squat normal), its eleven common mistakes; and the Library's source for the squat, ACE's Exercise Library: Bodyweight Squat.",
+  "mistakes": [
+    {
+      "id": "lean_forward",
+      "name": "Leaning too far forward",
+      "source": "Research file: \"Leaning too far forward: this shifts the load to the lower back. Keep your chest up.\" Its key angles: torso lean moderate, about 30 to 45 degrees forward from vertical.",
+      "camera": "checked",
+      "read": {
+        "kind": "value",
+        "measures": [
+          "trunk lean"
+        ]
+      },
+      "at": "bottom",
+      "view": "side",
+      "against": "nothing",
+      "atMost": 46,
+      "standard": {
+        "at": 45,
+        "source": "Research file, key angles: torso lean moderate, about 30 to 45 degrees forward from vertical."
+      },
+      "from": "Set by form-check: the further out of the form standard, 45 (its source beside it), and the furthest of 118 reps of 9 people's good-form videos, as filmed and as each replay that sets numbers (40.06), plus the camera's own room: the same rep's change from as filmed to each such replay, in 99 reps of 100 (104 reps): 0.41; rounded outward."
+    },
+    {
+      "id": "hips_rise_first",
+      "name": "Hips rising before the chest",
+      "source": "Research file: \"Hips rising before the chest: this turns the lift into a stiff-legged hinge. Rise with your hips and chest together.\"",
+      "camera": "not checked",
+      "why": "From a phone on the floor a man's own proper squats read the chest 3.1 to 4.2 degrees further forward half way out of the bottom than at it (once 12.6), as filmed and replayed; a line set from the eight others alone, all filmed from hip height, lies at 3 degrees and marks his proper squats. He is the only person filmed from the floor: tried again with more floor bodies (jobs 53 and 54)."
+    },
+    {
+      "id": "knees_forward",
+      "name": "Knees shooting far forward with the hips staying high",
+      "source": "Research file: \"Knees shooting far forward with the hips staying high: start the movement by sending the hips back.\" Its key angles: shin angle a slight forward lean, about 15 to 30 degrees.",
+      "camera": "not checked",
+      "why": "Read side on, the shins' lean less the thighs' at the bottom: a man's own proper squats, from the floor and a raised phone, read -17 to -29 degrees; the eight others' reach -32 at most, and a line set from them alone, -30, marks his proper squats. Tried again with more bodies (jobs 53 and 54)."
+    },
+    {
+      "id": "knees_cave_in",
+      "name": "Knees caving inward",
+      "source": "Research file: \"Knees caving inward: this stresses the knee ligaments. Push your knees out over your toes.\" ACE: keep your knees in line with your second toes.",
+      "camera": "checked",
+      "read": {
+        "kind": "gap",
+        "from": [
+          "knees apart"
+        ],
+        "less": [
+          "feet apart"
+        ]
+      },
+      "at": "rep",
+      "view": "any",
+      "against": "standing",
+      "atLeast": -0.06,
+      "standard": {
+        "at": 0,
+        "source": "ACE: keep your knees in line with your second toes; the research file: let your knees track outward over your toes. So the knees never come closer together, against the feet, than they stood."
+      },
+      "from": "Set by form-check: the further out of the form standard, 0 (its source beside it), and the furthest of 144 reps of 9 people's good-form videos, as filmed and as each replay that sets numbers (0), minus the camera's own room: the same rep's change from as filmed to each such replay, in 99 reps of 100 (120 reps): 0.05; rounded outward."
+    },
+    {
+      "id": "quarter_reps",
+      "name": "Quarter reps",
+      "source": "Research file: \"Quarter reps: very shallow squats limit glute and hamstring work. Go to parallel if your mobility allows.\"",
+      "camera": "counting",
+      "rule": "knees bent"
+    },
+    {
+      "id": "feet_move",
+      "name": "Feet shifting during the set",
+      "source": "ACE (the Library's squat file): keep both feet planted in one place.",
+      "camera": "counting",
+      "rule": "feet stay in place"
+    },
+    {
+      "id": "heels_lift",
+      "name": "Heels lifting",
+      "source": "Research file: \"Heels lifting: this usually points to tight ankles and puts extra load on the knees. Keep your whole foot planted.\" ACE: heels lift off the floor.",
+      "camera": "cannot see",
+      "why": "On proper squats the heel point alone reads up to 11.5 cm above where it stood, its toes down, from a phone on the floor (5.3 in the middle), and up to 5.1 cm from hip height (4.2 in 95 of 100): a heel lifted less than that cannot be told from the pose model's own wander (measured 2026-11-22, 72 feet of 43 reps)."
+    },
+    {
+      "id": "bounce",
+      "name": "Bouncing out of the bottom",
+      "source": "Research file: \"Bouncing out of the bottom: this uses momentum instead of muscle control.\"",
+      "camera": "cannot see",
+      "why": "Proper squats in the videos stay at the bottom for as little as 0.10 s (0.17 s in 5 of 100), three pictures at 30 a second: a bounce is as short, and the muscles let go are not in the body's points, so it cannot be told from a brisk proper squat (measured 2026-11-22, 43 reps)."
+    },
+    {
+      "id": "back_rounds",
+      "name": "Rounding the lower back",
+      "source": "Research file: \"Rounding the lower back (butt wink): stop the descent just before your pelvis tucks under.\" ACE: back rounds at the bottom.",
+      "camera": "cannot see",
+      "why": "The pose model gives no point along the spine or on the pelvis, only the shoulders and the hips, so the back's own shape is not in what it sees."
+    },
+    {
+      "id": "knees_lock",
+      "name": "Locking the knees hard at the top",
+      "source": "Research file: \"Locking the knees hard at the top: this jars the joint.\"",
+      "camera": "cannot see",
+      "why": "A knee's angle reads 180 degrees at its straightest and never past it, and how hard a joint locks is a force, not a place the camera sees."
+    },
+    {
+      "id": "breath_held",
+      "name": "Holding your breath for the whole rep",
+      "source": "Research file: \"Holding your breath for the whole rep: brace on the way down and exhale on the way up.\"",
+      "camera": "cannot see",
+      "why": "Breathing is not a movement of the body's points."
+    },
+    {
+      "id": "stance_width",
+      "name": "Feet too narrow or too wide",
+      "source": "Research file: \"Feet too narrow or too wide: too narrow limits balance and depth; too wide shifts the work to the inner thighs and turns it into a sumo squat.\"",
+      "camera": "not checked",
+      "why": "A wide stance is the sumo squat's own, a twin of this movement whose videos set its numbers: set with the squat's twins, each its own exercise (job 54)."
+    }
+  ]
+}

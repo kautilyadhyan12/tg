@@ -9,15 +9,15 @@
 //   - every rep that says something on the screen (counted; short, with the rule that fell short; unseen, where the camera
 //     could not judge it), in the same order, each the same verdict and the same rule, at the same place in the video (the
 //     two reps overlap);
-//   - and the coach's lines, once there are any (52b and 53 make them): until then there is nothing to compare, and the
-//     table says so.
+//   - for an exercise's form check (52b-ii-a), the mistakes marked in each counted rep, the same ones;
+//   - and the coach's lines, once there are any (53 makes them): until then there is nothing more to compare.
 // A dip read as another movement says nothing and is not compared, only counted in the table.
 // A phone file is judged only when it is the phone's own reading of the very frames of the kept file under its name, from
 // the chosen set-up; anything else is refused and never judged, and a video with no phone file is never "the same": the
 // table is all the same only when every video has a judged phone run and each is the same.
 import { existsSync, readFileSync } from "node:fs";
 import { basename, join } from "node:path";
-import { phonePointsManifestSchema, type Movement, type PhonePointsManifest } from "@app/shared";
+import { phonePointsManifestSchema, type ExerciseCamera, type Movement, type PhonePointsManifest } from "@app/shared";
 import type { RepResult } from "../src/index.js";
 import { KEPT_MODEL } from "./keptVideos.js";
 import { readKept, type KeptFile, type Video } from "./bodyCheck.js";
@@ -63,6 +63,8 @@ export const says = (r: RepResult): boolean => r.verdict !== "other";
 /** A rep in words, at its time in the video (a run holds a lead-in first). */
 const repWords = (r: RepResult): string => `${((r.start - LEAD_IN) / 1000).toFixed(1)} s ${r.verdict}${r.rule === null ? "" : ` (${r.rule})`}`;
 const overlap = (a: RepResult, b: RepResult): boolean => a.start < b.end && b.start < a.end;
+/** The mistakes marked made in a rep, in its exercise file's order. */
+const madeIn = (r: RepResult): string => r.form.filter((f) => f.status === "made").map((f) => f.mistake).join(", ");
 
 /** What differs between the laptop's run and the phone's, in words; empty when a person would be told the same. */
 export function differences(laptop: Run, phone: Run): string[] {
@@ -77,6 +79,8 @@ export function differences(laptop: Run, phone: Run): string[] {
     else if (y === undefined && x !== undefined) out.push(`the phone does not say ${repWords(x)}`);
     else if (x !== undefined && y !== undefined && (x.verdict !== y.verdict || x.rule !== y.rule || !overlap(x, y))) {
       out.push(`the laptop says ${repWords(x)}, the phone ${repWords(y)}`);
+    } else if (x !== undefined && y !== undefined && madeIn(x) !== madeIn(y)) {
+      out.push(`at ${repWords(x)} the laptop marks ${madeIn(x) || "no mistake"}, the phone ${madeIn(y) || "no mistake"}`);
     }
   }
   return out;
@@ -97,13 +101,13 @@ export interface PhoneRow {
 const asVideo = (file: KeptFile): Video => ({ label: file.header.label, frames: file.frames, sets: false, why: "judged, never setting a number" });
 
 /** One proof video: the laptop's kept file against the phone's file (null: none was kept). */
-export function judgePhone(movement: Movement, entry: MovementVideo, kept: KeptFile, phone: KeptFile | null, madeFrom: string | null, run: string = CHOSEN_RUN): PhoneRow {
-  const laptop = runMovement(movement, asVideo(kept));
+export function judgePhone(movement: Movement, entry: MovementVideo, kept: KeptFile, phone: KeptFile | null, madeFrom: string | null, run: string = CHOSEN_RUN, exercise: ExerciseCamera | null = null): PhoneRow {
+  const laptop = runMovement(movement, asVideo(kept), exercise);
   const label = kept.header.label;
   if (phone === null) return { label, entry, verdict: "no run", why: ["the phone has not run this video"], laptop, phone: null };
   const refused = refusal(kept, phone, madeFrom, run);
   if (refused !== null) return { label, entry, verdict: "refused", why: [refused], laptop, phone: null };
-  const phoneRun = runMovement(movement, asVideo(phone));
+  const phoneRun = runMovement(movement, asVideo(phone), exercise);
   const diff = differences(laptop, phoneRun);
   return { label, entry, verdict: diff.length === 0 ? "same" : "differs", why: diff, laptop, phone: phoneRun };
 }
@@ -116,8 +120,8 @@ export function readManifest(): PhonePointsManifest {
   return existsSync(path) ? phonePointsManifestSchema.parse(JSON.parse(readFileSync(path, "utf8"))) : { files: {} };
 }
 
-/** Every proof video, the laptop against the phone's kept run of it. */
-export function phoneTable(movement: Movement, entries: readonly MovementVideo[] = MOVEMENT_VIDEOS, run: string = CHOSEN_RUN): PhoneRow[] {
+/** Every proof video, the laptop against the phone's kept run of it; with `exercise`, its mistakes judged too. */
+export function phoneTable(movement: Movement, entries: readonly MovementVideo[] = MOVEMENT_VIDEOS, run: string = CHOSEN_RUN, exercise: ExerciseCamera | null = null): PhoneRow[] {
   const manifest = readManifest();
   // A set of a video (`cut`) is the same stretch of both files: the phone writes the laptop's own frame times.
   const cutOf = (entry: MovementVideo, file: KeptFile): KeptFile => ({ ...file, frames: framesOf(entry, file.frames) });
@@ -125,7 +129,7 @@ export function phoneTable(movement: Movement, entries: readonly MovementVideo[]
     const kept = readFile(join(TEST, `${entry.file}.bodypoints`));
     const path = phoneFileOf(entry, run);
     const phone = existsSync(path) ? cutOf(entry, readFile(path)) : null;
-    const row = judgePhone(movement, entry, cutOf(entry, kept), phone, manifest.files[basename(path)]?.kept ?? null, run);
+    const row = judgePhone(movement, entry, cutOf(entry, kept), phone, manifest.files[basename(path)]?.kept ?? null, run, exercise);
     return { ...row, label: labelOf(entry, row.label) };
   });
 }

@@ -34,4 +34,5 @@ export {
   type RepResult,
   type Verdict,
 } from "./movement/matcher.js";
-export { parseMovement } from "./movement/load.js";
+export { FORM_SEEN, FORM_SEEN_FOR, OUT_OF_BOTTOM, SIDE_ON, checkExercise, checkedOf, formOf, mistakeReading, sideOn, type FormCheck, type FormFrame, type FormStatus } from "./movement/form.js";
+export { parseExercise, parseMovement } from "./movement/load.js";
