@@ -2270,9 +2270,10 @@
     grid-template-areas: 'who have' 'pays have';
   }
 }
+/* The board's columns: who they are and who pays at 300 px, what they have in the rest. */
 @container (min-width: 960px) {
   .c-person-cols {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: 300px minmax(0, 1fr) 300px;
     grid-template-rows: auto;
     grid-template-areas: 'who have pays';
   }
@@ -2309,12 +2310,14 @@
 /* A membership's price, dates and payment (V2a-ii): side by side where they fit, each at least
    160 px, one under another in a narrow column or on a phone. */
 .c-held-facts {
-  display: grid;
+  display: flex;
+  flex-wrap: wrap;
   gap: 10px;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 160px), 1fr));
   margin: 4px 0;
 }
+/* A panel left alone on its row stretches across it. */
 .c-held-fact {
+  flex: 1 1 160px;
   display: flex;
   flex-direction: column;
   gap: 2px;
