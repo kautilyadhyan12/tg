@@ -144,7 +144,7 @@ export const TERMINAL_PAYMENT_WORDS = {
   sale_currency: "Your products are priced in another currency from your Square account, so this sale can't be paid on the Terminal.",
   waiting: "A payment for this membership is waiting on the Terminal. Wait for it to finish, or cancel it first.",
   payment_gone: "This payment is no longer active.",
-  keep_card_not_offered: "This card can't be saved with this payment. Untick Save the card for automatic payments and try again.",
+  keep_card_not_offered: "This card can't be saved with this payment. Untick Save the card for autopay and try again.",
   keep_card_save_waiting: "A card save is waiting on the Terminal for this person. Wait for it to finish, or cancel it first.",
   disconnect_waiting: "A payment is waiting on a Square Terminal. Let it finish, or cancel it, then disconnect.",
   void_terminal: "This was paid by card on the Terminal. To give the money back, press Refund on the payment.",

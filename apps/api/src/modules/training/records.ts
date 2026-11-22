@@ -11,7 +11,7 @@
 // - On a tie the first time it was reached keeps the record.
 // - "New record" is a set (or, for most lifted, a workout) that beats everything the person did BEFORE
 //   that workout. With nothing of that kind before it, nothing is beaten: the first is not a record.
-import type { ExerciseRecords, NewRecord, RecentWorkout, RecordKind, RecordSet } from "@app/shared";
+import { estimatedOneRepMaxGrams, type ExerciseRecords, type NewRecord, type RecentWorkout, type RecordKind, type RecordSet } from "@app/shared";
 
 /** One set, as the records read it. */
 export interface SetFact {
@@ -47,15 +47,8 @@ export function liftedOf(sets: readonly SetFact[]): LiftedWorkout[] {
   return [...sums.values()];
 }
 
-/** Epley's estimate (1985) is not used past 10 reps, where it strays most (LeSuer et al., 1997). */
-export const EPLEY_REPS_MOST = 10;
-
-/** The estimated one-rep max in whole grams, or null for a set it is not worked out for. One rep is the
- *  weight itself. */
-export function estimatedOneRepMaxGrams(weightGrams: number | null, reps: number): number | null {
-  if (weightGrams === null || reps < 1 || reps > EPLEY_REPS_MOST) return null;
-  return reps === 1 ? weightGrams : Math.floor((weightGrams * (30 + reps)) / 30);
-}
+// Epley's estimate is shared, so the phone names a record's value by the same formula (64a-v).
+export { EPLEY_REPS_MOST, estimatedOneRepMaxGrams } from "@app/shared";
 
 /** A set's unit and what was done, from the row as kept. A set saved by the old route has no unit kept:
  *  one with a hold is in time, any other in reps. Time is in whole seconds, rounded down. */

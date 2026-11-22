@@ -4,10 +4,12 @@ import type { TextStore } from "../src/screens/food/outbox";
 import type { Answer } from "../src/session/calls";
 import { effortPath, effortSender, effortWaiting, readEffortAnswer } from "../src/library/effortSaving";
 import {
+  blocksOf,
   exerciseBlocks,
   ideaTotals,
   kcalLine,
   recordRow,
+  recordRowOf,
   setsHeading,
   starWords,
   streakNext,
@@ -91,6 +93,38 @@ describe("a new record as a row", () => {
     ["an exercise the Library never had shows its id word", record({ exerciseName: null }), "Heaviest", "barbell_curl · set 2", "52.5 kg"],
   ])("%s", (_case, r, kind, where, value) => {
     expect(recordRow(r, DONE, "metric")).toMatchObject({ kind, where, value });
+  });
+});
+
+// A workout looked back on in History (64a-v) is drawn by the same rules from the server's sets, each at its own place
+// in the workout: places that are not 0, 1, 2… (an old workout's), a set saved before targets were kept, and records
+// that name a place, never a row of the list.
+describe("a workout's sets read back from the server", () => {
+  const shown = [
+    { exercise: "plank", measuredIn: "time" as const, target: null, done: 95, weightGrams: null, place: 7 },
+    { exercise: "barbell_curl", measuredIn: "reps" as const, target: 10, done: 8, weightGrams: 52_500, place: 4 },
+    { exercise: "barbell_curl", measuredIn: "reps" as const, target: 10, done: 10, weightGrams: 50_000, place: 2 },
+  ];
+  const named = (exercise: string) => ({ name: exercise === "plank" ? "Plank" : "Barbell Curl", kind: "strength" });
+
+  it("orders the sets by their place, marks the record's place, and says nothing of a target never kept", () => {
+    const blocks = blocksOf(shown, named, [record({ position: 4 })], "metric");
+    expect(blocks.map((b) => [b.name, b.line])).toEqual([
+      ["Barbell Curl", "2 sets · 920 kg lifted"],
+      ["Plank", "1 set"],
+    ]);
+    expect(blocks[0]?.sets.map((s) => [s.key, s.n, s.done, s.of, s.pr])).toEqual([
+      ["2", "1", "10 reps", "", false],
+      ["4", "2", "8 reps", "of 10", true],
+    ]);
+    expect(blocks[1]?.sets.map((s) => [s.done, s.of])).toEqual([["1:35", ""]]);
+  });
+
+  it("names a record's set by its place within its exercise", () => {
+    expect(recordRowOf(record({ position: 4 }), shown, "metric")).toMatchObject({ where: "Barbell Curl · set 2", value: "52.5 kg" });
+    expect(recordRowOf(record({ exercise: "plank", exerciseName: "Plank", measuredIn: "time", kind: "longest_hold", position: 7, value: 95 }), shown, "metric")).toMatchObject({ where: "Plank · set 1", value: "1:35" });
+    // A place no set holds names the exercise alone, never a wrong set.
+    expect(recordRowOf(record({ position: 3 }), shown, "metric").where).toBe("Barbell Curl");
   });
 });
 

@@ -25,7 +25,7 @@ export default function PtSessionsEnding({ ending, clockFormat, moved = false, o
         {rows.map((row) => (
           <li key={row.id} className="min-w-0">
             <div className="c-s15 c-t1 c-ell">{row.name}</div>
-            {row.detail === '' ? null : <div className="c-s13 c-t3 c-ell">{row.detail}</div>}
+            {row.detail === '' ? null : <div className="c-s14 c-t3 c-ell">{row.detail}</div>}
           </li>
         ))}
       </ul>

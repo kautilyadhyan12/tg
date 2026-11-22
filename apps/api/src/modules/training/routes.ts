@@ -17,6 +17,7 @@ import {
   exerciseIdSchema,
   historyDaySchema,
   historyMonthQuerySchema,
+  historyRangeQuerySchema,
   PLANNED_WORKOUT_LIMITS,
   savedWorkoutWriteSchema,
   workoutEffortSchema,
@@ -25,7 +26,7 @@ import {
   type WorkoutSaveRefusal,
 } from "@app/shared";
 import { z } from "zod";
-import { historyDay, historyMonth, historyWorkout, recordsOf } from "./history.js";
+import { historyDay, historyMonth, historyRange, historyWorkout, recordsOf } from "./history.js";
 import type { RedisLike } from "../../redis.js";
 import { createDualRateLimit } from "../auth/rateLimit.js";
 import { tellMembersLeaderboards, type LiveNewsSender } from "../live/news.js";
@@ -115,6 +116,13 @@ export function registerTrainingRoutes(
     const parsed = historyMonthQuerySchema.safeParse(req.query);
     if (!parsed.success) return validationError(req, reply, issues(parsed.error));
     return reply.status(200).send(await historyMonth(readDeps, owner(req), parsed.data.month));
+  });
+
+  // The calendar's days (64a-v): a year of them in one read, counted as the month and the day are.
+  app.get("/v1/training/days", { onRequest: [app.authenticate, readLimit] }, async (req, reply) => {
+    const parsed = historyRangeQuerySchema.safeParse(req.query);
+    if (!parsed.success) return validationError(req, reply, issues(parsed.error));
+    return reply.status(200).send(await historyRange(readDeps, owner(req), parsed.data.from, parsed.data.to));
   });
 
   app.get<{ Params: { day: string } }>("/v1/training/days/:day", { onRequest: [app.authenticate, readLimit] }, async (req, reply) => {

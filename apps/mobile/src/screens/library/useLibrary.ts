@@ -1,4 +1,4 @@
-import { onboardingResponseSchema } from "@app/shared";
+import { onboardingResponseSchema, type PhoneLibraryEntry } from "@app/shared";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { useSession } from "../../session/SessionProvider";
 import type { Sex } from "../../library/figure";
@@ -6,6 +6,7 @@ import { figureFile, libraryFile, myWorkoutFile } from "../../library/files";
 import { EMPTY, storeFor, type MyWorkout, type MyWorkoutStore } from "../../library/myWorkout";
 import { readKept, refreshLibrary, type LibraryFile, type LibraryState } from "../../library/store";
 import { setupPath } from "../setup/useSetupAnswers";
+import { namedFrom, type Named } from "../workout/pastWords";
 
 /** The Library kept on the phone: the kept copy at once, then the server asked for a newer one. `again`
  *  asks once more (Try again). A test hands in its own file. */
@@ -36,6 +37,25 @@ export function useLibrary(file?: LibraryFile): { state: LibraryState; again: ()
     void load();
   }, [load]);
   return { state, again };
+}
+
+/** Exercises named from the Library kept on the phone, so History names them with no internet (64a-v); an exercise it
+ *  does not hold, and every one until the copy is read, by its id word made readable. */
+export function useNamed(): Named {
+  const { state } = useSession();
+  const me = state.kind === "in" ? state.user.id : null;
+  const [entries, setEntries] = useState<PhoneLibraryEntry[] | null>(null);
+  useEffect(() => {
+    if (me === null) return undefined;
+    const alive = { now: true };
+    void readKept(libraryFile(me)).then((kept) => {
+      if (alive.now) setEntries(kept?.exercises ?? []);
+    });
+    return () => {
+      alive.now = false;
+    };
+  }, [me]);
+  return useMemo(() => namedFrom(entries), [entries]);
 }
 
 /** What the Library reads of the person's setup answers, asked once for both. `sex`: whose body the figures show, the

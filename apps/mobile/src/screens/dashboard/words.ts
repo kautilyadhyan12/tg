@@ -106,6 +106,8 @@ export interface ActivityRow {
   value: string | null;
   /** A run's id: its row opens the run's own page (37c-i). */
   runId?: string;
+  /** A workout's id: its row opens the workout set by set (64a-v). */
+  workoutId?: string;
 }
 
 const MEAL_TYPES: Record<MealType, string> = { breakfast: "Breakfast", lunch: "Lunch", dinner: "Dinner", snack: "Snack" };
@@ -123,9 +125,11 @@ export function workoutRow(w: WorkoutListItem): ActivityRow {
     key: `workout-${w.id}`,
     kind: "workout",
     at: w.startedAt,
-    name: "Workout",
+    // The name the person gave it, as History says it (64a-v).
+    name: w.name === null || w.name.trim() === "" ? "Workout" : w.name.trim(),
     facts: joined([dayWords(w.startedAt), minutesWords(w.durationMs === null ? null : w.durationMs / 60_000), w.avgFormScore === null ? null : `${count(w.avgFormScore)} form`]),
     value: w.kcalPoint === null ? null : `${count(w.kcalPoint)} kcal`,
+    workoutId: w.id,
   };
 }
 

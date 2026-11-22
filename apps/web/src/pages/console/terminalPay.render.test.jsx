@@ -237,7 +237,7 @@ describe('Take payment on Terminal: how it ends', () => {
     orgService.getTerminalPayments.mockReturnValue(terminals([DESK], [payment(part)]));
     orgService.checkTerminalPayment.mockResolvedValue({ data: { payment: payment({ ...part, step: 'done', outcome: 'paid', receiptNumber: 3 }) } });
     draw();
-    expect(await screen.findByText('$10.00 paid by card on the Terminal. $39.99 is still left to pay.')).toBeTruthy();
+    expect(await screen.findByText('$10.00 paid by card on the Terminal. $39.99 is still due.')).toBeTruthy();
     expect(screen.queryByText(/That bill is paid/)).toBeNull();
   });
 
@@ -384,7 +384,7 @@ describe('Take payment on Terminal for a fee', () => {
 
 describe('The card kept from a Terminal payment (18d-vi-c)', () => {
   const VISA = { brand: 'VISA', last4: '4242', expired: false, stopped: false, payerName: null, ref: 'ref' };
-  const CARD_TICK = 'Save the card for automatic payments';
+  const CARD_TICK = 'Save the card for autopay';
   const offered = (cardOnFile = null, keepsCard = true) => Promise.resolve({ data: { terminals: [DESK], waiting: [], cardOnFile, keepsCard } });
   const onTerminal = async () => {
     const form = await openPay();
@@ -407,7 +407,7 @@ describe('The card kept from a Terminal payment (18d-vi-c)', () => {
     await waitFor(() => expect(orgService.startTerminalPayment).toHaveBeenCalledTimes(1));
     expect(orgService.startTerminalPayment.mock.calls[0][3].keepCard).toBe(true);
     expect(await screen.findByText('$49.99 paid by card on the Terminal. That bill is paid. Card saved: Visa ending 1111.')).toBeTruthy();
-    expect(screen.queryByRole('button', { name: 'Open Card on file' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'View Card on file' })).toBeNull();
   });
 
   it('a card on file: not ticked, and it names the card it would replace', async () => {
@@ -450,7 +450,7 @@ describe('The card kept from a Terminal payment (18d-vi-c)', () => {
       const form = await onTerminal();
       fireEvent.click(form.getByRole('button', { name: 'Take payment on Terminal' }));
       expect(await screen.findByText(`$49.99 paid by card on the Terminal. That bill is paid. ${line}`)).toBeTruthy();
-      expect(screen.getByRole('button', { name: 'Open Card on file' })).toBeTruthy();
+      expect(screen.getByRole('button', { name: 'View Card on file' })).toBeTruthy();
       cleanup();
     }
   });

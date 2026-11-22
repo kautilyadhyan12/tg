@@ -5,21 +5,19 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Path } from "react-native-svg";
 import { Button } from "../../look/Button";
 import { Segments } from "../../look/Choice";
-import { colours, raisedOrangeGradient, shadows, sizes, type ColourName } from "../../look/colours";
+import { colours, raisedOrangeGradient, shadows, sizes } from "../../look/colours";
 import { Icon } from "../../look/Icon";
 import { Rise, useGrow, useMotion } from "../../look/Motion";
 import { PictureTop } from "../../look/PictureTop";
 import { pictures } from "../../look/pictures";
-import { fonts, Txt } from "../../look/Txt";
+import { Txt } from "../../look/Txt";
 import { libraryFile } from "../../library/files";
-import { exercisePicture } from "../../library/pictures";
 import type { Units } from "../../library/records";
 import { readKept } from "../../library/store";
 import type { Finished } from "../../library/workoutRunStore";
 import type { WaitingView } from "../../session/waitingList";
 import { useSession } from "../../session/SessionProvider";
 import { ideaAmountWords } from "../food/ideaRules";
-import { Led } from "../library/Records";
 import { ProgressPage } from "../progress/ProgressPage";
 import { useSetupFacts } from "../library/useLibrary";
 import {
@@ -27,7 +25,6 @@ import {
   ideaTotals,
   kcalLine,
   recordRow,
-  setsHeading,
   starSay,
   starWords,
   streakNext,
@@ -39,6 +36,7 @@ import {
   xpWhy,
 } from "./afterWords";
 import { clock } from "./words";
+import { RecordsBox, SetBlocks, Tile, Wall } from "./WorkoutParts";
 import type { EffortHand } from "./WorkoutLayer";
 
 // A workout's last screen (ROADMAP Stage 5 64a-iii, Kd's drawing of 2026-11-21, its fonts and glow brought down at his
@@ -155,7 +153,7 @@ export function Summary({ finished, keeping, waiting, effort, units, onDone, onN
           }
         />
         <View style={styles.body}>
-          <View style={[styles.wall, styles.tiles]}>
+          <Wall>
             <Tile label="Time" text={clock(finished.activeMs)} colour="ledAmber" />
             <Tile
               label="Kcal"
@@ -164,7 +162,7 @@ export function Summary({ finished, keeping, waiting, effort, units, onDone, onN
               say={known === null || known.kcalPoint === null ? "not yet known" : `about ${String(known.kcalPoint)} calories`}
             />
             <Tile label="Sets" text={String(finished.sets).padStart(2, "0")} colour="ledGreen" say={String(finished.sets)} />
-          </View>
+          </Wall>
           {known === null || known.kcalPoint === null ? null : (
             <Rise>
               <View style={styles.kcalRow}>
@@ -209,33 +207,7 @@ export function Summary({ finished, keeping, waiting, effort, units, onDone, onN
                   <XpBox after={known} />
                   {known.records.length === 0 ? null : (
                     <Rise delay={150}>
-                      <View style={styles.records}>
-                        <View style={styles.row}>
-                          <Icon name="bell" size={22} colour="gold" />
-                          <Txt kind="eyebrow" colour="gold" style={styles.grow}>
-                            {`New records · ${String(known.records.length)}`}
-                          </Txt>
-                        </View>
-                        {known.records.map((r) => {
-                          const row = recordRow(r, finished.done, units);
-                          return (
-                            <View key={row.key} style={styles.recordRow} accessible accessibilityLabel={`New record, ${row.kind}, ${row.where}, ${row.value}`}>
-                              <View style={styles.medal}>
-                                <Txt kind="tiny" style={styles.medalWords}>
-                                  PR
-                                </Txt>
-                              </View>
-                              <View style={styles.grow}>
-                                <Txt kind="strong">{row.kind}</Txt>
-                                <Txt kind="small">{row.where}</Txt>
-                              </View>
-                              <Txt kind="strong" colour="gold" style={styles.digits}>
-                                {row.value}
-                              </Txt>
-                            </View>
-                          );
-                        })}
-                      </View>
+                      <RecordsBox rows={known.records.map((r) => recordRow(r, finished.done, units))} />
                     </Rise>
                   )}
                 </>
@@ -283,45 +255,7 @@ export function Summary({ finished, keeping, waiting, effort, units, onDone, onN
           ) : null}
 
           {tab === "sets" ? (
-            <View style={styles.part}>
-              <Txt kind="body">{setsHeading(blocks)}</Txt>
-              {blocks.map((b) => (
-                <View key={b.key} style={styles.box}>
-                  <View style={[styles.row, styles.blockTop]}>
-                    <Image source={pictures[exercisePicture(b.exercise, b.kind)]} resizeMode="cover" style={styles.thumb} accessible={false} />
-                    <View style={styles.grow}>
-                      <Txt kind="strong">{b.name}</Txt>
-                      <Txt kind="small">{b.line}</Txt>
-                    </View>
-                  </View>
-                  {b.sets.map((s) => (
-                    <View key={s.key} style={styles.setRow} accessible accessibilityLabel={`Set ${s.n}, ${s.done} ${s.of} ${s.weight}${s.pr ? ", a new record" : ""}`}>
-                      <View style={styles.setNumber}>
-                        <Txt kind="tiny" colour="text">
-                          {s.n}
-                        </Txt>
-                      </View>
-                      <Txt kind="strong" style={[styles.grow, styles.digits]}>
-                        {s.done}
-                        {s.of === "" ? null : <Txt kind="body">{` ${s.of}`}</Txt>}
-                      </Txt>
-                      {s.weight === "" ? null : (
-                        <Txt kind="body" colour="text" style={styles.digits}>
-                          {s.weight}
-                        </Txt>
-                      )}
-                      {s.pr ? (
-                        <View style={styles.prTag}>
-                          <Txt kind="tiny" style={styles.medalWords}>
-                            PR
-                          </Txt>
-                        </View>
-                      ) : null}
-                    </View>
-                  ))}
-                </View>
-              ))}
-            </View>
+            <SetBlocks blocks={blocks} />
           ) : null}
 
           {tab === "recover" ? (
@@ -395,17 +329,6 @@ export function Summary({ finished, keeping, waiting, effort, units, onDone, onN
           facts.again();
         }}
       />
-    </View>
-  );
-}
-
-function Tile({ label, text, colour, say }: { label: string; text: string; colour: ColourName; say?: string }) {
-  return (
-    <View style={styles.tile} accessible accessibilityLabel={`${label}, ${say ?? text}`}>
-      <Txt kind="tiny" style={styles.label}>
-        {label.toUpperCase()}
-      </Txt>
-      <Led text={text} colour={colour} height={26} />
     </View>
   );
 }
@@ -545,10 +468,6 @@ const styles = StyleSheet.create({
   part: { gap: 12 },
   row: { flexDirection: "row", alignItems: "center", gap: 12 },
   tick: { width: 42, height: 42, borderRadius: 21, alignItems: "center", justifyContent: "center", experimental_backgroundImage: raisedOrangeGradient },
-  wall: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 22, borderWidth: 1, borderColor: colours.timerEdge, backgroundColor: colours.timerFace },
-  tiles: { flexDirection: "row", paddingVertical: 14 },
-  tile: { flex: 1, alignItems: "center", gap: 10 },
-  label: { fontFamily: fonts.bold, letterSpacing: 1.1, color: colours.timerWords },
   kcalRow: { alignItems: "center", gap: 2, marginTop: -4 },
   saveLine: { flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 16, paddingVertical: 12, borderRadius: 18, borderWidth: 1 },
   saveGood: { borderColor: colours.goodLine, backgroundColor: colours.goodFill },
@@ -561,18 +480,9 @@ const styles = StyleSheet.create({
   bar: { height: 8, borderRadius: sizes.round, backgroundColor: colours.track, overflow: "hidden" },
   barFill: { height: "100%", borderRadius: sizes.round, backgroundColor: colours.ledAmber },
   streak: { paddingTop: 12, borderTopWidth: 1, borderTopColor: colours.line },
-  records: { gap: 8, padding: 14, borderRadius: 22, borderWidth: 1, borderColor: colours.goldLine, backgroundColor: colours.goldFill },
-  recordRow: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 6 },
-  medal: { width: 32, height: 32, borderRadius: 16, alignItems: "center", justifyContent: "center", backgroundColor: colours.gold },
-  medalWords: { fontFamily: fonts.bold, color: colours.onLight },
   starsBox: { alignItems: "center", gap: 8, padding: 14, borderRadius: 22, borderWidth: 1, borderColor: colours.line, backgroundColor: colours.raised },
   starsRow: { flexDirection: "row", gap: 4 },
   star: { width: sizes.press, height: sizes.press, alignItems: "center", justifyContent: "center" },
-  blockTop: { paddingBottom: 4 },
-  thumb: { width: 48, height: 48, borderRadius: 12, backgroundColor: colours.box },
-  setRow: { flexDirection: "row", alignItems: "center", gap: 12, minHeight: 40, paddingVertical: 6, borderTopWidth: 1, borderTopColor: colours.line },
-  setNumber: { width: 26, height: 26, borderRadius: 13, alignItems: "center", justifyContent: "center", backgroundColor: colours.fill },
-  prTag: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: sizes.round, backgroundColor: colours.gold },
   ideaBox: { alignItems: "flex-start" },
   ideaPicture: { width: 64, height: 64, borderRadius: 16, backgroundColor: colours.box },
   ideaWords: { gap: 3 },

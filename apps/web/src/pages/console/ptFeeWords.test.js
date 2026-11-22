@@ -32,16 +32,16 @@ describe("a session's fee on the person's page", () => {
 
   it('once they are marked Came, it never says a class was cancelled', () => {
     const paid = fee({ state: 'paid', stillOwed: false, payments: [{ id: PAY_ID, amountMinor: 800, method: 'cash', paidOn: '2026-10-09', by: 'Sam Owner', receiptNumber: 41 }] });
-    expect(feeRow(paid, 'GBP', '2026-10-10').waived).toBe('No longer owed: they were marked Came. If you gave the money back, void the payment.');
-    expect(feeRow(fee({ state: 'removed', stillOwed: false }), 'GBP', '2026-10-10').waived).toBe('No longer owed: they were marked Came.');
+    expect(feeRow(paid, 'GBP', '2026-10-10').waived).toBe('No longer outstanding: they were marked Came. If you gave the money back, void the payment.');
+    expect(feeRow(fee({ state: 'removed', stillOwed: false }), 'GBP', '2026-10-10').waived).toBe('No longer outstanding: they were marked Came.');
     expect(voidFeePaymentWords(paid, 'GBP', 'Kim Page').detail).toMatch(/^Kim Page no longer owes this fee: they were marked Came\. Voiding/);
     // Paid on the Terminal (18d-vi-b-i): Square holds the money, so it goes back through Square (18d-iv-b-i).
     const onTerminal = { ...paid, payments: [{ ...paid.payments[0], method: 'terminal' }], can: { pay: false, waive: false, voidPaymentId: null } };
-    expect(feeRow(onTerminal, 'GBP', '2026-10-10').waived).toBe('No longer owed: they were marked Came. To give the money back, press Refund on the payment.');
-    expect(feeRow({ ...onTerminal, refundedMinor: 300 }, 'GBP', '2026-10-10')).toMatchObject({ tag: 'Part refunded', waived: 'No longer owed: they were marked Came. To give the rest back, press Refund on the payment.' });
+    expect(feeRow(onTerminal, 'GBP', '2026-10-10').waived).toBe('No longer outstanding: they were marked Came. To give the money back, press Refund on the payment.');
+    expect(feeRow({ ...onTerminal, refundedMinor: 300 }, 'GBP', '2026-10-10')).toMatchObject({ tag: 'Part refunded', waived: 'No longer outstanding: they were marked Came. To give the rest back, press Refund on the payment.' });
     // A class's fee keeps its own words.
     expect(feeRow({ ...fee({ state: 'removed', stillOwed: false }), of: 'class' }, 'GBP', '2026-10-10').waived).toBe(
-      'No longer owed: they were marked Came, or the class was cancelled.',
+      'No longer outstanding: they were marked Came, or the class was cancelled.',
     );
   });
 });

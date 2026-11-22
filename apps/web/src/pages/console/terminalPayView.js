@@ -54,7 +54,7 @@ export function terminalPayWaitWords(payment, name) {
 
 /** The tick in Record payment: what it does and, where a card is saved, which card it replaces (18d-vi-c). */
 export function keepCardTickLine(cardOnFile) {
-  return cardOnFile === null ? 'Save the card for automatic payments' : `Save the card for automatic payments, in place of ${cardName(cardOnFile)}`;
+  return cardOnFile === null ? 'Save the card for autopay' : `Save the card for autopay, in place of ${cardName(cardOnFile)}`;
 }
 
 /** The sentence after a payment that asked to keep the card (18d-vi-c); null where it did not. */
@@ -92,7 +92,7 @@ export function terminalPayOutcomeLine(payment, name, billLeftMinor) {
       if (fee) return `${amount} paid by card on the Terminal. That fee is paid.`;
       const left = billLeftMinor - payment.amountMinor;
       return left > 0
-        ? `${amount} paid by card on the Terminal. ${formatMinor(left, payment.currency)} is still left to pay.`
+        ? `${amount} paid by card on the Terminal. ${formatMinor(left, payment.currency)} is still due.`
         : `${amount} paid by card on the Terminal. That bill is paid.`;
     }
     case 'cancelled_on_terminal':

@@ -1034,10 +1034,10 @@ export default function MemberMemberships({
             style={{ borderLeft: `2px solid ${r.voided === null ? 'var(--bad)' : 'var(--raise-line)'}` }}
             data-testid={r.voided === null ? 'held-refund' : 'held-voided-refund'}
           >
-            <span className="c-s13 c-w6 whitespace-nowrap" style={r.voided === null ? { color: 'var(--bad)' } : VOIDED}>
+            <span className="c-s14 c-w6 whitespace-nowrap" style={r.voided === null ? { color: 'var(--bad)' } : VOIDED}>
               {r.amount}
             </span>
-            <span className="c-s13 c-t2 md:flex-[1_1_10rem] min-w-0 flex flex-col">
+            <span className="c-s14 c-t2 md:flex-[1_1_10rem] min-w-0 flex flex-col">
               <span>{r.detail}</span>
               {r.note === null ? null : <span style={{ color: 'var(--warn)' }}>{r.note}</span>}
               {r.voided === null ? null : <span>{r.voided}</span>}
@@ -1082,9 +1082,9 @@ export default function MemberMemberships({
     const SPLIT = { borderTop: '1px solid var(--line)' };
     return (
       <div className="flex flex-col gap-2 pt-2" data-testid="held-fees">
-        <span className="c-s13 c-w6 c-t2 uppercase" style={{ letterSpacing: '0.04em' }}>
+        <h5 className="c-h3">
           Fees
-        </span>
+        </h5>
         <ul className="m-0 p-0 list-none flex flex-col gap-2">
           {fees.map((fee) => {
             const row = feeRow(fee, m.currency, today);
@@ -1107,17 +1107,17 @@ export default function MemberMemberships({
                 </div>
                 <div className="flex flex-col px-3 pb-2.5">
                   {notes.map((line) => (
-                    <span key={line} className="c-s13 c-t2" style={row.tone === 'red' && line === row.when ? { color: 'var(--bad)' } : undefined}>
+                    <span key={line} className="c-s14 c-t2" style={row.tone === 'red' && line === row.when ? { color: 'var(--bad)' } : undefined}>
                       {line}
                     </span>
                   ))}
                   {row.declined !== null ? (
-                    <span className="c-s13 c-w5" style={{ color: 'var(--bad)' }} data-testid="held-fee-declined">
+                    <span className="c-s14 c-w5" style={{ color: 'var(--bad)' }} data-testid="held-fee-declined">
                       {row.declined}
                     </span>
                   ) : null}
                   <ChargeStopHolder holder={row.stopHolder} gym={gym} />
-                  {row.charging !== null ? <span className="c-s13 c-t2">{row.charging}</span> : null}
+                  {row.charging !== null ? <span className="c-s14 c-t2">{row.charging}</span> : null}
                 </div>
                 {renderFeeAppPaying(m, fee)}
                 {row.payments.map((p) => (
@@ -1126,7 +1126,7 @@ export default function MemberMemberships({
                       <span className="c-s14 c-w6 whitespace-nowrap" style={p.voided === null ? { minWidth: 84, color: 'var(--good)' } : { minWidth: 84, ...VOIDED }}>
                         {p.amount}
                       </span>
-                      <span className="c-s13 c-t2 md:flex-[1_1_10rem] min-w-0 flex flex-col">
+                      <span className="c-s14 c-t2 md:flex-[1_1_10rem] min-w-0 flex flex-col">
                         <span>{p.detail}</span>
                         {p.voided === null ? null : <span>{p.voided}</span>}
                       </span>
@@ -1143,14 +1143,14 @@ export default function MemberMemberships({
                         {(() => {
                           const items = refundMenu(m, p, acts);
                           if (acts && p.voided === null && p.id === row.voidPaymentId) {
-                            items.push({ label: 'Void payment', hint: 'It was recorded by mistake. The fee is owed again.', danger: true, onPick: () => startFee(m, 'voidFeePayment', fee) });
+                            items.push({ label: 'Void payment', hint: 'It was recorded by mistake. The fee is outstanding again.', danger: true, onPick: () => startFee(m, 'voidFeePayment', fee) });
                           }
                           return paymentMenu(p, items);
                         })()}
                       </span>
                     </div>
                     {p.cardRefund !== null ? (
-                      <span className="c-s13 c-w5" style={{ color: 'var(--warn)' }} data-testid="held-card-refund-open">
+                      <span className="c-s14 c-w5" style={{ color: 'var(--warn)' }} data-testid="held-card-refund-open">
                         {p.cardRefund}
                       </span>
                     ) : null}
@@ -1708,12 +1708,12 @@ export default function MemberMemberships({
     return (
       <div className="flex flex-col items-start gap-1.5 px-3 pb-2.5" data-testid="held-fee-app-payment">
         {check !== null ? (
-          <span className="c-s13 c-w5" style={{ color: 'var(--bad)' }} data-testid="held-fee-app-check" data-check={`fee:${fee.id}`}>
+          <span className="c-s14 c-w5" style={{ color: 'var(--bad)' }} data-testid="held-fee-app-check" data-check={`fee:${fee.id}`}>
             {check}
           </span>
         ) : null}
         {open !== null ? (
-          <span className="c-s13 c-w5" style={{ color: 'var(--warn)' }}>
+          <span className="c-s14 c-w5" style={{ color: 'var(--warn)' }}>
             {open.line}
           </span>
         ) : null}
@@ -1723,7 +1723,7 @@ export default function MemberMemberships({
           </button>
         ) : null}
         {said !== null ? (
-          <span className="c-s13 c-t2" role="status">
+          <span className="c-s14 c-t2" role="status">
             {said}
           </span>
         ) : null}
@@ -1742,12 +1742,12 @@ export default function MemberMemberships({
     return (
       <div className="flex flex-col items-start gap-1.5 pt-1" data-testid="held-app-payment">
         {check !== null ? (
-          <span className="c-s13 c-w5" style={{ color: 'var(--bad)' }} data-testid="held-app-check" data-check={`bill:${m.id}`}>
+          <span className="c-s14 c-w5" style={{ color: 'var(--bad)' }} data-testid="held-app-check" data-check={`bill:${m.id}`}>
             {check}
           </span>
         ) : null}
         {open !== null ? (
-          <span className="c-s13 c-w5" style={{ color: 'var(--warn)' }}>
+          <span className="c-s14 c-w5" style={{ color: 'var(--warn)' }}>
             {open.line}
           </span>
         ) : null}
@@ -1757,7 +1757,7 @@ export default function MemberMemberships({
           </button>
         ) : null}
         {said !== null ? (
-          <span className="c-s13 c-t2" role="status">
+          <span className="c-s14 c-t2" role="status">
             {said}
           </span>
         ) : null}
@@ -1786,9 +1786,9 @@ export default function MemberMemberships({
     const SPLIT = { borderTop: '1px solid var(--line)' };
     return (
       <div className="flex flex-col gap-2 pt-2" data-testid="held-bills">
-        <span className="c-s13 c-w6 c-t2 uppercase" style={{ letterSpacing: '0.04em' }}>
+        <h5 className="c-h3">
           Bills
-        </span>
+        </h5>
         <ul className="m-0 p-0 list-none flex flex-col gap-2">
           {rows.map((row) => {
             const pays = acts && payHere && billing.pay !== null && billing.pay.periodIndex === row.periodIndex;
@@ -1813,19 +1813,19 @@ export default function MemberMemberships({
                 {notes.length > 0 || row.left !== null || row.declined !== null || row.charging !== null ? (
                   <div className="flex flex-col px-3 pb-2.5">
                     {notes.map((line) => (
-                      <span key={line} className="c-s13 c-t2" style={row.tone === 'red' ? { color: 'var(--bad)' } : undefined}>
+                      <span key={line} className="c-s14 c-t2" style={row.tone === 'red' ? { color: 'var(--bad)' } : undefined}>
                         {line}
                       </span>
                     ))}
                     {row.declined !== null ? (
-                      <span className="c-s13 c-w5" style={{ color: 'var(--bad)' }} data-testid="held-bill-declined">
+                      <span className="c-s14 c-w5" style={{ color: 'var(--bad)' }} data-testid="held-bill-declined">
                         {row.declined}
                       </span>
                     ) : null}
                     <ChargeStopHolder holder={row.stopHolder} gym={gym} />
-                    {row.charging !== null ? <span className="c-s13 c-t2">{row.charging}</span> : null}
+                    {row.charging !== null ? <span className="c-s14 c-t2">{row.charging}</span> : null}
                     {row.left !== null ? (
-                      <span className="c-s13 c-w5" style={{ color: 'var(--warn)' }}>
+                      <span className="c-s14 c-w5" style={{ color: 'var(--warn)' }}>
                         {row.left}
                       </span>
                     ) : null}
@@ -1838,7 +1838,7 @@ export default function MemberMemberships({
                       <span className="c-s14 c-w6 whitespace-nowrap" style={p.voided === null ? { minWidth: 84, color: 'var(--good)' } : { minWidth: 84, ...VOIDED }}>
                         {p.amount}
                       </span>
-                      <span className="c-s13 c-t2 md:flex-[1_1_10rem] min-w-0 flex flex-col">
+                      <span className="c-s14 c-t2 md:flex-[1_1_10rem] min-w-0 flex flex-col">
                         <span>{p.detail}</span>
                         {p.voided === null ? null : <span>{p.voided}</span>}
                       </span>
@@ -1862,7 +1862,7 @@ export default function MemberMemberships({
                       </span>
                     </div>
                     {p.cardRefund !== null ? (
-                      <span className="c-s13 c-w5" style={{ color: 'var(--warn)' }} data-testid="held-card-refund-open">
+                      <span className="c-s14 c-w5" style={{ color: 'var(--warn)' }} data-testid="held-card-refund-open">
                         {p.cardRefund}
                       </span>
                     ) : null}
@@ -1903,7 +1903,7 @@ export default function MemberMemberships({
           </button>
         ) : null}
         {all && billing.billsNotShown > 0 ? (
-          <p className="c-s13 c-t3 m-0">
+          <p className="c-s14 c-t3 m-0">
             {billing.billsNotShown === 1 ? '1 older bill is not shown.' : `${String(billing.billsNotShown)} older bills are not shown.`}
           </p>
         ) : null}
@@ -2230,7 +2230,7 @@ export default function MemberMemberships({
                 <span className="c-s15 c-w5 c-t1">{freezeFeeAsk(m, name, today).tick}</span>
               </button>
             ) : (
-              <p className="c-s13 c-t2 m-0">{FREEZE_FEE_WHO}</p>
+              <p className="c-s14 c-t2 m-0">{FREEZE_FEE_WHO}</p>
             )}
           </div>
         ) : null}
@@ -2384,18 +2384,35 @@ export default function MemberMemberships({
     return (
       <li key={m.id} className="py-3 flex flex-col gap-1.5" style={{ borderTop: '1px solid var(--line)' }} data-testid="held-membership" data-held-id={m.id}>
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-          <span className="c-s15 c-w6 c-t1 break-words min-w-0">{m.typeName}</span>
+          <h4 className="m-0 c-s16 c-w6 c-t1 tracking-normal break-words min-w-0">{m.typeName}</h4>
           <span className={`c-tag ${TAG_TONES[tag.tone]} whitespace-nowrap`}>{tag.tag}</span>
         </div>
-        <span className="c-s14 c-t2">{termLine(m)}</span>
-        {heldDiscountLine(m) !== null ? <span className="c-s14 c-t2">{heldDiscountLine(m)}</span> : null}
-        {heldTaxLine(m) !== null ? <span className="c-s14 c-t2">{heldTaxLine(m)}</span> : null}
+        {/* Its price, its dates and its payment, side by side where they fit (the Person board). */}
+        <div className="c-held-facts" data-testid="held-facts">
+          <div className="c-held-fact">
+            <span className="c-s14 c-t2">Price</span>
+            <span className="c-s14 c-w6 c-t1">{termLine(m)}</span>
+            {heldDiscountLine(m) !== null ? <span className="c-s14 c-t2">{heldDiscountLine(m)}</span> : null}
+            {heldTaxLine(m) !== null ? <span className="c-s14 c-t2">{heldTaxLine(m)}</span> : null}
+          </div>
+          <div className="c-held-fact">
+            <span className="c-s14 c-t2">Dates</span>
+            <span className="c-s14 c-w6 c-t1">{[datesLine(m), classes].filter((part) => part !== null).join(' · ')}</span>
+          </div>
+          {pay !== null ? (
+            <div className={pay.overdue === true ? 'c-held-fact c-held-fact-bad' : pay.due ? 'c-held-fact c-held-fact-warn' : 'c-held-fact'}>
+              <span className="c-s14 c-held-fact-label">Payment</span>
+              <span className="c-s14 c-w6 c-held-fact-value" data-testid="held-payment">
+                {pay.text}
+              </span>
+            </div>
+          ) : null}
+        </div>
         {freezeFeeLine(m) !== null ? (
           <span className="c-s14 c-t2" data-testid="held-freeze-fee-line">
             {freezeFeeLine(m)}
           </span>
         ) : null}
-        <span className="c-s14 c-t2">{[datesLine(m), classes].filter((part) => part !== null).join(' · ')}</span>
         {contractShownLine(m) !== null ? (
           <span className="c-s14 c-t2" data-testid="held-contract-line">
             {contractShownLine(m)}
@@ -2459,11 +2476,6 @@ export default function MemberMemberships({
             {memberGiftDaysLine(d.days, d.friendName)}
           </span>
         ))}
-        {pay !== null ? (
-          <span className="c-s14 c-w5" style={{ color: pay.overdue === true ? 'var(--bad)' : pay.due ? 'var(--warn)' : 'var(--t1)' }} data-testid="held-payment">
-            {pay.text}
-          </span>
-        ) : null}
         {/* Its reminders (18v-iv): emailed, when they will be, or why they cannot be. */}
         {(shown.renewalReminders ?? [])
           .filter((r) => r.membershipId === m.id)
@@ -2518,7 +2530,7 @@ export default function MemberMemberships({
         {renderBills(m, payInBill)}
         {renderFees(m)}
         {inUse && !shown.canBill && can.markPaid !== null ? (
-          <p className="c-s13 c-t2 m-0" data-testid="held-no-payments">
+          <p className="c-s14 c-t2 m-0" data-testid="held-no-payments">
             {NO_PAYMENTS_LINE}
           </p>
         ) : null}
@@ -2565,7 +2577,7 @@ export default function MemberMemberships({
               </button>
             ) : null}
             {can.cancel ? (
-              <button type="button" className={STOP} disabled={busy} onClick={() => ask('cancel', m)}>
+              <button type="button" className={`${STOP} ml-auto`} disabled={busy} onClick={() => ask('cancel', m)}>
                 Cancel membership
               </button>
             ) : null}
@@ -2763,7 +2775,7 @@ export default function MemberMemberships({
       {notice !== null && cardNotKept === notice ? (
         <div>
           <button type="button" className={SMALL} onClick={() => document.querySelector('[data-testid="card-on-file"]')?.scrollIntoView({ block: 'center' })}>
-            Open Card on file
+            View Card on file
           </button>
         </div>
       ) : null}
@@ -2810,7 +2822,7 @@ export default function MemberMemberships({
           </button>
           {showPast ? <ul className="m-0 p-0 list-none flex flex-col">{over.map(renderOne)}</ul> : null}
           {showPast && shown.earlierNotShown > 0 ? (
-            <p className="c-s13 c-t3 m-0" data-testid="held-older">
+            <p className="c-s14 c-t3 m-0" data-testid="held-older">
               {shown.earlierNotShown === 1 ? '1 older one is not shown.' : `${String(shown.earlierNotShown)} older ones are not shown.`}
             </p>
           ) : null}

@@ -19,6 +19,28 @@ export const historyDaySchema = z
 
 export const historyMonthQuerySchema = z.object({ month: historyMonthSchema }).strict();
 
+/** The most days one read of the calendar's days covers: a year, a leap year's included. */
+export const HISTORY_RANGE_DAYS_MOST = 366;
+
+const dayNumber = (s: string): number => Date.parse(`${s}T00:00:00Z`) / 86_400_000;
+
+/** The days from `from` to `to`, both included, at most `HISTORY_RANGE_DAYS_MOST` of them (job 64a-v): the
+ *  calendar's year, its months and its days read by one rule. */
+export const historyRangeQuerySchema = z
+  .object({ from: historyDaySchema, to: historyDaySchema })
+  .strict()
+  .refine((q) => q.from <= q.to, { message: "from on or before to", path: ["from"] })
+  .refine((q) => dayNumber(q.to) - dayNumber(q.from) < HISTORY_RANGE_DAYS_MOST, { message: `at most ${String(HISTORY_RANGE_DAYS_MOST)} days`, path: ["to"] });
+
+/** The days from `from` to `to` the person worked out on, as `historyMonthOutSchema` counts them. */
+export const historyRangeOutSchema = z.object({
+  from: historyDaySchema,
+  to: historyDaySchema,
+  days: z.array(z.object({ day: z.string(), workouts: z.number().int().min(1) })),
+  limitedToDays: z.number().int().nullable(),
+});
+export type HistoryRange = z.infer<typeof historyRangeOutSchema>;
+
 /** How many of a day's workouts one answer lists, in the order they started. */
 export const HISTORY_DAY_WORKOUTS_MOST = 100;
 
@@ -41,6 +63,9 @@ export const historyWorkoutListedSchema = z.object({
   kcalPoint: z.number().int().nullable(),
   /** Its exercises' id words, each once, in the order they were first done. */
   exercises: z.array(z.string()),
+  /** Each exercise's Library name, in the same order (64a-v); null for one the Library never had, which the phone names
+   *  as a workout's page does. */
+  exerciseNames: z.array(z.string().nullable()),
 });
 export type HistoryWorkoutListed = z.infer<typeof historyWorkoutListedSchema>;
 
@@ -101,11 +126,23 @@ export const historyWorkoutSchema = z.object({
   durationMs: z.number().int().nullable(),
   kcalPoint: z.number().int().nullable(),
   kcalCalcVersion: z.number().int().nullable(),
+  /** The body weight its calories were worked out at when it was saved; null where none was given (70 kg). */
+  kcalWeightKg: z.number().nullable(),
   platform: z.enum(["web", "android", "ios"]),
   sets: z.array(historySetSchema),
   newRecords: z.array(newRecordSchema),
 });
 export type HistoryWorkout = z.infer<typeof historyWorkoutSchema>;
+
+/** Epley's estimate (1985) is not used past 10 reps, where it strays most (LeSuer et al., 1997). */
+export const EPLEY_REPS_MOST = 10;
+
+/** The estimated one-rep max in whole grams, or null for a set it is not worked out for. One rep is the
+ *  weight itself. */
+export function estimatedOneRepMaxGrams(weightGrams: number | null, reps: number): number | null {
+  if (weightGrams === null || reps < 1 || reps > EPLEY_REPS_MOST) return null;
+  return reps === 1 ? weightGrams : Math.floor((weightGrams * (30 + reps)) / 30);
+}
 
 /** The set a record was made in. */
 export const recordSetSchema = z.object({
