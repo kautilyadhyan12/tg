@@ -166,7 +166,7 @@ export function agreementSignedLine(emailed) {
 /** The card kept for this membership from a Terminal payment (18d-vi-c). */
 export function agreementCardLine(card, when) {
   const day = when(card.at);
-  return `Card for automatic payments: ${cardName(card)}, agreed on the Terminal${day === '' ? '' : ` on ${day}`}.`;
+  return `Card for autopay: ${cardName(card)}, agreed on the Terminal${day === '' ? '' : ` on ${day}`}.`;
 }
 
 /** Who signed, as the signed copy says it, and from the emailed link (18u-ii-b) or in the app as they bought it (18k-iii-a). */

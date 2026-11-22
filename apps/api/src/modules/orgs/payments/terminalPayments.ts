@@ -819,7 +819,7 @@ async function start(
     case "not_allowed":
       throw new OrgsError(409, "held_membership_changed", "This membership has changed since you opened it. Nothing was sent: check it and try again.");
     case "too_much":
-      throw new OrgsError(409, "payment_too_much", `That is more than is left to pay. ${formatMinor(written.leftMinor, written.currency)} is left.`);
+      throw new OrgsError(409, "payment_too_much", `That is more than is due. ${formatMinor(written.leftMinor, written.currency)} is due.`);
     case "currency":
       throw new OrgsError(409, "terminal_payment_currency", TERMINAL_PAYMENT_WORDS.currency);
     case "other_waiting":

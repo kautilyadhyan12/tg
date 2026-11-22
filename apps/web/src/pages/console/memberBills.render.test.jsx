@@ -48,7 +48,7 @@ const menuOf = (el, menu) => {
 };
 const BILL_MENU = /^More for the bill/;
 const REFUND_ITEM = 'Note a refundYou gave some or all of it back.';
-const VOID_ITEM = 'Void paymentIt was recorded by mistake. The bill is owed again.';
+const VOID_ITEM = 'Void paymentIt was recorded by mistake. The bill is outstanding again.';
 
 const GYM = '11111111-1111-4111-8111-111111111111';
 const ADA = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
@@ -142,7 +142,7 @@ describe('each bill reads the word the server sent, under its own membership', (
     const packRow = rows.find((r) => within(r).queryByText('10 classes') !== null);
     expect(billsOf(goldRow)).toEqual(['4 Oct – 3 Nov 2026£49.99Paid£49.99Cash · 4 Oct 2026 · by Sam OwnerView receipt']);
     // The pack's bill holds its Record payment and its ⋯ (Void bill): they act on that bill.
-    expect(billsOf(packRow)).toEqual(['Whole membership£90.00OverdueWas due 10 October 2026Record payment']);
+    expect(billsOf(packRow)).toEqual(['Whole membership£90.00OverdueDue 10 October 2026Record payment']);
     expect(within(goldRow).queryByText('Overdue')).toBeNull();
     expect(within(goldRow).queryByText('Due')).toBeNull();
     expect(within(packRow).queryByText('Paid')).toBeNull();
@@ -186,7 +186,7 @@ describe('each bill reads the word the server sent, under its own membership', (
     fireEvent.change(form.getByLabelText('Amount paid (GBP)'), { target: { value: '90.01' } });
     fireEvent.change(form.getByLabelText('Payment method'), { target: { value: 'cash' } });
     fireEvent.click(form.getByRole('button', { name: 'Record payment' }));
-    expect(form.getByRole('alert').textContent).toBe('That is more than is left to pay. £90.00 is left.');
+    expect(form.getByRole('alert').textContent).toBe('That is more than is due. £90.00 is due.');
     expect(orgService.changeHeldMembership).not.toHaveBeenCalled();
     // Part of it.
     fireEvent.change(form.getByLabelText('Amount paid (GBP)'), { target: { value: '40' } });
@@ -198,7 +198,7 @@ describe('each bill reads the word the server sent, under its own membership', (
       amountMinor: 4000,
       method: 'cash',
     });
-    expect(await screen.findByText('£40.00 recorded. £50.00 is still left to pay.')).toBeTruthy();
+    expect(await screen.findByText('£40.00 recorded. £50.00 is still due.')).toBeTruthy();
   });
 });
 
@@ -210,10 +210,10 @@ describe('what the bills show', () => {
     orgService.getHeldMemberships.mockResolvedValue(answer([part]));
     render(draw());
     const [row] = await rowsSoon();
-    expect(billsOf(row)).toEqual(['Whole membership£90.00OverdueWas due 10 October 2026£40.00 paid · £50.00 left£40.00Bank transfer · 12 Oct 2026View receiptRecord payment']);
+    expect(billsOf(row)).toEqual(['Whole membership£90.00OverdueDue 10 October 2026£40.00 paid · £50.00 due£40.00Bank transfer · 12 Oct 2026View receiptRecord payment']);
     fireEvent.click(within(row).getByRole('button', { name: 'Record payment' }));
     expect(within(row).getByLabelText('Amount paid (GBP)').value).toBe('50.00');
-    expect(within(row).getByText('£50.00 is left to pay. This only writes it in your records: no money is taken.')).toBeTruthy();
+    expect(within(row).getByText('£50.00 due. This only writes it in your records: no money is taken.')).toBeTruthy();
   });
 
   it('shows the two newest bills, and the rest behind one line', async () => {
@@ -241,10 +241,10 @@ describe('what the bills show', () => {
     const rows = await rowsSoon();
     expect(rows).toHaveLength(1);
     expect(within(rows[0]).getByText('Cancelled')).toBeTruthy();
-    expect(billsOf(rows[0])).toEqual(['4 Oct – 3 Nov 2026£49.99OverdueWas due 4 October 2026Record payment']);
+    expect(billsOf(rows[0])).toEqual(['4 Oct – 3 Nov 2026£49.99OverdueDue 4 October 2026Record payment']);
     // Its bill is paid or voided: nothing else can be done to a membership that is over.
     expect(buttonsIn(rows[0])).toEqual(['Record payment', 'More for the bill 4 Oct – 3 Nov 2026']);
-    expect(menuOf(rows[0], BILL_MENU)).toEqual(['Void billNothing is owed for these days.']);
+    expect(menuOf(rows[0], BILL_MENU)).toEqual(['Void billNothing is outstanding for these days.']);
     expect(screen.getByRole('button', { name: 'Show 1 earlier membership' })).toBeTruthy();
   });
 
@@ -432,7 +432,7 @@ describe('Void bill (was Cancel this bill)', () => {
     fireEvent.click(box.getByRole('button', { name: 'Void bill' }));
     await waitFor(() => expect(orgService.changeHeldMembership).toHaveBeenCalledTimes(1));
     expect(orgService.changeHeldMembership).toHaveBeenCalledWith(GYM, ADA, pack.id, `bills/${pack.billing.bills[0].id}/cancel`, { reason: 'not_charging' });
-    expect(await screen.findByText('That £90.00 bill was voided. Nothing is owed for it.')).toBeTruthy();
+    expect(await screen.findByText('That £90.00 bill was voided. Nothing is outstanding for it.')).toBeTruthy();
     // Afterwards: the bill reads Voided with who and why, the line never says Paid, and nothing is left to press for it.
     const now = (await rowsSoon()).find((r) => within(r).queryByText('10 classes') !== null);
     expect(billsOf(now)).toEqual(['Whole membership£90.00VoidedVoided 20 October 2026 by Sam Owner · Not charging for this one']);
@@ -590,7 +590,7 @@ describe('Note a refund', () => {
     render(draw());
     const [row] = await rowsSoon();
     expect(billsOf(row)).toEqual([
-      '4 Oct – 3 Nov 2026£49.99OverdueWas due 4 October 2026' +
+      '4 Oct – 3 Nov 2026£49.99OverdueDue 4 October 2026' +
         '£49.99Cash · 4 Oct 2026 · by Sam OwnerVoided 4 October 2026View receipt' +
         '£49.99Cash · 4 Oct 2026 · by Sam OwnerVoided 6 October 2026 by Priya Desk · Wrong personView receipt' +
         '£20.00 refundedCash · 4 Oct 2026 · Charged too much · by Sam OwnerVoided 5 October 2026 by Priya Desk · Noted by mistakeView receipt' +
@@ -779,11 +779,11 @@ describe('a late cancel or no-show fee, under its membership (18h-i)', () => {
     orgService.getHeldMemberships.mockResolvedValue(answer([gold]));
     render(draw());
     const item = within(await feesIn()).getByTestId('held-fee');
-    expect(item.textContent).toContain('No longer owed: they were marked Came, or the class was cancelled. If you gave the money back, void the payment.');
+    expect(item.textContent).toContain('No longer outstanding: they were marked Came, or the class was cancelled. If you gave the money back, void the payment.');
     fromMenu(item, /^More for the payment/, 'Void payment');
     const ask = within(item).getByTestId('held-fee-void');
-    expect(ask.textContent).toContain('Voiding the payment takes the fee off too, so nothing is owed.');
-    expect(ask.textContent).not.toContain('owed again');
+    expect(ask.textContent).toContain('Voiding the payment takes the fee off too, so nothing is outstanding.');
+    expect(ask.textContent).not.toContain('outstanding again');
   });
 
   it('a fee taken off after its payment was voided reads Taken off, with nothing to press', async () => {
@@ -798,7 +798,7 @@ describe('a late cancel or no-show fee, under its membership (18h-i)', () => {
     render(draw());
     const item = within(await feesIn()).getByTestId('held-fee');
     expect(item.textContent).toContain('Taken off');
-    expect(item.textContent).toContain('No longer owed: they were marked Came, or the class was cancelled.');
+    expect(item.textContent).toContain('No longer outstanding: they were marked Came, or the class was cancelled.');
     expect(within(item).getByTestId('held-fee-voided-payment').textContent).toContain('Voided 16 October 2026 by Sam Owner');
     expect(within(item).queryByRole('button', { name: /Record payment|Waive fee/ })).toBeNull();
   });
@@ -974,7 +974,7 @@ describe('a member paying a fee in the app (18k-ii-b)', () => {
     render(draw({ readOnly: true }));
     const item = await screen.findByTestId('held-fee');
     expect(item.textContent).toContain('They were marked Came, or the class was cancelled. It comes off once their payment page in the app closes, if nothing was paid.');
-    expect(item.textContent).not.toContain('No longer owed');
+    expect(item.textContent).not.toContain('No longer outstanding');
     expect(within(item).getByTestId('held-fee-app-payment').textContent).toContain('is paying this fee in the app');
     expect(within(within(item).getByTestId('held-fee-app-payment')).queryByRole('button')).toBeNull();
   });

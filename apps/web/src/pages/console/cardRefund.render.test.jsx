@@ -215,7 +215,7 @@ describe('Refund to card on a fee', () => {
     orgService.getHeldMemberships.mockResolvedValue(feePage({ method: 'cash', refundableMinor: 0 }, { can: { pay: false, waive: false, voidPaymentId: FEE_PAYMENT } }));
     draw();
     const items = await menuItems(await feePayment());
-    expect(items.map((i) => i.textContent)).toEqual(['Void paymentIt was recorded by mistake. The fee is owed again.']);
+    expect(items.map((i) => i.textContent)).toEqual(['Void paymentIt was recorded by mistake. The fee is outstanding again.']);
   });
 
   it('Note a refund opens under the fee, names it, and sends to the fee\'s payment', async () => {

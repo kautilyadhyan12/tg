@@ -115,7 +115,7 @@ export default function TerminalPayBox({ gymId, entryId, payment, name, showName
       <div className="flex flex-col gap-1">
         <p className="c-s15 c-w6 c-t1 m-0">{words.title}</p>
         {showName ? (
-          <p className="c-s13 c-t2 m-0">
+          <p className="c-s14 c-t2 m-0">
             {payTerminalName(payment.terminal)}
             {cardTerminalSerial(payment.terminal) !== null ? <span className="c-num">{` · ${cardTerminalSerial(payment.terminal)}`}</span> : null}
             {payment.startedByName ? ` · started by ${payment.startedByName}` : null}

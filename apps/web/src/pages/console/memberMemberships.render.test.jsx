@@ -201,7 +201,7 @@ describe('whose membership is on screen', () => {
     // The form is under the pack, names Ada, and Gold keeps its own buttons.
     const form = within(packRow).getByTestId('held-pay');
     expect(within(form).getByText("Record a payment for Ada Lovelace's 10 classes")).toBeTruthy();
-    expect(within(form).getByText('£90.00 is left to pay. This only writes it in your records: no money is taken.')).toBeTruthy();
+    expect(within(form).getByText('£90.00 due. This only writes it in your records: no money is taken.')).toBeTruthy();
     expect(within(goldRow).queryByTestId('held-pay')).toBeNull();
     // Gold is paid up to 4 November: its next payment can be recorded, and the button says it is early.
     expect(within(goldRow).getByRole('button', { name: 'Record payment early' })).toBeTruthy();
@@ -960,7 +960,7 @@ describe('changing a membership', () => {
     const found = await (await boxSoon()).findByTestId('chargeback');
     expect(found.textContent).toContain('The cardholder says they were charged twice.');
     expect(box().getByTestId('held-bill-declined').textContent).toBe("Not charged automatically because of a chargeback on Pat's payment. You can still charge the card here.");
-    expect(box().getByRole('link', { name: "Open Pat's page" }).getAttribute('href')).toContain('?person=77777777-7777-4777-8777-000000000004');
+    expect(box().getByRole('link', { name: "View Pat's page" }).getAttribute('href')).toContain('?person=77777777-7777-4777-8777-000000000004');
     cleanup();
   });
 
