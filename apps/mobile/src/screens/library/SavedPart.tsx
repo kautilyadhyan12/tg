@@ -1,6 +1,6 @@
 import { PLANNED_WORKOUT_LIMITS, type PhoneLibraryEntry } from "@app/shared";
-import { useState } from "react";
-import { Image, Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from "react-native";
+import { useEffect, useState } from "react";
+import { AppState, Image, Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from "react-native";
 import { Button } from "../../look/Button";
 import { colours, sizes } from "../../look/colours";
 import { Field } from "../../look/Field";
@@ -45,6 +45,18 @@ export function SavedPart({ mine, planned, entryOf }: Props) {
   const [boxSaid, setBoxSaid] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [newName, setNewName] = useState("");
+  // The person's list is read when My Workout opens and when the app comes back to it.
+  const reading = saved?.store ?? null;
+  useEffect(() => {
+    if (reading === null) return undefined;
+    void reading.refresh();
+    const heard = AppState.addEventListener("change", (next) => {
+      if (next === "active") void reading.refresh();
+    });
+    return () => {
+      heard.remove();
+    };
+  }, [reading]);
   if (saved === null) return null;
   const { view, store } = saved;
   const list = view.list;

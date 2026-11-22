@@ -93,13 +93,11 @@ export function WorkoutLayerProvider({ children, files = PHONE_FILES, onNewWorko
       effortSender((request, shape) => session.signedIn(request, shape)),
       (id) => store.keeping() === id || waiting.view().waiting.some((w) => w.workoutId === id),
     );
-    // Saved workouts' saves and deletes go from here too, whichever page is on screen.
+    // Saved workouts' saves and deletes go from here too, whichever page is on screen; the list is read only when My
+    // Workout is open (SavedPart), so a member who never opens it costs the server nothing.
     const saved = createSavedStore({ copy: files.savedCopy(me), waiting: files.savedWaiting(me), signedIn: (request, shape) => session.signedIn(request, shape), newId: newWorkoutId });
     setMade({ store, waiting, effort, saved });
-    void saved.ready.then(() => {
-      void saved.send(true);
-      void saved.refresh();
-    });
+    void saved.ready.then(() => saved.send(true));
     void waiting.start().then(() => waiting.send(true));
     void effort.start().then(() => effort.send(true));
     const sendStars = () => {
@@ -119,7 +117,6 @@ export function WorkoutLayerProvider({ children, files = PHONE_FILES, onNewWorko
       void waiting.send(true);
       void effort.send(true);
       void saved.send(true);
-      void saved.refresh();
     });
     return () => {
       waiting.stop();
