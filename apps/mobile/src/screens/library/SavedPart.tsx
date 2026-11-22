@@ -341,17 +341,21 @@ function SavedRow({ entry, inMine, entryOf, busy, onLoad, onDelete }: RowProps) 
           <Txt kind="small" numberOfLines={1}>
             {`${plural(entry.exercises.length, "exercise")} · ${plural(entry.setsCount, "set")}`}
           </Txt>
-          <Txt kind="small" colour="textFaint" numberOfLines={1}>
-            {names}
-          </Txt>
-        </View>
-        {inMine ? (
-          <View style={styles.tag}>
-            <Txt kind="tiny" colour="orange" style={styles.bold}>
-              In My Workout
+          {/* The one My Workout holds says so under its words, never beside them, so a small phone keeps them whole; its
+              exercises are just above, in My Workout. */}
+          {inMine ? (
+            <View style={styles.tag}>
+              <Txt kind="tiny" colour="orange" style={styles.bold}>
+                In My Workout
+              </Txt>
+            </View>
+          ) : (
+            <Txt kind="small" colour="textFaint" numberOfLines={1}>
+              {names}
             </Txt>
-          </View>
-        ) : (
+          )}
+        </View>
+        {inMine ? null : (
           <Txt kind="body" colour="orange" style={styles.bold}>
             Load
           </Txt>
@@ -384,7 +388,7 @@ const styles = StyleSheet.create({
   rowMain: { flex: 1, flexDirection: "row", alignItems: "center", gap: 12 },
   thumb: { width: 52, height: 52, borderRadius: 12, overflow: "hidden", alignItems: "center", justifyContent: "center", backgroundColor: colours.box },
   thumbPicture: { width: "100%", height: "100%" },
-  tag: { paddingVertical: 3, paddingHorizontal: 8, borderRadius: sizes.round, borderWidth: 1, borderColor: colours.orangeLine, backgroundColor: colours.orangeFill },
+  tag: { alignSelf: "flex-start", marginTop: 3, paddingVertical: 3, paddingHorizontal: 8, borderRadius: sizes.round, borderWidth: 1, borderColor: colours.orangeLine, backgroundColor: colours.orangeFill },
   icon: { width: sizes.press, height: sizes.press, alignItems: "center", justifyContent: "center" },
   boxBody: { gap: 12 },
   two: { flexDirection: "row", gap: 10 },
