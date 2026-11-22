@@ -35,7 +35,7 @@ for (const lean of [...FLOOR_LEANS, ...FLOOR_LEANS_MEASURED.filter((l) => !FLOOR
 // 52a-ii-b-ii-b-i: the pose model's own foot wander measured on his floor sets, added in step with his knees.
 const floorSets = floorSquatSets().floor;
 const tries: readonly (readonly [string, readonly string[] | null])[] = [
-  ["all four floor sets", null],
+  ["all his floor sets", null],
   ...floorSets.map((s): readonly [string, readonly string[]] => [`all but ${s}`, floorSets.filter((x) => x !== s)]),
   ...floorSets.map((s): readonly [string, readonly string[]] => [`${s} alone`, [s]]),
 ];

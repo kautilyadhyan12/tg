@@ -17,12 +17,19 @@ const runs = (file: string) =>
 describe("the worst thing: good squats with the phone on the floor are counted, every one", () => {
   it.each([
     ["floor_phone_test", "the phone on a shiny floor: side on, half turned, from the front", 9],
-    ["usual_v04", "the phone on a dull floor: side on", 3],
+    ["usual_v04", "the phone on a dull floor: side on, then side on the other way after turning round", 3],
     ["usual_v11", "the phone raised: five pairs, a new way of facing each", 10],
   ])("%s (%s) counts its %s squats, each set what was counted by eye", (file, _what, total) => {
     const sets = runs(file);
     expect(sets.map((s) => [s.label, s.run.count])).toEqual(sets.map((s) => [s.label, s.reps]));
     expect(sets.reduce((n, s) => n + s.run.count, 0)).toBe(total);
+  });
+
+  it("his dull-floor video played whole, his turn round between his second and third squats in it, still counts its 3", () => {
+    const whole = MOVEMENT_VIDEOS.find((v) => v.file === "movement-points/usual_v04" && v.reps === 2);
+    if (whole === undefined) throw new Error("no dull-floor set");
+    const [v] = proofVideos([{ ...whole, cut: [9.8, 23.2], reps: 3 }]);
+    expect(v === undefined ? null : runMovement(SQUAT, v.video).count).toBe(3);
   });
 
   it("no rep of his squats is called short: they are good-form squats, and no advice is ever given on them", () => {

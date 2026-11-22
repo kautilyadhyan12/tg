@@ -55,8 +55,9 @@ describe("each squat video counts what a person counts by eye, however the world
       "slower",
       "twice as slow",
     ]);
-    // The 13 squat videos with a count by eye, and a man's own nine sets from a phone on the floor and raised (52a-ii-b-i).
-    expect(new Set(ROWS.map((r) => r.label)).size).toBe(22);
+    // The 13 squat videos with a count by eye, and a man's own ten sets from a phone on the floor and raised (52a-ii-b-i;
+    // his dull-floor set cut in two where he turns round, 52a-ii-b-ii-b-ii).
+    expect(new Set(ROWS.map((r) => r.label)).size).toBe(23);
   });
 
   it.each(ROWS.filter((r) => r.tried && !openRow(r)).map((r) => [`${r.replay.name}: ${r.label}`, r] as const))("%s, with the squat's numbers and, where the video sets them, with its person left out", (_name, r) => {
@@ -88,7 +89,7 @@ describe("each squat video counts what a person counts by eye, however the world
       "prisoner_squat_2: twice as slow",
       "floor_phone_test 13.9-21.1 s: twice as slow",
     ]);
-    expect(ROWS.filter(openRow).every((r) => /^52(a-ii-b-ii-b-ii|b-i), /.test(r.entry.replayOpen?.why ?? ""))).toBe(true);
+    expect(ROWS.filter(openRow).every((r) => /^(52b-i|53), /.test(r.entry.replayOpen?.why ?? ""))).toBe(true);
     // An open row only ever misses squats: never one more than by eye, with every person's numbers or with its own left out.
     expect(ROWS.filter(openRow).filter((r) => r.count > r.most || (r.leftOut ?? 0) > r.most).map((r) => `${r.label}: ${r.replay.name}`)).toEqual([]);
   });

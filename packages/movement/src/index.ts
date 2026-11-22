@@ -24,6 +24,7 @@ export {
   checkMovement,
   PROMISED_JUMP,
   FOOT_ROOM,
+  FOOT_ENDS_AGREE,
   NEVER_JUMP,
   SLOWEST_RATE,
   hopTime,
