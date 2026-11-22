@@ -2875,9 +2875,12 @@ screen (`apps/mobile/src/screens/workout/Summary.tsx`, words `afterWords.ts`, ta
   `most`) the box says "You have 50 saved workouts, the most you can keep. Delete one to save this one." with See saved workouts; past
   200 sets it says so. Under it, **Saved workouts**: the newest three (the first exercise's picture, the name, "3 exercises · 9 sets",
   the names), See all N (every one, in a box from the bottom, "4 saved workouts of 50"), the one My Workout holds marked In My Workout.
-- **Load:** a press puts it in My Workout ("Push day is in My Workout."), asking first ("Load Push day?" · "Legs isn't saved. Push day
-  takes its place in My Workout." · Keep mine · Load Push day) only where something would be lost: My Workout holds exercises that are
-  not exactly the saved workout it holds. My Workout keeps which saved workout it holds (`from` in `my-workout-<id>.json`) until Clear,
+- **Load:** a press puts it in My Workout ("Push day is in My Workout."), asking first only where something would be lost (My Workout
+  holds exercises that are not exactly the saved workout it holds), and asking to save it first, as any app does (Kd's click-through):
+  "Save changes to Push day?" (or "Save Legs?") · "Your changes to Push day aren't saved. Pull day then takes its place in My Workout." ·
+  Save and load Pull day · Don't save · Cancel. **Create workout**, beside Save workout, asks a name ("Create workout", Create) and
+  gives an empty My Workout under it ("Pull is ready. Add exercises from the Library."), asking the same question first where My Workout
+  holds what is not saved. The pen beside My Workout's name opens it for typing, as a tap on the name does. My Workout keeps which saved workout it holds (`from` in `my-workout-<id>.json`) until Clear,
   another load, or that one's delete; an exercise twice keeps its first place, and an exercise's first 10 sets (`fromSaved`). One
   this phone does not hold whole is read from the server; with no internet, "Couldn't load Push day. Check your internet connection
   and try again."; one gone, "Push day is no longer in your saved workouts."

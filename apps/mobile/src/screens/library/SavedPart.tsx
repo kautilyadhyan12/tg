@@ -8,7 +8,7 @@ import { Icon } from "../../look/Icon";
 import { pictures } from "../../look/pictures";
 import { Sheet } from "../../look/Sheet";
 import { fonts, Txt } from "../../look/Txt";
-import { fromSaved, NAME_MOST } from "../../library/myWorkout";
+import { fromSaved, NAME_MOST, nameOf as cleanName } from "../../library/myWorkout";
 import { exercisePicture } from "../../library/pictures";
 import { sameWorkout, type Planned, type ShownSaved } from "../../library/savedWorkouts";
 import type { MyWorkoutHook } from "./useLibrary";
@@ -39,7 +39,9 @@ export function savedState(mine: MyWorkoutHook | null, list: readonly ShownSaved
   return { linked, same };
 }
 
-type Box = { kind: "save" } | { kind: "load"; id: string } | { kind: "delete"; id: string } | { kind: "all"; asking: string | null };
+/** `leave`: My Workout holds what is not saved, and the person pressed a saved workout (`to`, its id) or Create workout
+ *  (`to` null): save it first, or not. `new`: the name of a new workout. */
+type Box = { kind: "save" } | { kind: "leave"; to: string | null } | { kind: "new" } | { kind: "delete"; id: string } | { kind: "all"; asking: string | null };
 type Said = { text: string; bad: boolean } | null;
 
 interface Props {
@@ -56,6 +58,7 @@ export function SavedPart({ mine, planned, entryOf }: Props) {
   const [said, setSaid] = useState<Said>(null);
   const [boxSaid, setBoxSaid] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [newName, setNewName] = useState("");
   if (saved === null) return null;
   const { view, store } = saved;
   const list = view.list;
@@ -69,17 +72,25 @@ export function SavedPart({ mine, planned, entryOf }: Props) {
     setBoxSaid(null);
   };
 
-  const keep = async (savedId: string | null) => {
+  /** Saves My Workout (over `savedId`, or as a new one); false where it could not be kept, said in the box. */
+  const keep = async (savedId: string | null): Promise<boolean> => {
     setBusy(true);
     const result = await store.save({ savedId, name: mine.workout.name, exercises: planned.exercises });
     setBusy(false);
     if (result.kept === "lost") {
       setBoxSaid("This workout couldn't be kept on this phone. Try again in a moment.");
-      return;
+      return false;
     }
     mine.link(result.savedId);
     setSaid(null);
-    close();
+    return true;
+  };
+
+  /** A new, empty workout: its name asked first. */
+  const askName = () => {
+    setNewName("");
+    setBoxSaid(null);
+    setBox({ kind: "new" });
   };
 
   const load = async (id: string) => {
@@ -97,8 +108,27 @@ export function SavedPart({ mine, planned, entryOf }: Props) {
 
   const pressRow = (id: string) => {
     if (linked?.id === id && same) setSaid({ text: `${nameOf(id)} is in My Workout.`, bad: false });
-    else if (unsaved) setBox({ kind: "load", id });
+    else if (unsaved) setBox({ kind: "leave", to: id });
     else void load(id);
+  };
+
+  const goTo = (to: string | null) => {
+    if (to === null) askName();
+    else void load(to);
+  };
+
+  const pressNew = () => {
+    setSaid(null);
+    if (unsaved) setBox({ kind: "leave", to: null });
+    else askName();
+  };
+
+  const create = () => {
+    const name = cleanName(newName).trim();
+    if (name === "") return;
+    mine.load({ name, items: [], from: null });
+    close();
+    setSaid({ text: `${name} is ready. Add exercises from the Library.`, bad: false });
   };
 
   const remove = async (id: string) => {
@@ -136,7 +166,7 @@ export function SavedPart({ mine, planned, entryOf }: Props) {
 
   return (
     <>
-      {count === 0 ? null : <SaveLine linked={linked} same={same} held={view.held} onSave={() => { setSaid(null); setBox({ kind: "save" }); }} />}
+      {count === 0 ? null : <SaveLine linked={linked} same={same} held={view.held} onSave={() => { setSaid(null); setBox({ kind: "save" }); }} onNew={pressNew} />}
       {view.refused.map((r) => (
         <View key={r.id} style={styles.refused}>
           <Icon name="warn" size={18} colour="badText" />
@@ -170,7 +200,9 @@ export function SavedPart({ mine, planned, entryOf }: Props) {
             busy={busy}
             said={boxSaid}
             onSave={(savedId) => {
-              void keep(savedId);
+              void keep(savedId).then((ok) => {
+                if (ok) close();
+              });
             }}
             onSeeAll={() => {
               setBoxSaid(null);
@@ -180,14 +212,40 @@ export function SavedPart({ mine, planned, entryOf }: Props) {
         ) : null}
       </Sheet>
 
-      <Sheet open={box?.kind === "load"} title={box?.kind === "load" ? `Load ${nameOf(box.id)}?` : ""} onClose={close}>
-        {box?.kind === "load" ? (
+      <Sheet open={box?.kind === "leave"} title={box?.kind === "leave" ? leaveTitle(linked, mine.workout.name) : ""} onClose={close}>
+        {box?.kind === "leave" ? (
+          <LeaveAsk
+            mine={mine}
+            planned={planned}
+            linked={linked}
+            to={box.to === null ? null : nameOf(box.to)}
+            full={linked === null && list.length >= view.most && view.most > 0}
+            most={view.most}
+            busy={busy}
+            said={boxSaid}
+            onSave={() => {
+              const to = box.to;
+              void keep(linked?.id ?? null).then((ok) => {
+                if (!ok) return;
+                close();
+                goTo(to);
+              });
+            }}
+            onDontSave={() => {
+              const to = box.to;
+              close();
+              goTo(to);
+            }}
+            onCancel={close}
+          />
+        ) : null}
+      </Sheet>
+
+      <Sheet open={box?.kind === "new"} title="Create workout" onClose={close}>
+        {box?.kind === "new" ? (
           <View style={styles.boxBody}>
-            <Txt kind="body">{`${linked === null ? (mine.workout.name.trim() === "" ? "Your workout isn't saved." : `${mine.workout.name.trim()} isn't saved.`) : `Your changes to ${linked.name} aren't saved.`} ${nameOf(box.id)} takes its place in My Workout.`}</Txt>
-            <View style={styles.two}>
-              <Button label="Keep mine" kind="plain" style={styles.half} onPress={close} />
-              <Button label={`Load ${nameOf(box.id)}`} style={styles.half} disabled={busy} onPress={() => { void load(box.id); }} />
-            </View>
+            <Field label="Name" value={newName} onChange={setNewName} placeholder="Push day, Legs, Full body" maxLength={NAME_MOST} ready onDone={create} />
+            <Button label="Create" wide raised disabled={newName.trim() === ""} onPress={create} />
           </View>
         ) : null}
       </Sheet>
@@ -226,23 +284,70 @@ export function SavedPart({ mine, planned, entryOf }: Props) {
   );
 }
 
-/** Under Start workout: Save workout, Save changes, or that it is saved. */
-function SaveLine({ linked, same, held, onSave }: { linked: ShownSaved | null; same: boolean; held: boolean; onSave: () => void }) {
-  if (linked !== null && same) {
-    const onPhone = linked.onPhone && held;
-    return (
-      <View style={styles.savedLine} accessible accessibilityLabel={onPhone ? "Saved on this phone. It goes to your account as soon as it can." : "Saved"}>
-        <View style={styles.savedRow}>
-          <Icon name="check" size={15} colour="good" />
-          <Txt kind="small" colour="good" style={styles.bold}>
-            {onPhone ? "Saved on this phone." : "Saved"}
-          </Txt>
-        </View>
-        {onPhone ? <Txt kind="small" style={styles.centre}>It goes to your account as soon as it can.</Txt> : null}
+/** Under Start workout: Save workout, Save changes, or that it is saved; and Create workout beside it. */
+function SaveLine({ linked, same, held, onSave, onNew }: { linked: ShownSaved | null; same: boolean; held: boolean; onSave: () => void; onNew: () => void }) {
+  const isSaved = linked !== null && same;
+  const onPhone = isSaved && linked.onPhone && held;
+  return (
+    <View style={styles.saveArea}>
+      <View style={styles.saveRow}>
+        {isSaved ? (
+          <View style={styles.savedRow} accessible accessibilityLabel={onPhone ? "Saved on this phone. It goes to your account as soon as it can." : "Saved"}>
+            <Icon name="check" size={15} colour="good" />
+            <Txt kind="small" colour="good" style={styles.bold}>
+              {onPhone ? "Saved on this phone." : "Saved"}
+            </Txt>
+          </View>
+        ) : (
+          <Button label={linked === null ? "Save workout" : "Save changes"} kind="link" icon="save" onPress={onSave} />
+        )}
+        <Button label="Create workout" kind="link" icon="plus" onPress={onNew} />
       </View>
-    );
-  }
-  return <Button label={linked === null ? "Save workout" : "Save changes"} kind="link" icon="save" style={styles.saveLink} onPress={onSave} />;
+      {onPhone ? <Txt kind="small" style={styles.centre}>It goes to your account as soon as it can.</Txt> : null}
+    </View>
+  );
+}
+
+/** The title of the question asked before My Workout's unsaved changes give way. */
+function leaveTitle(linked: ShownSaved | null, name: string): string {
+  if (linked !== null) return `Save changes to ${linked.name}?`;
+  return name.trim() === "" ? "Save this workout?" : `Save ${name.trim()}?`;
+}
+
+interface LeaveProps {
+  mine: MyWorkoutHook;
+  planned: Planned;
+  linked: ShownSaved | null;
+  /** The name of the saved workout pressed; null for Create workout. */
+  to: string | null;
+  full: boolean;
+  most: number;
+  busy: boolean;
+  said: string | null;
+  onSave: () => void;
+  onDontSave: () => void;
+  onCancel: () => void;
+}
+
+/** My Workout holds what is not saved and is about to give way: save it first, don't, or cancel, as any app asks. */
+function LeaveAsk({ mine, planned, linked, to, full, most, busy, said, onSave, onDontSave, onCancel }: LeaveProps) {
+  const name = mine.workout.name.trim();
+  const what = linked !== null ? `Your changes to ${linked.name} aren't saved.` : name === "" ? "This workout isn't saved." : `${name} isn't saved.`;
+  const then = to === null ? "A new workout then takes its place in My Workout." : `${to} then takes its place in My Workout.`;
+  const tooMany = planned.sets > SETS_MOST;
+  const can = name !== "" && !tooMany && planned.exercises.length > 0 && !full && !busy;
+  return (
+    <View style={styles.boxBody}>
+      <Txt kind="body">{`${what} ${then}`}</Txt>
+      {linked === null && name === "" ? <Field label="Name" value={mine.workout.name} onChange={mine.rename} placeholder="Name this workout" maxLength={NAME_MOST} /> : null}
+      {full ? <Txt kind="small">{`You have ${String(most)} saved workouts, the most you can keep. Delete one to save this one.`}</Txt> : null}
+      {tooMany ? <Txt kind="small" colour="badText">{`A saved workout holds up to ${String(SETS_MOST)} sets. This one has ${String(planned.sets)}.`}</Txt> : null}
+      {said === null ? null : <Txt kind="small" colour="badText">{said}</Txt>}
+      <Button label={to === null ? "Save and create workout" : `Save and load ${to}`} wide raised disabled={!can} onPress={onSave} />
+      <Button label="Don't save" kind="plain" wide disabled={busy} onPress={onDontSave} />
+      <Button label="Cancel" kind="link" style={styles.self} onPress={onCancel} />
+    </View>
+  );
 }
 
 interface SaveBoxProps {
@@ -375,8 +480,8 @@ const styles = StyleSheet.create({
   centre: { textAlign: "center" },
   self: { alignSelf: "center" },
   // Under Start workout, closer to it than the page's own gap.
-  savedLine: { alignItems: "center", gap: 2, paddingVertical: 6, marginTop: -8 },
-  saveLink: { alignSelf: "center", marginTop: -8 },
+  saveArea: { alignItems: "center", gap: 2, marginTop: -8 },
+  saveRow: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", justifyContent: "center", columnGap: 28, minHeight: sizes.press },
   savedRow: { flexDirection: "row", alignItems: "center", gap: 6 },
   section: { gap: 10, marginTop: 10 },
   head: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", minHeight: sizes.press },

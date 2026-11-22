@@ -1312,26 +1312,85 @@ describe("saved workouts (64a-iv)", () => {
     expect([...server.account.values()].map((w) => w.name).sort()).toEqual(["Legs B", "Legs C"]);
   });
 
-  it("loading over a workout that isn't saved asks first; Keep mine keeps it; Load puts it in My Workout, and a workout done from it says so", async () => {
+  it("loading over a workout that isn't saved asks to save it first: Cancel keeps it; Don't save loads; a workout done from it says so", async () => {
     keptWorkout("Legs", [{ id: "squat", plan: { measuredIn: "reps", sets: SQUAT_SETS } }]);
     const server = withSaved({ [PUSH]: { ...push, exercises: [{ exercise: "squat", measuredIn: "reps", sets: [{ target: 1, weightGrams: null, restSeconds: null }] }] } });
     await openLibrary(server.ask);
     await openMine();
     await fireEvent.press(await screen.findByRole("button", { name: /^Load Push day/ }));
-    expect(await screen.findByText("Load Push day?")).toBeTruthy();
-    expect(screen.getByText("Legs isn't saved. Push day takes its place in My Workout.")).toBeTruthy();
-    await fireEvent.press(screen.getByRole("button", { name: "Keep mine" }));
+    expect(await screen.findByText("Save Legs?")).toBeTruthy();
+    expect(screen.getByText("Legs isn't saved. Push day then takes its place in My Workout.")).toBeTruthy();
+    await fireEvent.press(screen.getByRole("button", { name: "Cancel" }));
     expect((screen.getByLabelText("Workout name").props as { value: string }).value).toBe("Legs");
     await fireEvent.press(screen.getByRole("button", { name: /^Load Push day/ }));
-    await fireEvent.press(await screen.findByRole("button", { name: "Load Push day" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Don't save" }));
     expect(await screen.findByText("Push day is in My Workout.")).toBeTruthy();
     expect((screen.getByLabelText("Workout name").props as { value: string }).value).toBe("Push day");
     expect(screen.getByText("Saved")).toBeTruthy();
+    expect(server.changes).toEqual([]);
     await fireEvent.press(screen.getByRole("button", { name: "Start workout" }));
     await fireEvent.press(await screen.findByRole("button", { name: "One rep more" }));
     await waitFor(() => {
       expect(server.workouts.map((w) => w.startedFrom)).toEqual(["saved"]);
     });
+  });
+
+  it("Kd's click-through: changes to a saved workout, then another pressed: Save changes and load keeps the changes, then loads it", async () => {
+    keptWorkout("Push day", [{ id: "barbell_curl", plan: { measuredIn: "reps", sets: push.exercises[0]?.sets } }], PUSH);
+    const pull: Held = { name: "Pull day", editedAt: "2026-11-21T10:00:00.000Z", exercises: [{ exercise: "squat", measuredIn: "reps", sets: SQUAT_SETS }] };
+    const PULL = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+    const server = withSaved({ [PUSH]: push, [PULL]: pull });
+    await openLibrary(server.ask);
+    await openMine();
+    // Loaded from the server, so the phone holds Push day whole; then an exercise added.
+    await fireEvent.press(await screen.findByRole("button", { name: /^Load Push day/ }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Don't save" }));
+    expect(await screen.findByText("Saved")).toBeTruthy();
+    await fireEvent.press(screen.getByRole("button", { name: "Add exercises" }));
+    await fireEvent.press(await screen.findByRole("button", { name: /^Plank/ }));
+    await fireEvent.press(await screen.findByRole("button", { name: /Add to workout/ }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Close" }));
+    await openMine();
+    expect(await screen.findByRole("button", { name: "Save changes" })).toBeTruthy();
+    await fireEvent.press(screen.getByRole("button", { name: /^Load Pull day/ }));
+    expect(await screen.findByText("Save changes to Push day?")).toBeTruthy();
+    expect(screen.getByText("Your changes to Push day aren't saved. Pull day then takes its place in My Workout.")).toBeTruthy();
+    await fireEvent.press(screen.getByRole("button", { name: "Save and load Pull day" }));
+    expect(await screen.findByText("Pull day is in My Workout.")).toBeTruthy();
+    await waitFor(() => {
+      expect(server.account.get(PUSH)?.exercises.map((e) => e.exercise)).toEqual(["barbell_curl", "plank"]);
+    });
+    expect((screen.getByLabelText("Workout name").props as { value: string }).value).toBe("Pull day");
+  });
+
+  it("Create workout: asks the name, and gives an empty My Workout under it; with unsaved changes it asks to save them first", async () => {
+    keptWorkout("Legs", [{ id: "squat", plan: { measuredIn: "reps", sets: SQUAT_SETS } }]);
+    const server = withSaved();
+    await openLibrary(server.ask);
+    await openMine();
+    await fireEvent.press(await screen.findByRole("button", { name: "Create workout" }));
+    expect(await screen.findByText("Save Legs?")).toBeTruthy();
+    expect(screen.getByText("Legs isn't saved. A new workout then takes its place in My Workout.")).toBeTruthy();
+    await fireEvent.press(screen.getByRole("button", { name: "Save and create workout" }));
+    expect(await screen.findByRole("button", { name: "Create" })).toBeTruthy();
+    await waitFor(() => {
+      expect([...server.account.values()].map((w) => w.name)).toEqual(["Legs"]);
+    });
+    expect(screen.getByRole("button", { name: "Create" }).props.accessibilityState).toMatchObject({ disabled: true });
+    await fireEvent.changeText(screen.getByLabelText("Name"), "Pull");
+    await fireEvent.press(screen.getByRole("button", { name: "Create" }));
+    expect(await screen.findByText("Pull is ready. Add exercises from the Library.")).toBeTruthy();
+    expect((screen.getByLabelText("Workout name").props as { value: string }).value).toBe("Pull");
+    expect(screen.getByText("No exercises yet")).toBeTruthy();
+    expect(screen.getByRole("button", { name: /^Load Legs/ })).toBeTruthy();
+  });
+
+  it("the pen beside the name is a button of its own (that it opens the keyboard is seen on the phone)", async () => {
+    keptWorkout("Legs", [{ id: "squat", plan: { measuredIn: "reps", sets: SQUAT_SETS } }]);
+    await openLibrary(withSaved().ask);
+    await openMine();
+    await fireEvent.press(await screen.findByRole("button", { name: "Rename workout" }));
+    expect((screen.getByLabelText("Workout name").props as { value: string }).value).toBe("Legs");
   });
 
   it("with nothing to lose it loads with no question; one this phone never held needs the internet, and says so", async () => {

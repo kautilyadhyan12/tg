@@ -1,5 +1,5 @@
 import { RUN_SETS_MOST, WORKOUT_SAVE_LIMITS, type PhoneLibraryEntry, type RunExercise } from "@app/shared";
-import { useState, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import { Image, Pressable, StyleSheet, TextInput, View } from "react-native";
 import { Button } from "../../look/Button";
 import { Badge, Card } from "../../look/Card";
@@ -39,6 +39,7 @@ export function MyWorkoutPart({ parts, units, onBrowse, file }: { parts: ReactNo
   const [weighing, setWeighing] = useState(false);
   // Start workout pressed while the last workout is still being kept on the phone (round one, H3).
   const [busy, setBusy] = useState(false);
+  const nameBox = useRef<TextInput>(null);
   const library = state.kind === "ready" ? state.library : null;
   const entryOf = (id: string): PhoneLibraryEntry | null => library?.exercises.find((e) => e.id === id) ?? null;
   const liveOf = (id: string): PhoneLibraryEntry | null => {
@@ -76,6 +77,7 @@ export function MyWorkoutPart({ parts, units, onBrowse, file }: { parts: ReactNo
         <View style={styles.foot}>
           <View style={styles.nameRow}>
             <TextInput
+              ref={nameBox}
               value={mine?.workout.name ?? ""}
               onChangeText={(t) => {
                 mine?.rename(t);
@@ -87,7 +89,16 @@ export function MyWorkoutPart({ parts, units, onBrowse, file }: { parts: ReactNo
               returnKeyType="done"
               style={styles.name}
             />
-            <Icon name="pen" size={16} colour="textSoft" />
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Rename workout"
+              hitSlop={12}
+              onPress={() => {
+                nameBox.current?.focus();
+              }}
+            >
+              <Icon name="pen" size={16} colour="textSoft" />
+            </Pressable>
           </View>
           {count === 0 ? null : <Txt kind="body">{summaryLine(count, sum, units)}</Txt>}
           {count === 0 || sum.assumedKg === null || sum.kcal === null ? null : (
