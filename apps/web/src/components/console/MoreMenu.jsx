@@ -56,7 +56,7 @@ export default function MoreMenu({ items, disabled = false, label = 'More', aria
               {item.icon ? <item.icon aria-hidden="true" className="w-4 h-4 mt-0.5 flex-shrink-0" /> : <span className="w-4 flex-shrink-0" />}
               <span>
                 <span className="block c-s15 c-w5">{item.label}</span>
-                {item.hint ? <span className="block c-s13 c-t3">{item.hint}</span> : null}
+                {item.hint ? <span className="block c-s14 c-t3">{item.hint}</span> : null}
               </span>
             </button>
           ))}

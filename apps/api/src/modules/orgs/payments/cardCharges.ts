@@ -355,7 +355,7 @@ async function chargeByStaff(
     case "not_allowed":
       throw new OrgsError(409, "held_membership_changed", "This membership has changed since you opened it. Nothing was charged: check it and try again.");
     case "too_much":
-      throw new OrgsError(409, "payment_too_much", `That is more than is left to pay. ${formatMinor(written.leftMinor, written.currency)} is left.`);
+      throw new OrgsError(409, "payment_too_much", `That is more than is due. ${formatMinor(written.leftMinor, written.currency)} is due.`);
     case "currency":
       throw new OrgsError(409, "card_charge_currency", CARD_CHARGE_WORDS.currency);
     case "no_card":

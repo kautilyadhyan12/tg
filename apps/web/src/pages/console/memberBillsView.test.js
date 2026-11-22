@@ -42,6 +42,8 @@ import {
   voidedLine,
 } from './memberBillsView';
 import { paymentLine } from './heldMembershipsView';
+import { formatMinor } from '@app/shared';
+import { dayWords } from './memberListView';
 
 const TODAY = '2026-10-20';
 const bill = (over = {}) => ({
@@ -64,6 +66,70 @@ const membership = (over = {}, billing = {}) => ({
   currency: 'GBP',
   billing: { bills: [bill()], billsNotShown: 0, pay: { periodIndex: 0, covers: bill().covers, leftMinor: 4999, dueOn: '2026-10-04', state: 'due' }, cancel: null, undo: null, ...billing },
   ...over,
+});
+
+// V2a-ii, the worst thing the new words could do: a bill with money still due reads as paid, or
+// says another amount than the server sent. Every state, part payment, due day and currency.
+describe('V2a-ii: a bill still due never reads as paid, and says the amounts the server sent', () => {
+  const CURRENCIES = ['GBP', 'JPY', 'INR', 'USD'];
+  const AMOUNTS = [1, 2500, 4999, 1000000];
+  const DUE_ON = ['2026-10-01', TODAY, '2026-11-01'];
+  const cases = [];
+  for (const currency of CURRENCIES) {
+    for (const amountMinor of AMOUNTS) {
+      const paidSteps = [...new Set([0, 1, Math.floor(amountMinor / 2), amountMinor - 1, amountMinor])].filter((p) => p >= 0 && p <= amountMinor);
+      for (const paidMinor of paidSteps) {
+        for (const dueOn of DUE_ON) {
+          for (const state of ['due', 'overdue', 'paid', 'void', 'refunded']) {
+            if ((state === 'due' || state === 'overdue') && paidMinor === amountMinor) continue;
+            if (state === 'paid' && paidMinor !== amountMinor) continue;
+            cases.push({ currency, amountMinor, paidMinor, dueOn, state });
+          }
+        }
+      }
+    }
+  }
+
+  it('builds a few hundred cases', () => {
+    expect(cases.length).toBeGreaterThan(300);
+  });
+
+  it.each(cases)('%o', ({ currency, amountMinor, paidMinor, dueOn, state }) => {
+    const row = billRow(bill({ state, amountMinor, paidMinor, dueOn }), currency, TODAY);
+    expect(row.amount).toBe(formatMinor(amountMinor, currency));
+    if (state === 'due' || state === 'overdue') {
+      expect(row.tag).not.toBe('Paid');
+      expect(row.tone).not.toBe('green');
+      expect(row.when).toBe(dueOn === TODAY && state === 'due' ? 'Due today' : `Due ${dayWords(dueOn)}`);
+      expect(row.left).toBe(paidMinor === 0 ? null : `${formatMinor(paidMinor, currency)} paid · ${formatMinor(amountMinor - paidMinor, currency)} due`);
+    } else {
+      expect(row.when).toBeNull();
+      expect(row.left).toBeNull();
+    }
+  });
+
+  // Written out by hand, so a fault in the money formatting itself cannot pass the sweep above.
+  it.each([
+    ['GBP', 4999, '£49.99 is due.'],
+    ['JPY', 2500, '¥2,500 is due.'],
+    ['INR', 2500, '₹25.00 is due.'],
+    ['USD', 9282, '$92.82 is due.'],
+  ])('%s %i reads %s', (currency, amountMinor, words) => {
+    const m = membership({ currency }, { bills: [bill({ amountMinor, paidMinor: 0 })], pay: { periodIndex: 0, covers: null, leftMinor: amountMinor, dueOn: TODAY, state: 'due' } });
+    expect(paymentWords(m, 'Ada', TODAY).left).toBe(words);
+  });
+
+  it.each(cases.filter((c) => c.state === 'due' || c.state === 'overdue'))('recording against %o', ({ currency, amountMinor, paidMinor }) => {
+    const leftMinor = amountMinor - paidMinor;
+    const m = membership({ currency }, { bills: [bill({ amountMinor, paidMinor })], pay: { periodIndex: 0, covers: null, leftMinor, dueOn: TODAY, state: 'due' } });
+    expect(paymentWords(m, 'Ada', TODAY).left).toBe(`${formatMinor(leftMinor, currency)} is due.`);
+    // Recording all of it says the bill is paid; anything less says what is still due, to the penny.
+    expect(paidWords(m, leftMinor)).toBe(`${formatMinor(leftMinor, currency)} recorded. That bill is paid.`);
+    if (leftMinor > 1) expect(paidWords(m, 1)).toBe(`${formatMinor(1, currency)} recorded. ${formatMinor(leftMinor - 1, currency)} is still due.`);
+    // More than is due is refused, naming what is due.
+    const more = paymentBody(m, { requestKey: 'k', amount: formatMinor(leftMinor + (currency === 'JPY' ? 1 : 100), currency).replace(/[^0-9.]/g, ''), method: 'cash' });
+    expect(more).toEqual({ problem: `That is more than is due. ${formatMinor(leftMinor, currency)} is due.`, body: null });
+  });
 });
 
 describe('a refund made inside Square (18d-iv-d-i)', () => {
@@ -108,12 +174,12 @@ describe('each state the server sends has its own word, and no other', () => {
   it('Due says when, and Overdue says when it was due', () => {
     expect(billRow(bill({ dueOn: '2026-11-04' }), 'GBP', TODAY)).toMatchObject({ tag: 'Due', tone: 'orange', when: 'Due 4 November 2026' });
     expect(billRow(bill({ dueOn: TODAY }), 'GBP', TODAY)).toMatchObject({ tag: 'Due', when: 'Due today' });
-    expect(billRow(bill({ state: 'overdue' }), 'GBP', TODAY)).toMatchObject({ tag: 'Overdue', tone: 'red', when: 'Was due 4 October 2026' });
+    expect(billRow(bill({ state: 'overdue' }), 'GBP', TODAY)).toMatchObject({ tag: 'Overdue', tone: 'red', when: 'Due 4 October 2026' });
   });
 
   it('a part-paid bill says what was paid and what is left, in money', () => {
     const part = billRow(bill({ state: 'overdue', paidMinor: 2000, payments: [payment({ amountMinor: 2000, method: 'card_at_desk', by: null })] }), 'GBP', TODAY);
-    expect(part.left).toBe('£20.00 paid · £29.99 left');
+    expect(part.left).toBe('£20.00 paid · £29.99 due');
     expect(part.payments[0]).toMatchObject({ amount: '£20.00', detail: 'Card at the desk · 4 Oct 2026' });
   });
 
@@ -138,10 +204,10 @@ describe('the amount typed is the amount sent', () => {
     expect(paymentDraft(m, () => 'key-1')).toEqual({ requestKey: 'key-1', amount: '49.99', method: '' });
     expect(paymentWords(m, 'Ada Lovelace', TODAY)).toEqual({
       title: "Record a payment for Ada Lovelace's Gold Monthly",
-      detail: '£49.99 is left to pay for 4 October 2026 to 3 November 2026. This only writes it in your records: no money is taken.',
+      detail: '£49.99 is due for 4 October 2026 to 3 November 2026. This only writes it in your records: no money is taken.',
       // Card on Terminal takes the money (18d-vi-a): its box keeps what is left and drops the last sentence.
       takeTitle: "Take a payment for Ada Lovelace's Gold Monthly",
-      left: '£49.99 is left to pay for 4 October 2026 to 3 November 2026.',
+      left: '£49.99 is due for 4 October 2026 to 3 November 2026.',
     });
     expect(payLabel(m, TODAY)).toBe('Record payment');
   });
@@ -150,7 +216,7 @@ describe('the amount typed is the amount sent', () => {
     const next = membership({}, { pay: { periodIndex: 1, covers: { from: '2026-11-04', to: '2026-12-03' }, leftMinor: 4999, dueOn: '2026-11-04', state: 'due' } });
     expect(payLabel(next, TODAY)).toBe('Record payment early');
     expect(paymentWords(next, 'Ada Lovelace', TODAY).detail).toBe(
-      '£49.99 is left to pay for 4 November 2026 to 3 December 2026. It is not due until 4 November 2026. This only writes it in your records: no money is taken.',
+      '£49.99 is due for 4 November 2026 to 3 December 2026. It is not due until 4 November 2026. This only writes it in your records: no money is taken.',
     );
     // Due today is not early.
     expect(payLabel(next, '2026-11-04')).toBe('Record payment');
@@ -166,7 +232,7 @@ describe('the amount typed is the amount sent', () => {
     for (const amount of ['', '0', '0.00', 'twenty', '-5', '20.555', '1e3']) {
       expect(paymentBody(m, draft({ amount, method: 'cash' })), amount).toEqual({ problem: 'Type the amount they paid, like 20 or 20.50.', body: null });
     }
-    expect(paymentBody(m, draft({ amount: '50', method: 'cash' }))).toEqual({ problem: 'That is more than is left to pay. £49.99 is left.', body: null });
+    expect(paymentBody(m, draft({ amount: '50', method: 'cash' }))).toEqual({ problem: 'That is more than is due. £49.99 is due.', body: null });
     expect(paymentBody(m, draft())).toEqual({ problem: 'Choose a payment method.', body: null });
   });
 
@@ -180,7 +246,7 @@ describe('the amount typed is the amount sent', () => {
   it('says back all of it, or what is still left', () => {
     // Never "Gold Monthly is paid": another of its bills may still be owed.
     expect(paidWords(m, 4999)).toBe('£49.99 recorded. That bill is paid.');
-    expect(paidWords(m, 2000)).toBe('£20.00 recorded. £29.99 is still left to pay.');
+    expect(paidWords(m, 2000)).toBe('£20.00 recorded. £29.99 is still due.');
   });
 });
 
@@ -326,7 +392,7 @@ describe('Void bill (was Cancel this bill)', () => {
       detail:
         "It is the bill for 4 October 2026 to 3 November 2026. Ada Lovelace will owe nothing for it. Ada Lovelace keeps the membership and its dates. The bill stays on this page, marked Voided, with who voided it and why. This can't be undone.",
       button: 'Void bill',
-      done: 'That £49.99 bill was voided. Nothing is owed for it.',
+      done: 'That £49.99 bill was voided. Nothing is outstanding for it.',
     });
     // A membership that is over, or a fixed term with no days on its bill: nothing said that is not so.
     const over = membership({}, { bills: [bill({ covers: null })], cancel: { billId: bill().id } });
@@ -469,7 +535,7 @@ describe('a freeze fee on the bills (18z)', () => {
 
   it('a freeze fee paid for a month the membership was unfrozen by: no longer owed, and why', () => {
     const row = feeRow({ ...fee, state: 'paid', stillOwed: false, payments: [{ id: '77777777-7777-4777-8777-777777777777', amountMinor: 1000, method: 'cash', paidOn: '2026-10-22', by: 'Sam', receiptNumber: 3 }] }, 'USD', '2026-10-22');
-    expect(row.waived).toBe('No longer owed: the membership was unfrozen or cancelled by the day this month began. If you gave the money back, void the payment.');
+    expect(row.waived).toBe('No longer outstanding: the membership was unfrozen or cancelled by the day this month began. If you gave the money back, void the payment.');
   });
 
   it('a late cancel fee still says its one day', () => {

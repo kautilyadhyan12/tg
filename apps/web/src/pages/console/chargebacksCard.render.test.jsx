@@ -131,7 +131,7 @@ describe('the lines', () => {
 
   it("the person whose chargeback it is opens from the bill", () => {
     render(<MemoryRouter><ChargeStopHolder holder={{ entryId: ENTRY, name: 'Pat' }} gym={{ slug: 'demo', viewerPrivileges: ['members.read'], privileges: ['members.read'] }} /></MemoryRouter>);
-    expect(screen.getByRole('link', { name: "Open Pat's page" }).getAttribute('href')).toContain(`?person=${ENTRY}`);
+    expect(screen.getByRole('link', { name: "View Pat's page" }).getAttribute('href')).toContain(`?person=${ENTRY}`);
   });
   it('each stop says what is true', () => {
     expect(chargeStopLine(null)).toBeNull();

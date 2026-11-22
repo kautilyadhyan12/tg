@@ -61,11 +61,11 @@ afterEach(cleanup);
 describe('the words of a row', () => {
   it('a fee, part of a fee and a fee paid by hand', () => {
     expect(reviewWhat(base)).toBe('No-show fee · Spin on 28 October 2026');
-    expect(reviewWhy(base)).toBe('No longer owed: they were marked Came, or the class was cancelled.');
+    expect(reviewWhy(base)).toBe('No longer outstanding: they were marked Came, or the class was cancelled.');
     expect(reviewButtons(base)).toEqual({ open: 'Refund', decide: 'Keep the fee' });
-    expect(reviewWhy({ ...base, amountMinor: 600 })).toBe('No longer owed: they were marked Came, or the class was cancelled. $6.00 of $10.00 is left to refund.');
+    expect(reviewWhy({ ...base, amountMinor: 600 })).toBe('No longer outstanding: they were marked Came, or the class was cancelled. $6.00 of $10.00 is left to refund.');
     const byHand = { ...base, member: member({ fee: noShow, byHand: true }) };
-    expect(reviewWhy(byHand)).toBe('No longer owed: they were marked Came, or the class was cancelled. If you gave the money back, void the payment.');
+    expect(reviewWhy(byHand)).toBe('No longer outstanding: they were marked Came, or the class was cancelled. If you gave the money back, void the payment.');
     expect(reviewButtons(byHand).open).toBe('Void payment');
   });
 
@@ -89,13 +89,13 @@ describe('the words of a row', () => {
 
   it('a freeze fee, a personal training fee, what is left after a smaller refund, and a past member paid by hand', () => {
     const freeze = { ...base, member: member({ fee: { kind: 'freeze', of: 'membership', forName: 'Gold Monthly', on: '2026-10-01', to: '2026-10-31' } }) };
-    expect(reviewWhy(freeze)).toBe('No longer owed: the membership was unfrozen or cancelled by the day this month began.');
+    expect(reviewWhy(freeze)).toBe('No longer outstanding: the membership was unfrozen or cancelled by the day this month began.');
     const pt = { ...base, member: member({ fee: { ...noShow, of: 'pt' } }) };
-    expect(reviewWhy(pt)).toBe('No longer owed: they were marked Came.');
+    expect(reviewWhy(pt)).toBe('No longer outstanding: they were marked Came.');
     expect(reviewWhy({ ...failed, amountMinor: 600, paidMinor: 1000 })).toBe('Square could not refund $10.00. $6.00 of it has not been refunded another way.');
     expect(reviewWhy({ ...saleRow, amountMinor: 600, paidMinor: 1000 })).toBe("We don't know whether Square took the $10.00 refund of 30 October 2026. $6.00 of it has not been refunded another way. Check your Square Dashboard. If it went through, press Refund and note it there.");
     const past = { ...base, past: true, member: member({ fee: noShow, byHand: true }) };
-    expect(reviewWhy(past)).toBe('No longer owed: they were marked Came, or the class was cancelled. Put them back on your list to void the payment.');
+    expect(reviewWhy(past)).toBe('No longer outstanding: they were marked Came, or the class was cancelled. Put them back on your list to void the payment.');
     expect(reviewButtons(past).open).toBe('Open their page');
   });
 
@@ -128,7 +128,7 @@ describe('the words of a row', () => {
     expect(cardRefundOpenLine({ amountMinor: 2500, on: '2026-10-30', lost: true, decided: { on: '2026-10-31', by: 'Sam Lee' } }, 'USD')).toBe('No refund needed on the $25.00 refund of 30 October 2026, decided by Sam Lee on 31 October 2026.');
     expect(cardRefundOpenLine({ amountMinor: 2500, on: '2026-10-30', lost: true, decided: { on: '2026-10-31', by: null } }, 'USD')).toBe('No refund needed on the $25.00 refund of 30 October 2026, decided on 31 October 2026.');
     const fee = { id: FEE, fee: 'no_show', of: 'class', forName: 'Spin', on: '2026-10-28', to: null, amountMinor: 1000, taxes: [], dueOn: '2026-10-28', state: 'paid', waived: null, stillOwed: false, kept: { on: '2026-10-31', by: 'Sam Lee' }, refundedMinor: 0, payments: [{ id: PAY, method: 'company', amountMinor: 1000, paidOn: '2026-10-28', by: null, receiptNumber: 1, refunds: [], voidedRefunds: [], refundableMinor: 1000, cardRefund: null, card: null }], voidedPayments: [], can: { pay: false, waive: false, voidPaymentId: null } };
-    expect(feeRow(fee, 'USD', '2026-10-31').waived).toBe('No longer owed: they were marked Came, or the class was cancelled. Kept by Sam Lee on 31 October 2026. To give the money back, press Refund on the payment.');
+    expect(feeRow(fee, 'USD', '2026-10-31').waived).toBe('No longer outstanding: they were marked Came, or the class was cancelled. Kept by Sam Lee on 31 October 2026. To give the money back, press Refund on the payment.');
   });
 });
 

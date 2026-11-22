@@ -23,9 +23,9 @@ describe("the box's line", () => {
 
 describe('what a payer reads as owed now for somebody they pay for', () => {
   it.each([
-    ['a bill due today', [membership({ pay: pay() })], [['bill', 'Gold Monthly · 20 Oct – 19 Nov 2026', '₹1,500.00 left', 'Payment due']]],
-    ['an overdue bill, part paid', [membership({ pay: pay({ state: 'overdue', leftMinor: 50_000, dueOn: '2026-09-20', covers: { from: '2026-09-20', to: '2026-10-19' } }) })], [['bill', 'Gold Monthly · 20 Sep – 19 Oct 2026', '₹500.00 left', 'Overdue']]],
-    ['a membership of one period', [membership({ pay: pay({ covers: null }) })], [['bill', 'Gold Monthly', '₹1,500.00 left', 'Payment due']]],
+    ['a bill due today', [membership({ pay: pay() })], [['bill', 'Gold Monthly · 20 Oct – 19 Nov 2026', '₹1,500.00 due', 'Payment due']]],
+    ['an overdue bill, part paid', [membership({ pay: pay({ state: 'overdue', leftMinor: 50_000, dueOn: '2026-09-20', covers: { from: '2026-09-20', to: '2026-10-19' } }) })], [['bill', 'Gold Monthly · 20 Sep – 19 Oct 2026', '₹500.00 due', 'Overdue']]],
+    ['a membership of one period', [membership({ pay: pay({ covers: null }) })], [['bill', 'Gold Monthly', '₹1,500.00 due', 'Payment due']]],
     ['a bill not due yet is left to their own page', [membership({ pay: pay({ dueOn: '2026-10-21' }) })], []],
     ['a fee still owed', [membership({ fees: [fee()] })], [['fee', 'No-show fee · Spin · 18 Oct', '₹200.00', 'Payment due']]],
     ['a fee paid or waived is not owed', [membership({ fees: [fee({ state: 'paid' }), fee({ id: 'f2', state: 'waived' })] })], []],

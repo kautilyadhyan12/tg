@@ -54,7 +54,7 @@ export default function ReceiptBox({ gymId, gym, number, onClose }) {
         <div className="c-receipt flex flex-col gap-1" data-testid="receipt">
           <p className="c-s16 c-w7 c-t1 m-0">{receipt.gym.name}</p>
           {receipt.gym.address !== null ? (
-            <p className="c-s13 c-t2 m-0" style={{ whiteSpace: 'pre-line' }}>
+            <p className="c-s14 c-t2 m-0" style={{ whiteSpace: 'pre-line' }}>
               {receipt.gym.address}
             </p>
           ) : null}
@@ -78,7 +78,7 @@ export default function ReceiptBox({ gymId, gym, number, onClose }) {
             ))}
           </div>
           {receiptNotes(receipt).map((note) => (
-            <p key={note} className="c-s13 c-t2 m-0">
+            <p key={note} className="c-s14 c-t2 m-0">
               {note}
             </p>
           ))}
