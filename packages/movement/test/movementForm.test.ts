@@ -4,13 +4,15 @@
 // as filmed, with every person's numbers and with their own left out of them, and the phone's own runs of the same
 // pictures: no mistake is marked on any. Under every replay of the world, and the mistakes drawn onto real squats, are the
 // proof file's (movementFormProof.test.ts). Then the judge itself, case by case, and the files it refuses.
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { checkedMistakeSchema, exerciseCameraSchema, type CheckedMistake } from "@app/shared";
+import { checkedMistakeSchema, exerciseCameraSchema, exerciseFileSchema, type CheckedMistake } from "@app/shared";
 import { FORM_SEEN_FOR, MATCH_LIMITS, checkedOf, formOf, parseExercise, type FormFrame } from "../src/index.js";
 import { formRows } from "../scripts/formCheck.js";
 import { proofVideos, readExercise, readMovement, runMovement } from "../scripts/movementCheck.js";
 import { MOVEMENT_VIDEOS } from "../scripts/movementVideos.js";
-import { CHOSEN_RUN, phoneTable } from "../scripts/phoneCounts.js";
+import { CHOSEN_RUN, pairedMarks, phoneTable } from "../scripts/phoneCounts.js";
 
 const SQUAT = readMovement("squat");
 const EXERCISE = readExercise("squat");
@@ -35,6 +37,13 @@ describe("the worst thing: nobody squatting properly is told to change their for
     const made = phone.flatMap((r) => (r.phone?.reps ?? []).flatMap((x) => x.form.filter((f) => f.status === "made").map((f) => `${r.label}: ${f.mistake}`)));
     expect(made).toEqual([]);
     expect(phone.flatMap((r) => r.why.filter((w) => w.includes("marks")))).toEqual([]);
+    // Each counted rep is paired with the phone's by when it was, the three sets the phone counts one fewer on too.
+    const counted = (reps: readonly { verdict: string }[]): number => reps.filter((x) => x.verdict === "counted").length;
+    const unpaired = phone.filter((r) => r.phone === null || pairedMarks(r.laptop, r.phone).length !== Math.min(counted(r.laptop.reps), counted(r.phone.reps)));
+    expect(unpaired.map((r) => r.label)).toEqual([]);
+    const pairs = phone.flatMap((r) => (r.phone === null ? [] : pairedMarks(r.laptop, r.phone)));
+    expect(pairs.length).toBeGreaterThan(50);
+    expect(pairs.filter((p) => p.laptop !== p.phone)).toEqual([]);
   });
 });
 
@@ -61,6 +70,17 @@ describe("a mistake is judged only inside a counted rep", () => {
     }
     expect(runMovement(SQUAT, v.video).reps.every((r) => r.form.length === 0)).toBe(true);
   });
+
+  it.each(["prisoner_squat_1", "prisoner_squat_2", "prisoner_squat_3", "prisoner_squat_4", "sumo_squat_2a", "sumo_squat_2b"])(
+    "%s, facing the phone or half turned: the lean forward is never read there",
+    (label) => {
+      const v = VIDEOS.find((x) => x.video.label === label);
+      if (v === undefined) throw new Error(`no ${label}`);
+      const counted = runMovement(SQUAT, v.video, EXERCISE).reps.filter((r) => r.verdict === "counted");
+      expect(counted.length).toBe(v.entry.reps);
+      expect(counted.map((r) => r.form.find((f) => f.mistake === "lean_forward")?.status)).toEqual(counted.map(() => "unseen"));
+    },
+  );
 });
 
 describe("the squat's camera file lists every common mistake of its research file, each marked", () => {
@@ -96,14 +116,17 @@ describe("the squat's camera file lists every common mistake of its research fil
       breath_held: "cannot see",
       stance_width: "not checked",
     });
-    // The Library's squat file names these ids; the camera file uses the same for the same mistake (spec §13.3).
-    for (const id of ["heels_lift", "knees_cave_in", "back_rounds", "feet_move"]) expect(EXERCISE.mistakes.some((m) => m.id === id)).toBe(true);
+    // Every mistake the Library's squat file names is in the camera file under the same id (spec §13.3).
+    const library = exerciseFileSchema.parse(JSON.parse(readFileSync(join(import.meta.dirname, "../../shared/library/exercises/squat.json"), "utf8")));
+    const ids = library.text.en.mistakes.map((m) => m.id);
+    expect(ids.length).toBeGreaterThan(0);
+    expect(ids.filter((id) => !EXERCISE.mistakes.some((m) => m.id === id))).toEqual([]);
   });
 });
 
 // ── The judge, case by case (a rule that thresholds: every class of case, CLAUDE.md §4) ─────────────────────────────
-/** A checked mistake, read at the bottom with a line of at most 40 unless `over` says otherwise; `lower` gives it a
- *  line of at least `lower` instead. */
+/** A checked mistake, a lean read side on at the bottom with a line of at most 40 unless `over` says otherwise; `lower`
+ *  gives it a line of at least `lower` instead. */
 const mistake = (over: Record<string, unknown>, lower?: number): CheckedMistake =>
   checkedMistakeSchema.parse({
     id: "m",
@@ -112,7 +135,7 @@ const mistake = (over: Record<string, unknown>, lower?: number): CheckedMistake 
     camera: "checked",
     read: { kind: "value", measures: ["trunk lean"] },
     at: "bottom",
-    view: "any",
+    view: "side",
     against: "nothing",
     ...(lower === undefined ? { atMost: 40 } : { atLeast: lower }),
     from: "test",
@@ -120,15 +143,17 @@ const mistake = (over: Record<string, unknown>, lower?: number): CheckedMistake 
   });
 
 /** A rep at 30 frames a second: down for 1 s to a drop of 0.5, 0.3 s at the bottom, up for 1 s; `v` gives each frame's
- *  reading from its time (ms) and drop. */
-function rep(v: (t: number, drop: number) => number | null): FormFrame[] {
+ *  reading from its time (ms) and drop; `turn`, how much of the body's line across the picture shows (0 side on). */
+function rep(v: (t: number, drop: number) => number | null, turn: number | null = 0): FormFrame[] {
   const out: FormFrame[] = [];
   for (let t = 0; t <= 2300; t += 1000 / 30) {
     const drop = t < 1000 ? 0.5 * (t / 1000) : t <= 1300 ? 0.5 : 0.5 * Math.max(0, 1 - (t - 1300) / 1000);
-    out.push({ t, drop, form: [v(t, drop)] });
+    out.push({ t, drop, form: [v(t, drop)], turn });
   }
   return out;
 }
+/** A width across the body, read facing the phone. */
+const across = { view: "front", read: { kind: "value", measures: ["knees apart"] } };
 const judge = (m: CheckedMistake, frames: readonly FormFrame[], standing: number | null = null) => formOf(m, 0, frames, standing, MATCH_LIMITS.bottomBand, 100);
 
 describe("the judge", () => {
@@ -139,15 +164,21 @@ describe("the judge", () => {
     ["past the line only on the way down, not at the bottom: fine", mistake({}), rep((t) => (t < 900 ? 60 : 30)), null, "fine", 30],
     ["seen in fewer than half the bottom's frames: unseen", mistake({}), rep((t) => (t >= 900 && t < 1300 ? null : 50)), null, "unseen", null],
     ["seen in half the bottom's frames or more: judged", mistake({}), rep((t) => (t >= 1000 && t < 1100 ? null : 50)), null, "made", 50],
-    ["against standing: the change from it", mistake({ against: "standing" }, -0.1), rep(() => 0.2), 0.35, "made", -0.15],
-    ["against standing, never stood ready seen: unseen", mistake({ against: "standing" }), rep(() => 0.2), null, "unseen", null],
+    ["against standing: the change from it", mistake({ ...across, against: "standing" }, -0.1), rep(() => 0.2, 1), 0.35, "made", -0.15],
+    ["against standing, never stood ready seen: unseen", mistake({ ...across, against: "standing" }), rep(() => 0.2, 1), null, "unseen", null],
+    ["side on but turned, inside its line yet truly past it at that turn: unseen", mistake({}), rep(() => 38, 0.5), null, "unseen", 38],
+    ["side on but turned, inside its line even at its truest: fine", mistake({}), rep(() => 35, 0.5), null, "fine", 35],
+    ["side on but turned, past its line: made", mistake({}), rep(() => 41, 0.5), null, "made", 41],
+    ["facing the phone half turned, a width inside its line yet truly past it: unseen", mistake({ ...across, against: "standing" }, -0.06), rep(() => 0.25, 0.7), 0.3, "unseen", -0.05],
+    ["facing the phone square on, the same width: fine", mistake({ ...across, against: "standing" }, -0.06), rep(() => 0.25, 1), 0.3, "fine", -0.05],
+    ["the body's turn not seen: unseen, however far inside its line", mistake({}), rep(() => 10, null), null, "unseen", 10],
     ["no drop seen at all: unseen", mistake({}), rep(() => 50).map((f) => ({ ...f, drop: null })), null, "unseen", null],
     ["on the way up, the chest falling forward out of the bottom: made", mistake({ at: "way up", against: "bottom", atMost: 10 }), rep((t) => (t > 1450 && t < 1700 ? 45 : 30)), null, "made", 15],
     ["on the way up, rising together: fine", mistake({ at: "way up", against: "bottom", atMost: 10 }), rep((_t, d) => (d >= 0.45 ? 30 : 10 + 40 * d)), null, "fine", 0],
     ["on the way up, a lean past half way up is not read", mistake({ at: "way up", against: "bottom", atMost: 10 }), rep((t) => (t > 2000 ? 60 : 30)), null, "fine", 0],
     ["on the way up, broken off longer than a break: unseen", mistake({ at: "way up", against: "bottom", atMost: 10 }), rep((t) => (t > 1450 && t < 1600 ? null : 30)), null, "unseen", null],
-    ["over the rep, its furthest wherever seen: made", mistake({ at: "rep", against: "standing" }, -0.1), rep((t) => (t > 1000 && t < 1300 ? null : t > 1500 && t < 1600 ? 0.1 : 0.3)), 0.3, "made", -0.2],
-    ["over the rep, seen too briefly: unseen", mistake({ at: "rep", against: "standing" }, -0.1), rep((t) => (t < FORM_SEEN_FOR - 50 ? 0.1 : null)), 0.3, "unseen", null],
+    ["over the rep, its furthest wherever seen: made", mistake({ ...across, at: "rep", against: "standing" }, -0.1), rep((t) => (t > 1000 && t < 1300 ? null : t > 1500 && t < 1600 ? 0.1 : 0.3), 1), 0.3, "made", -0.2],
+    ["over the rep, seen too briefly: unseen", mistake({ ...across, at: "rep", against: "standing" }, -0.1), rep((t) => (t < FORM_SEEN_FOR - 50 ? 0.1 : null), 1), 0.3, "unseen", null],
   ])("%s", (_name, m, frames, standing, status, reading) => {
     const got = judge(m, frames, standing);
     expect(got.status).toBe(status);
@@ -172,6 +203,7 @@ describe("a camera file the engine cannot read rightly is refused", () => {
     ["a reading on the way up not taken against the bottom", lean({ at: "way up" })],
     ["a reading at the bottom taken against the bottom", lean({ against: "bottom" })],
     ["a mistake read from no view", lean({ view: undefined })],
+    ["a mistake read from any view", lean({ view: "any" })],
     ["a name that is a sentence", lean({ name: "Leaning too far forward." })],
     ["two mistakes with one id", { ...json, mistakes: [...json.mistakes, json.mistakes[0]] }],
     ["a status nobody knows", lean({ camera: "maybe" })],
@@ -183,6 +215,9 @@ describe("a camera file the engine cannot read rightly is refused", () => {
     ["a measure the engine does not have", lean({ read: { kind: "value", measures: ["spine curve"] } }), /spine curve/],
     ["a mistake left to a rule the movement does not have", { ...json, mistakes: json.mistakes.map((m) => (m.id === "quarter_reps" ? { ...m, rule: "depth of soul" } : m)) }, /depth of soul/],
     ["a file on another movement", { ...json, movement: "lunge" }, /lunge/],
+    ["a width read side on", lean({ read: { kind: "value", measures: ["knees apart"] } }), /side on/],
+    ["a lean read side on against standing", lean({ against: "standing" }), /side on/],
+    ["a lean read facing the phone", lean({ view: "front" }), /facing the phone/],
   ])("%s", (_name, bad, message) => {
     expect(() => parseExercise(bad, SQUAT)).toThrow(message);
   });

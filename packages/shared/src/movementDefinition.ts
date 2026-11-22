@@ -182,10 +182,11 @@ export const checkedMistakeSchema = z
     /** Read at the bottom of the rep (the middle of the frames nearest the deepest), on the way up from it (the most it
      *  reaches there), or over the whole rep wherever the picture gives it (its furthest). */
     at: z.enum(["bottom", "way up", "rep"]),
-    /** Where the picture shows it: "side", only in frames where the body stands side on to the phone (a lean forward
-     *  from the front points at the phone, and the picture shows a knee moving sideways as if it moved forward);
-     *  "any", wherever its measures are given. */
-    view: z.enum(["side", "any"]),
+    /** Where the picture shows it: "side", a lean, only in frames where the body stands side on to the phone (a lean
+     *  forward from the front points at the phone, and the picture shows a knee moving sideways as if it moved
+     *  forward); "front", a width across the body, wherever the picture shows the body's line from left to right. Either
+     *  way the judge allows for the body's turn, which shortens what the picture shows. */
+    view: z.enum(["side", "front"]),
     /** What the reading is taken against: nothing (the reading itself), the same reading while the person stood ready
      *  before the rep (their own body), or, on the way up, the reading at the bottom. */
     against: z.enum(["nothing", "standing", "bottom"]),

@@ -9,7 +9,8 @@
 //   - every rep that says something on the screen (counted; short, with the rule that fell short; unseen, where the camera
 //     could not judge it), in the same order, each the same verdict and the same rule, at the same place in the video (the
 //     two reps overlap);
-//   - for an exercise's form check (52b-ii-a), the mistakes marked in each counted rep, the same ones;
+//   - for an exercise's form check (52b-ii-a), the mistakes marked in each rep both count, paired by when it was (so
+//     even where the two count apart), the same ones;
 //   - and the coach's lines, once there are any (53 makes them): until then there is nothing more to compare.
 // A dip read as another movement says nothing and is not compared, only counted in the table.
 // A phone file is judged only when it is the phone's own reading of the very frames of the kept file under its name, from
@@ -65,6 +66,21 @@ const repWords = (r: RepResult): string => `${((r.start - LEAD_IN) / 1000).toFix
 const overlap = (a: RepResult, b: RepResult): boolean => a.start < b.end && b.start < a.end;
 /** The mistakes marked made in a rep, in its exercise file's order. */
 const madeIn = (r: RepResult): string => r.form.filter((f) => f.status === "made").map((f) => f.mistake).join(", ");
+const overlapMs = (a: RepResult, b: RepResult): number => Math.max(0, Math.min(a.end, b.end) - Math.max(a.start, b.start));
+
+/** Each rep both runs counted, paired by when it was (the phone's rep overlapping the laptop's most, and the other way
+ *  round), with the mistakes each marked in it: compared even where the two count apart. */
+export function pairedMarks(laptop: Run, phone: Run): { at: string; laptop: string; phone: string }[] {
+  const counted = (run: Run): RepResult[] => run.reps.filter((r) => r.verdict === "counted");
+  const best = (r: RepResult, among: readonly RepResult[]): RepResult | undefined =>
+    among.reduce<RepResult | undefined>((top, x) => (overlapMs(r, x) > (top === undefined ? 0 : overlapMs(r, top)) ? x : top), undefined);
+  const a = counted(laptop);
+  const b = counted(phone);
+  return a.flatMap((x) => {
+    const y = best(x, b);
+    return y === undefined || best(y, a) !== x ? [] : [{ at: repWords(x), laptop: madeIn(x), phone: madeIn(y) }];
+  });
+}
 
 /** What differs between the laptop's run and the phone's, in words; empty when a person would be told the same. */
 export function differences(laptop: Run, phone: Run): string[] {
@@ -79,9 +95,10 @@ export function differences(laptop: Run, phone: Run): string[] {
     else if (y === undefined && x !== undefined) out.push(`the phone does not say ${repWords(x)}`);
     else if (x !== undefined && y !== undefined && (x.verdict !== y.verdict || x.rule !== y.rule || !overlap(x, y))) {
       out.push(`the laptop says ${repWords(x)}, the phone ${repWords(y)}`);
-    } else if (x !== undefined && y !== undefined && madeIn(x) !== madeIn(y)) {
-      out.push(`at ${repWords(x)} the laptop marks ${madeIn(x) || "no mistake"}, the phone ${madeIn(y) || "no mistake"}`);
     }
+  }
+  for (const p of pairedMarks(laptop, phone)) {
+    if (p.laptop !== p.phone) out.push(`at ${p.at} the laptop marks ${p.laptop || "no mistake"}, the phone ${p.phone || "no mistake"}`);
   }
   return out;
 }

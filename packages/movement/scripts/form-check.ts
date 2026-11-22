@@ -22,12 +22,13 @@ const fitted = fitForm(movement, exercise, setting);
 const folds = people.map((person) => ({ person, fitted: fitForm(movement, exercise, setting.filter((v) => v.entry.person !== person)) }));
 
 const r2 = (v: number): string => String(Math.round(v * 100) / 100);
-console.log(`The ${id} exercise's mistakes the camera checks, set from ${String(people.length)} people`);
+console.log(`The ${id} exercise's mistakes the camera checks, each set from the reps of the ${String(people.length)} people's videos that read it`);
 for (const f of fitted) {
   const m = checkedOf(exercise).find((x) => x.id === f.mistake);
   const word = m?.atLeast !== undefined ? "at least" : "at most";
   const written = m?.atLeast ?? m?.atMost;
   const range = folds.map((fold) => fold.fitted.find((x) => x.mistake === f.mistake)?.bound ?? Number.NaN);
+  console.log(`  ${f.mistake}: read on ${String(f.filmed)} reps as filmed, of ${String(f.people.length)} people: ${f.people.join("; ")}`);
   console.log(
     `  ${f.mistake.padEnd(18)} ${word} ${String(f.bound).padEnd(6)} (furthest rep ${r2(f.furthest)}, middle ${r2(f.middle)}, ${String(f.reps)} reps; room ${r2(f.room.size)} on ${String(f.room.pairs)}; standard moved ${f.fromStandard === null ? "-" : r2(f.fromStandard)}; one person left out ${String(Math.min(...range))} to ${String(Math.max(...range))})${written === f.bound ? "" : `  [the file says ${String(written)}]`}`,
   );
@@ -46,7 +47,7 @@ if (values.write) {
     const m = checkedOf(exercise).find((x) => x.id === f.mistake);
     const way = m?.atLeast !== undefined ? "minus" : "plus";
     const standard = f.fromStandard === null ? "" : `the further out of the form standard, ${String(m?.standard?.at)} (its source beside it), and `;
-    return `Set by form-check: ${standard}the furthest of ${String(f.reps)} reps of ${String(people.length)} people's good-form videos, as filmed and as each replay that sets numbers (${r2(f.furthest)}), ${way} the camera's own room: the same rep's change from as filmed to each such replay, in 99 reps of 100 (${String(f.room.pairs)} reps): ${r2(f.room.size)}; rounded outward.`;
+    return `Set by form-check: ${standard}the furthest proper rep that reads it, as filmed and as each replay that sets numbers (${r2(f.furthest)}; ${String(f.filmed)} reps as filmed, ${String(f.people.length)} people), ${way} the camera's own room: the same rep's change from as filmed to each such replay, in 99 reps of 100 (${String(f.room.pairs)} reps): ${r2(f.room.size)}; rounded outward.`;
   };
   const json = {
     ...checked,

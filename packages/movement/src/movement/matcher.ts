@@ -18,7 +18,7 @@ import type { CheckedMistake, ExerciseCamera, Movement, MovementRead, MovementRe
 import { KP } from "@app/shared";
 import { MEASURE_LIST, type MeasureName, type MeasuredBody, type Reading } from "../body/measures.js";
 import type { SteadyBody } from "../body/steady.js";
-import { checkExercise, checkedOf, formOf, mistakeReading, type FormCheck } from "./form.js";
+import { checkExercise, checkedOf, formOf, mistakeReading, turnOf, type FormCheck } from "./form.js";
 
 /** A jump this high or higher from the top of a rep is never let through, however its feet are hidden or its pictures
  *  missing (52a-ii-a): under Kd's lowest real squat jump (12 cm; his four squat-jump videos lift the ankles 12 to 34
@@ -328,6 +328,8 @@ interface Sample {
   readonly feet: readonly (number | null)[];
   /** Each checked mistake's reading this frame, on the picture only (form.ts); null where not given. */
   readonly form: readonly (number | null)[];
+  /** How much of the body's line from left to right the picture shows this frame (form.ts `turnOf`). */
+  readonly turn: number | null;
 }
 
 interface Rep {
@@ -719,7 +721,7 @@ export class MovementMatcher {
       reads[rule.name] = rule.read.kind === "lift" ? (bothEnds(along) ? 0 : null) : this.read(rule.read, measured, rep.standing, placed, heights);
       if (rule.read.kind === "travel") jointly[rule.name] = feetMoved(placed, rep.standing).together;
     }
-    return { t, drop, reads, jointly, feet: along, form: this.mistakes.map((m) => mistakeReading(m, measured)) };
+    return { t, drop, reads, jointly, feet: along, form: this.mistakes.map((m) => mistakeReading(m, measured)), turn: turnOf(measured) };
   }
 
   /** The longest break in a rep's readings that decides nothing: `gap`, or one and a half of the rep's own frame step

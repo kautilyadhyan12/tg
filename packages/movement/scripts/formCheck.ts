@@ -38,6 +38,9 @@ export function readingOf(r: RepResult, id: string): number | null {
 export interface FormFitted {
   readonly mistake: string;
   readonly bound: number;
+  /** The reps, as filmed, that read it, and the people whose videos those are: a line rests on them alone. */
+  readonly filmed: number;
+  readonly people: readonly string[];
   /** The furthest rep's reading, how many reps were read, and the middle of them. */
   readonly furthest: number;
   readonly middle: number;
@@ -69,7 +72,10 @@ export function fitForm(movement: Movement, exercise: ExerciseCamera, videos: re
     const fromStandard = m.standard === undefined ? null : m.standard.at + signed;
     const fromReps = furthest + signed;
     const raw = fromStandard === null ? fromReps : up ? Math.max(fromStandard, fromReps) : Math.min(fromStandard, fromReps);
-    return { mistake: m.id, bound: outward(raw, stepOf(m), up), furthest, middle: middleOf(values), reps: values.length, room, fromStandard };
+    const asFilmed = videos.map((v) => ({ person: v.entry.person, reading: repsOf(movement, [v], exercise).filter((r) => readingOf(r, m.id) !== null).length }));
+    const filmed = asFilmed.reduce((n, v) => n + v.reading, 0);
+    const people = [...new Set(asFilmed.filter((v) => v.reading > 0).map((v) => v.person))];
+    return { mistake: m.id, bound: outward(raw, stepOf(m), up), filmed, people, furthest, middle: middleOf(values), reps: values.length, room, fromStandard };
   });
 }
 

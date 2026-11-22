@@ -5,11 +5,14 @@
 //     out: no mistake is ever marked (the worst thing: a person squatting properly told to change their form).
 //   - The camera file's lines are what form-check sets from the videos.
 //   - Each mistake the camera checks, drawn onto every rep of the real squats that reads it (scripts/mistakes.ts): just
-//     past its line, the rep still counts and that mistake, and no other, is marked; just short of it, nothing is.
+//     past its line, the rep still counts and that mistake, and no other, is marked; just short of it, nothing is; and
+//     the reading follows what was drawn (the search for each rep's size makes the reading meet its target, so that alone
+//     would prove nothing about the reading).
 import { describe, expect, it } from "vitest";
 import { checkedOf } from "../src/index.js";
 import { fitForm, formRows } from "../scripts/formCheck.js";
-import { drawnTo, kneesIn, leanForward } from "../scripts/mistakes.js";
+import { bendOf, drawnTo, kneesIn, leanForward, perRep, trunkOf, type DrawnRep } from "../scripts/mistakes.js";
+import { runOf } from "../scripts/measureCheck.js";
 import { proofVideos, readExercise, readMovement } from "../scripts/movementCheck.js";
 import { REPLAYS } from "../scripts/replays.js";
 
@@ -50,6 +53,33 @@ describe("each mistake drawn onto real squats is marked, and no other", () => {
     { id: "lean_forward", draw: leanForward, step: 2, most: 60, near: 0.5, reps: 26 },
     { id: "knees_cave_in", draw: kneesIn, step: 0.03, most: 0.25, near: 0.01, reps: 16 },
   ] as const;
+  /** For the knees, frame by frame in each set: how far the measures read the knees' width less the feet's moved, against
+   *  how far the drawing carried the knees together in that very frame (both knees' metres, as far through its bend as the
+   *  body was, in the body's own trunks), where it carried them at least 0.02 of a trunk and the picture gives both
+   *  readings. The middle of a set's frames, and its least. */
+  const kneesFollow = (label: string, reps: readonly DrawnRep[]): { middle: number; least: number; frames: number } => {
+    const v = GOOD.find((x) => x.video.label === label);
+    if (v === undefined || reps.length === 0) return { middle: Number.NaN, least: Number.NaN, frames: 0 };
+    const size = perRep(reps);
+    const drawnFrames = kneesIn(size)(v.video.frames);
+    const filmed = runOf(v.video).measured;
+    const drawn = runOf({ ...v.video, frames: drawnFrames }).measured;
+    const trunk = trunkOf(v.video.frames);
+    const gap = (m: (typeof filmed)[number] | undefined): number | null => {
+      const k = m?.readings.get("knees apart")?.flat ?? null;
+      const f = m?.readings.get("feet apart")?.flat ?? null;
+      return k === null || f === null ? null : k - f;
+    };
+    const ratios = v.video.frames.flatMap((f, i) => {
+      const world = f.people[0]?.world ?? null;
+      const a = gap(filmed[i]);
+      const b = gap(drawn[i]);
+      const carried = world === null ? 0 : (2 * size(f.t) * bendOf(world)) / trunk;
+      return a === null || b === null || carried < 0.02 ? [] : [(a - b) / carried];
+    });
+    const sorted = [...ratios].sort((x, y) => x - y);
+    return { middle: sorted[Math.floor(sorted.length / 2)] ?? Number.NaN, least: sorted[0] ?? Number.NaN, frames: sorted.length };
+  };
 
   it("every mistake the camera checks is drawn", () => {
     expect(cases.map((c) => c.id)).toEqual(checkedOf(EXERCISE).map((m) => m.id));
@@ -69,6 +99,33 @@ describe("each mistake drawn onto real squats is marked, and no other", () => {
       it(`${word}: every rep that reads it is drawn there, from the people's and the twins' videos`, () => {
         expect(drawn.length).toBe(reps);
         expect(drawn.filter((r) => r.reading === null || Math.abs(r.reading - target) > near)).toEqual([]);
+      });
+
+      it(`${word}: the reading follows what was drawn`, () => {
+        if (id === "lean_forward") {
+          // Each rep's lean moved within a quarter of the degrees the trunk was turned: the body's turn shortens it on the
+          // picture, and the phone's place can stretch it (two reps lay 3 to 4 degrees from it, round one's re-check).
+          const wrong = drawn.flatMap((r) => {
+            const moved = (r.reading ?? Number.NaN) - r.filmed;
+            const share = moved / r.size;
+            return share >= 0.75 && share <= 1.25 ? [] : [`${r.label} ${(r.start / 1000).toFixed(1)} s: moved ${moved.toFixed(2)}, drawn ${r.size.toFixed(2)}`];
+          });
+          expect(wrong).toEqual([]);
+        } else {
+          // In each set, the knees' width moved by what the drawing carried in that frame: its middle within about a third
+          // (measured 0.95 to 1.26 over both drawings), and no frame the other way.
+          const sets = [...new Set(drawn.map((r) => r.label))];
+          const wrong = sets.flatMap((label) => {
+            const follow = kneesFollow(
+              label,
+              drawn.filter((r) => r.label === label),
+            );
+            const right = follow.frames >= 10 && follow.middle >= 0.75 && follow.middle <= 1.35 && follow.least > 0;
+            return right ? [] : [`${label}: middle ${follow.middle.toFixed(2)}, least ${follow.least.toFixed(2)}, ${String(follow.frames)} frames`];
+          });
+          expect(sets.length).toBeGreaterThan(3);
+          expect(wrong).toEqual([]);
+        }
       });
 
       it(`${word}: each still counts, and ${off > 0 ? "only this mistake is" : "no mistake is"} marked`, () => {

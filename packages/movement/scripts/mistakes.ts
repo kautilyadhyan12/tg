@@ -60,7 +60,7 @@ function angle(a: readonly number[], b: readonly number[], c: readonly number[])
 }
 
 /** How far through its bend the body is, 0 to 1, from the less bent knee in 3D. */
-function bendOf(world: World): number {
+export function bendOf(world: World): number {
   const knees = [0, 1].map((s) => {
     const h = world[HIP[s as 0 | 1]];
     const k = world[KNEE[s as 0 | 1]];
@@ -145,6 +145,19 @@ export function kneesIn(metres: Size) {
         return [w[0], w[1], w[2]];
       });
     });
+}
+
+/** The body's own trunk in 3D, metres: the middle over the video of its shoulders' middle to its hips' middle. */
+export function trunkOf(frames: Frames): number {
+  const lengths = frames.flatMap((f) => {
+    const w = f.people[0]?.world ?? null;
+    const [ls, rs, lh, rh] = [w?.[11], w?.[12], w?.[HIP[0]], w?.[HIP[1]]];
+    if (ls === undefined || rs === undefined || lh === undefined || rh === undefined) return [];
+    const d = minus(middle(ls, rs), middle(lh, rh));
+    return [Math.sqrt(dot(d, d))];
+  });
+  const sorted = [...lengths].sort((a, b) => a - b);
+  return sorted[Math.floor(sorted.length / 2)] ?? Number.NaN;
 }
 
 /** One rep of a good-form video with a mistake drawn on it, as the judge then read it. */
