@@ -178,6 +178,41 @@ describe("the workout as the server takes it", () => {
     const save = toSave(out, "android", "x");
     expect(workoutSaveSchema.safeParse(save).success).toBe(true);
     expect(Date.parse(save?.endedAt ?? "") - T0).toBe(12 * 3_600_000);
+    expect(save?.trainedMs).toBe(25_000);
+  });
+
+  it("the time trained is the time the screen showed, every pause left out (64a-ii-b's worst thing)", () => {
+    // 20 s of curl, paused 5 hours, resumed: 30 s more of the set, then End.
+    const out = play([curl], [[20, { kind: "main" }], [25, { kind: "pause" }], [5 * 3600 + 25, { kind: "resume" }], [5 * 3600 + 55, { kind: "end" }]]);
+    if (out === "gone") throw new Error("gone");
+    const save = toSave(out, "android", "x");
+    expect(workoutSaveSchema.safeParse(save).success).toBe(true);
+    expect(save?.trainedMs).toBe(55_000);
+    expect(save?.trainedMs).toBe(out.activeMs);
+    expect(Date.parse(save?.endedAt ?? "") - T0).toBe(5 * 3_600_000 + 55_000);
+  });
+
+  it("a workout with no pause is trained for its whole length", () => {
+    const out = play([curl], [[20, { kind: "main" }], [50, { kind: "end" }]]);
+    if (out === "gone") throw new Error("gone");
+    const save = toSave(out, "android", "x");
+    expect(save?.trainedMs).toBe(50_000);
+    expect(Date.parse(save?.endedAt ?? "") - T0).toBe(50_000);
+  });
+
+  it("away more than 10 minutes, those minutes are not trained", () => {
+    const out = play([curl], [[20, { kind: "main" }], [20 + 3600, { kind: "back" }], [20 + 3600 + 5, { kind: "end" }]]);
+    if (out === "gone") throw new Error("gone");
+    const save = toSave(out, "android", "x");
+    expect(save?.trainedMs).toBe(20_000);
+  });
+
+  it("trained past 12 hours is sent as 12, within the length and covering its sets", () => {
+    const out = play([curl], [[20, { kind: "main" }], [13 * 3600, { kind: "tick" }], [13 * 3600 + 1, { kind: "end" }]]);
+    if (out === "gone") throw new Error("gone");
+    const save = toSave(out, "android", "x");
+    expect(workoutSaveSchema.safeParse(save).success).toBe(true);
+    expect(save?.trainedMs).toBe(12 * 3_600_000);
   });
 
   it("no exercise, no workout", () => {
