@@ -283,14 +283,14 @@ export const GIVE_WORDS = {
   stopped: (plan, to) => `${plan} is no longer given to ${to}.`,
   deleteWhy: (gets, words) =>
     gets === 0 ? PLAN_WORDS.deleteWhy : `Its meals are deleted with it, and the ${peopleCount(gets, words)} who get it stop getting it. This can’t be undone.`,
-  sheetTitle: 'Give a meal plan',
+  sheetTitle: 'Assign meal plan',
   pickPlan: 'Meal plan',
   pickPlanFirst: 'Choose a meal plan',
   noPlans: 'You have no meal plans yet.',
   writePlan: 'Write a meal plan',
-  openPlan: (plan) => `Open ${plan}`,
+  openPlan: (plan) => `View ${plan}`,
   personHeading: 'Meal plan',
-  personNone: 'No meal plan given.',
-  personGive: 'Give a meal plan',
+  personNone: 'No meal plan assigned.',
+  personGive: 'Assign meal plan',
   personChange: 'Change',
 };

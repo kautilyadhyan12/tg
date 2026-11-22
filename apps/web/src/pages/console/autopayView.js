@@ -14,12 +14,12 @@ export const autopayPayerPausedLine = (payerName) => `Automatic payments are pau
 
 const peopleOf = (preview) => preview.people.map((p) => (p.what === '' ? p.name : `${p.name} · ${p.what}`));
 
-/** The box under Pause automatic payments. */
+/** The box under Pause autopay. */
 export function autopayPauseBox(preview) {
   const card = preview.card === null ? 'The card' : cardName(preview.card);
   const people = peopleOf(preview);
   return {
-    title: 'Pause automatic payments?',
+    title: 'Pause autopay?',
     lead: people.length === 0 ? 'Nobody this card pays for has a renewing membership, so nothing is charged automatically now.' : `${card} won't be charged automatically for:`,
     people,
     more: preview.more,
@@ -31,7 +31,7 @@ export function autopayPauseBox(preview) {
 /** What is said in that place once paused. */
 export const autopayPausedWords = (preview) => `Automatic payments paused. ${preview.card === null ? 'The card' : cardName(preview.card)} stays saved.`;
 
-/** The box under Resume automatic payments. */
+/** The box under Resume autopay. */
 export function autopayResumeBox(preview) {
   const card = preview.card === null ? null : cardName(preview.card);
   const people = peopleOf(preview);
@@ -42,7 +42,7 @@ export function autopayResumeBox(preview) {
   else if (card === null) lead = 'No card is on file, so nothing will be charged until one is added. This applies to:';
   else lead = `${card} will be charged automatically for:`;
   return {
-    title: 'Resume automatic payments?',
+    title: 'Resume autopay?',
     lead,
     people,
     more: preview.more,

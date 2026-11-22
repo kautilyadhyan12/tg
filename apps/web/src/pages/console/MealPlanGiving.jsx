@@ -346,7 +346,7 @@ export function GivenSection({ gymId, plan, given, readOnly, words, membersTo, m
                 <div className="flex items-center justify-between gap-3">
                   <div className="min-w-0">
                     <p className="c-s15 c-t1 c-ell">{m.name || 'No name'}</p>
-                    {m.instead !== null ? <p className="c-s13 c-t2">{GIVE_WORDS.instead(m.instead)}</p> : null}
+                    {m.instead !== null ? <p className="c-s14 c-t2">{GIVE_WORDS.instead(m.instead)}</p> : null}
                   </div>
                   {!readOnly && asking !== m.audienceId ? (
                     <button type="button" onClick={() => setAsking(m.audienceId)} disabled={busy} className="c-btn c-btn-quiet c-btn-sm">
@@ -540,7 +540,7 @@ export function PersonMealPlan({ gymId, gymSlug, entryId, words, readOnly }) {
             ) : (
               <p className="c-s15 c-t2">{GIVE_WORDS.personNone}</p>
             )}
-            {through !== null ? <p className="c-s13 c-t2">{through}</p> : null}
+            {through !== null ? <p className="c-s14 c-t2">{through}</p> : null}
           </div>
           {!readOnly ? (
             <button type="button" onClick={() => setGiving(true)} className="c-btn c-btn-s c-btn-sm">

@@ -12,7 +12,7 @@ const preview = (over = {}) => ({ pausedOn: null, people, more: 0, card, squareC
 describe('Pause', () => {
   it('names the card and each membership, and says the card stays and bills still come due', () => {
     const box = autopayPauseBox(preview());
-    expect(box.title).toBe('Pause automatic payments?');
+    expect(box.title).toBe('Pause autopay?');
     expect(box.lead).toBe("Visa ending 1111 won't be charged automatically for:");
     expect(box.people).toEqual(['Maya Patel · Gold Weekly', 'Arun Patel']);
     expect(box.note).toBe('The card stays saved. Bills still come due: take payment at the desk, or charge the card from the bill.');

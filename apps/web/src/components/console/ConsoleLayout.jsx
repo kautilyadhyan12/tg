@@ -23,6 +23,7 @@ import { opensSearch, searchCatalogue, searchKeysLabel } from '../../pages/conso
 import { searchFindsPeople, searchPlaceholder } from '../../pages/console/searchPeople';
 import { initialsOf } from '../../pages/console/memberListPeople';
 import { orgTypeLabel, roleLabel, viewerPrivileges } from '../../pages/console/consoleView';
+import { PageOverContext, pageLabelFor } from './pageOver';
 import './console.css';
 
 // The console's own shell (spec Part 3 §3.1, §17): the menu on the left from 768 px; below
@@ -321,6 +322,18 @@ export default function ConsoleLayout({ children }) {
   const showBell = menu !== null && seesAnyPart(attention);
   // Payments overview says "Set up" until a payment provider is connected (V1-f).
   const paymentSetup = usePaymentSetup(org?.id ?? null, menu !== null && menu.pages.some((p) => p.key === 'payments'));
+  // A page drawn over this one (a member's page, V2a): where it draws, the name of the page it
+  // was opened from, and how many are open; while one is, the page under it is hidden as it is.
+  const [overSlot, setOverSlot] = useState(null);
+  const [overOpen, setOverOpen] = useState(0);
+  const pageOver = {
+    slot: overSlot,
+    label: menu ? pageLabelFor(menu.pages, pathname) : null,
+    open: () => {
+      setOverOpen((n) => n + 1);
+      return () => setOverOpen((n) => n - 1);
+    },
+  };
   /** A page's mark in the menu: its count where something waits, else Payments overview's Set up,
    *  else Members' Review needed dot. */
   const mark = (page) => {
@@ -501,9 +514,14 @@ export default function ConsoleLayout({ children }) {
             the last gym's answers under the new gym's name (Kd, 2026-08-28). `screen:` keeps
             the key apart from the banner's `no-gym`. `gymSwitch.render.test.jsx` checks
             every console route is drawn inside this shell. */}
-        <AttentionContext.Provider value={{ attention, counts, reload: reloadAttention, paymentSetup }}>
-          <Fragment key={`screen:${orgSlug ?? 'no-gym'}`}>{children}</Fragment>
-        </AttentionContext.Provider>
+        <PageOverContext.Provider value={pageOver}>
+          <AttentionContext.Provider value={{ attention, counts, reload: reloadAttention, paymentSetup }}>
+            <div ref={setOverSlot} data-testid="console-page-over" />
+            <div style={{ display: overOpen > 0 ? 'none' : 'contents' }} data-testid="console-page">
+              <Fragment key={`screen:${orgSlug ?? 'no-gym'}`}>{children}</Fragment>
+            </div>
+          </AttentionContext.Provider>
+        </PageOverContext.Provider>
       </main>
 
       {/* The prompt an owner cannot skip (Kd, :22215, :22697), drawn from the shell so no

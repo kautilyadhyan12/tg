@@ -212,6 +212,12 @@ export default function MemberMemberships({
   hasEmail = false,
   /** A Terminal payment asked to keep the card: Card on file reads again (18d-vi-c). */
   onCardAsked = null,
+  /** Told this box's answer each time it changes, null while there is none: the strip under the
+   *  person's name reads it (V2a), so the two never disagree. */
+  onHeld = null,
+  /** A press of the strip's button (V2a): { n, what: 'pay' | 'add' | 'agreement', membershipId, feeBillId },
+   *  `n` new each press. It opens the box this box's own button opens, and brings it into view. */
+  stripAsk = null,
 }) {
   const payMethods = paymentMethodsFor(gym?.country);
   /** The answer on screen, and the record it is about: never shown under another. */
@@ -309,6 +315,9 @@ export default function MemberMemberships({
   }, [gymId, entryId, attempt]);
 
   const shown = held !== null && held.entryId === entryId ? held : null;
+  useEffect(() => {
+    onHeld?.(shown);
+  }, [onHeld, shown]);
   // Live updates (ROADMAP Stage 4 item 18): when the person signs from an emailed link in another
   // window or on their phone, or another member of staff changes their memberships, the server tells
   // this page and it reads them again, quietly; and again when its line opens after being away, or
@@ -493,6 +502,13 @@ export default function MemberMemberships({
     listed?.toMemberships === true ||
     (shown !== null && shown.types.length === 0 && (open?.what === 'add' || shown.memberships.length === 0));
   useCameBack(membershipsTo !== null && sendsToMemberships, () => setAttempt((n) => n + 1));
+  /** The strip's last press this box answered; the box it opened is brought into view. */
+  const [askSeen, setAskSeen] = useState(null);
+  useEffect(() => {
+    if (askSeen === null) return;
+    const row = askSeen.membershipId === undefined ? null : document.querySelector(`[data-held-id="${askSeen.membershipId}"]`);
+    (row ?? document.querySelector('[data-testid="held-add"]'))?.scrollIntoView?.({ block: 'center' });
+  }, [askSeen]);
 
   if (loadError !== null && shown === null) {
     return (
@@ -794,6 +810,21 @@ export default function MemberMemberships({
     setVoidForm(what === 'voidFeePayment' ? { reason: '', tried: false } : null);
     setOpen({ what, id: m.id });
   };
+
+  // The strip under the name was pressed (V2a): the same box this box's own button opens.
+  if (stripAsk !== null && stripAsk.n !== askSeen?.n) {
+    setAskSeen(stripAsk);
+    const m = stripAsk.membershipId === undefined ? undefined : shown.memberships.find((x) => x.id === stripAsk.membershipId);
+    if (stripAsk.what === 'add') {
+      if (canAct && !nothingToSell) startAdd();
+    } else if (stripAsk.what === 'agreement' && m !== undefined) {
+      setAgreementFor({ id: m.id, justGiven: false });
+    } else if (stripAsk.what === 'pay' && m !== undefined && !readOnly && m.billing !== null && !appPageOpenOn(m)) {
+      const fee = stripAsk.feeBillId === null ? undefined : (m.billing.fees ?? []).find((x) => x.id === stripAsk.feeBillId && x.can.pay);
+      if (fee !== undefined) startFee(m, 'payFee', fee);
+      else if (stripAsk.feeBillId === null && m.billing.pay !== null) startPay(m);
+    }
+  }
 
   /** The box a fee's button opened, drawn inside that fee. */
   const renderFeeBox = (m, fee) => {
@@ -2345,7 +2376,7 @@ export default function MemberMemberships({
     const BAR = 'flex flex-wrap gap-2 pt-3 mt-1';
     const BAR_LINE = { borderTop: '1px solid var(--line)' };
     return (
-      <li key={m.id} className="py-3 flex flex-col gap-1.5" style={{ borderTop: '1px solid var(--line)' }} data-testid="held-membership">
+      <li key={m.id} className="py-3 flex flex-col gap-1.5" style={{ borderTop: '1px solid var(--line)' }} data-testid="held-membership" data-held-id={m.id}>
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
           <span className="c-s15 c-w6 c-t1 break-words min-w-0">{m.typeName}</span>
           <span className={`c-tag ${TAG_TONES[tag.tone]} whitespace-nowrap`}>{tag.tag}</span>

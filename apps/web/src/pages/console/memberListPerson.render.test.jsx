@@ -445,10 +445,10 @@ describe("5b-v-c: the one main button, and Invite asks first (spec Part 3 §18.6
     expect(orgService.inviteMemberListEntry).not.toHaveBeenCalled();
   });
 
-  it('opens as a side panel with the App word under the name, in the console look', async () => {
+  it('opens as a page of its own with the App word under the name, in the console look', async () => {
     openBox(ADA);
     await dialog().findByRole('heading', { name: 'Ada Lovelace' });
-    expect(screen.getByRole('dialog').classList.contains('c-sheet')).toBe(true);
+    expect(screen.getByRole('dialog').classList.contains('c-person')).toBe(true);
     expect(dialog().getByText('Not in the app').classList.contains('c-tag')).toBe(true);
   });
 });
@@ -483,7 +483,7 @@ describe('a person on the list', () => {
     orgService.getMemberListEntry.mockResolvedValue(entryAnswer(person(ADA, 'Ada Lovelace')));
     notesDrawn.mockClear();
     openBox(ADA, { readOnly: true, gym: { timezone: 'America/Chicago' } });
-    await dialog().findByRole('heading', { name: 'Contact' });
+    await dialog().findByRole('heading', { name: 'Contact details' });
     expect(notesDrawn).toHaveBeenLastCalledWith({ gymId: GYM, entryId: ADA, name: 'Ada Lovelace', readOnly: true, timeZone: 'America/Chicago' });
   });
   it("shows every kept field, the gym's own columns and who uses the app", async () => {

@@ -977,3 +977,38 @@ describe('a member paying a fee in the app (18k-ii-b)', () => {
     expect(within(within(item).getByTestId('held-fee-app-payment')).queryByRole('button')).toBeNull();
   });
 });
+
+describe('the strip under the name (V2a) and this box', () => {
+  it('hands the page the answer it drew, for this person', async () => {
+    const answerOf = answer([held(1, GOLD, '2026-10-04', false)]);
+    orgService.getHeldMemberships.mockResolvedValue(answerOf);
+    const onHeld = vi.fn();
+    render(draw({ onHeld }));
+    await rowsSoon();
+    const last = onHeld.mock.calls.at(-1)[0];
+    expect(last.entryId).toBe(ADA);
+    expect(last.memberships.map((m) => m.id)).toEqual(answerOf.data.memberships.map((m) => m.id));
+  });
+
+  it("its Record payment opens this box's own Record payment, under that membership, once a press", async () => {
+    const gold = held(1, GOLD, '2026-10-04', false);
+    orgService.getHeldMemberships.mockResolvedValue(answer([gold]));
+    const { rerender } = render(draw({ stripAsk: { what: 'pay', membershipId: gold.id, feeBillId: null, n: 1 } }));
+    const [row] = await rowsSoon();
+    expect(within(row).getByTestId('held-pay')).toBeTruthy();
+    // Closed with Back, the same press does not open it again; a new press does.
+    fireEvent.click(within(within(row).getByTestId('held-pay')).getByRole('button', { name: 'Back' }));
+    expect(within(row).queryByTestId('held-pay')).toBeNull();
+    rerender(draw({ stripAsk: { what: 'pay', membershipId: gold.id, feeBillId: null, n: 1 } }));
+    expect(within(row).queryByTestId('held-pay')).toBeNull();
+    rerender(draw({ stripAsk: { what: 'pay', membershipId: gold.id, feeBillId: null, n: 2 } }));
+    expect(within(row).getByTestId('held-pay')).toBeTruthy();
+  });
+
+  it('a press for a membership that is not theirs opens nothing', async () => {
+    orgService.getHeldMemberships.mockResolvedValue(answer([held(1, GOLD, '2026-10-04', false)]));
+    render(draw({ stripAsk: { what: 'pay', membershipId: '44444444-4444-4444-8444-000000000009', feeBillId: null, n: 1 } }));
+    const [row] = await rowsSoon();
+    expect(within(row).queryByTestId('held-pay')).toBeNull();
+  });
+});

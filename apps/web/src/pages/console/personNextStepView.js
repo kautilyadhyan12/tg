@@ -5,7 +5,7 @@
 // memberships answer (the one Memberships draws, and the Members list's Payment word) and
 // their record. Pure: no clock, `today` is the business's own day from that answer.
 import { MEMBER_FEE_WORDS, formatMinor } from '@app/shared';
-import { billDays, feeForWords, feesOwed, NO_PAYMENTS_LINE, shortDay } from './memberBillsView';
+import { appPageOpenOn, billDays, feeForWords, feesOwed, NO_PAYMENTS_LINE, shortDay } from './memberBillsView';
 import { agreementLineParts, UNSIGNED_STOPS_LINE } from './agreementView';
 import { signedInApp } from './waiverView';
 
@@ -51,7 +51,8 @@ function paymentStep(held, canBill, readOnly) {
     };
   }
   const amount = formatMinor(target.amountMinor, m.currency);
-  const canPress = !readOnly && canBill && target.canPay !== false;
+  // As the membership's own Record payment: none while the member has a payment page open in the app.
+  const canPress = !readOnly && canBill && target.canPay !== false && !appPageOpenOn(m);
   return {
     kind: 'payment',
     membershipId: m.id,

@@ -163,7 +163,7 @@ describe('Save card on Terminal: the box', () => {
     ['refused', "Not saved. Square couldn't save the card. Try again, or type the card instead."],
     ['merged_away', 'Not saved. In Square, Tara had been merged with another customer. Save the card again.'],
     ['gone', 'Not saved. Try again.'],
-  ])('ended %s: says why, with Try again on the same Terminal and Type card instead', async (outcome, line) => {
+  ])('ended %s: says why, with Try again on the same Terminal and Enter card manually', async (outcome, line) => {
     orgService.getMemberCard.mockReturnValue(cardAnswer());
     orgService.startTerminalSave.mockReturnValue(saveAnswer({}));
     orgService.checkTerminalSave.mockReturnValue(saveAnswer({ step: 'done', outcome }));
@@ -179,22 +179,22 @@ describe('Save card on Terminal: the box', () => {
     expect(orgService.startTerminalSave.mock.calls[1]?.[2].requestKey).not.toBe(orgService.startTerminalSave.mock.calls[0]?.[2].requestKey);
   });
 
-  it('Not saved, then Type card instead: Square’s own card boxes open in the same place', async () => {
+  it('Not saved, then Enter card manually: Square’s own card boxes open in the same place', async () => {
     orgService.getMemberCard.mockReturnValue(cardAnswer());
     orgService.startTerminalSave.mockReturnValue(saveAnswer({}));
     orgService.checkTerminalSave.mockReturnValue(saveAnswer({ step: 'done', outcome: 'not_agreed' }));
     show();
     fireEvent.click(await screen.findByRole('button', { name: 'Save card on Terminal' }));
     const ended = await screen.findByTestId('terminal-not-saved');
-    fireEvent.click(within(ended).getByRole('button', { name: 'Type card instead' }));
+    fireEvent.click(within(ended).getByRole('button', { name: 'Enter card manually' }));
     expect(await screen.findByTestId('card-form')).toBeTruthy();
     expect(screen.queryByTestId('terminal-not-saved')).toBeNull();
   });
 
-  it('Type card instead opens Square’s own card boxes, as Add card does', async () => {
+  it('Enter card manually opens Square’s own card boxes, as Add card does', async () => {
     orgService.getMemberCard.mockReturnValue(cardAnswer());
     show();
-    fireEvent.click(await screen.findByRole('button', { name: 'Type card instead' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Enter card manually' }));
     expect(await screen.findByText('Add a card for Tara Singh')).toBeTruthy();
     await waitFor(() => expect(square.attachCardForm).toHaveBeenCalled());
   });
@@ -321,7 +321,7 @@ describe('Save card on Terminal: the box', () => {
     orgService.getMemberCard.mockReturnValue(cardAnswer({ card: { ...VISA, savedFrom: 'desk' } }));
     show();
     expect(await screen.findByRole('button', { name: 'Replace card on Terminal' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Type card instead' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Enter card manually' })).toBeTruthy();
     cleanup();
     orgService.getMemberCard.mockReturnValue(cardAnswer());
     show({ readOnly: true });

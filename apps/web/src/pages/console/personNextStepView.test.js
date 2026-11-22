@@ -195,6 +195,14 @@ describe('a payment due', () => {
     expect(s.button).toBeNull();
   });
 
+  it('no Record payment while the member is paying it in the app, as the membership itself has none', () => {
+    const m = OWED();
+    const paying = { ...m, billing: { ...m.billing, appPayment: { id: '88888888-8888-4888-8888-000000000001', payerName: 'Ada Lovelace', closesAt: '2026-10-20T12:00:00.000Z' } } };
+    const s = step(answer(ADA, [paying]));
+    expect(s.kind).toBe('payment');
+    expect(s.button).toBeNull();
+  });
+
   it('a past member who still owes is told it, and nothing else', () => {
     const s = step(answer(ADA, [OWED()], { past: true }), person({ formerAt: '2026-10-15T10:00:00.000Z' }), { inviteAction: 'invite' });
     expect(s.kind).toBe('payment');

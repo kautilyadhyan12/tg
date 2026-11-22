@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   AlertTriangle,
   ArrowLeft,
@@ -81,14 +82,20 @@ import {
   noteDay,
   whenWords,
   inviteBlockedWords,
+  initialsOf,
 } from './memberListPeople';
+import { personNextStep } from './personNextStepView';
+import { usePageOver } from '../../components/console/pageOver';
 
 // One person on the gym's own list (ROADMAP 5b-i, 5b-v-c; spec Part 3 §18.7): everything
 // kept about them, the one button their state calls for, and under More, Remove (One
 // Remove, RULINGS 2026-09-27), Merge duplicate and (for a past member) Delete for good, as
 // gym software keeps its rarer actions. "Add member" is the same panel with an empty form.
-// A side panel on a computer, the whole screen on a phone (§17.2 rule 9), in the console's
-// look; it closes only by its X.
+// A page of its own (spec Part 3 §17.11, V2a): drawn in the console's place for a page, beside
+// the menu and under the bar across the top, over the page it was opened from, which stays as
+// it was under it; its name above the head goes back, and so does the browser's Back. Under the
+// name, one strip for the next step. Three columns where the page is wide enough, two below
+// that, one on a phone.
 //
 // Every answer is shown only for the record it was asked about: the panel draws a
 // person's details only when they belong to the record it has open, so a slow answer
@@ -131,7 +138,7 @@ function Fact({ label, value, edited }) {
       <dt className="c-s14 c-t2">{label}</dt>
       <dd className="c-s14 c-w5 c-t1 m-0 break-words min-w-0">
         {value}
-        {edited ? <span className="block c-s13 c-t3 font-normal">Changed by hand</span> : null}
+        {edited ? <span className="block c-s14 c-t3 font-normal">Changed by hand</span> : null}
       </dd>
     </div>
   );
@@ -161,10 +168,10 @@ function MaybeBox({ maybe, words, busy, readOnly, onOpen, onAnyway, onBack }) {
                 <span className="c-s14 c-w6 c-t1">{m.fullName || 'No name'}</span>
                 {m.past ? <span className="c-tag c-tag-plain">{`Past ${words.person}`}</span> : null}
               </span>
-              <span className="c-s13 c-t2" style={{ overflowWrap: 'anywhere' }}>
+              <span className="c-s14 c-t2" style={{ overflowWrap: 'anywhere' }}>
                 {matchDetailWords(m)}
               </span>
-              <span className="c-s13 c-w6" style={{ color: 'var(--warn)' }}>
+              <span className="c-s14 c-w6" style={{ color: 'var(--warn)' }}>
                 {pairWhyWords(m)}
               </span>
             </span>
@@ -219,12 +226,36 @@ function ReviewBox({ lines, busy, readOnly, onCorrect }) {
   );
 }
 
+const STRIP_TONES = { bad: 'c-strip-bad', warn: 'c-strip-warn', good: 'c-strip-good', plain: 'c-strip-plain' };
+
+/** The next step under the name (§17.11): what it is, and the page's own button for it. */
+function NextStep({ step, onPress, setUpTo }) {
+  return (
+    <div className={`c-strip ${STRIP_TONES[step.tone]}`} data-testid="next-step">
+      <div className="c-strip-words">
+        <span className="c-s15 c-w6 c-strip-title">{step.title}</span>
+        {step.detail !== null ? <span className="c-s14 c-strip-detail">{step.detail}</span> : null}
+        {step.note !== null ? <span className="c-s14 c-t2">{step.note}</span> : null}
+      </div>
+      {step.button !== null ? (
+        <button type="button" onClick={() => onPress(step.button.ask)} className="c-btn c-btn-p whitespace-nowrap">
+          {step.button.label}
+        </button>
+      ) : step.setUp === true && setUpTo !== null ? (
+        <PlaceLink to={setUpTo} className="c-btn c-btn-s whitespace-nowrap">
+          Set up memberships
+        </PlaceLink>
+      ) : null}
+    </div>
+  );
+}
+
 function Section({ title, note, children }) {
   return (
     <section className="c-card px-4 py-3 md:px-5 md:py-4">
       <h3 className="c-h2 mb-1">
         {title}
-        {note ? <span className="c-s13 c-t3 font-normal"> ({note})</span> : null}
+        {note ? <span className="c-s14 c-t3 font-normal"> ({note})</span> : null}
       </h3>
       <dl className="m-0">{children}</dl>
     </section>
@@ -262,7 +293,7 @@ function CompareRecords({ first, second, fields, person, keepId, onChoose, disab
           data-testid={`keep-${side}`}
           onClick={() => onChoose(record.entryId)}
           disabled={disabled}
-          className="flex items-center gap-1.5 c-s13 c-w7 text-left min-h-9"
+          className="flex items-center gap-1.5 c-s14 c-w7 text-left min-h-9"
           style={{ color: kept ? 'var(--good)' : gone ? 'var(--bad)' : 'var(--t1)' }}
         >
           <span
@@ -301,7 +332,7 @@ function CompareRecords({ first, second, fields, person, keepId, onChoose, disab
                 data-differs={row.differs ? 'true' : 'false'}
                 style={{ borderTop: '1px solid var(--line)', background: row.differs ? 'var(--warn-bg)' : 'transparent' }}
               >
-                <th scope="row" className="text-left font-normal px-1.5 sm:px-2 py-2 align-top c-s13 c-t2">
+                <th scope="row" className="text-left font-normal px-1.5 sm:px-2 py-2 align-top c-s14 c-t2">
                   {row.label}
                 </th>
                 {[
@@ -311,7 +342,7 @@ function CompareRecords({ first, second, fields, person, keepId, onChoose, disab
                   <td
                     key={side}
                     data-testid={`join-${side}-${row.key}`}
-                    className="px-1.5 sm:px-2 py-2 align-top c-s13"
+                    className="px-1.5 sm:px-2 py-2 align-top c-s14"
                     style={{ color: value === '—' ? 'var(--t3)' : 'var(--t1)', overflowWrap: 'break-word' }}
                   >
                     {/* An address may wrap at its @, never in the middle of a word. */}
@@ -345,8 +376,8 @@ function MergePreview({ keep, remove, fields, person }) {
       <dl className="grid gap-x-3 gap-y-1.5 m-0" style={{ gridTemplateColumns: 'minmax(0, 28%) minmax(0, 1fr)' }}>
         {rows.map((row) => (
           <div key={row.key} className="contents">
-            <dt className="c-s13 c-t2">{row.label}</dt>
-            <dd className="c-s13 c-t1 m-0" style={{ overflowWrap: 'anywhere' }} data-testid={`after-${row.key}`}>
+            <dt className="c-s14 c-t2">{row.label}</dt>
+            <dd className="c-s14 c-t1 m-0" style={{ overflowWrap: 'anywhere' }} data-testid={`after-${row.key}`}>
               {row.value}
               {row.fromOther ? (
                 <span className="c-tag c-tag-plain ml-2" data-testid="from-other">
@@ -358,7 +389,7 @@ function MergePreview({ keep, remove, fields, person }) {
         ))}
       </dl>
       {memberships ? (
-        <p className="c-s13 c-t2 m-0" data-testid="merge-memberships">
+        <p className="c-s14 c-t2 m-0" data-testid="merge-memberships">
           Their memberships stay as they are.
         </p>
       ) : null}
@@ -369,7 +400,7 @@ function MergePreview({ keep, remove, fields, person }) {
           </h4>
           <ul className="flex flex-col gap-1 m-0 p-0 list-none">
             {lost.map((item) => (
-              <li key={item.key} className="c-s13 c-t2" style={{ overflowWrap: 'anywhere' }} data-testid={`lost-${item.key}`}>
+              <li key={item.key} className="c-s14 c-t2" style={{ overflowWrap: 'anywhere' }} data-testid={`lost-${item.key}`}>
                 <span className="c-t1">{`${item.label}: ${item.value}`}</span>
                 {` — ${item.why}`}
               </li>
@@ -393,7 +424,7 @@ function WaiverLine({ member, desk, timeZone }) {
   // The day is the gym's own, as a note's is.
   const parts = waiverLineParts(member, (iso) => noteDay(iso, timeZone), desk);
   return (
-    <span className="flex flex-wrap items-center gap-x-1.5 gap-y-1 mt-1.5 c-s13 c-t2" data-testid="waiver-line">
+    <span className="flex flex-wrap items-center gap-x-1.5 gap-y-1 mt-1.5 c-s14 c-t2" data-testid="waiver-line">
       <span className={`c-tag ${WAIVER_TAG[parts.tone]}`}>{parts.label}</span>
       {parts.rest === '' ? null : <span>{parts.rest}</span>}
     </span>
@@ -416,6 +447,11 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
   const [attempt, setAttempt] = useState(0);
   /** Bumped when a Terminal payment asked to keep the card: Card on file reads again (18d-vi-c). */
   const [cardReads, setCardReads] = useState(0);
+  /** Their memberships as the Memberships box last read them, for the strip under the name. */
+  const [heldNow, setHeldNow] = useState(null);
+  /** A press of the strip's button, for the box it opens: Memberships' or the waiver's. */
+  const [stripAsk, setStripAsk] = useState(null);
+  const [waiverAsk, setWaiverAsk] = useState(0);
   const [mode, setMode] = useState(entryId === null ? 'edit' : pair !== null ? 'join' : 'view');
   /** The person in the app a "Not this person" box is about. */
   const [notThem, setNotThem] = useState(null);
@@ -557,14 +593,60 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
   // Somebody who set memberships up in another tab finds them here on coming back: a form
   // with nothing to pick from reads the price list again.
   useCameBack(adding && !sells, () => setPriceAsk((n) => n + 1));
+  // In the console it is a page in the page's own place: the page under it is hidden while it is
+  // open and comes back where it was left. Outside the console (a test drawing it alone) it
+  // covers the window, as a box.
+  const over = usePageOver();
+  const slot = over?.slot ?? null;
+  const inShell = slot !== null;
+  const openOver = useRef(null);
   useEffect(() => {
+    openOver.current = over?.open ?? null;
+  });
+  const closeNow = useRef(onClose);
+  useEffect(() => {
+    closeNow.current = onClose;
+  });
+  useEffect(() => {
+    if (inShell) {
+      const shut = openOver.current?.();
+      // The browser's Back closes it, as it leaves a page: one step of the browser's own history,
+      // at the same address, stands for it, holding where the page under it was scrolled to. A
+      // person's page opened straight after another (or drawn twice by React's checks) takes over
+      // the same step; closed any other way, the step is taken back, unless another person's
+      // page has it by then or the console has moved on to another page.
+      const mark = `person:${String(Math.random()).slice(2)}`;
+      const state = window.history.state ?? {};
+      const leftAt = typeof state.personPage === 'string' && typeof state.personScroll === 'number' ? state.personScroll : window.scrollY;
+      const next = { ...state, personPage: mark, personScroll: leftAt };
+      if (typeof state.personPage === 'string') window.history.replaceState(next, '');
+      else window.history.pushState(next, '');
+      window.scrollTo?.(0, 0);
+      dialogRef.current?.focus({ preventScroll: true });
+      let backed = false;
+      const onBack = () => {
+        if (window.history.state?.personPage === mark) return;
+        backed = true;
+        closeNow.current();
+      };
+      window.addEventListener('popstate', onBack);
+      return () => {
+        window.removeEventListener('popstate', onBack);
+        shut?.();
+        window.setTimeout(() => {
+          const ours = window.history.state?.personPage === mark;
+          if (ours) window.history.back();
+          if (ours || backed) window.scrollTo?.(0, leftAt);
+        }, 0);
+      };
+    }
     const before = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     dialogRef.current?.focus();
     return () => {
       document.body.style.overflow = before;
     };
-  }, []);
+  }, [inShell]);
 
   const keepFocusInside = (e) => {
     if (e.key !== 'Tab') return;
@@ -1360,7 +1442,7 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
     // Add member writes the type's name as the list's Membership word.
     const byHand = handEditedWords({ ...p, handEdited: p.handEdited.filter((k) => !answered.includes(k)) }, fields, FIELD_LABELS);
     return (
-      <div className="flex flex-col gap-5">
+      <div className="flex flex-col gap-4">
         {action === 'under_age' ? (
           <div className="flex flex-col gap-1">
             <p className="c-s14 c-t2 m-0" data-testid="under-age-note">
@@ -1385,42 +1467,15 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
           </div>
         ) : null}
         {(p.review ?? []).length > 0 ? <ReviewBox lines={p.review} busy={busy} readOnly={readOnly} onCorrect={(line) => void markCorrect(line)} /> : null}
-        {renderButtons(p, action)}
-        <Section title="Contact">
+        <div className="c-person-cols" data-testid="person-columns">
+        {/* Who they are. */}
+        <div className="c-person-col c-person-who" data-testid="person-who">
+        <Section title="Contact details">
           {contact.length === 0 ? <Fact label="Email or phone" value="None" /> : null}
           {contact.map(([k, v]) => (
             <Fact key={k} label={FIELD_LABELS[k]} value={v} edited={edited.has(k)} />
           ))}
         </Section>
-        <MemberMemberships
-          key={p.entryId}
-          gymId={gymId}
-          gym={gym}
-          entryId={p.entryId}
-          name={p.fullName || 'this person'}
-          readOnly={readOnly}
-          clockFormat={gym?.clockFormat}
-          onChanged={membershipsChanged}
-          nothingNow={nothingNow}
-          managesTypes={canManageMemberships(viewerPrivileges(gym))}
-          membershipsTo={placeFor(gym?.slug, viewerPrivileges(gym), 'memberships')}
-          addNow={addMembership || (addNowFor !== null && addNowFor === p.entryId)}
-          payNow={payNow}
-          refundNow={refundNow}
-          checkNow={checkNow}
-          hasEmail={typeof p.email === 'string' && p.email !== ''}
-          onCardAsked={() => setCardReads((n) => n + 1)}
-        />
-        {/* The meal plan they get, for staff who give the gym's plans (24a-ii). */}
-        {canManagePlans(viewerPrivileges(gym)) && p.formerAt === null ? (
-          <PersonMealPlan key={`meal-plan-${p.entryId}`} gymId={gymId} gymSlug={gym?.slug ?? ''} entryId={p.entryId} words={words} readOnly={readOnly} />
-        ) : null}
-        <MemberPayer key={`payer-${p.entryId}`} gymId={gymId} gym={gym} entryId={p.entryId} name={p.fullName} readOnly={readOnly} onChanged={onChanged} />
-        {/* The card on file is for staff holding the payments tick alone (18d-ii). */}
-        {canRecordPayments(viewerPrivileges(gym)) ? (
-          <MemberCard key={`card-${p.entryId}-${cardReads}`} gymId={gymId} gym={gym} entryId={p.entryId} name={p.fullName} readOnly={readOnly} />
-        ) : null}
-        <MemberPurchases key={`purchases-${p.entryId}`} gymId={gymId} gym={gym} entryId={p.entryId} name={p.fullName} past={p.formerAt !== null} />
         <MemberNotes key={`notes-${p.entryId}`} gymId={gymId} entryId={p.entryId} name={p.fullName} readOnly={readOnly} timeZone={gym?.timezone ?? null} />
         {membership.length > 0 ? (
           // What the gym's own list says about them, in its words; the box above is what
@@ -1450,7 +1505,7 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
                 <Smartphone aria-hidden="true" className="w-4 h-4 mt-0.5 flex-shrink-0" style={{ color: 'var(--good)' }} />
                 <div className="c-s14 c-t2 flex-1 min-w-0">
                   <span className="c-t1 c-w5">{m.displayName}</span> · In the app since {whenWords(m.joinedAt)}
-                  <span className="block c-s13 c-t3">
+                  <span className="block c-s14 c-t3">
                     {m.visits === 1 ? '1 visit' : `${String(m.visits)} visits`}
                     {m.lastVisitOn !== null ? ` · last ${dayWords(m.lastVisitOn)}` : ''}
                   </span>
@@ -1490,13 +1545,53 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
               setEntry((e) => (e !== null && e.entryId === p.entryId ? { ...e, waiverDesk: signed } : e));
               onChanged();
             }}
+            ask={waiverAsk}
           />
         ) : null}
         {byHand.length > 0 ? (
-          <p className="c-s13 c-t3 m-0">
+          <p className="c-s14 c-t3 m-0">
             Changed by hand: {byHand.join(', ')}. An import asks before it writes over these.
           </p>
         ) : null}
+        </div>
+        {/* What they have. */}
+        <div className="c-person-col c-person-have" data-testid="person-have">
+        <MemberMemberships
+          key={p.entryId}
+          gymId={gymId}
+          gym={gym}
+          entryId={p.entryId}
+          name={p.fullName || 'this person'}
+          readOnly={readOnly}
+          clockFormat={gym?.clockFormat}
+          onChanged={membershipsChanged}
+          nothingNow={nothingNow}
+          managesTypes={canManageMemberships(viewerPrivileges(gym))}
+          membershipsTo={placeFor(gym?.slug, viewerPrivileges(gym), 'memberships')}
+          addNow={addMembership || (addNowFor !== null && addNowFor === p.entryId)}
+          payNow={payNow}
+          refundNow={refundNow}
+          checkNow={checkNow}
+          hasEmail={typeof p.email === 'string' && p.email !== ''}
+          onCardAsked={() => setCardReads((n) => n + 1)}
+          onHeld={setHeldNow}
+          stripAsk={stripAsk}
+        />
+        <MemberPurchases key={`purchases-${p.entryId}`} gymId={gymId} gym={gym} entryId={p.entryId} name={p.fullName} past={p.formerAt !== null} />
+        </div>
+        {/* Who pays, and their card. */}
+        <div className="c-person-col c-person-pays" data-testid="person-pays">
+        <MemberPayer key={`payer-${p.entryId}`} gymId={gymId} gym={gym} entryId={p.entryId} name={p.fullName} readOnly={readOnly} onChanged={onChanged} />
+        {/* The card on file is for staff holding the payments tick alone (18d-ii). */}
+        {canRecordPayments(viewerPrivileges(gym)) ? (
+          <MemberCard key={`card-${p.entryId}-${cardReads}`} gymId={gymId} gym={gym} entryId={p.entryId} name={p.fullName} readOnly={readOnly} />
+        ) : null}
+        {/* The meal plan they get, for staff who give the gym's plans (24a-ii). */}
+        {canManagePlans(viewerPrivileges(gym)) && p.formerAt === null ? (
+          <PersonMealPlan key={`meal-plan-${p.entryId}`} gymId={gymId} gymSlug={gym?.slug ?? ''} entryId={p.entryId} words={words} readOnly={readOnly} />
+        ) : null}
+        </div>
+        </div>
       </div>
     );
   };
@@ -1748,7 +1843,7 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
               Back
             </button>
           </div>
-          {roles === null ? <p className="c-s13 c-t3 m-0">Choose the one to keep to see what the merge leaves.</p> : null}
+          {roles === null ? <p className="c-s14 c-t3 m-0">Choose the one to keep to see what the merge leaves.</p> : null}
         </div>
       );
     }
@@ -1853,29 +1948,62 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
 
   // Under the name: past member, the App word and its line (§18.4), whatever step is open.
   const inv = shown !== null && deleted === null ? invitationView(shown, gymToday(gym?.timezone)) : null;
+  // Their details on screen: the head holds the page's buttons, and the strip its next step.
+  const viewing = mode === 'view' && shown !== null && deleted === null && loadError === null && id !== null;
+  const inviteNow = viewing ? personInviteAction(shown, gymToday(gym?.timezone)) : null;
+  const step = viewing
+    ? personNextStep({
+        held: heldNow,
+        person: shown,
+        inviteAction: inviteNow,
+        canBill: heldNow?.canBill === true,
+        readOnly,
+        managesTypes: canManageMemberships(viewerPrivileges(gym)),
+      })
+    : null;
+  /** The strip's button: the same box the page's own button opens. */
+  const pressStep = (what) => {
+    if (what.what === 'waiver') setWaiverAsk((n) => n + 1);
+    else if (what.what === 'app') ask(inviteNow === 'again' ? 'again' : inviteNow === 'invite_again' ? 'inviteAgain' : 'invite');
+    else setStripAsk((was) => ({ ...what, n: (was?.n ?? 0) + 1 }));
+  };
+  // A form or a question is read best at a form's width; their details take the whole page.
+  const wide = viewing || (mode === 'view' && shown === null);
 
-  return (
-    <div className="fixed inset-0 z-50" style={{ background: 'var(--scrim)' }} data-testid="member-person">
-      <div
-        ref={dialogRef}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={titleId}
-        tabIndex={-1}
-        onKeyDown={keepFocusInside}
-        className="c-sheet absolute inset-0 md:left-auto md:w-[560px] md:border-l flex flex-col overflow-y-auto outline-none"
-        style={{ borderColor: 'var(--card-line)' }}
-      >
-        <div className="flex items-start gap-3 px-4 pt-5 pb-4 md:px-7 md:pt-7 md:pb-5 border-b" style={{ borderColor: 'var(--line)' }}>
-          <div className="flex flex-col gap-2 flex-grow min-w-0">
-            <h2 id={titleId} className="c-h1 break-words" style={{ fontSize: 28, lineHeight: '34px' }}>
+  const page = (
+    <div
+      ref={dialogRef}
+      role="dialog"
+      aria-modal={inShell ? undefined : 'true'}
+      aria-labelledby={titleId}
+      tabIndex={-1}
+      onKeyDown={inShell ? undefined : keepFocusInside}
+      className={inShell ? 'c-person outline-none' : 'c-person c-page-over fixed inset-0 z-50 overflow-y-auto outline-none'}
+      data-testid="member-person"
+    >
+      <div className="c-person-in">
+        {inShell ? (
+          <button type="button" onClick={onClose} className="c-person-back" data-testid="person-back">
+            <ArrowLeft aria-hidden="true" className="w-4 h-4" />
+            {over?.label ?? 'Back'}
+          </button>
+        ) : null}
+        <header className="c-card c-person-head">
+          <div className="flex flex-wrap items-start gap-x-4 gap-y-3">
+            {viewing ? (
+              <span className="c-avatar c-avatar-lg" aria-hidden="true">
+                {initialsOf(shown.fullName || '')}
+              </span>
+            ) : null}
+            <div className="flex flex-col gap-2 flex-1 min-w-[min(100%,220px)]">
+            <h1 id={titleId} className="c-h1 break-words m-0">
               {title}
-            </h2>
+            </h1>
             {inv !== null ? (
               <div className="flex flex-wrap items-center gap-2">
                 {shown.formerAt !== null ? <span className="c-tag c-tag-plain">{pastWords(shown, words.person)}</span> : null}
                 <Tag view={inv} />
-                {inv.line !== null ? <span className="c-s13 c-t2">{inv.line}</span> : null}
+                {inv.line !== null ? <span className="c-s14 c-t2">{inv.line}</span> : null}
               </div>
             ) : null}
             {inv?.detail && !(mode === 'view' && pastInApp(shown)) ? (
@@ -1886,12 +2014,17 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
             ) : null}
             {/* It leaves this page, so it asks first while a form is open on it. */}
             {inv?.detail && !(mode === 'view' && pastInApp(shown)) ? <SentencePlace kind={inv.place} gym={gym} guard={mode !== 'view'} /> : null}
+            </div>
+            {viewing ? renderButtons(shown, inviteNow) : null}
+            {inShell ? null : (
+              <button type="button" aria-label="Close" onClick={onClose} className="c-icon-btn flex-shrink-0">
+                <X aria-hidden="true" className="w-5 h-5" />
+              </button>
+            )}
           </div>
-          <button type="button" aria-label="Close" onClick={onClose} className="c-icon-btn flex-shrink-0">
-            <X aria-hidden="true" className="w-5 h-5" />
-          </button>
-        </div>
-        <div className="flex flex-col gap-4 px-4 py-5 md:px-7">
+          {step !== null ? <NextStep step={step} onPress={pressStep} setUpTo={placeFor(gym?.slug, viewerPrivileges(gym), 'memberships')} /> : null}
+        </header>
+        <div className={wide ? 'flex flex-col gap-4' : 'flex flex-col gap-4 c-person-narrow'}>
           {draft !== null && id !== null ? (
             <button type="button" onClick={backToAdding} className="c-s14 c-w6 c-lk self-start flex items-center gap-1.5" data-testid="back-to-adding">
               <ArrowLeft aria-hidden="true" className="w-4 h-4" />
@@ -1957,4 +2090,5 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
       </div>
     </div>
   );
+  return inShell ? createPortal(page, slot) : page;
 }
