@@ -388,6 +388,14 @@ describe("a day tapped on the calendar", () => {
     expect(daySum([bare, early])).toEqual({ workouts: "2", trained: "40 min", kcal: "21" });
   });
 
+  // Found on the walk (64a-v): a plank held 18 s read "0 min".
+  it("says a workout under a minute as 1 min, never 0 min, alone and in the day's sum", () => {
+    const short = item({ workoutId: "6b5a4c3d-2e1f-4a0b-9c8d-7e6f5a4b3c2d", startedAt: new Date(2026, 9, 26, 23, 22).toISOString(), setsCount: 1, durationMs: 18_000, exercises: ["plank"] });
+    expect(dayWorkouts([short], named)[0]?.when).toBe("11:22 pm · 1 min · 1 set");
+    expect(daySum([short]).trained).toBe("1 min");
+    expect(daySum([item({ workoutId: short.workoutId, startedAt: short.startedAt, durationMs: 0 })]).trained).toBe("0 min");
+  });
+
   it.each([
     [null, "Workout"],
     ["", "Workout"],

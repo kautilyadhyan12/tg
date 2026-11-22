@@ -271,9 +271,7 @@ function DayBox({ day }: { day: string }) {
                   <Txt kind="strong" numberOfLines={1}>
                     {w.name}
                   </Txt>
-                  <Txt kind="small" numberOfLines={1}>
-                    {w.when}
-                  </Txt>
+                  <Txt kind="small">{w.when}</Txt>
                   {w.exercises === "" ? null : <Txt kind="small">{w.exercises}</Txt>}
                 </View>
                 {w.kcal === null ? null : (

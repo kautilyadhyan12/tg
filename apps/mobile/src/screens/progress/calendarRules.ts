@@ -199,6 +199,9 @@ export interface DayWorkout {
   said: string;
 }
 
+/** A workout's time trained; under a minute is still a workout that happened, never "0 min" (as Recent Activity says it). */
+const trainedWords = (ms: number): string => hoursWords(ms > 0 && ms < 60_000 ? 60_000 : ms);
+
 const many = (n: number, one: string, more: string) => `${count(n)} ${n === 1 ? one : more}`;
 
 /** A workout's name, or "Workout" for one never named. */
@@ -210,7 +213,7 @@ export function dayWorkouts(items: readonly HistoryWorkoutListed[], named: Named
     .sort((a, b) => Date.parse(a.startedAt) - Date.parse(b.startedAt))
     .map((w) => {
       const name = workoutName(w.name);
-      const when = [clockWords(new Date(w.startedAt)), w.durationMs === null ? null : hoursWords(w.durationMs), many(w.setsCount, "set", "sets")].filter((x) => x !== null).join(" · ");
+      const when = [clockWords(new Date(w.startedAt)), w.durationMs === null ? null : trainedWords(w.durationMs), many(w.setsCount, "set", "sets")].filter((x) => x !== null).join(" · ");
       const exercises = exercisesLine(w.exercises, named);
       const kcal = w.kcalPoint === null ? null : count(w.kcalPoint);
       return { id: w.workoutId, name, when, exercises, first: w.exercises[0] ?? null, kcal, said: [name, when, exercises, kcal === null ? null : `${kcal} kcal`].filter((x) => x !== null && x !== "").join(", ") };
@@ -223,7 +226,7 @@ export function daySum(items: readonly HistoryWorkoutListed[]): { workouts: stri
   const withKcal = items.filter((w) => w.kcalPoint !== null);
   return {
     workouts: count(items.length),
-    trained: items.some((w) => w.durationMs !== null) ? hoursWords(ms) : null,
+    trained: items.some((w) => w.durationMs !== null) ? trainedWords(ms) : null,
     kcal: withKcal.length === 0 ? null : count(withKcal.reduce((n, w) => n + (w.kcalPoint ?? 0), 0)),
   };
 }
