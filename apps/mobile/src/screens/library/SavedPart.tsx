@@ -10,7 +10,7 @@ import { Sheet } from "../../look/Sheet";
 import { fonts, Txt } from "../../look/Txt";
 import { fromSaved, NAME_MOST, nameOf as cleanName, plannedOf } from "../../library/myWorkout";
 import { exercisePicture } from "../../library/pictures";
-import { savedState, type Planned, type ShownSaved } from "../../library/savedWorkouts";
+import { rebased, savedState, type Planned, type ShownSaved } from "../../library/savedWorkouts";
 import { planOf } from "../../library/workoutSetup";
 import type { MyWorkoutHook } from "./useLibrary";
 import { useWorkoutLayer } from "../workout/WorkoutLayer";
@@ -57,6 +57,11 @@ export function SavedPart({ mine, planned, entryOf }: Props) {
       heard.remove();
     };
   }, [reading]);
+  // My Workout takes the time the account keeps for this phone's own save (re-check, L3).
+  const moved = saved === null ? null : rebased(mine.workout, saved.view.list);
+  useEffect(() => {
+    if (moved !== null && mine.workout.from !== null) mine.link(mine.workout.from, moved);
+  }, [moved, mine]);
   if (saved === null) return null;
   const { view, store } = saved;
   const list = view.list;

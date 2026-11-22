@@ -13,6 +13,7 @@ import {
   type PhoneLibraryEntry,
   type PlannedExercise,
   type RefusedSavedChange,
+  type SavedBase,
   type SavedChange,
   type SavedWorkoutList,
 } from "@app/shared";
@@ -96,6 +97,17 @@ export function savedState(w: MyWorkout, list: readonly ShownSaved[], startOf: (
     same: sameWorkout(w.name, plannedOf(w, startOf), base.name, base.exercises),
     newer: Date.parse(linked.editedAt) > Date.parse(base.editedAt),
   };
+}
+
+/** My Workout's base moved to the time the account keeps for this phone's own change (re-check, L3): a save stamped again
+ *  with the server's time (a phone whose clock runs fast) is kept at an earlier time than the phone stamped, so without
+ *  this a later change from another device could still read as older than this phone's. Null where nothing moves: the
+ *  change is still on its way, the account holds another change (its content differs), or the times already agree. */
+export function rebased(w: MyWorkout, list: readonly ShownSaved[]): SavedBase | null {
+  const linked = w.from === null ? null : list.find((e) => e.id === w.from);
+  if (w.base === null || linked === undefined || linked === null || linked.onPhone || linked.whole === null) return null;
+  if (!(Date.parse(linked.editedAt) < Date.parse(w.base.editedAt))) return null;
+  return sameWorkout(linked.name, linked.whole, w.base.name, w.base.exercises) ? { ...w.base, editedAt: linked.editedAt } : null;
 }
 
 /** A saved workout as a save leaves it. */

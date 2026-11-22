@@ -23,6 +23,7 @@ import {
   mergeList,
   readSaveRefusal,
   sameWorkout,
+  rebased,
   savedPath,
   savedState,
   shownList,
@@ -379,7 +380,7 @@ describe("the rules", () => {
   });
 
   describe("round one H1: is My Workout saved? judged against what it last loaded or saved, never the list alone", () => {
-    const entry = (over: Partial<KeptSavedEntry> = {}) => ({ ...entryOf(LEG, "Leg day", at(-5), [SQUAT]), onPhone: false, ...over });
+    const entry = (over: Partial<KeptSavedEntry> & { onPhone?: boolean } = {}) => ({ ...entryOf(LEG, "Leg day", at(-5), [SQUAT]), onPhone: false, ...over });
     const loaded = fromSaved(LEG, "Leg day", [SQUAT], at(-5));
     const start = () => null;
     it.each<[string, MyWorkout, ReturnType<typeof entry>[], { linked: boolean; same: boolean; newer: boolean }]>([
@@ -394,6 +395,24 @@ describe("the rules", () => {
     ])("%s", (_, w, list, want) => {
       const got = savedState(w, list, start);
       expect({ linked: got.linked !== null, same: got.same, newer: got.newer }).toEqual(want);
+    });
+
+    it.each<[string, ReturnType<typeof entry>[], string | null]>([
+      ["this phone's own save kept at the server's earlier time: the base takes it", [entry({ editedAt: at(-20) })], at(-20)],
+      ["still on its way", [entry({ editedAt: at(-20), onPhone: true })], null],
+      ["the account holds another change", [entry({ editedAt: at(-20), name: "Leg day B" })], null],
+      ["the times already agree", [entry()], null],
+      ["a later time is never taken this way", [entry({ editedAt: at(-1) })], null],
+      ["no copy on the phone", [entry({ editedAt: at(-20), whole: null })], null],
+    ])("re-check L3, the base's time: %s", (_, list, want) => {
+      expect(rebased(loaded, list)?.editedAt ?? null).toBe(want);
+    });
+
+    it("re-check L3: once the base has the server's time, another device's later change reads as newer", () => {
+      const base = rebased(loaded, [entry({ editedAt: at(-20) })]);
+      if (base === null) throw new Error("not moved");
+      const w = { ...loaded, base };
+      expect(savedState(w, [entry({ editedAt: at(-10), whole: null, name: "Leg day B" })], start)).toMatchObject({ same: true, newer: true });
     });
 
     it("a saved workout holding an exercise since removed from the Library reads as saved straight after loading", () => {
