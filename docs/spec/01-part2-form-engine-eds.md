@@ -2246,7 +2246,7 @@ form standard (`standard` in the movement's file): the standard's own line, move
 on that reading where it has one, and `movement-check` writes where each came from. *The knees:* a quarter squat bends them
 to an inner angle of 110° to 140°, a half squat to 80° to 100°, a parallel squat to 60° to 70° (Front. Sports Act. Living
 2024, a scoping review of the deep squat, PMC11618833; Kd's research file asks for about 90°), so the line is the quarter
-squat's deepest end, 110°, less the camera's own room: how much the same rep's bottom knee reads differently between a video
+squat's deepest end, 110°, plus the camera's own room (the forgiving way): how much the same rep's bottom knee reads differently between a video
 as filmed and each replay that sets numbers, each replayed rep paired with the filmed rep it overlaps most in time, 3.88° in
 99 reps of 100 (313 reps paired; paired by their order, 2.78° on 303): a rep read at 114° or deeper counts (113° to 116° with
 one person left out). *The hips:* a hip stands no higher above its ankle than a leg bent so allows, thigh and shin of equal

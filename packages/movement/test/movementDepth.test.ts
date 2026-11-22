@@ -46,7 +46,7 @@ describe("how deep comes from the form standard, never from how shallow anybody 
     return r;
   };
 
-  it("the knees: the quarter squat's deepest end (110 degrees, the source written in the file), less the camera's own room", () => {
+  it("the knees: the quarter squat's deepest end (110 degrees, the source written in the file), plus the camera's own room", () => {
     const knees = rule("knees bent");
     expect([knees.standard?.at, knees.standard?.room, knees.standard?.source.includes("PMC11618833")]).toEqual([110, "camera", true]);
     // The room as measured: the same rep's bottom knee, as filmed and under each replay that sets numbers, paired by when
