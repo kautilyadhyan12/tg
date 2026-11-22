@@ -836,7 +836,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
     - 52b. **The form judge, the reason for a rep not counted, and the summary** (§12.1, §2.4; split 2026-11-20 in three, `handoff/2026-11-20-floor-phone-plan.md` keeps its line as first written):
         - 52b-i. [x] **Why a rep did not count, and the squat's depth** — merged 2026-11-22 (PR #622).
         - 52b-ii. **The form check and each rep's score** (split 2026-11-22 in two, the check first; `handoff/2026-11-22-52b-ii-a.md` keeps its line as first written):
-            - 52b-ii-a. [x] **The squat's form check** — merged 2026-11-22 (PR #PRNUM).
+            - 52b-ii-a. [x] **The squat's form check** — merged 2026-11-22 (PR #624).
             - 52b-ii-b. [ ] **Each rep's score** from its form checks (§2.4's `repScores`, `avgFormScore`, `faultCounts`), a mistake not seen from where the phone stands never counted as good form; with it the measuring run's 0.1 s break for the feet (52b-i), which leaves most squat sets no rep under uneven pictures to set numbers from.
         - 52b-iii. [ ] **The set's summary** (§2.4), which the workout reads as it does today.
     - 52c. [ ] **The other kinds of counting**: one side at a time, holds, fast rhythm, timed only, jumps, floor work. Since 52b-i: a
