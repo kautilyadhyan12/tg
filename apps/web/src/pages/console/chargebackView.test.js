@@ -29,7 +29,7 @@ describe('a lost chargeback (18d-iv-e-ii-a)', () => {
     const card = { brand: 'VISA', last4: '1111' };
     expect(chargebackStartedWords({ people, card, otherStops: false })).toBe('Autopay resumed. Visa ending 1111 will be charged when bills are due.');
     expect(chargebackStartedWords({ people, card: null, otherStops: false })).toContain('until a card is on file');
-    expect(chargebackStartedWords({ people, card, otherStops: true })).toContain('stay paused');
+    expect(chargebackStartedWords({ people, card, otherStops: true })).toContain('stays paused');
     expect(chargebackStartedWords({ people: [], card, otherStops: false })).toContain('no renewing membership');
   });
 

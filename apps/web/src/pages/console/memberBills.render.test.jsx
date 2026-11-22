@@ -1004,6 +1004,8 @@ describe('the strip under the name (V2a) and this box', () => {
     const onHeld = vi.fn();
     render(draw({ onHeld }));
     await rowsSoon();
+    // Handed over once drawn, after the rows: waited for, never read before it.
+    await waitFor(() => expect(onHeld.mock.calls.at(-1)?.[0]).not.toBeNull());
     const last = onHeld.mock.calls.at(-1)[0];
     expect(last.entryId).toBe(ADA);
     expect(last.memberships.map((m) => m.id)).toEqual(answerOf.data.memberships.map((m) => m.id));
