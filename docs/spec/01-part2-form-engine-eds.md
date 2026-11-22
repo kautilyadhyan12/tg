@@ -2866,6 +2866,48 @@ screen (`apps/mobile/src/screens/workout/Summary.tsx`, words `afterWords.ts`, ta
   waiting list takes `ready`, so stars waiting for their workout keep their place and never hold up another workout's.
 - **Not in 64a-iii:** the form score and grade (64b, with the camera); the share card (item 39).
 
+**As built in 64a-iv (2026-11-22, Kd's drawing of that day).** A person's saved workouts on the phone (61c's routes):
+- **On My Workout** (`apps/mobile/src/screens/library/SavedPart.tsx`, one place on the page whatever My Workout holds): under Start
+  workout, **Save workout**, which opens a box with the name (the same name as at the top of My Workout) and "3 exercises · 9 sets",
+  then Save; "✓ Saved" once My Workout is exactly the saved workout it holds, and **Save changes** once it is not, whose box offers
+  "Save changes to Leg day" and "Save as a new workout". What is saved is what Start workout does: each exercise the Library still
+  offers, with its sets as set up (`toPlanned`); one no longer in the Library is left out, and the box says so. At 50 (the server's
+  `most`) the box says "You have 50 saved workouts, the most you can keep. Delete one to save this one." with See saved workouts; past
+  200 sets it says so. Under it, **Saved workouts**: the newest three (the first exercise's picture, the name, "3 exercises · 9 sets",
+  the names), See all N (every one, in a box from the bottom, "4 saved workouts of 50"), the one My Workout holds marked In My Workout.
+- **Load:** a press puts it in My Workout ("Push day is in My Workout."), asking first only where something would be lost (My Workout
+  holds exercises that are not exactly the saved workout it holds), and asking to save it first, as any app does (Kd's click-through):
+  "Save changes to Push day?" (or "Save Legs?") · "Your changes to Push day aren't saved. Pull day then takes its place in My Workout." ·
+  Save and load Pull day · Don't save · Cancel. **Create workout**, beside Save workout, asks a name ("Create workout", Create) and
+  gives an empty My Workout under it ("Pull is ready. Add exercises from the Library."), asking the same question first where My Workout
+  holds what is not saved. The pen beside My Workout's name opens it for typing, as a tap on the name does. My Workout keeps which saved workout it holds (`from` in `my-workout-<id>.json`) until Clear,
+  another load, or that one's delete; an exercise twice keeps its first place, and an exercise's first 10 sets (`fromSaved`). One
+  this phone does not hold whole is read from the server; with no internet, "Couldn't load Push day. Check your internet connection
+  and try again."; one gone, "Push day is no longer in your saved workouts."
+- **Saved or not (round one, H1):** judged against what My Workout last loaded or saved (`base` beside `from`, `savedState`),
+  never against the list alone. Where the account holds a newer change of it, made on another device, and nothing was changed
+  here: "Push day was changed on another device." with Load the newer one, and loading another asks nothing; where both changed,
+  the save boxes say "Push day was changed on another device. Saving replaces that change." A loaded saved workout holding an
+  exercise since removed from the Library reads as saved; a save leaves that exercise out and says so. Create workout shows on an
+  empty My Workout too. The `edited_ahead` answer carries `serverTime`, and the phone stamps the change again with it (still after
+  the change it last heard of) and sends it at once.
+- **Delete:** the bin asks first ("Delete Push day?" · "It's removed from your saved workouts." and, for the one My Workout holds, "My
+  Workout keeps its exercises."), then "Push day was deleted."
+- **Kept on the phone** (`apps/mobile/src/library/savedWorkouts.ts`, table-tested): the person's list as last heard
+  (`saved-workouts-<id>.json`, with the whole of each one this phone saved or loaded at that change), so it opens with no internet,
+  and each save and delete in the one shared waiting list (`saved-changes-<id>.json`, at most 200), sent from the moment the tabs open,
+  in the order made, every 15 s and when the app comes back; both removed with the account. The list shown is the copy with every
+  change still waiting laid over it; a list the server sent before a change's answer is asked for again, so a saved workout never
+  vanishes. A change's time is the phone's clock and always after the change the phone last heard of. Answers: saved; `removed`
+  (deleted on another phone) forgotten; `unchanged` with another time (a newer change elsewhere) reads the list again; no answer,
+  401, 422, 429, 5xx and `edited_ahead` tried again; 409 says "You can keep 50 saved workouts. Delete one, then save this one again."
+  on My Workout until OK; any other refusal "This workout couldn't be saved." A delete answered 404 is let go.
+- **The server:** a change made more than five minutes past its clock is answered 400 `edited_ahead` (`SAVED_EDITED_AHEAD`), its own
+  word, so a phone whose clock runs fast keeps it and sends it again once the server's clock has passed it, never losing it.
+- **A workout started from a saved workout** (My Workout holds one still in the list) is sent as `startedFrom: "saved"`; the workout's
+  file keeps the mark (`workoutRunSchema.startedFrom`, absent for one kept before).
+- **The policy** says the phone keeps a copy of saved workouts and each save or delete until it reaches the server.
+
 ### 13.7 The jobs (ROADMAP Stage 5, exercise folder 2; ROADMAP wins where they differ)
 
 | Job | What it builds | Waits for |

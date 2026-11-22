@@ -91,6 +91,14 @@ export const savedWorkoutWrittenSchema = z.object({
 });
 export type SavedWorkoutWritten = z.infer<typeof savedWorkoutWrittenSchema>;
 
+/** The answer (400) to a change made more than five minutes past the server's clock: a phone whose clock runs
+ *  fast. Its own word, so the phone keeps the change and sends it again once the server's clock has passed it,
+ *  never refusing it for good (64a-iv, as `WORKOUT_NOT_ENDED` for a workout). */
+export const SAVED_EDITED_AHEAD = "edited_ahead";
+
+/** The edited_ahead answer carries the server's clock, so the phone stamps the change again at once (round one, L2). */
+export const savedEditedAheadSchema = z.object({ error: z.literal(SAVED_EDITED_AHEAD), serverTime: instantSchema });
+
 /** The answer (409) to a new saved workout past the person's limit. */
 export const savedWorkoutsFullSchema = z.object({
   error: z.literal("saved_workouts_full"),
@@ -123,3 +131,60 @@ export const savedWorkoutListSchema = z.object({
   most: z.number().int(),
 });
 export type SavedWorkoutList = z.infer<typeof savedWorkoutListSchema>;
+
+// What the phone keeps of a person's saved workouts (64a-iv): its copy of their list, so it opens with no
+// internet, and the saves and deletes not yet on the server, each under its own id in the one shared waiting
+// list, sent in the order made.
+
+const changeIdSchema = z.string().min(1).max(100);
+
+/** One save or delete made on the phone, waiting for the server. A save carries the whole saved workout, as
+ *  PUT /v1/training/saved/:id takes it. */
+export const savedChangeSchema = z.discriminatedUnion("kind", [
+  z
+    .object({
+      id: changeIdSchema,
+      kind: z.literal("save"),
+      savedId: z.uuid(),
+      ...plannedFields,
+      editedAt: instantSchema.refine(toTheMillisecond, { message: "to the millisecond at most" }),
+    })
+    .strict()
+    .superRefine(setsWithinLimit),
+  z.object({ id: changeIdSchema, kind: z.literal("delete"), savedId: z.uuid() }).strict(),
+]);
+export type SavedChange = z.infer<typeof savedChangeSchema>;
+
+/** A save the server would not take (past the limit of 50, or a broken phone's): said on the phone until OK. */
+export const refusedSavedChangeSchema = z
+  .object({ id: changeIdSchema, savedId: z.uuid(), name: z.string().max(P.nameMost), message: z.string().max(500) })
+  .strict();
+export type RefusedSavedChange = z.infer<typeof refusedSavedChangeSchema>;
+
+/** One saved workout as the phone last heard it: the list's facts, and the whole of it where this phone has
+ *  read or saved it at that `editedAt` (null until then). */
+export const keptSavedEntrySchema = z
+  .object({
+    id: z.uuid(),
+    name: z.string().max(P.nameMost),
+    editedAt: instantSchema,
+    exercises: z.array(z.string().max(100)).max(P.exercisesMost),
+    setsCount: z.number().int().min(0).max(P.setsMost),
+    whole: z.array(plannedExerciseSchema).max(P.exercisesMost).nullable(),
+  })
+  .strict();
+export type KeptSavedEntry = z.infer<typeof keptSavedEntrySchema>;
+
+/** What My Workout last loaded from, or saved as, its saved workout (64a-iv, round one H1): "not saved" is judged
+ *  against this, never against the list, so a change made on another phone never reads as this phone's own. */
+export const savedBaseSchema = z
+  .object({
+    editedAt: instantSchema,
+    name: z.string().max(P.nameMost),
+    exercises: z.array(plannedExerciseSchema).max(P.exercisesMost),
+  })
+  .strict();
+export type SavedBase = z.infer<typeof savedBaseSchema>;
+
+/** The phone's copy of the list; its entries are read one by one, so one that cannot be read is left out. */
+export const keptSavedFrameSchema = z.object({ v: z.literal(1), most: z.number().int().min(0), entries: z.array(z.unknown()) }).strict();
