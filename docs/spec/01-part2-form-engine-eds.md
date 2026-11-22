@@ -2328,7 +2328,8 @@ man filmed from the floor); *knees caving inward*, the knees' width less the fee
 least -0.06 of a trunk (never closer together than they stood, ACE's knees over the second toes, less 0.05 of room; the
 furthest proper rep 0, of 144; -0.11 to -0.03 in the folds; read on 17 reps as filmed of six people, three prisoner
 squatters, the two sumo squatters, whose wide stance is "not checked", and the floor man). From the front the bottom of a squat points the thighs at the
-phone and its knees' width is never read there, so it is read on the way down and up (on 16 reps of the 23 sets). **Measured:** on the 23 good-form squat sets (the eight people, the twins, his floor and raised
+phone and its knees' width is never read there, so it is read on the way down and up (on 16 counted reps of the 23 good-form sets; the 17 above are the measuring run's reps of
+the sets that set numbers). **Measured:** on the 23 good-form squat sets (the eight people, the twins, his floor and raised
 sets) no mistake is marked, as filmed and under each of the 14 held replays, with every person's numbers and with their own
 left out (600 runs), nor in the phone's own runs of the same pictures, which mark what the laptop marks on every rep both
 count, paired by when it was (the three sets the phone counts one fewer on included, round one); every other

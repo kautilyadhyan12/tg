@@ -23,7 +23,8 @@ export type FormStatus = "made" | "fine" | "unseen";
 export interface FormCheck {
   /** The mistake's id, its camera file's own. */
   readonly mistake: string;
-  /** Its reading in this rep, in its measure's unit; null when unseen. */
+  /** Its reading in this rep, in its measure's unit; null when the picture did not give it. A rep unseen at the body's
+   *  turn keeps its reading, so a reading is never taken to mean the mistake was seen: `status` says that. */
   readonly reading: number | null;
   readonly status: FormStatus;
 }
