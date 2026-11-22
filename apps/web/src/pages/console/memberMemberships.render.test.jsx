@@ -154,9 +154,16 @@ const draw = (entryId, name, extra = {}) => (
     <MemberMemberships gymId={GYM} entryId={entryId} name={name} readOnly={false} {...extra} />
   </MemoryRouter>
 );
-const box = () => within(screen.getByTestId('held-memberships'));
-/** The box once it has been read: it draws nothing until then. */
-const boxSoon = async () => within(await screen.findByTestId('held-memberships'));
+/** Add or Change membership's panel from the right, while one is open (V2b-i). */
+const sidePanel = () => screen.queryAllByRole('dialog').find((d) => d.classList.contains('c-panel')) ?? null;
+/** The box on top: that panel while it is open, else their Memberships. */
+const box = () => within(sidePanel() ?? screen.getByTestId('held-memberships'));
+/** The box once it has been read (it draws nothing until then), looked for afresh at each use. */
+const boxSoon = async () => {
+  await screen.findByTestId('held-memberships');
+  // Not a promise: `then` is no query.
+  return new Proxy({}, { get: (_t, query) => (query === 'then' ? undefined : (...args) => box()[query](...args)) });
+};
 
 beforeEach(() => {
   vi.resetAllMocks();
@@ -531,8 +538,8 @@ describe('adding a membership', () => {
     expect(form.getByRole('combobox').value).toBe(PACK.id);
     expect(form.getByRole('button', { name: 'Add membership' }).disabled).toBe(false);
     expect(orgService.giveHeldMembership).not.toHaveBeenCalled();
-    // Back closes it, and it does not open by itself again.
-    fireEvent.click(form.getByRole('button', { name: 'Back' }));
+    // Cancel closes it (nothing changed, so it asks nothing), and it does not open by itself again.
+    fireEvent.click(form.getByRole('button', { name: 'Cancel' }));
     expect(screen.queryByTestId('held-add')).toBeNull();
     view.unmount();
 
@@ -2474,5 +2481,36 @@ describe('a renewal reminder (18v-iv)', () => {
     const b = await boxSoon();
     const lines = b.getAllByTestId('held-renewal-reminder').map((el) => el.textContent);
     expect(lines.sort()).toEqual(['No renewal reminder can be emailed: whoever pays for it has no email address on their record.', 'Renewal reminder emailed on 18 Oct.', 'Minimum term reminder will be emailed on 25 Oct.'].sort());
+  });
+});
+
+describe('V2b-i: Add membership opens from the right', () => {
+  it("is a panel naming the person; it asks before a choice is thrown away, and a refusal is said inside it", async () => {
+    orgService.getHeldMemberships.mockResolvedValue(answer([]));
+    orgService.giveHeldMembership.mockRejectedValueOnce(refusal(500, { error: 'internal', message: 'Something went wrong.' }));
+    render(draw(ADA, 'Ada Lovelace'));
+    fireEvent.click(await (await boxSoon()).findByRole('button', { name: 'Add membership' }));
+    const panel = screen.getByRole('dialog', { name: 'Add a membership for Ada Lovelace' });
+    expect(panel.classList.contains('c-panel')).toBe(true);
+    const form = within(panel);
+    expect(form.getByText('Nothing is added until you press Add membership.')).toBeTruthy();
+    expect(screen.getByTestId('held-memberships')).toBeTruthy();
+
+    fireEvent.change(form.getByRole('combobox'), { target: { value: GOLD.id } });
+    fireEvent.click(form.getByRole('button', { name: 'Close' }));
+    expect(form.getByText("Your changes aren't saved. Close and lose them?")).toBeTruthy();
+    fireEvent.click(form.getByRole('button', { name: 'Keep editing' }));
+    expect(form.getByRole('combobox').value).toBe(GOLD.id);
+
+    fireEvent.click(form.getByRole('button', { name: 'Add membership' }));
+    await waitFor(() => expect(orgService.giveHeldMembership).toHaveBeenCalledTimes(1));
+    expect(orgService.giveHeldMembership.mock.calls[0].slice(0, 2)).toEqual([GYM, ADA]);
+    expect(await form.findByRole('alert')).toBeTruthy();
+    expect(within(screen.getByTestId('held-memberships')).queryByRole('alert')).toBeNull();
+
+    fireEvent.keyDown(document, { key: 'Escape' });
+    fireEvent.click(form.getByRole('button', { name: 'Close without saving' }));
+    expect(screen.queryByTestId('held-add')).toBeNull();
+    expect(orgService.giveHeldMembership).toHaveBeenCalledTimes(1);
   });
 });

@@ -143,7 +143,10 @@ function openBox(entryId, extra = {}) {
   );
 }
 
-const dialog = () => within(screen.getAllByRole('dialog')[0]);
+/** The box on top: Add member's or Edit's panel from the right while it is open (V2b-i), else the page. */
+const dialog = () => within(screen.queryByTestId('person-form-panel') ?? screen.getAllByRole('dialog')[0]);
+/** Words said once a panel has closed: looked for in whichever box is on top by then. */
+const onTop = (text) => waitFor(() => dialog().getByText(text));
 /** Open "More" on a person's page and pick one of its items. */
 const pickMore = async (name) => {
   fireEvent.click(await dialog().findByRole('button', { name: /^More/ }));
@@ -1227,6 +1230,21 @@ describe('23a-ii: Details and Edit agree with the Memberships box', () => {
     expect(orgService.changeMemberListEntry).not.toHaveBeenCalled();
   });
 
+  it('V2b-i: Go to Memberships with a change typed asks first, as Cancel does, and keeps it on Keep editing', async () => {
+    orgService.getMemberListEntry.mockResolvedValue(entryAnswer(priya));
+    openBox(ADA);
+    fireEvent.click(await dialog().findByRole('button', { name: 'Edit' }));
+    fireEvent.change(dialog().getByLabelText('Phone'), { target: { value: '+447700900444' } });
+    fireEvent.click(within(dialog().getByTestId('edit-held-note')).getByRole('button', { name: 'Go to Memberships' }));
+    expect(dialog().getByText("Your changes aren't saved. Close and lose them?")).toBeTruthy();
+    fireEvent.click(dialog().getByRole('button', { name: 'Keep editing' }));
+    expect(dialog().getByLabelText('Phone').value).toBe('+447700900444');
+    fireEvent.click(within(dialog().getByTestId('edit-held-note')).getByRole('button', { name: 'Go to Memberships' }));
+    fireEvent.click(dialog().getByRole('button', { name: 'Close without saving' }));
+    expect(await dialog().findByRole('button', { name: 'Edit' })).toBeTruthy();
+    expect(orgService.changeMemberListEntry).not.toHaveBeenCalled();
+  });
+
   it('says nothing was changed by hand about a word the page does not show; a word it shows is still named', async () => {
     // Picking a membership in Add member writes the type's name as the list's Membership word.
     orgService.getMemberListEntry.mockResolvedValue(entryAnswer({ ...priya, handEdited: ['membershipType'] }));
@@ -1302,7 +1320,7 @@ describe('Add member', () => {
     await waitFor(() => expect(dialog().getByLabelText('Member number').value).toBe('M0042'));
     fireEvent.change(dialog().getByLabelText('Email'), { target: { value: 'bea@members.example' } });
     fireEvent.click(dialog().getByRole('button', { name: 'Add member' }));
-    expect(await dialog().findByText('Member added.')).toBeTruthy();
+    expect(await onTop('Member added.')).toBeTruthy();
   });
 
   it('an emptied number box says the person is still given the next number', async () => {
@@ -1357,7 +1375,7 @@ describe('Add member', () => {
     openBox(null);
     fireEvent.change(dialog().getByLabelText('Email'), { target: { value: 'bea@members.example' } });
     fireEvent.click(dialog().getByRole('button', { name: 'Add member' }));
-    expect(await dialog().findByText('They are already on your list.')).toBeTruthy();
+    expect(await onTop('They are already on your list.')).toBeTruthy();
     expect(dialog().getByText('Bea Hart')).toBeTruthy();
   });
 });
@@ -1517,7 +1535,7 @@ describe('Add member: may already be on your list', () => {
     fireEvent.click(await dialog().findByRole('button', { name: 'Edit' }));
     fireEvent.change(dialog().getByLabelText('Phone'), { target: { value: '9876543210' } });
     fireEvent.click(dialog().getByRole('button', { name: 'Save' }));
-    expect(await dialog().findByText('Changes saved.')).toBeTruthy();
+    expect(await onTop('Changes saved.')).toBeTruthy();
     expect(dialog().queryByTestId('back-to-adding')).toBeNull();
   });
 
@@ -1598,11 +1616,14 @@ describe("the server's sentences that name another place", () => {
     orgService.getMemberListEntry.mockResolvedValue(entryAnswer(named));
     inRouter(ADA, OWNER_GYM);
     fireEvent.click(await dialog().findByRole('button', { name: 'Edit' }));
-    expect(dialog().queryByRole('link', { name: 'Open Gym details' })).toBeNull();
-    fireEvent.click(dialog().getByRole('button', { name: 'Open Gym details' }));
-    expect(dialog().getByRole('link', { name: 'Leave this page' }).getAttribute('href')).toBe('/console/iron-house/settings#gym-details');
-    fireEvent.click(dialog().getByRole('button', { name: 'Stay here' }));
-    expect(dialog().getByRole('button', { name: 'Open Gym details' })).toBeTruthy();
+    // The line is on their page, behind Edit's panel (V2b-i).
+    const behind = within(screen.getByTestId('member-person'));
+    expect(behind.queryByRole('link', { name: 'Open Gym details' })).toBeNull();
+    fireEvent.click(behind.getByRole('button', { name: 'Open Gym details' }));
+    expect(behind.getByRole('link', { name: 'Leave this page' }).getAttribute('href')).toBe('/console/iron-house/settings#gym-details');
+    fireEvent.click(behind.getByRole('button', { name: 'Stay here' }));
+    expect(behind.getByRole('button', { name: 'Open Gym details' })).toBeTruthy();
+    expect(dialog().getByRole('button', { name: 'Save' })).toBeTruthy();
   });
 
   it('a past member still in the app, whose page moves that line into its own box, has no button', async () => {

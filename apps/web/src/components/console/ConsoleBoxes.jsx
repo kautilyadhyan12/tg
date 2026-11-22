@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useImperativeHandle, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import { ConfirmInline } from './ConsoleStates';
@@ -165,7 +165,10 @@ export function OpenUnder({ anchorRef, label, onClose, children }) {
  *  panel scrolls as one page; only its foot stays, with Save and, while something is not
  *  saved, "You have changes that aren't saved." Closed by its X or Escape; with changes not
  *  saved it asks first, in place, and keeps what was typed until the answer. Pressing the
- *  page behind it does nothing. `formId` makes Save submit that form; otherwise `onSave`. */
+ *  page behind it does nothing. `formId` makes Save submit that form; otherwise `onSave`.
+ *  `saveLabel` null draws no Save (a question in the panel has its own buttons);
+ *  `cancelLabel` draws a button at the foot that closes it as the X does, asking first.
+ *  `closeRef.current.close()` is that same close, for a button in the form that leaves it. */
 export function SidePanel({
   title,
   sub = null,
@@ -177,6 +180,9 @@ export function SidePanel({
   busy = false,
   saveDisabled = false,
   foot = null,
+  cancelLabel = null,
+  testId = undefined,
+  closeRef = null,
   children,
 }) {
   const boxRef = useRef(null);
@@ -190,11 +196,12 @@ export function SidePanel({
   };
   useBoxKeys(boxRef, tryClose, ready);
   useStillPage();
+  useImperativeHandle(closeRef, () => ({ close: tryClose }));
 
   return draw(
     <>
       <div className="c-scrim" />
-      <div ref={boxRef} role="dialog" aria-modal="true" aria-labelledby={titleId} tabIndex={-1} className="c-panel">
+      <div ref={boxRef} role="dialog" aria-modal="true" aria-labelledby={titleId} tabIndex={-1} className="c-panel" data-testid={testId}>
         <div className="c-panel-h">
           <div className="c-stack-xs flex-grow">
             <h2 id={titleId} className="c-h1" style={{ fontSize: 26, lineHeight: '32px' }}>
@@ -204,9 +211,11 @@ export function SidePanel({
           </div>
           <CloseButton onClick={tryClose} />
         </div>
-        <div className="c-panel-b">
+        <div className="c-panel-b">{children}</div>
+        <div className="c-panel-f">
+          {/* At the foot, which is always on screen, whichever close was pressed. */}
           {asking ? (
-            <div className="c-callout" role="group" aria-label="Close without saving?">
+            <div className="c-callout w-full" role="group" aria-label="Close without saving?">
               <ConfirmInline
                 newLook
                 question="Your changes aren't saved. Close and lose them?"
@@ -217,19 +226,23 @@ export function SidePanel({
               />
             </div>
           ) : null}
-          {children}
-        </div>
-        <div className="c-panel-f">
-          <button
-            type={formId !== undefined ? 'submit' : 'button'}
-            form={formId}
-            onClick={formId !== undefined ? undefined : onSave}
-            disabled={busy || saveDisabled}
-            className="c-btn c-btn-p c-btn-lg"
-          >
-            {busy ? 'Saving…' : saveLabel}
-          </button>
+          {saveLabel !== null ? (
+            <button
+              type={formId !== undefined ? 'submit' : 'button'}
+              form={formId}
+              onClick={formId !== undefined ? undefined : onSave}
+              disabled={busy || saveDisabled}
+              className="c-btn c-btn-p c-btn-lg"
+            >
+              {busy ? 'Saving…' : saveLabel}
+            </button>
+          ) : null}
           {foot}
+          {cancelLabel !== null ? (
+            <button type="button" onClick={tryClose} disabled={busy} className="c-btn c-btn-s c-btn-lg">
+              {cancelLabel}
+            </button>
+          ) : null}
           {unsaved ? (
             <span role="status" className="c-s14 c-t2">
               You have changes that aren't saved.
