@@ -108,3 +108,9 @@ export const workoutsWaitingFile = (userId: string): TextStore => personFile(use
 
 /** The effort stars a person gave their workouts, not yet on the server (64a-iii). */
 export const effortWaitingFile = (userId: string): TextStore => personFile(userId, `workout-effort-${userId}.json`);
+
+/** The phone's copy of a person's saved workouts (64a-iv), so the list opens with no internet. */
+export const savedCopyFile = (userId: string): TextStore => personFile(userId, `saved-workouts-${userId}.json`);
+
+/** A person's saves and deletes of saved workouts not yet on the server (64a-iv). */
+export const savedWaitingFile = (userId: string): TextStore => personFile(userId, `saved-changes-${userId}.json`);

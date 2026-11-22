@@ -1,4 +1,4 @@
-import { useEffect, useId, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { Check, Loader2 } from 'lucide-react';
 import { WAIVER_NAME_MAX_CHARS, waiverReadyToSign } from '@app/shared';
 import { orgService, errorCode, errorText } from '../../api/orgsApi';
@@ -30,7 +30,9 @@ function Tick({ checked, onChange, disabled, children }) {
 }
 
 // `when` writes a day in the gym's own calendar. `onSigned` takes the signature made.
-export default function DeskWaiver({ gymId, entry, readOnly, when, onSigned }) {
+// `ask`: a press of Sign waiver in the strip under the person's name (V2a), new each press: the
+// box opens as its own button opens it, and is brought into view.
+export default function DeskWaiver({ gymId, entry, readOnly, when, onSigned, ask = 0 }) {
   const nameId = useId();
   const [open, setOpen] = useState(false);
   const [box, setBox] = useState(null);
@@ -42,6 +44,21 @@ export default function DeskWaiver({ gymId, entry, readOnly, when, onSigned }) {
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState(null);
   const [done, setDone] = useState(null);
+  // Drawn afresh, the press it was drawn with counts as seen: only a new press opens the box.
+  const [askSeen, setAskSeen] = useState(ask);
+  const [askOpened, setAskOpened] = useState(0);
+  const sectionRef = useRef(null);
+  if (ask !== askSeen) {
+    setAskSeen(ask);
+    if (ask !== 0 && !readOnly && entry.waiverDesk == null) {
+      setDone(null);
+      setOpen(true);
+      setAskOpened(ask);
+    }
+  }
+  useEffect(() => {
+    if (askOpened !== 0) sectionRef.current?.scrollIntoView?.({ block: 'center' });
+  }, [askOpened]);
 
   // The box reads the gym's words each time it opens, and again after they changed.
   useEffect(() => {
@@ -101,7 +118,7 @@ export default function DeskWaiver({ gymId, entry, readOnly, when, onSigned }) {
   };
 
   return (
-    <section className="c-card px-4 py-3 md:px-5 md:py-4" data-testid="desk-waiver">
+    <section ref={sectionRef} className="c-card px-4 py-3 md:px-5 md:py-4" data-testid="desk-waiver">
       <h3 className="c-h2 mb-1">Waiver</h3>
       <p className="flex flex-wrap items-center gap-x-1.5 gap-y-1 c-s14 c-t2 m-0" data-testid="waiver-line">
         <span className={`c-tag ${WAIVER_TAG[parts.tone]}`}>{parts.label}</span>

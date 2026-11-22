@@ -10,6 +10,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
 import {
   PLANNED_WORKOUT_LIMITS,
+  SAVED_EDITED_AHEAD,
   savedWorkoutListSchema,
   savedWorkoutSchema,
   savedWorkoutWrittenSchema,
@@ -432,10 +433,12 @@ d("saved workouts (real Postgres)", () => {
       expect((await put(a, id, edges)).statusCode).toBe(201);
     });
 
-    it("a change made later than the server's clock is refused: kept, it would outrank every later change", async () => {
+    it("a change made later than the server's clock is refused with its own word, so a phone whose clock runs fast sends it again", async () => {
       const a = await person();
       const id = randomUUID();
-      expect((await put(a, id, body({ editedAt: new Date(NOW.getTime() + 5 * 60_000 + 1000).toISOString() }))).statusCode).toBe(400);
+      const ahead = await put(a, id, body({ editedAt: new Date(NOW.getTime() + 5 * 60_000 + 1000).toISOString() }));
+      expect(ahead.statusCode).toBe(400);
+      expect(ahead.json()).toMatchObject({ error: SAVED_EDITED_AHEAD, serverTime: NOW.toISOString() });
       expect((await put(a, id, body({ editedAt: new Date(NOW.getTime() + 4 * 60_000).toISOString() }))).statusCode).toBe(201);
     });
 

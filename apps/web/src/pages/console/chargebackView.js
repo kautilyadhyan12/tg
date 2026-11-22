@@ -20,7 +20,7 @@ export const CHARGEBACK_REASON_WORDS = {
 
 const HOLD = 'Square may hold this money until the bank decides.';
 const STOPPED = "The app won't charge this card by itself.";
-const STOPPED_LOST = 'Automatic payments are paused until you resume them.';
+const STOPPED_LOST = 'Autopay is paused until you resume it.';
 const OVER_IN_YOUR_FAVOUR = ['WON', 'INQUIRY_CLOSED'];
 const ASKING = ['EVIDENCE_REQUIRED', 'INQUIRY_EVIDENCE_REQUIRED'];
 const LOST = ['LOST', 'ACCEPTED'];
@@ -55,9 +55,9 @@ function stateWords(c) {
 
 /** Whether the app charges this card by itself. */
 function chargesWords(c) {
-  if (c.stillPaused === true) return 'Automatic payments are paused because of another chargeback.';
-  if (c.chargesStartedOn !== null && c.chargesStartedOn !== undefined && c.staffPaused === true) return 'Automatic payments are paused under Card on file.';
-  if (c.chargesStartedOn !== null && c.chargesStartedOn !== undefined) return `Automatic payments resumed on ${dayWords(c.chargesStartedOn)}.`;
+  if (c.stillPaused === true) return 'Autopay is paused because of another chargeback.';
+  if (c.chargesStartedOn !== null && c.chargesStartedOn !== undefined && c.staffPaused === true) return 'Autopay is paused under Card on file.';
+  if (c.chargesStartedOn !== null && c.chargesStartedOn !== undefined) return `Autopay resumed on ${dayWords(c.chargesStartedOn)}.`;
   if (!c.stops) return null;
   return LOST.includes(c.state) ? STOPPED_LOST : STOPPED;
 }
@@ -83,9 +83,9 @@ export function chargeStopLine(stop) {
   if (stop === null || stop === undefined) return null;
   if (stop.kind === 'paused') {
     const on = stop.heldBy === null ? '' : ` on ${stop.heldBy.name}'s card`;
-    return `Not charged automatically because automatic payments are paused${on}. You can still charge the card here.`;
+    return `Not charged automatically because autopay is paused${on}. You can still charge the card here.`;
   }
-  if (stop.kind === 'paused_missed') return 'Not charged automatically while automatic payments were paused. Charge the card here, oldest first. Automatic payments carry on once the missed bills are paid.';
+  if (stop.kind === 'paused_missed') return 'Not charged automatically while autopay was paused. Charge the card here, oldest first. Autopay carries on once the missed bills are paid.';
   if (stop.kind === 'missed') return 'Not charged automatically while a chargeback was open. Charge the card here, oldest first. Automatic charges carry on once the missed bills are paid.';
   if (stop.kind === 'behind') return 'Not charged automatically because the bill before it was paid late. Charge the card here, oldest first. Automatic charges carry on once the older bills are paid.';
   const whose = stop.heldBy === null ? 'a chargeback' : `a chargeback on ${stop.heldBy.name}'s payment`;
@@ -103,12 +103,12 @@ export function chargebackStartBox(preview) {
   const people = preview.people.map((p) => (p.what === '' ? p.name : `${p.name} · ${p.what}`));
   let lead;
   if (people.length === 0) lead = 'This person has no renewing membership, so nothing will be charged.';
-  else if (preview.otherStops) lead = 'Another chargeback is still open, so automatic payments stay paused until it is closed. This applies to:';
-  else if (preview.staffPaused) lead = 'Automatic payments are also paused under Card on file, so nothing will be charged until they are resumed there. This applies to:';
+  else if (preview.otherStops) lead = 'Another chargeback is still open, so autopay stays paused until it is closed. This applies to:';
+  else if (preview.staffPaused) lead = 'Autopay is also paused under Card on file, so nothing will be charged until it is resumed there. This applies to:';
   else if (card === null) lead = 'No card is on file, so nothing will be charged until one is added. This applies to:';
   else lead = `${card} will be charged automatically for:`;
   return {
-    title: 'Resume automatic payments?',
+    title: 'Resume autopay?',
     lead,
     people,
     note: people.length === 0 || preview.otherStops || preview.staffPaused || card === null ? null : 'A bill due in the last two days may be charged today. Charge older bills by hand, oldest first.',
@@ -118,11 +118,11 @@ export function chargebackStartBox(preview) {
 
 /** What is said in that place once it is done. */
 export function chargebackStartedWords(preview) {
-  if (preview.otherStops) return 'Automatic payments stay paused until the other chargeback is closed.';
-  if (preview.staffPaused) return 'This chargeback no longer pauses automatic payments. They stay paused until you resume them under Card on file.';
-  if (preview.people.length === 0) return 'Automatic payments resumed. This person has no renewing membership, so nothing will be charged.';
-  if (preview.card === null) return 'Automatic payments resumed. Nothing will be charged until a card is on file.';
-  return `Automatic payments resumed. ${cardName(preview.card)} will be charged when bills are due.`;
+  if (preview.otherStops) return 'Autopay stays paused until the other chargeback is closed.';
+  if (preview.staffPaused) return 'This chargeback no longer pauses autopay. It stays paused until you resume it under Card on file.';
+  if (preview.people.length === 0) return 'Autopay resumed. This person has no renewing membership, so nothing will be charged.';
+  if (preview.card === null) return 'Autopay resumed. Nothing will be charged until a card is on file.';
+  return `Autopay resumed. ${cardName(preview.card)} will be charged when bills are due.`;
 }
 
 // Overview.
@@ -135,13 +135,13 @@ export function chargebacksHeadline(count, lost = 0) {
   if (count <= 0) return null;
   if (lost > 0) {
     if (lost < count) return `${String(count)} chargebacks need attention`;
-    return lost === 1 ? '1 lost chargeback has automatic payments paused' : `${String(lost)} lost chargebacks have automatic payments paused`;
+    return lost === 1 ? '1 lost chargeback has autopay paused' : `${String(lost)} lost chargebacks have autopay paused`;
   }
   return count === 1 ? '1 chargeback needs a response' : `${String(count)} chargebacks need a response`;
 }
 
 export const CHARGEBACKS_INTRO = "A cardholder asked their bank to reverse a payment. Respond in Square by the date shown. If you don't, Square challenges it for you.";
-export const CHARGEBACKS_LOST_INTRO = 'The money went back to the cardholder. Open their page to resume automatic payments. If they have left, cancel their membership.';
+export const CHARGEBACKS_LOST_INTRO = 'The money went back to the cardholder. Open their page to resume autopay. If they have left, cancel their membership.';
 export const CHARGEBACKS_RECONNECT = 'Reconnect Square so chargebacks show here, with the date to respond to each one.';
 export const CHARGEBACKS_RECONNECT_OTHERS = 'The owner needs to reconnect Square before chargebacks can show here.';
 

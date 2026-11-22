@@ -483,7 +483,9 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
    - V1. **The building blocks and the menu** (this folder), in two (2026-11-16): every screen shape, phones, folding phones, tablets and laptops (Kd, `rulings/2026-11-16-v1-a.md`).
      - V1-a. [x] **The menu in five groups and More on a phone** · merged 2026-11-17 · PR #566
      - V1-b. [x] **The building blocks** · merged 2026-11-18 · PR #576
-   - V2a. [ ] **A member's page, a whole page** (web folder 1; the `Person*` pages and `PhonePerson`).
+   - V2a. **A member's page, a whole page**, in two (2026-11-22; the `Person*` pages and `PhonePerson`):
+     - V2a-i. [x] **The page, its three columns and the next step under the name** · merged 2026-11-22 · PR #620
+     - V2a-ii. [ ] **Memberships and bills in the third look's words and sizes** (`MemberMemberships` and the boxes inside it).
    - V2b. [ ] **A member's page: its boxes** (web folder 1): Add member, edit, add a membership, record a payment, a quick look, freeze, cancel, money back, receipt, remove, merge (`Person*`, `AddMember`, `PhoneRecordPayment`, `PhoneForm`).
    - V3a. [ ] **Members: Your list** (web folder 1): the one-press picks, the list, people ticked and the bar, Send message, Tags, Remove, Filter from the right (`MembersNew*`).
    - V3b. [ ] **Members: In the app, waiting to join, and Staff** (web folder 1): a staff member's panel, Invite staff, Staff activity (`MembersNewApp`, `MembersNewStaff*`).
@@ -865,7 +867,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
       - 64a-ii. [x] **Do it** — merged 2026-11-21 (PR #614).
       - 64a-iii. [x] **After it** — merged 2026-11-22 (PR #616).
       - 64a-ii-b. [x] **Time trained, never time paused** — merged 2026-11-22 (PR #619).
-      - 64a-iv. [ ] **Saved workouts**: save, list, load and delete (61c's routes), with a question first.
+      - 64a-iv. [x] **Saved workouts** — merged 2026-11-22 (PR #621).
       - 64a-v. [ ] **History**: the month, a day's workouts and one workout set by set (61b's routes).
       - 64a-vi. [ ] **Heart rate and sounds**: the monitor of 37f-i during a workout and kept with it (Kd, 2026-11-12); the sounds at a rep, a set's end and the last 3 seconds.
     - 64b. [ ] **With the camera** (after 64a and item 53's screen): Camera or Count myself, picked every time.

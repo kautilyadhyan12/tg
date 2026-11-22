@@ -49,7 +49,7 @@ describe('the Members bar’s Meal plan box', () => {
     expect(await sheet().findByText('Muscle week given to 2 members.')).toBeTruthy();
     expect(svc.giveSelected).toHaveBeenCalledTimes(1);
     expect(svc.giveSelected).toHaveBeenCalledWith('g1', 'p2', TICKED);
-    expect(sheet().getByRole('link', { name: 'Open Muscle week' }).getAttribute('href')).toBe('/console/iron-house/plans/p2');
+    expect(sheet().getByRole('link', { name: 'View Muscle week' }).getAttribute('href')).toBe('/console/iron-house/plans/p2');
     fireEvent.click(sheet().getByRole('button', { name: 'Done' }));
     expect(onClose).toHaveBeenCalled();
   });
@@ -102,7 +102,7 @@ describe('a person’s page', () => {
     expect(svc.previewSelected).toHaveBeenCalledWith('g1', 'p2', { kind: 'ticked', entryIds: ['e7'] });
   });
 
-  it('with none, says so and offers Give a meal plan', async () => {
+  it('with none, says so and offers Assign meal plan', async () => {
     svc.forRecord.mockResolvedValue({ plan: null, through: null });
     render(
       <MemoryRouter>
@@ -110,7 +110,7 @@ describe('a person’s page', () => {
       </MemoryRouter>,
     );
     const box = within(screen.getByTestId('person-meal-plan'));
-    expect(await box.findByText('No meal plan given.')).toBeTruthy();
-    expect(box.getByRole('button', { name: 'Give a meal plan' })).toBeTruthy();
+    expect(await box.findByText('No meal plan assigned.')).toBeTruthy();
+    expect(box.getByRole('button', { name: 'Assign meal plan' })).toBeTruthy();
   });
 });

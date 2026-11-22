@@ -17,9 +17,9 @@
 //   GET    /v1/orgs/:gymId/member-list/entries/:entryId/card   Card on file (`billing.members`)
 //   POST   /v1/orgs/:gymId/member-list/entries/:entryId/card   save the card typed into Square's form
 //   DELETE /v1/orgs/:gymId/member-list/entries/:entryId/card   Remove card
-//   GET    …/member-list/entries/:entryId/card/autopay          what Pause or Resume automatic payments changes (18d-iv-f)
+//   GET    …/member-list/entries/:entryId/card/autopay          what Pause or Resume autopay changes (18d-iv-f)
 //   POST   …/member-list/entries/:entryId/card/autopay/pause    Pause automatic payments
-//   POST   …/member-list/entries/:entryId/card/autopay/resume   Resume automatic payments
+//   POST   …/member-list/entries/:entryId/card/autopay/resume   Resume autopay
 //   GET    /v1/orgs/:gymId/my-card                             the member's own, for the phone
 //   POST   /v1/orgs/:gymId/my-card                             the member adds or updates their own
 //   POST   /v1/orgs/:gymId/my-card/remove                      the member removes their own, while nothing is charged to it (Stage 5 item 20e)
@@ -270,7 +270,7 @@ export function registerPaymentRoutes(app: FastifyInstance, deps: Omit<service.P
     return reply.status(200).send(await cards.removeMemberCard(paymentsDeps, callerId(req), params.gymId, params.entryId));
   });
 
-  // Pause and Resume automatic payments (18d-iv-f): no trip to Square, a row and a line in Staff activity each.
+  // Pause and Resume autopay (18d-iv-f): no trip to Square, a row and a line in Staff activity each.
   const autopayLimit = createDualRateLimit({ name: "autopay_change", max: 120, ipMax: 600, windowMs: HOUR_MS, identifier: byPerson, redis: deps.redis });
 
   app.get(`${cardUrl}/autopay`, { preHandler: [app.authenticate, staffOnly(deps.sql, cardReadLimit)] }, async (req, reply) => {

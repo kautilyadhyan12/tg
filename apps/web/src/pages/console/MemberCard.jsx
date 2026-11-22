@@ -36,7 +36,7 @@ import {
 // reader is the desk's normal way (Kd, 2026-10-20): the person reads the same agreement on the
 // Terminal and taps I agree, then gives their card there. The box under the button asks the
 // server every few seconds until it ends; a save still waiting is shown to whoever opens the
-// page. Typing the card stays, as Type card instead.
+// page. Typing the card stays, as Enter card manually.
 
 const MAIN = 'c-btn c-btn-p';
 const PLAIN = 'c-btn c-btn-s';
@@ -62,7 +62,7 @@ function TerminalChoice({ terminals, busy, problem, onPick, onBack }) {
         {terminals.map((t) => (
           <button key={t.id} type="button" className={`${PLAIN} justify-start`} disabled={busy} onClick={() => onPick(t)}>
             <span className="c-t1">{cardTerminalName(t)}</span>
-            {cardTerminalSerial(t) !== null ? <span className="c-s13 c-t2 c-num">{cardTerminalSerial(t)}</span> : null}
+            {cardTerminalSerial(t) !== null ? <span className="c-s14 c-t2 c-num">{cardTerminalSerial(t)}</span> : null}
           </button>
         ))}
       </div>
@@ -179,7 +179,7 @@ function TerminalWait({ gymId, entryId, save, name, showName, onAnswer, onEnded,
       <div className="flex flex-col gap-1">
         <p className="c-s15 c-w6 c-t1 m-0">{words.title}</p>
         {showName ? (
-          <p className="c-s13 c-t2 m-0">
+          <p className="c-s14 c-t2 m-0">
             {cardTerminalName(save.terminal)}
             {cardTerminalSerial(save.terminal) !== null ? <span className="c-num">{` · ${cardTerminalSerial(save.terminal)}`}</span> : null}
           </p>
@@ -230,7 +230,7 @@ function TerminalNotSaved({ line, busy, onAgain, onType, onBack }) {
         ) : null}
         {onType !== null ? (
           <button type="button" className={SMALL} disabled={busy} onClick={onType}>
-            Type card instead
+            Enter card manually
           </button>
         ) : null}
         <button type="button" className={SMALL} disabled={busy} onClick={onBack}>
@@ -339,7 +339,7 @@ function CardForm({ gymId, entryId, view, name, onSaved, onBack }) {
           {view.agreement}
         </label>
       </div>
-      <p className="c-s13 c-t2 m-0">{words.tickHint}</p>
+      <p className="c-s14 c-t2 m-0">{words.tickHint}</p>
       {problem !== null ? (
         <p className="c-s14 m-0" style={BAD} role="alert">
           {problem}
@@ -383,7 +383,7 @@ function RemoveAsk({ view, name, busy, refusal, onYes, onBack }) {
   );
 }
 
-/** Pause or Resume automatic payments asks first, under the button, naming the card and each membership it changes. */
+/** Pause or Resume autopay asks first, under the button, naming the card and each membership it changes. */
 function AutopayAsk({ ask, busy, refusal, onYes, onBack }) {
   const [all, setAll] = useState(false);
   const words = ask.kind === 'pause' ? autopayPauseBox(ask.preview) : autopayResumeBox(ask.preview);
@@ -581,7 +581,7 @@ export default function MemberCard({ gymId, gym, entryId, name, readOnly, checkE
       setOpen(null);
       setDone(ask.kind === 'pause' ? autopayPausedWords(ask.preview) : autopayResumedWords(ask.preview));
     } catch (err) {
-      setRefusal(errorText(err, ask.kind === 'pause' ? 'Automatic payments were not paused. Try again.' : 'Automatic payments were not resumed. Try again.'));
+      setRefusal(errorText(err, ask.kind === 'pause' ? 'Autopay was not paused. Try again.' : 'Autopay was not resumed. Try again.'));
     } finally {
       setBusy(false);
     }
@@ -635,7 +635,7 @@ export default function MemberCard({ gymId, gym, entryId, name, readOnly, checkE
           <p className="c-s15 c-t1 m-0">{box.paidBy.line}</p>
           {membersTo !== null ? (
             <Link to={`${membersTo}?person=${encodeURIComponent(box.paidBy.entryId)}`} className={SMALL}>
-              {`Open ${box.paidBy.name}`}
+              {`View ${box.paidBy.name}`}
             </Link>
           ) : null}
         </div>
@@ -714,7 +714,7 @@ export default function MemberCard({ gymId, gym, entryId, name, readOnly, checkE
                 setOpen('form');
               }}
             >
-              {box.terminals.length > 0 ? 'Type card instead' : view.card === null ? 'Add card' : 'Replace card'}
+              {box.terminals.length > 0 ? 'Enter card manually' : view.card === null ? 'Add card' : 'Replace card'}
             </button>
           ) : null}
           {box.canRemove ? (
@@ -731,11 +731,11 @@ export default function MemberCard({ gymId, gym, entryId, name, readOnly, checkE
           ) : null}
           {autopayButton !== null ? (
             <button type="button" className={SMALL} disabled={busy} onClick={() => void openAutopay(autopayButton)}>
-              {autopayButton === 'pause' ? 'Pause automatic payments' : 'Resume automatic payments'}
+              {autopayButton === 'pause' ? 'Pause autopay' : 'Resume autopay'}
             </button>
           ) : null}
           {box.canAdd && box.pairTerminal && paymentsTo !== null ? (
-            <Link to={paymentsTo} className="c-btn c-btn-link c-s13">
+            <Link to={paymentsTo} className="c-btn c-btn-link c-s14">
               Pair a Terminal
             </Link>
           ) : null}

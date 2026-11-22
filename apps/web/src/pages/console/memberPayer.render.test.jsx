@@ -92,7 +92,7 @@ const draw = (entryId, name, gym = IRON) => (
     <MemberPayer gymId={GYM} gym={gym} entryId={entryId} name={name} readOnly={false} onChanged={listChanged} />
   </MemoryRouter>
 );
-const box = () => screen.getByRole('region', { name: 'Who pays' });
+const box = () => screen.getByRole('region', { name: 'Payer' });
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -161,7 +161,7 @@ describe('Who pays', () => {
         'Take the money from Priya Sharma, and receipts name them. Priya Sharma is told in the app when a payment is overdue. Aarav Sharma keeps their own memberships, bookings and pass.',
       ),
     ).toBeTruthy();
-    expect(within(box()).getByRole('button', { name: 'Change who pays' })).toBeTruthy();
+    expect(within(box()).getByRole('button', { name: 'Change payer' })).toBeTruthy();
     expect(within(box()).queryByRole('button', { name: 'Add someone they pay for' })).toBeNull();
   });
 
@@ -184,7 +184,7 @@ describe('Who pays', () => {
     ]);
     render(draw(AARAV, 'Aarav Sharma'));
     await screen.findByText('Aarav Sharma pays their own bills.');
-    fireEvent.click(screen.getByRole('button', { name: 'Choose who pays' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Change payer' }));
     fireEvent.change(screen.getByLabelText('Find who pays, by name or member number'), { target: { value: 'Sharma' } });
     // Aarav himself is never offered as his own payer.
     const found = await screen.findByRole('list', { name: 'People found' });
@@ -238,7 +238,7 @@ describe('Who pays', () => {
     fireEvent.click(within(screen.getByTestId('payer-ask')).getByRole('button', { name: 'Remove' }));
     await screen.findByText('Aarav Sharma now pays their own bills.');
     expect(orgService.removePayer).toHaveBeenLastCalledWith(GYM, AARAV);
-    expect(screen.getByRole('button', { name: 'Choose who pays' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Change payer' })).toBeTruthy();
   });
 
   it('staff who may not record payments read who pays, are told who can change it, and see no bills', async () => {

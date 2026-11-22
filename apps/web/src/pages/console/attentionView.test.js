@@ -41,7 +41,7 @@ describe('the bell: a line only for what the server sent and what waits', () => 
     const table = [
       [{ chargebacks: { count: 1, lostCount: 0, needsReconnect: false, canReconnect: true } }, { key: 'chargebacks', tone: 'bad', count: 1, title: '1 chargeback needs a response', note: "A cardholder's bank disputed a payment", button: 'Respond', to: '/console/iron-house#chargebacks' }],
       [{ chargebacks: { count: 3, lostCount: 1, needsReconnect: false, canReconnect: true } }, { title: '3 chargebacks need attention', count: 3, note: "A cardholder's bank disputed a payment", button: 'Respond' }],
-      [{ chargebacks: { count: 2, lostCount: 2, needsReconnect: false, canReconnect: true } }, { title: '2 lost chargebacks have automatic payments paused', note: 'The money went back to the cardholder', button: 'View' }],
+      [{ chargebacks: { count: 2, lostCount: 2, needsReconnect: false, canReconnect: true } }, { title: '2 lost chargebacks have autopay paused', note: 'The money went back to the cardholder', button: 'View' }],
       [{ failedPayments: { count: 1, totals: [{ currency: 'USD', minor: 2000 }] } }, { key: 'failed-payments', tone: 'bad', title: '1 failed card payment', note: 'Declined, still outstanding', money: '$20.00', to: '/console/iron-house/failed-payments' }],
       [{ failedPayments: { count: 3, totals: [{ currency: 'USD', minor: 6000 }, { currency: 'CAD', minor: 1500 }] } }, { title: '3 failed card payments', count: 3 }],
       [{ paymentDue: { count: 6, past: 1 } }, { key: 'payment-due', tone: 'warn', count: 7, title: '6 members with a payment due', note: 'Plus 1 past member', to: '/console/iron-house/members?show=payment-due' }],

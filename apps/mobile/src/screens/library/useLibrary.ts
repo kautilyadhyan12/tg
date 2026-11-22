@@ -103,7 +103,7 @@ export function useMyWorkout(): MyWorkoutHook | null {
     () =>
       store === null
         ? null
-        : { list, workout, add: store.add, remove: store.remove, move: store.move, plan: store.plan, rename: store.rename, clear: store.clear },
+        : { list, workout, add: store.add, remove: store.remove, move: store.move, plan: store.plan, rename: store.rename, clear: store.clear, load: store.load, link: store.link },
     [store, list, workout],
   );
 }

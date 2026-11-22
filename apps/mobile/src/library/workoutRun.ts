@@ -52,6 +52,8 @@ export interface Start {
   now: number;
   timeZone: string;
   exercises: readonly RunExercise[];
+  /** "saved": My Workout holds one of the person's saved workouts (64a-iv). */
+  startedFrom?: "saved" | "none";
 }
 
 /** A new workout at its first set; null with no exercise to do. */
@@ -76,6 +78,7 @@ export function startRun(s: Start): WorkoutRun | null {
     activeMs: 0,
     seenAt: s.now,
     done: [],
+    ...(s.startedFrom === "saved" ? { startedFrom: "saved" as const } : {}),
   };
   return begin(run, false);
 }
@@ -295,7 +298,7 @@ export function toSave(r: WorkoutRun, platform: WorkoutSave["platform"], appVers
     startedAt: r.startedAt,
     endedAt: new Date(started + lengthMs).toISOString(),
     timeZone: r.timeZone,
-    startedFrom: "none",
+    startedFrom: r.startedFrom ?? "none",
     effort: null,
     heart: [],
     platform,
