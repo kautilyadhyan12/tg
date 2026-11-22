@@ -2217,7 +2217,9 @@ floor, taking off 0.1 or 0.2 s before the rep is back up, one of them as filmed;
 and the three squat videos of 52a-ii-a; the 270 jumps on those three, and the jumps from the bottom, none, as before. Every
 squat set counts as before, as filmed and under every held replay, with every person's numbers and with each left out, and
 the squat's numbers are as they were; every other movement counts 0 as before, but a squat jack done twice as slowly now 1
-(was 2: open, 52b-i); the phone's own runs, 92 of 100 sets the same (his squats 19 of 22, as before). The floor view, judged
+(was 2: open, 52b-i); under the small model's gap, shown only (the app does not use that model), 27 of 57 squats, 29 before:
+each sumo squat loses one, one foot's heel and toes set apart by its noise and the other foot alone reading 4.5 and 5.1 cm (the
+heel-and-toe rule off, 29); the phone's own runs, 92 of 100 sets the same (his squats 19 of 22, as before). The floor view, judged
 against his five floor sets, still does not read as his floor at any lean and stays shown (`movementFloorView.test.ts` pins
 each lean and fold again); at the replay's lean the hips below standing now go past his floor's (0.088 of a leg redrawn, his
 floor 0.073, his raised phone 0.063); jumps drawn on his raised sets seen from the floor, 4 of 150 counted (14 before), none
