@@ -44,18 +44,21 @@ export default function DeskWaiver({ gymId, entry, readOnly, when, onSigned, ask
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState(null);
   const [done, setDone] = useState(null);
-  const [askSeen, setAskSeen] = useState(0);
+  // Drawn afresh, the press it was drawn with counts as seen: only a new press opens the box.
+  const [askSeen, setAskSeen] = useState(ask);
+  const [askOpened, setAskOpened] = useState(0);
   const sectionRef = useRef(null);
   if (ask !== askSeen) {
     setAskSeen(ask);
     if (ask !== 0 && !readOnly && entry.waiverDesk == null) {
       setDone(null);
       setOpen(true);
+      setAskOpened(ask);
     }
   }
   useEffect(() => {
-    if (askSeen !== 0) sectionRef.current?.scrollIntoView?.({ block: 'center' });
-  }, [askSeen]);
+    if (askOpened !== 0) sectionRef.current?.scrollIntoView?.({ block: 'center' });
+  }, [askOpened]);
 
   // The box reads the gym's words each time it opens, and again after they changed.
   useEffect(() => {

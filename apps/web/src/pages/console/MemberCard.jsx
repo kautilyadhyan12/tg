@@ -383,7 +383,7 @@ function RemoveAsk({ view, name, busy, refusal, onYes, onBack }) {
   );
 }
 
-/** Pause or Resume automatic payments asks first, under the button, naming the card and each membership it changes. */
+/** Pause or Resume autopay asks first, under the button, naming the card and each membership it changes. */
 function AutopayAsk({ ask, busy, refusal, onYes, onBack }) {
   const [all, setAll] = useState(false);
   const words = ask.kind === 'pause' ? autopayPauseBox(ask.preview) : autopayResumeBox(ask.preview);
@@ -581,7 +581,7 @@ export default function MemberCard({ gymId, gym, entryId, name, readOnly, checkE
       setOpen(null);
       setDone(ask.kind === 'pause' ? autopayPausedWords(ask.preview) : autopayResumedWords(ask.preview));
     } catch (err) {
-      setRefusal(errorText(err, ask.kind === 'pause' ? 'Automatic payments were not paused. Try again.' : 'Automatic payments were not resumed. Try again.'));
+      setRefusal(errorText(err, ask.kind === 'pause' ? 'Autopay was not paused. Try again.' : 'Autopay was not resumed. Try again.'));
     } finally {
       setBusy(false);
     }

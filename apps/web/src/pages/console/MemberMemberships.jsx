@@ -504,13 +504,16 @@ export default function MemberMemberships({
     listed?.toMemberships === true ||
     (shown !== null && shown.types.length === 0 && (open?.what === 'add' || shown.memberships.length === 0));
   useCameBack(membershipsTo !== null && sendsToMemberships, () => setAttempt((n) => n + 1));
-  /** The strip's last press this box answered; the box it opened is brought into view. */
-  const [askSeen, setAskSeen] = useState(null);
+  /** The strip's last press this box has seen. A box drawn afresh (after Edit, or for another record) takes the
+   *  press it was drawn with as seen, so only a new press opens anything. `askOpened`: the press it answered,
+   *  whose box is brought into view. */
+  const [askSeen, setAskSeen] = useState(stripAsk);
+  const [askOpened, setAskOpened] = useState(null);
   useEffect(() => {
-    if (askSeen === null) return;
-    const row = askSeen.membershipId === undefined ? null : document.querySelector(`[data-held-id="${askSeen.membershipId}"]`);
+    if (askOpened === null) return;
+    const row = askOpened.membershipId === undefined ? null : document.querySelector(`[data-held-id="${askOpened.membershipId}"]`);
     (row ?? document.querySelector('[data-testid="held-add"]'))?.scrollIntoView?.({ block: 'center' });
-  }, [askSeen]);
+  }, [askOpened]);
 
   if (loadError !== null && shown === null) {
     return (
@@ -816,6 +819,7 @@ export default function MemberMemberships({
   // The strip under the name was pressed (V2a): the same box this box's own button opens.
   if (stripAsk !== null && stripAsk.n !== askSeen?.n) {
     setAskSeen(stripAsk);
+    setAskOpened(stripAsk);
     const m = stripAsk.membershipId === undefined ? undefined : shown.memberships.find((x) => x.id === stripAsk.membershipId);
     if (stripAsk.what === 'add') {
       if (canAct && !nothingToSell) startAdd();

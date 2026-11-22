@@ -244,7 +244,7 @@ describe('Card on file: what it says', () => {
   });
 });
 
-describe('Pause automatic payments (18d-iv-f)', () => {
+describe('Pause autopay (18d-iv-f)', () => {
   const preview = (over = {}) =>
     Promise.resolve({
       data: {
@@ -279,8 +279,8 @@ describe('Pause automatic payments (18d-iv-f)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Pause autopay' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Pause' }));
     await waitFor(() => expect(orgService.pauseAutopay).toHaveBeenCalledWith(GYM, TARA));
-    expect((await screen.findByRole('status')).textContent).toBe('Automatic payments paused. Visa ending 1111 stays saved.');
-    expect(screen.getByTestId('autopay-paused').textContent).toBe('Automatic payments paused on 2 November 2026.');
+    expect((await screen.findByRole('status')).textContent).toBe('Autopay paused. Visa ending 1111 stays saved.');
+    expect(screen.getByTestId('autopay-paused').textContent).toBe('Autopay paused on 2 November 2026.');
     expect(screen.getByText('Card on file: Visa ending 1111 · expires 12/2028')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Resume autopay' })).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Pause autopay' })).toBeNull();
@@ -296,7 +296,7 @@ describe('Pause automatic payments (18d-iv-f)', () => {
     expect(box.textContent).toContain('Visa ending 1111 will be charged automatically for:');
     expect(box.textContent).toContain('A bill due in the last two days may be charged today. Charge older bills by hand, oldest first.');
     fireEvent.click(screen.getByRole('button', { name: 'Resume' }));
-    expect((await screen.findByRole('status')).textContent).toBe('Automatic payments resumed. Visa ending 1111 will be charged when bills are due.');
+    expect((await screen.findByRole('status')).textContent).toBe('Autopay resumed. Visa ending 1111 will be charged when bills are due.');
     expect(screen.queryByTestId('autopay-paused')).toBeNull();
     expect(screen.getByRole('button', { name: 'Pause autopay' })).toBeTruthy();
   });
@@ -304,7 +304,7 @@ describe('Pause automatic payments (18d-iv-f)', () => {
   it('paused, with the card since removed and Square no longer connected: Resume is still there', async () => {
     orgService.getMemberCard.mockReturnValue(answer({ state: 'connect', card: null, form: null, autopayPausedOn: '2026-11-02' }));
     show();
-    expect((await screen.findByTestId('autopay-paused')).textContent).toBe('Automatic payments paused on 2 November 2026.');
+    expect((await screen.findByTestId('autopay-paused')).textContent).toBe('Autopay paused on 2 November 2026.');
     expect(screen.getByRole('button', { name: 'Resume autopay' })).toBeTruthy();
   });
 
@@ -318,15 +318,15 @@ describe('Pause automatic payments (18d-iv-f)', () => {
   it("somebody paid for by another person: says their payer's card is paused, with no button here", async () => {
     orgService.getMemberCard.mockReturnValue(answer({ paidBy: { entryId: PRIYA, name: 'Priya Sharma' }, form: null, autopayPausedOn: '2026-11-02' }));
     show({ name: 'Aarav Sharma' });
-    expect((await screen.findByTestId('autopay-paused')).textContent).toBe("Automatic payments are paused on Priya Sharma's card.");
-    expect(screen.queryByRole('button', { name: /automatic payments/ })).toBeNull();
+    expect((await screen.findByTestId('autopay-paused')).textContent).toBe("Autopay is paused on Priya Sharma's card.");
+    expect(screen.queryByRole('button', { name: /autopay/ })).toBeNull();
   });
 
   it('a read-only console shows the line and no button', async () => {
     orgService.getMemberCard.mockReturnValue(answer({ card: VISA, autopayPausedOn: '2026-11-02' }));
     show({ readOnly: true });
     expect(await screen.findByTestId('autopay-paused')).toBeTruthy();
-    expect(screen.queryByRole('button', { name: /automatic payments/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /autopay/ })).toBeNull();
   });
 });
 

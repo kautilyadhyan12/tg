@@ -1894,7 +1894,7 @@ export const orgService = {
   getAutopay: (gymId, entryId) =>
     readThrough(
       autopayPreviewSchema,
-      'their automatic payments',
+      'their autopay',
       authApi.get(`/v1/orgs/${encodeURIComponent(gymId)}/member-list/entries/${encodeURIComponent(entryId)}/card/autopay`),
     ),
   pauseAutopay: (gymId, entryId) =>

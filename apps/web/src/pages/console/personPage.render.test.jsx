@@ -8,7 +8,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import { giveHeldMembership, heldMembershipView, heldMembershipsResponseSchema, memberListEntryDetailSchema, memberListViewSchema } from '@app/shared';
 import { billingFor } from './billingFixture';
-import { PageOverContext } from '../../components/console/pageOver';
+import { PageOverContext, usePageOverShell } from '../../components/console/pageOver';
 
 /** What the Memberships box was last given, and the answer it hands the page. */
 const drawn = { props: null, answer: null };
@@ -213,34 +213,133 @@ describe('the page', () => {
     expect(within(screen.getByTestId('person-pays')).getByTestId('card-on-file')).toBeTruthy();
   });
 
-  it("in the console: drawn in the page's place, the way back named after the page it came from, and the browser's Back closes it", async () => {
-    function Shell() {
-      const [slot, setSlot] = useState(null);
-      const [open, setOpen] = useState(0);
-      const over = { slot, label: 'Members & staff', open: () => { setOpen((n) => n + 1); return () => setOpen((n) => n - 1); } };
-      return (
-        <PageOverContext.Provider value={over}>
-          <div ref={setSlot} data-testid="slot" />
-          <div data-testid="under" style={{ display: open > 0 ? 'none' : 'contents' }}>
-            {slot !== null ? <MemberListPerson gymId={GYM} gym={GYM_ROW} entryId={ADA} list={LIST} words={WORDS} readOnly={false} canRemove onClose={onClose} onChanged={() => undefined} /> : null}
-          </div>
-        </PageOverContext.Provider>
-      );
-    }
-    render(<MemoryRouter><Shell /></MemoryRouter>);
+});
+
+describe('in the console', () => {
+  /** The shell's own part (`usePageOverShell`, as `ConsoleLayout` uses it), with the page under it. */
+  function Shell({ entryId = ADA, close = onClose, lockFirst = false, opener = false }) {
+    const { setSlot, hidden, pageOver } = usePageOverShell('Members & staff');
+    const [showing, setShowing] = useState(!opener);
+    // A box under the page that locked the window's scrolling, as Invite to app does.
+    useEffect(() => {
+      if (!lockFirst) return undefined;
+      document.body.style.overflow = 'hidden';
+      return () => {
+        document.body.style.overflow = '';
+      };
+    }, [lockFirst]);
+    return (
+      <PageOverContext.Provider value={pageOver}>
+        <div ref={setSlot} data-testid="slot" />
+        <div data-testid="under" style={{ display: hidden ? 'none' : 'contents' }}>
+          {opener ? (
+            <button type="button" onClick={() => setShowing(true)}>
+              Open Ada
+            </button>
+          ) : null}
+          {showing && pageOver.slot !== null ? (
+            <MemberListPerson key={entryId} gymId={GYM} gym={GYM_ROW} entryId={entryId} list={LIST} words={WORDS} readOnly={false} canRemove onClose={() => { close(); setShowing(false); }} onChanged={() => undefined} />
+          ) : null}
+        </div>
+      </PageOverContext.Provider>
+    );
+  }
+  const drawShell = (props = {}) => render(<MemoryRouter><Shell {...props} /></MemoryRouter>);
+  const settle = () => act(() => new Promise((r) => setTimeout(r, 5)));
+
+  beforeEach(() => {
+    window.history.replaceState({ idx: 0 }, '');
+    document.body.style.overflow = '';
+  });
+
+  it("drawn in the page's place, the page under it hidden, the way back named after that page", async () => {
+    drawShell();
     const page = await screen.findByTestId('member-person');
     expect(within(screen.getByTestId('slot')).getByTestId('member-person')).toBe(page);
     expect(screen.getByTestId('under').style.display).toBe('none');
+    expect(page.getAttribute('role')).toBe('region');
     expect(page.getAttribute('aria-modal')).toBeNull();
     expect(within(page).queryByRole('button', { name: 'Close' })).toBeNull();
     fireEvent.click(within(page).getByRole('button', { name: 'Members & staff' }));
     expect(onClose).toHaveBeenCalledTimes(1);
-    // The browser's Back: the step it stands for is gone, and it closes.
+    expect(screen.getByTestId('under').style.display).toBe('contents');
+  });
+
+  it("the browser's Back closes it", async () => {
+    drawShell();
+    await screen.findByTestId('member-person');
     expect(typeof window.history.state?.personPage).toBe('string');
     act(() => {
-      window.history.replaceState({}, '');
+      window.history.replaceState({ idx: 0 }, '');
       window.dispatchEvent(new PopStateEvent('popstate'));
     });
-    expect(onClose).toHaveBeenCalledTimes(2);
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('closed by its way back, its step of the history is taken back', async () => {
+    const back = vi.spyOn(window.history, 'back').mockImplementation(() => undefined);
+    drawShell();
+    const page = await screen.findByTestId('member-person');
+    fireEvent.click(within(page).getByRole('button', { name: 'Members & staff' }));
+    await settle();
+    expect(back).toHaveBeenCalledTimes(1);
+    back.mockRestore();
+  });
+
+  it("another person's page opened straight after takes over the same step, never a second one", async () => {
+    const push = vi.spyOn(window.history, 'pushState');
+    const view = drawShell();
+    await screen.findByRole('heading', { name: 'Ada Lovelace', level: 1 });
+    view.rerender(<MemoryRouter><Shell entryId={BEN} /></MemoryRouter>);
+    await screen.findByRole('heading', { name: 'Ben Okafor', level: 1 });
+    await settle();
+    expect(push.mock.calls.filter(([state]) => typeof state?.personPage === 'string')).toHaveLength(1);
+    expect(typeof window.history.state?.personPage).toBe('string');
+    push.mockRestore();
+  });
+
+  it('the window scrolls while it is open, though a box under it locked scrolling; the lock is back once it closes', async () => {
+    drawShell({ lockFirst: true });
+    const page = await screen.findByTestId('member-person');
+    expect(document.body.style.overflow).toBe('');
+    fireEvent.click(within(page).getByRole('button', { name: 'Members & staff' }));
+    expect(document.body.style.overflow).toBe('hidden');
+  });
+
+  it('a step left by a page that closed by a link is gone past, the way the person was going', async () => {
+    const back = vi.spyOn(window.history, 'back').mockImplementation(() => undefined);
+    const forward = vi.spyOn(window.history, 'forward').mockImplementation(() => undefined);
+    window.history.replaceState({ idx: 1 }, '');
+    drawShell({ opener: true });
+    await screen.findByRole('button', { name: 'Open Ada' });
+    // Back from the new page (1) onto the old step (0): on to the page under it.
+    act(() => {
+      window.history.replaceState({ idx: 0, personPage: 'person:old' }, '');
+      window.dispatchEvent(new PopStateEvent('popstate'));
+    });
+    expect(back).toHaveBeenCalledTimes(1);
+    // Forward from the page under it (0) onto the old step (0): on to the new page.
+    act(() => {
+      window.history.replaceState({ idx: 0 }, '');
+      window.dispatchEvent(new PopStateEvent('popstate'));
+    });
+    act(() => {
+      window.history.replaceState({ idx: 0, personPage: 'person:old' }, '');
+      window.dispatchEvent(new PopStateEvent('popstate'));
+    });
+    expect(forward).toHaveBeenCalledTimes(1);
+    back.mockRestore();
+    forward.mockRestore();
+  });
+
+  it('closed, the focus is back on what opened it', async () => {
+    drawShell({ opener: true });
+    const open = await screen.findByRole('button', { name: 'Open Ada' });
+    open.focus();
+    fireEvent.click(open);
+    const page = await screen.findByTestId('member-person');
+    fireEvent.click(within(page).getByRole('button', { name: 'Members & staff' }));
+    await settle();
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Open Ada' }));
   });
 });

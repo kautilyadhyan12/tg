@@ -226,10 +226,13 @@ function ReviewBox({ lines, busy, readOnly, onCorrect }) {
   );
 }
 
+/** What last opened a person's page in the console: it has the focus again when the page closes. */
+let keptOpener = null;
+
 const STRIP_TONES = { bad: 'c-strip-bad', warn: 'c-strip-warn', good: 'c-strip-good', plain: 'c-strip-plain' };
 
 /** The next step under the name (§17.11): what it is, and the page's own button for it. */
-function NextStep({ step, onPress, setUpTo }) {
+function NextStep({ step, onPress, setUpTo, disabled }) {
   return (
     <div className={`c-strip ${STRIP_TONES[step.tone]}`} data-testid="next-step">
       <div className="c-strip-words">
@@ -238,7 +241,7 @@ function NextStep({ step, onPress, setUpTo }) {
         {step.note !== null ? <span className="c-s14 c-t2">{step.note}</span> : null}
       </div>
       {step.button !== null ? (
-        <button type="button" onClick={() => onPress(step.button.ask)} className="c-btn c-btn-p whitespace-nowrap">
+        <button type="button" onClick={() => onPress(step.button.ask)} disabled={disabled} className="c-btn c-btn-p whitespace-nowrap">
           {step.button.label}
         </button>
       ) : step.setUp === true && setUpTo !== null ? (
@@ -610,6 +613,11 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
   useEffect(() => {
     if (inShell) {
       const shut = openOver.current?.();
+      // What opened it (a name on a list, a button) has the focus again once it closes; drawn twice by
+      // React's checks, the second drawing finds the page itself focused, and keeps the first one's.
+      const active = document.activeElement;
+      if (active instanceof HTMLElement && active !== document.body && active.closest('[data-testid="member-person"]') === null) keptOpener = active;
+      const opener = keptOpener;
       // The browser's Back closes it, as it leaves a page: one step of the browser's own history,
       // at the same address, stands for it, holding where the page under it was scrolled to. A
       // person's page opened straight after another (or drawn twice by React's checks) takes over
@@ -636,7 +644,10 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
         window.setTimeout(() => {
           const ours = window.history.state?.personPage === mark;
           if (ours) window.history.back();
-          if (ours || backed) window.scrollTo?.(0, leftAt);
+          if (ours || backed) {
+            window.scrollTo?.(0, leftAt);
+            if (opener?.isConnected === true) opener.focus({ preventScroll: true });
+          }
         }, 0);
       };
     }
@@ -1974,7 +1985,7 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
   const page = (
     <div
       ref={dialogRef}
-      role="dialog"
+      role={inShell ? 'region' : 'dialog'}
       aria-modal={inShell ? undefined : 'true'}
       aria-labelledby={titleId}
       tabIndex={-1}
@@ -2023,7 +2034,7 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
               </button>
             )}
           </div>
-          {step !== null ? <NextStep step={step} onPress={pressStep} setUpTo={placeFor(gym?.slug, viewerPrivileges(gym), 'memberships')} /> : null}
+          {step !== null ? <NextStep step={step} onPress={pressStep} disabled={busy || readOnly} setUpTo={placeFor(gym?.slug, viewerPrivileges(gym), 'memberships')} /> : null}
         </header>
         <div className={wide ? 'flex flex-col gap-4' : 'flex flex-col gap-4 c-person-narrow'}>
           {draft !== null && id !== null ? (

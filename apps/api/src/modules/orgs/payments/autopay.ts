@@ -59,7 +59,7 @@ export async function pauseAutopay(deps: PaymentsDeps, userId: string, gymId: st
   return await staffView(deps, org, userId, entryId);
 }
 
-/** Resume automatic payments. Pressed twice, resumed once. */
+/** Resume autopay. Pressed twice, resumed once. */
 export async function resumeAutopay(deps: PaymentsDeps, userId: string, gymId: string, entryId: string): Promise<MemberCardResponse> {
   const { org } = await requireWritablePrivilege(deps, gymId, userId, BILLING);
   await payingSelf(deps, gymId, entryId);

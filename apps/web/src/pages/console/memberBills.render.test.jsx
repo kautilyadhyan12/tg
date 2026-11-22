@@ -20,6 +20,8 @@ vi.mock('../../api/orgsApi', async (importOriginal) => {
       getTerminalPayments: vi.fn(() => Promise.resolve({ data: { terminals: [], waiting: [] } })),
       giveHeldMembership: vi.fn(),
       changeHeldMembership: vi.fn(),
+      // The agreement box opened by the strip (V2a) is only looked for, never answered.
+      getMembershipAgreement: vi.fn(() => new Promise(() => undefined)),
       getBillSettings: vi.fn(),
       saveBillSettings: vi.fn(),
       closeAppPayment: vi.fn(),
@@ -979,6 +981,23 @@ describe('a member paying a fee in the app (18k-ii-b)', () => {
 });
 
 describe('the strip under the name (V2a) and this box', () => {
+  const ask = (n, more) => ({ n, ...more });
+  const FEE = '55555555-5555-4555-8555-000000000009';
+  const owedFee = {
+    id: FEE,
+    fee: 'late_cancel',
+    forName: 'Spin',
+    on: '2026-10-14',
+    amountMinor: 500,
+    taxes: [],
+    dueOn: '2026-10-14',
+    state: 'overdue',
+    waived: null,
+    payments: [],
+    voidedPayments: [],
+    can: { pay: true, waive: true, voidPaymentId: null },
+  };
+
   it('hands the page the answer it drew, for this person', async () => {
     const answerOf = answer([held(1, GOLD, '2026-10-04', false)]);
     orgService.getHeldMemberships.mockResolvedValue(answerOf);
@@ -990,25 +1009,69 @@ describe('the strip under the name (V2a) and this box', () => {
     expect(last.memberships.map((m) => m.id)).toEqual(answerOf.data.memberships.map((m) => m.id));
   });
 
-  it("its Record payment opens this box's own Record payment, under that membership, once a press", async () => {
+  it("Record payment opens this box's own Record payment under that membership, once a press", async () => {
     const gold = held(1, GOLD, '2026-10-04', false);
     orgService.getHeldMemberships.mockResolvedValue(answer([gold]));
-    const { rerender } = render(draw({ stripAsk: { what: 'pay', membershipId: gold.id, feeBillId: null, n: 1 } }));
+    const press = (n) => draw({ stripAsk: ask(n, { what: 'pay', membershipId: gold.id, feeBillId: null }) });
+    const { rerender } = render(draw({ stripAsk: null }));
     const [row] = await rowsSoon();
+    rerender(press(1));
     expect(within(row).getByTestId('held-pay')).toBeTruthy();
     // Closed with Back, the same press does not open it again; a new press does.
     fireEvent.click(within(within(row).getByTestId('held-pay')).getByRole('button', { name: 'Back' }));
     expect(within(row).queryByTestId('held-pay')).toBeNull();
-    rerender(draw({ stripAsk: { what: 'pay', membershipId: gold.id, feeBillId: null, n: 1 } }));
+    rerender(press(1));
     expect(within(row).queryByTestId('held-pay')).toBeNull();
-    rerender(draw({ stripAsk: { what: 'pay', membershipId: gold.id, feeBillId: null, n: 2 } }));
+    rerender(press(2));
     expect(within(row).getByTestId('held-pay')).toBeTruthy();
+  });
+
+  it('drawn afresh (after Edit, or for another record), the box does not act on the press it was drawn with', async () => {
+    const gold = held(1, GOLD, '2026-10-04', false);
+    orgService.getHeldMemberships.mockResolvedValue(answer([gold]));
+    render(draw({ stripAsk: ask(1, { what: 'pay', membershipId: gold.id, feeBillId: null }) }));
+    const [row] = await rowsSoon();
+    expect(within(row).queryByTestId('held-pay')).toBeNull();
+    cleanup();
+    render(draw({ stripAsk: ask(3, { what: 'add' }) }));
+    await rowsSoon();
+    expect(screen.queryByTestId('held-add')).toBeNull();
+  });
+
+  it("a fee's Record payment opens that fee's own form", async () => {
+    const m = held(1, GOLD, '2026-10-04', true);
+    const gold = { ...m, billing: { ...m.billing, fees: [owedFee] } };
+    orgService.getHeldMemberships.mockResolvedValue(answer([gold]));
+    const { rerender } = render(draw({ stripAsk: null }));
+    await rowsSoon();
+    rerender(draw({ stripAsk: ask(1, { what: 'pay', membershipId: gold.id, feeBillId: FEE }) }));
+    expect(within(screen.getByTestId('held-fee')).getByTestId('held-fee-pay')).toBeTruthy();
+  });
+
+  it('Add membership opens the Add form', async () => {
+    orgService.getHeldMemberships.mockResolvedValue(answer([]));
+    const { rerender } = render(draw({ stripAsk: null }));
+    await screen.findByTestId('held-memberships');
+    expect(screen.queryByTestId('held-add')).toBeNull();
+    rerender(draw({ stripAsk: ask(1, { what: 'add' }) }));
+    expect(screen.getByTestId('held-add')).toBeTruthy();
+  });
+
+  it("Sign agreement opens that membership's agreement box", async () => {
+    const gold = { ...held(1, GOLD, '2026-10-04', true), agreementAsked: true };
+    orgService.getHeldMemberships.mockResolvedValue(answer([gold], { agreementInUse: true }));
+    const { rerender } = render(draw({ stripAsk: null }));
+    const [row] = await rowsSoon();
+    expect(within(row).queryByRole('group', { name: 'Sign the agreement' })).toBeNull();
+    rerender(draw({ stripAsk: ask(1, { what: 'agreement', membershipId: gold.id }) }));
+    expect(within(row).getByRole('group', { name: 'Sign the agreement' })).toBeTruthy();
   });
 
   it('a press for a membership that is not theirs opens nothing', async () => {
     orgService.getHeldMemberships.mockResolvedValue(answer([held(1, GOLD, '2026-10-04', false)]));
-    render(draw({ stripAsk: { what: 'pay', membershipId: '44444444-4444-4444-8444-000000000009', feeBillId: null, n: 1 } }));
+    const { rerender } = render(draw({ stripAsk: null }));
     const [row] = await rowsSoon();
+    rerender(draw({ stripAsk: ask(1, { what: 'pay', membershipId: '44444444-4444-4444-8444-000000000009', feeBillId: null }) }));
     expect(within(row).queryByTestId('held-pay')).toBeNull();
   });
 });
