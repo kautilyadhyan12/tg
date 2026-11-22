@@ -38,3 +38,27 @@ describe("the worst thing: a quarter squat is not counted, and a proper squat is
     expect(run.reps.filter((r) => r.verdict === "short").map((r) => [r.rule, r.reason])).toEqual([]);
   });
 });
+
+describe("how deep comes from the form standard, never from how shallow anybody went", () => {
+  const rule = (name: string) => {
+    const r = SQUAT.rules.find((x) => x.name === name);
+    if (r === undefined) throw new Error(`no rule ${name}`);
+    return r;
+  };
+
+  it("the knees: past a quarter squat (110 degrees, the source written in the file), with the camera's own room", () => {
+    const knees = rule("knees bent");
+    expect([knees.standard?.at, knees.standard?.room, knees.standard?.source.includes("PMC11618833")]).toEqual([110, "camera", true]);
+    // The room is a few degrees: never the old forgiving fit (125), which counted the push press.
+    expect(knees.atMost).toBeGreaterThanOrEqual(110);
+    expect(knees.atMost).toBeLessThan(120);
+  });
+
+  it("the hips: the least a leg bent to the knees' number lets them sink, 1 - sin(knees / 2), with no room of its own", () => {
+    const depth = rule("depth");
+    const knees = rule("knees bent").atMost ?? 0;
+    expect(depth.standard?.room).toBe("none");
+    expect(depth.standard?.at).toBe(Math.round((1 - Math.sin(((knees / 2) * Math.PI) / 180)) * 1000) / 1000);
+    expect(depth.atLeast).toBe(Math.floor((depth.standard?.at ?? 0) * 100) / 100);
+  });
+});
