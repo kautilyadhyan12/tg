@@ -1,6 +1,6 @@
 import type { HistoryWorkoutListed } from "@app/shared";
 import { count, hoursWords } from "../dashboard/words";
-import { exercisesLine, type Named } from "../workout/pastWords";
+import { exercisesLine, serverFirst, type Named } from "../workout/pastWords";
 import { addDays, dayKeyOf } from "./progressRules";
 
 // Progress's Calendar (ROADMAP Stage 5 35c-i): a month of days with a flame on each day trained, and
@@ -214,7 +214,7 @@ export function dayWorkouts(items: readonly HistoryWorkoutListed[], named: Named
     .map((w) => {
       const name = workoutName(w.name);
       const when = [clockWords(new Date(w.startedAt)), w.durationMs === null ? null : trainedWords(w.durationMs), many(w.setsCount, "set", "sets")].filter((x) => x !== null).join(" · ");
-      const exercises = exercisesLine(w.exercises, named);
+      const exercises = exercisesLine(w.exercises, serverFirst(named, new Map(w.exercises.map((id, i) => [id, w.exerciseNames[i] ?? null]))));
       const kcal = w.kcalPoint === null ? null : count(w.kcalPoint);
       return { id: w.workoutId, name, when, exercises, first: w.exercises[0] ?? null, kcal, said: [name, when, exercises, kcal === null ? null : `${kcal} kcal`].filter((x) => x !== null && x !== "").join(", ") };
     });

@@ -28,3 +28,12 @@ export function exercisesLine(ids: readonly string[], named: Named): string {
   if (names.length <= 3) return `${names.slice(0, -1).join(", ")} and ${names[names.length - 1] ?? ""}`;
   return `${names.slice(0, 2).join(", ")} and ${String(names.length - 2)} more`;
 }
+
+/** The one naming rule of History (64a-v, round one L2), for a day's rows and a workout's page alike: the server's Library
+ *  name first (it knows an exercise since removed from the phone's copy), then the phone's copy, then the id word. */
+export function serverFirst(named: Named, serverNames: ReadonlyMap<string, string | null>): Named {
+  return (exercise) => {
+    const own = named(exercise);
+    return { name: serverNames.get(exercise) ?? own.name, kind: own.kind };
+  };
+}

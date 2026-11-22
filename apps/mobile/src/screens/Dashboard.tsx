@@ -60,7 +60,7 @@ import { useRunOutbox } from "./running/RunOutbox";
 import { RunPage } from "./running/RunPage";
 import { RunRecommended } from "./running/RunRecommended";
 import { PastWorkout } from "./workout/PastWorkout";
-import { useWorkoutLayer } from "./workout/WorkoutLayer";
+import { useSentCount } from "./workout/WorkoutLayer";
 import { openRunning } from "./tabs";
 import { KindTabs, KindTabsContext, type RecommendedKind } from "./dashboard/KindTabs";
 import { accountUnits } from "./setup/Setup";
@@ -107,7 +107,7 @@ export function DashboardScreen() {
   // A run the server has just taken changes the sessions, the XP, the week and Recent Activity (37a).
   const { view: runsSent } = useRunOutbox();
   // So does a workout (64a-v): the number of them the server has taken since the app opened.
-  const workoutsSent = useWorkoutLayer()?.waiting.sent.length ?? 0;
+  const workoutsSent = useSentCount();
   const fresh = zoneSaved + runsSent.sent + workoutsSent;
   const overview = useRead(DASHBOARD_READS.overview, progressOverviewSchema, fresh);
   const me = useRead(DASHBOARD_READS.me, gamificationMeSchema, fresh);

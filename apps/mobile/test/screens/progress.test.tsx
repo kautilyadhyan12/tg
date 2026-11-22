@@ -84,7 +84,9 @@ const listed = (workoutId: string, back: number, hour: number, minutes: number, 
   const at = new Date();
   at.setDate(at.getDate() - back);
   at.setHours(hour, 30, 0, 0);
-  return { workoutId, name, startedAt: at.toISOString(), endedAt: null, durationMs: minutes * 60_000, setsCount: 3, kcalPoint: 21, exercises };
+  // The Library's own names, as the server sends them beside the id words.
+  const LIBRARY: Record<string, string> = { squat: "Squat", plank: "Plank", barbell_curl: "Barbell Curl" };
+  return { workoutId, name, startedAt: at.toISOString(), endedAt: null, durationMs: minutes * 60_000, setsCount: 3, kcalPoint: 21, exercises, exerciseNames: exercises.map((e) => LIBRARY[e] ?? null) };
 };
 const dayOf = (day: string, items: ReturnType<typeof listed>[]): Reply => ({ status: 200, body: { day, workouts: items, total: items.length, limitedToDays: null } });
 
@@ -341,7 +343,7 @@ describe("Me → Progress", () => {
     await fireEvent.press(await screen.findByRole("button", { name: /^Leg day, / }));
     expect(await screen.findByText("Loading your workout…")).toBeTruthy();
     await fireEvent.press(pageClose(closes));
-    await fireEvent.press(await screen.findByRole("button", { name: "Push day, 7:30 am · 42 min · 3 sets, Barbell curl and Plank, 21 kcal" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Push day, 7:30 am · 42 min · 3 sets, Barbell Curl and Plank, 21 kcal" }));
     expect(await screen.findByLabelText("Time, 42:10")).toBeTruthy();
     // Its name and when it began over its picture.
     expect(screen.getAllByText("Push day")).toHaveLength(2);

@@ -366,7 +366,7 @@ describe("a day tapped on the calendar", () => {
 
   // Two workouts of one day as the server lists them (GET /v1/training/days/:day, 64a-v), the Library's own three
   // exercises named from its copy on the phone; "deadlift" is one the phone's copy does not hold.
-  const item = (o: Record<string, unknown>) => historyWorkoutListedSchema.parse({ name: null, endedAt: null, setsCount: 3, kcalPoint: null, exercises: [], ...o });
+  const item = (o: Record<string, unknown>) => historyWorkoutListedSchema.parse({ name: null, endedAt: null, setsCount: 3, kcalPoint: null, exercises: [], exerciseNames: [], ...o });
   const late = item({ workoutId: "8d1b5b8e-1c3e-4f53-9d0e-8a9c2b1f0a11", name: "Push day", startedAt: new Date(2026, 9, 26, 18, 31).toISOString(), durationMs: 35 * 60_000, setsCount: 9, kcalPoint: 238, exercises: ["barbell_curl", "squat", "plank"] });
   const early = item({ workoutId: "2f6a9c4d-7e1b-4a8f-b3c2-5d6e7f8a9b0c", startedAt: new Date(2026, 9, 26, 18, 30).toISOString(), durationMs: 40 * 60_000, kcalPoint: 21, exercises: ["deadlift"] });
   const named = namedFrom(realLibrary());
@@ -386,6 +386,13 @@ describe("a day tapped on the calendar", () => {
     expect(dayWorkouts([bare], named)[0]?.said).toBe("Workout, 7:00 am · 1 set");
     expect(daySum([bare])).toEqual({ workouts: "1", trained: null, kcal: null });
     expect(daySum([bare, early])).toEqual({ workouts: "2", trained: "40 min", kcal: "21" });
+  });
+
+  // Round one L2: a day's row names an exercise as the workout's page does: the server's Library name first (it knows one
+  // since removed from the phone's copy), then the phone's copy, then the id word; never two names for one exercise.
+  it("names a day's exercises by the server's Library name first, then the phone's copy, then the id word", () => {
+    const w = item({ workoutId: "7c6b5a4d-3e2f-4a1b-9c8d-7e6f5a4b3c2e", startedAt: new Date(2026, 9, 26, 9, 0).toISOString(), durationMs: null, exercises: ["deadlift", "barbell_curl", "romanian_deadlift"], exerciseNames: ["Deadlift (Conventional)", null, null] });
+    expect(dayWorkouts([w], named)[0]?.exercises).toBe("Deadlift (Conventional), Barbell Curl and Romanian deadlift");
   });
 
   // Found on the walk (64a-v): a plank held 18 s read "0 min".

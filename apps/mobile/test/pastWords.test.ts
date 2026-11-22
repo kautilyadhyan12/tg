@@ -1,7 +1,7 @@
 // A workout looked back on in History (64a-v): its exercises named from the Library on the phone, one the phone's copy
 // does not hold named by its id word, and the line that lists them.
 import { describe, expect, it } from "vitest";
-import { exercisesLine, idWords, namedFrom } from "../src/screens/workout/pastWords";
+import { exercisesLine, idWords, namedFrom, serverFirst } from "../src/screens/workout/pastWords";
 import { realLibrary } from "./realLibrary";
 
 describe("naming a workout's exercises", () => {
@@ -36,5 +36,12 @@ describe("naming a workout's exercises", () => {
     [["squat", "plank", "barbell_curl", "deadlift", "lunge"], "Squat, Plank and 3 more"],
   ])("lists %j as %j", (ids, line) => {
     expect(exercisesLine(ids, named)).toBe(line);
+  });
+
+  it("names by the server's Library name first, then the phone's copy, then the id word (round one L2)", () => {
+    const by = serverFirst(named, new Map([["deadlift", "Deadlift"], ["barbell_curl", null]]));
+    expect(by("deadlift")).toEqual({ name: "Deadlift", kind: "strength" });
+    expect(by("barbell_curl").name).toBe("Barbell Curl");
+    expect(by("romanian_deadlift").name).toBe("Romanian deadlift");
   });
 });

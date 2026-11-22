@@ -13,7 +13,7 @@ import { useZoneSaved } from "../../session/TimeZoneSync";
 import { useNamed } from "../library/useLibrary";
 import { accountUnits } from "../setup/Setup";
 import { PastWorkout } from "../workout/PastWorkout";
-import { useWorkoutLayer } from "../workout/WorkoutLayer";
+import { useSentCount, useWorkoutLayer } from "../workout/WorkoutLayer";
 import { useRead } from "../dashboard/useRead";
 import { count } from "../dashboard/words";
 import {
@@ -57,22 +57,22 @@ export function CalendarTab() {
   const today = dayKeyOf(new Date());
   const { from, to } = yearRange(today, YEAR_DAYS);
   const layer = useWorkoutLayer();
-  // A workout the server has just taken shows at once: the year is read again each time one reaches it.
-  const sent = layer?.waiting.sent.length ?? 0;
+  // A workout the server has just taken shows at once: the year, and a day open, are read again each time one reaches it.
+  const sent = useSentCount();
   const days = useRead(`${CALENDAR_DAYS_READ}?from=${from}&to=${to}`, historyRangeOutSchema, useZoneSaved() + sent);
   const onPhone = layer?.waiting.waiting.length ?? 0;
   return (
     <Rise delay={60}>
       <ArtBox picture="steps" focus="top">
         <ReadOr read={days.read} again={days.again} what="Your calendar">
-          {(h) => <Activity answer={h} onPhone={onPhone} />}
+          {(h) => <Activity answer={h} onPhone={onPhone} sent={sent} />}
         </ReadOr>
       </ArtBox>
     </Rise>
   );
 }
 
-function Activity({ answer, onPhone }: { answer: HistoryRange; onPhone: number }) {
+function Activity({ answer, onPhone, sent }: { answer: HistoryRange; onPhone: number; sent: number }) {
   const today = dayKeyOf(new Date());
   const days = answer.limitedToDays === null ? YEAR_DAYS : Math.min(YEAR_DAYS, answer.limitedToDays);
   // Only the days the calendar draws: the year's or the plan's, today the last (35c-i review).
@@ -163,7 +163,7 @@ function Activity({ answer, onPhone }: { answer: HistoryRange; onPhone: number }
         }}
       >
         {/* One read for each day, so a late answer for a day left behind is never drawn under another. */}
-        {day === null ? null : <DayBox key={day} day={day} />}
+        {day === null ? null : <DayBox key={day} day={day} onPhone={onPhone} sent={sent} />}
       </Sheet>
     </>
   );
@@ -229,16 +229,28 @@ function MonthPicker({ years, month, onPick }: { years: readonly { year: number;
   );
 }
 
-function DayBox({ day }: { day: string }) {
+/** A day's workouts. `onPhone`: finished workouts not yet on the server, said in today's box, which lies over the calendar's
+ *  own line (round one H1); `sent`: read again as each reaches it. */
+function DayBox({ day, onPhone, sent }: { day: string; onPhone: number; sent: number }) {
   const { state } = useSession();
   const units = (state.kind === "in" ? accountUnits(state.user.units) : null) ?? "metric";
-  const list = useRead(`/v1/training/days/${day}`, historyDayOutSchema);
+  const list = useRead(`/v1/training/days/${day}`, historyDayOutSchema, sent);
+  const waits = onPhone > 0 && day === dayKeyOf(new Date());
+  const waitLine = (
+    <View style={styles.waitLine}>
+      <Icon name="phone" size={18} colour="orangeLight" />
+      <Txt kind="small" colour="text" style={styles.grow}>
+        {waitingWords(onPhone)}
+      </Txt>
+    </View>
+  );
   const named = useNamed();
   const [open, setOpen] = useState<string | null>(null);
   return (
     <ReadOr read={list.read} again={list.again} what="This day’s workouts">
       {(page) => {
         if (page.workouts.length === 0) {
+          if (waits) return waitLine;
           const hidden = page.limitedToDays !== null && beyondPlan(day, dayKeyOf(new Date()), page.limitedToDays);
           return (
             <View style={styles.dayNone}>
@@ -256,6 +268,7 @@ function DayBox({ day }: { day: string }) {
               {sum.trained === null ? null : <DayStat value={sum.trained} label="trained" />}
               {sum.kcal === null ? null : <DayStat value={sum.kcal} label="kcal" warm />}
             </View>
+            {waits ? waitLine : null}
             {dayWorkouts(page.workouts, named).map((w) => (
               <Pressable
                 key={w.id}

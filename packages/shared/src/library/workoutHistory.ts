@@ -63,6 +63,9 @@ export const historyWorkoutListedSchema = z.object({
   kcalPoint: z.number().int().nullable(),
   /** Its exercises' id words, each once, in the order they were first done. */
   exercises: z.array(z.string()),
+  /** Each exercise's Library name, in the same order (64a-v); null for one the Library never had, which the phone names
+   *  as a workout's page does. */
+  exerciseNames: z.array(z.string().nullable()),
 });
 export type HistoryWorkoutListed = z.infer<typeof historyWorkoutListedSchema>;
 

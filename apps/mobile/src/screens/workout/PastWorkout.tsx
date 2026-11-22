@@ -12,6 +12,7 @@ import { useNamed } from "../library/useLibrary";
 import { pastWhen, workoutName } from "../progress/calendarRules";
 import { dayKeyOf } from "../progress/progressRules";
 import { blocksOf, kcalLine, recordRowOf, type ShownSet } from "./afterWords";
+import { serverFirst } from "./pastWords";
 import { RecordsBox, SetBlocks, Tile, Wall } from "./WorkoutParts";
 import { clock } from "./words";
 
@@ -51,11 +52,7 @@ export function PastWorkout({ workoutId, units, onClose }: { workoutId: string |
     if (w === null) return null;
     const sets: ShownSet[] = w.sets.map((s) => ({ ...s, place: s.position }));
     const records = recordValues(w);
-    // The server's name for an exercise, which knows one since removed from the Library; else the phone's.
-    const name = (exercise: string) => {
-      const own = named(exercise);
-      return { name: w.sets.find((s) => s.exercise === exercise)?.exerciseName ?? own.name, kind: own.kind };
-    };
+    const name = serverFirst(named, new Map(w.sets.map((s) => [s.exercise, s.exerciseName])));
     return { blocks: blocksOf(sets, name, records, units), records: records.map((r) => recordRowOf(r, sets, units)) };
   }, [w, named, units]);
 

@@ -4,7 +4,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 import type { OnboardingAnswers } from "@app/shared";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react-native";
-import { TextInput } from "react-native";
+import { AppState, TextInput, type AppStateStatus } from "react-native";
 import { File, Paths } from "expo-file-system";
 import { App } from "../../src/App";
 import { Gesture, State } from "react-native-gesture-handler";
@@ -14,7 +14,7 @@ import { DOUBLE_TAP_ZOOM, toStage, WHOLE, zoomAbout, type View as Zoom } from ".
 import { forgetStores } from "../../src/library/myWorkout";
 import { LIBRARY_PATH } from "../../src/library/store";
 import type { Ask } from "../../src/session/calls";
-import { fakeServer, kept, lost, memoryStore, RAVI, refusal, tokens, type Reply } from "../kit";
+import { dayKey, fakeServer, kept, lost, memoryStore, RAVI, refusal, tokens, type Reply } from "../kit";
 
 const extra = { copyName: "Exercise 2", apiUrl: "http://localhost:3000" };
 const FOLDER = `${__dirname}/../../../../packages/shared/library/exercises/`;
@@ -948,6 +948,81 @@ describe("doing a workout (64a-ii)", () => {
     expect(screen.getByText("It goes to your account as soon as it can.")).toBeTruthy();
     const waiting = new File(Paths.document, `workouts-${RAVI.id}.json`);
     expect((JSON.parse(await waiting.text()) as { waiting: unknown[] }).waiting).toHaveLength(1);
+  });
+
+  // 64a-v round one H1: today's day box lies over the calendar's own waiting line, so it says the workout kept on the phone
+  // itself, never "No workout this day"; once the server takes it, the calendar and the open day read again and show it.
+  it("a workout kept on the phone is said in today's day box, and shows there once the server takes it", async () => {
+    const heard: ((state: AppStateStatus) => void)[] = [];
+    // The test setup's own stand-in, put back after: a restore would leave it with no answer for the tests after this one.
+    const spy = jest.spyOn(AppState, "addEventListener");
+    const setup = spy.getMockImplementation();
+    spy.mockImplementation((_type, handler) => {
+      heard.push(handler);
+      return { remove: () => undefined };
+    });
+    try {
+      keptWorkout([SQUAT]);
+      let online = false;
+      let taken: string | null = null;
+      const saving = withSaves((workoutId) => {
+        if (!online) return noInternet();
+        taken = workoutId;
+        return { status: 201, body: { workoutId, status: "created" } };
+      });
+      const today = dayKey(0);
+      const reads: string[] = [];
+      const ask: Ask = async (url, init) => {
+        const path = new URL(url).pathname;
+        const answer = (body: unknown) => ({ ok: true, status: 200, json: () => Promise.resolve(body) });
+        if (path === "/v1/training/days") {
+          reads.push(`year ${String(taken !== null)}`);
+          return answer({ from: dayKey(364), to: today, days: taken === null ? [] : [{ day: today, workouts: 1 }], limitedToDays: null });
+        }
+        if (path === `/v1/training/days/${today}`) {
+          reads.push(`day ${String(taken !== null)}`);
+          const workouts = taken === null ? [] : [{ workoutId: taken, name: "Legs", startedAt: new Date().toISOString(), endedAt: null, durationMs: 60_000, setsCount: 1, kcalPoint: 1, exercises: ["squat"], exerciseNames: ["Squat"] }];
+          return answer({ day: today, workouts, total: workouts.length, limitedToDays: null });
+        }
+        // The save answers a moment later, after the reads the app makes on coming to the front: only a read made because
+        // the server took the workout can see it.
+        if (path === "/v1/workouts" && init.method === "POST" && online) await new Promise((resolve) => setTimeout(resolve, 30));
+        return saving.ask(url, init);
+      };
+      await openLibrary(ask);
+      await openMine();
+      await fireEvent.press(await screen.findByRole("button", { name: "Start workout" }));
+      await fireEvent.press(await screen.findByRole("button", { name: "One rep more" }));
+      await fireEvent.press(screen.getByRole("button", { name: "One rep more" }));
+      expect(await screen.findByText("Saved on this phone")).toBeTruthy();
+      await fireEvent.press(screen.getByRole("button", { name: "Done" }));
+      await fireEvent.press(await screen.findByRole("button", { name: "History, your past workouts, day by day" }));
+      const words = "1 workout is saved on this phone. It shows here once it reaches your account.";
+      expect(await screen.findByText(words)).toBeTruthy();
+      await fireEvent.press(await screen.findByRole("button", { name: /, today, no workout$/ }));
+      await waitFor(() => {
+        expect(screen.getAllByText(words)).toHaveLength(2);
+      });
+      expect(screen.queryByText("No workout this day")).toBeNull();
+      // The signal comes back with the app to the front: the workout is sent, and both reads come again.
+      online = true;
+      const before = reads.length;
+      await act(async () => {
+        for (const h of heard) h("active");
+        await Promise.resolve();
+      });
+      expect(await screen.findByRole("button", { name: /^Legs, / })).toBeTruthy();
+      expect(screen.queryByText(words)).toBeNull();
+      expect(reads.slice(before)).toEqual(expect.arrayContaining(["year false", "day false", "year true", "day true"]));
+      expect(saving.saves).toHaveLength(1);
+      // Closed while the app's own mock of the front is still in place, its pages and stores let go.
+      await settle(50);
+      await screen.unmount();
+      forgetStores();
+    } finally {
+      if (setup === undefined) spy.mockRestore();
+      else spy.mockImplementation(setup);
+    }
   });
 
   it("put away mid-workout: a bar over the tabs and Open workout on My Workout open it again where it was", async () => {

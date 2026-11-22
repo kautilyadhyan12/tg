@@ -52,6 +52,7 @@ export async function historyDay(deps: HistoryDeps, userId: string, day: string)
       setsCount: r.sets_count,
       kcalPoint: r.kcal_point,
       exercises: r.exercises ?? [],
+      exerciseNames: r.exercise_names ?? [],
     })),
     total: rows[0]?.total ?? 0,
     limitedToDays: gate.limitedToDays,
