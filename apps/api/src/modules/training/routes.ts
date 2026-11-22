@@ -18,6 +18,7 @@ import {
   historyMonthQuerySchema,
   PLANNED_WORKOUT_LIMITS,
   savedWorkoutWriteSchema,
+  workoutEffortSchema,
   workoutSaveSchema,
   type SavedWorkoutsFull,
   type WorkoutSaveRefusal,
@@ -29,6 +30,7 @@ import { createDualRateLimit } from "../auth/rateLimit.js";
 import { tellMembersLeaderboards, type LiveNewsSender } from "../live/news.js";
 import { LIST_ITEMS_MOST } from "../../listLimit.js";
 import { ForeignWorkoutError, RefusedSaveError, UnknownExercisesError, saveWorkout } from "./service.js";
+import { giveEffort, workoutSummary } from "./summary.js";
 import { ForeignSavedError, FutureEditError, SavedFullError, deleteSaved, listSaved, readSaved, writeSaved } from "./saved.js";
 
 /** Twelve hours of heart rate at one a second, as text, is about 0.6 MB. */
@@ -126,6 +128,33 @@ export function registerTrainingRoutes(
     if (!parsed.success) return notFound(req, reply, "workout");
     const found = await historyWorkout(readDeps, owner(req), parsed.data);
     return found === null ? notFound(req, reply, "workout") : reply.status(200).send(found);
+  });
+
+  // ── after a workout (job 64a-iii): what the server adds to the phone's own summary, and the effort stars given
+  // after the save. Somebody else's workout is the same 404 as one that does not exist.
+  app.get<{ Params: { id: string } }>("/v1/training/workouts/:id/summary", { onRequest: [app.authenticate, readLimit] }, async (req, reply) => {
+    const parsed = z.uuid().safeParse(req.params.id);
+    if (!parsed.success) return notFound(req, reply, "workout");
+    const found = await workoutSummary({ ...readDeps, now }, owner(req), parsed.data);
+    return found === null ? notFound(req, reply, "workout") : reply.status(200).send(found);
+  });
+
+  // Thirty a minute for the person, never by address: a press on each star is one each.
+  const effortLimit = createDualRateLimit({
+    name: "workout_effort",
+    max: 30,
+    ipMax: null,
+    windowMs: 60 * 1000,
+    identifier: (req) => req.authUser?.id ?? null,
+    redis: deps.redis,
+  });
+  app.put<{ Params: { id: string } }>("/v1/training/workouts/:id/effort", { onRequest: [app.authenticate, effortLimit] }, async (req, reply) => {
+    const id = z.uuid().safeParse(req.params.id);
+    if (!id.success) return notFound(req, reply, "workout");
+    const parsed = workoutEffortSchema.safeParse(req.body);
+    if (!parsed.success) return validationError(req, reply, issues(parsed.error));
+    const given = await giveEffort({ sql: deps.sql }, owner(req), id.data, parsed.data.effort);
+    return given ? reply.status(200).send({ workoutId: id.data, effort: parsed.data.effort }) : notFound(req, reply, "workout");
   });
 
   app.get<{ Params: { exercise: string } }>("/v1/training/exercises/:exercise/records", { onRequest: [app.authenticate, readLimit] }, async (req, reply) => {

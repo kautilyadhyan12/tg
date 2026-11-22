@@ -45,6 +45,9 @@ export const workouts = pgTable(
     effort: smallint("effort"),
     heartAvg: smallint("heart_avg"),
     heartMax: smallint("heart_max"),
+    // 0246 (job 64a-iii): the body weight the calories were worked out at, in grams, as it stood when the
+    // workout was saved; empty where the person had given none (70 kg was used), and on every older workout.
+    kcalWeightGrams: integer("kcal_weight_grams"),
     createdAt: createdAt(),
   },
   (t) => [
@@ -52,6 +55,7 @@ export const workouts = pgTable(
     check("workouts_name_check", sql`${t.name} IS NULL OR char_length(${t.name}) BETWEEN 1 AND 60`),
     check("workouts_started_from_check", sql`${t.startedFrom} IN ('saved','app_plan','gym_plan','none')`),
     check("workouts_effort_check", sql`${t.effort} BETWEEN 1 AND 5`),
+    check("workouts_kcal_weight_check", sql`${t.kcalWeightGrams} IS NULL OR ${t.kcalWeightGrams} BETWEEN 1 AND 999990`),
     check(
       "workouts_heart_check",
       sql`(${t.heartAvg} IS NULL AND ${t.heartMax} IS NULL) OR (${t.heartAvg} BETWEEN 30 AND 240 AND ${t.heartMax} BETWEEN 30 AND 240 AND ${t.heartAvg} <= ${t.heartMax})`,

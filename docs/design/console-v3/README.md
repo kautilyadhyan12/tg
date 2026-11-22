@@ -76,6 +76,17 @@ permission a page has stays.
 | `SettingsMessages` | Automatic messages: the ten messages, each with its switch, number, words and own line; the button to the exact place where nobody would get one yet; Save pinned | V11 (V0-d-iii-a) |
 | `SettingsReferral` | Refer a friend: the switch, the gift for each side, its promo code, what members and their friend read | V11 (V0-d-iii-a) |
 | `PhoneSettings` | Settings on a phone: the list of sections first, each section a page of its own with Save at the foot, Disconnect Square from the bottom | V11 (V0-d-iii-a) |
+| `SettingsBooking` | Booking rules: Classes and Personal training, each rule with its own line, the fees, where a fee cannot be set yet, every message Save can say | V11 (V0-d-iii-b) |
+| `SettingsBookingOverdue` | Booking rules: Overdue payments, Stop new bookings until they pay, the grace period in Billing rules, who it stops today with View all | V11 (V0-d-iii-b) |
+| `SettingsDevices` | Check-in devices: each device with On, Waiting, Off or Paused, the new link to open once, New link and Switch off asked under the device, Add a device | V11 (V0-d-iii-b) |
+| `SettingsWho` | Who can check in: who the front desk checks in, overdue payments and waivers, who is sent to staff today and why, Open Attendance | V11 (V0-d-iii-b) |
+| `SettingsWaiver` | Waiver: the words, who has signed, who will be asked to sign, Turn off asked under its button; before there is one and once it is turned off | V11 (V0-d-iii-b) |
+| `SettingsAgreement` | Membership agreements: the default agreement, Other agreements, Add agreement, Before they book with who has to sign today, Turn off asked under its button | V11 (V0-d-iii-b) |
+| `SettingsAgreementAdd` | Add agreement under Other agreements (name, terms, used for, a membership moving from another), one opened under its own line, Turn off for one | V11 (V0-d-iii-b) |
+| `SettingsDeletedForms` | Signed forms of deleted members: search, the forms kept, one opened in place with its facts and terms; what staff who are not the owner read | V11 (V0-d-iii-b) |
+| `SettingsFollowUp` | Follow-up emails to leads: Send them for me, Replies go to, this month's count, each reason it cannot send with its button | V11 (V0-d-iii-b) |
+| `Account` | Your account: Delete account, an owner choosing a new owner first, staff getting a code, the code | V11 (V0-d-iii-b) |
+| `PhoneSettingsDesk` | On a phone: Who can check in as a page with Save at the foot, Turn off a waiver from the bottom, a device's new link, Your account from More | V11 (V0-d-iii-b) |
 
 ## Drawn in V0-d-i (2026-11-19)
 
@@ -166,6 +177,26 @@ permission a page has stays.
   own with Save at the foot. Each section keeps its own Save. Where a box opens (`Boxes`): Remove a Terminal and
   Disconnect Square under what was pressed; Pair a Square Terminal and Leave this page? in the middle; Disconnect
   Square from the bottom on a phone.
+
+## Drawn in V0-d-iii-b (2026-11-21)
+
+- **Every button, field and message of Settings' last seven sections and of Your account is on these boards**:
+  346 of 346, read from the code (`BookingSettingsPanel.jsx`, `CheckinDevicesPanel.jsx`, `CheckinRulesPanel.jsx`,
+  `WaiverPanel.jsx`, `AgreementPanel.jsx`, `OtherAgreementForm.jsx`, `AgreementBookingsPart.jsx`,
+  `DeletedFormsPanel.jsx`, `LeadEmailsPanel.jsx`, `Account.jsx`, their views and the words in `packages/shared`).
+  Signing at the desk, a card agreed on a Terminal and a copy emailed belong to a member's page (V2a, V2b) and the
+  front desk (V7), and are not drawn here. With these, every console page has a third-look board.
+- **Looked at in the same 24 screen shapes in both looks** as the boards before.
+- **Word changes** beyond the list on `Main`: "See all" reads **View all**, as V0-d-ii-b named it; "the Bills box on
+  Memberships" reads **Billing rules on Memberships**, as V0-d-i named it.
+- **Booking rules** keeps one Save for its three boxes (Classes, Personal training, Overdue payments), pinned at the
+  foot as on Automatic messages. **Membership agreements** keeps two: the agreement's own, and Before they book's.
+- **Where a box opens:** Turn off for a waiver or an agreement, and Switch off or Make a new link for a device, open
+  under what was pressed. Add agreement and an other agreement open in place under Other agreements, and a signed
+  form opens in place under its row. On a phone, Turn off comes from the bottom, and a device's New link and Switch
+  off are in its ⋯, from the bottom. Open Leads with a change not saved asks Leave this page? in the middle, as on
+  Payments.
+- **Your account** is opened from your name at the foot of the menu, or from More on a phone. No menu line is lit.
 
 ## What a builder must know
 

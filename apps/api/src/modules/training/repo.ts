@@ -1,7 +1,7 @@
 // Saving a workout from the phone (spec Part 2 §13.5, job 61a): the only file of this module that
 // touches the database. A workout is the person's own: it is read and written with its owner in the
 // WHERE, and a set is written only by the request that made its workout.
-import type { TransactionSql } from "postgres";
+import type { Sql, TransactionSql } from "postgres";
 
 /** The posted workout id is somebody else's. Answered 404, as an id that does not exist is. */
 export class ForeignWorkoutError extends Error {
@@ -61,6 +61,8 @@ export interface WorkoutRow {
   effort: number | null;
   heartAvg: number | null;
   heartMax: number | null;
+  /** The body weight `kcalPoint` was worked out at, in grams; null where the person had given none. */
+  kcalWeightGrams: number | null;
 }
 
 /** Inserts the workout unless its id is taken; true when this request made it. */
@@ -70,11 +72,11 @@ export async function insertWorkout(tx: TransactionSql, w: WorkoutRow): Promise<
     INSERT INTO workouts (id, user_id, started_at, ended_at, platform, engine_version, bundle_version,
                           sets_count, total_reps, avg_form_score, duration_ms, quality_flags,
                           kcal_point, kcal_calc_version, name, time_zone, started_from, effort,
-                          heart_avg, heart_max)
+                          heart_avg, heart_max, kcal_weight_grams)
     VALUES (${w.id}, ${w.userId}, ${w.startedAt}, ${w.endedAt}, ${w.platform}, ${w.appVersion}, NULL,
             ${w.setsCount}, ${w.totalReps}, NULL, ${w.durationMs}, '{}',
             ${w.kcalPoint}, ${w.kcalCalcVersion}, ${w.name}, ${w.timeZone}, ${w.startedFrom}, ${w.effort},
-            ${w.heartAvg}, ${w.heartMax})
+            ${w.heartAvg}, ${w.heartMax}, ${w.kcalWeightGrams})
     ON CONFLICT (id) DO NOTHING`;
   return inserted.count === 1;
 }
@@ -115,4 +117,12 @@ export async function insertSets(tx: TransactionSql, workoutId: string, userId: 
     FROM jsonb_to_recordset(${tx.json(values)}::jsonb)
       AS x(exercise_id uuid, set_index smallint, reps smallint, hold_ms integer, duration_ms integer,
            counted text, measured_in text, target integer, weight_grams integer, rest_seconds integer)`;
+}
+
+/** The effort stars of the person's own workout (job 64a-iii), given after it was saved; false where the workout
+ *  is not theirs or does not exist. Sent twice it is the same. */
+export async function setEffort(sql: Sql, userId: string, workoutId: string, effort: number): Promise<boolean> {
+  const rows = await sql<{ id: string }[]>`
+    UPDATE workouts SET effort = ${effort} WHERE id = ${workoutId} AND user_id = ${userId} RETURNING id`;
+  return rows.length > 0;
 }

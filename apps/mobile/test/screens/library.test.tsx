@@ -892,9 +892,8 @@ describe("doing a workout (64a-ii)", () => {
   const PLANK = { id: "plank", plan: { measuredIn: "time", sets: [{ target: 5, weightGrams: null, restSeconds: null }] } };
   type Save = { key: string | undefined; body: { workoutId: string; sets: { exercise: string; done: number }[] } };
   /** The server with the save route, each workout kept once by its id, as 61a's route does. */
-  function withSaves(answer: (workoutId: string) => Reply = (workoutId) => ({ status: 201, body: { workoutId, status: "created" } })) {
+  function withSaves(answer: (workoutId: string) => Reply = (workoutId) => ({ status: 201, body: { workoutId, status: "created" } }), library = libraryServer()) {
     const saves: Save[] = [];
-    const library = libraryServer();
     const ask: Ask = async (url, init) => {
       if (new URL(url).pathname !== "/v1/workouts" || init.method !== "POST") return library.ask(url, init);
       const body = JSON.parse(init.body ?? "{}") as Save["body"];
@@ -1010,5 +1009,187 @@ describe("doing a workout (64a-ii)", () => {
     expect(await screen.findByRole("button", { name: "Start workout" })).toBeTruthy();
     await settle(50);
     expect(server.saves).toHaveLength(0);
+  });
+
+  // ── after it (64a-iii): the workout's last screen.
+  const ALLERGY = "Have a food allergy? Always check the label.";
+  const LABELS = "Check labels too: some breads and cheeses contain animal ingredients.";
+  const yogurt = { canonical: "greek_yogurt_plain_nonfat", name: "Greek yogurt (plain, nonfat)", grams: 175, servings: 175, unit: "g", kcal: 103, proteinG: 17.9, carbsG: 6.4, fatG: 0.7 };
+  /** The server's summary of a workout, as 64a-iii's route answers it: 60 XP, a 5-day streak, the squat's most reps. */
+  const afterOf = (workoutId: string, over: Record<string, unknown> = {}) => ({
+    workoutId,
+    kcalPoint: 118,
+    weightKg: 82,
+    effort: null,
+    xp: { earned: 60, forWorkout: 50, forStreak: 10, forBadges: 0, view: { total: 532, level: 3, xpInLevel: 184, xpForNext: 374, progressPct: 49.2, nextLevelAt: 722 } },
+    streak: { days: 5, today: true },
+    records: [{ exercise: "squat", exerciseName: "Squat", measuredIn: "reps", kind: "most_reps", position: 0, value: 2 }],
+    food: { ideas: [{ when: "soon", idea: { kind: "light", items: [yogurt], totals: { kcal: 162, proteinG: 19.2, carbsG: 20.6, fatG: 1.1 } } }], caution: ALLERGY, labelCaution: LABELS },
+    ...over,
+  });
+  type Effort = { path: string; body: { effort: number } };
+  /** The server with the save, the summary and the stars' routes. */
+  function withAfter(
+    summary: (workoutId: string) => Reply = (workoutId) => ({ status: 200, body: afterOf(workoutId) }),
+    save: (workoutId: string) => Reply = (workoutId) => ({ status: 201, body: { workoutId, status: "created" } }),
+    extra: { hold?: Promise<void>; weightKg?: number } = {},
+  ) {
+    const efforts: Effort[] = [];
+    const saves = withSaves(save, libraryServer(extra.weightKg === undefined ? {} : { weightKg: extra.weightKg }));
+    const ask: Ask = async (url, init) => {
+      const path = new URL(url).pathname;
+      const summaryOf = /^\/v1\/training\/workouts\/([^/]+)\/summary$/.exec(path);
+      if (summaryOf?.[1] !== undefined && init.method === "GET") {
+        const reply = summary(summaryOf[1]);
+        return { ok: reply.status < 300, status: reply.status, json: () => Promise.resolve(reply.body) };
+      }
+      const effortOf = /^\/v1\/training\/workouts\/([^/]+)\/effort$/.exec(path);
+      if (effortOf?.[1] !== undefined && init.method === "PUT") {
+        const body = JSON.parse(init.body ?? "{}") as Effort["body"];
+        if (extra.hold !== undefined) await extra.hold;
+        efforts.push({ path, body });
+        return { ok: true, status: 200, json: () => Promise.resolve({ workoutId: effortOf[1], effort: body.effort }) };
+      }
+      return saves.ask(url, init);
+    };
+    return { ask, saves: saves.saves, efforts };
+  }
+  const finishSquat = async (ask: Ask) => {
+    keptWorkout([SQUAT]);
+    await openLibrary(ask);
+    await openMine();
+    await fireEvent.press(await screen.findByRole("button", { name: "Start workout" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Set done · 2 reps" }));
+    expect(await screen.findByText("Workout complete")).toBeTruthy();
+  };
+
+  it("after it, the worst thing: every meal idea shows the allergy warning (and a vegetarian's the label warning)", async () => {
+    await finishSquat(withAfter().ask);
+    await fireEvent.press(screen.getByRole("button", { name: "Recover" }));
+    expect(await screen.findByText("Within 30 minutes")).toBeTruthy();
+    expect(screen.getByText(/^Greek yogurt \(plain, nonfat\) +175 g$/)).toBeTruthy();
+    expect(screen.getByText("162 kcal · 19 g protein")).toBeTruthy();
+    expect(screen.getByText(ALLERGY)).toBeTruthy();
+    expect(screen.getByText(LABELS)).toBeTruthy();
+  });
+
+  it("after it, the worst thing: no meal idea is drawn without a warning beside it", async () => {
+    await finishSquat(withAfter((id) => ({ status: 200, body: afterOf(id, { food: { ideas: afterOf(id).food.ideas, caution: "", labelCaution: null } }) })).ask);
+    await fireEvent.press(screen.getByRole("button", { name: "Recover" }));
+    // A summary whose warning is empty is never read: the ideas wait as if the server had not answered.
+    expect(await screen.findByText("Couldn't load meal ideas.")).toBeTruthy();
+    expect(screen.queryByText(/^Greek yogurt/)).toBeNull();
+  });
+
+  it("after it: the time, calories and sets; XP, the level and the streak; a new record; every set done", async () => {
+    await finishSquat(withAfter().ask);
+    expect(await screen.findByText("+60 XP")).toBeTruthy();
+    expect(screen.getByText("50 for the workout · 10 for your streak")).toBeTruthy();
+    expect(screen.getByText("184/374 XP → Level 4")).toBeTruthy();
+    expect(screen.getByText("5-day streak")).toBeTruthy();
+    expect(screen.getByText("About 118 kcal for you, at 82 kg")).toBeTruthy();
+    expect(screen.getByLabelText("Kcal, about 118 calories")).toBeTruthy();
+    expect(screen.getByText("New records · 1")).toBeTruthy();
+    expect(screen.getByLabelText("New record, Most reps, Squat · set 1, 2 reps")).toBeTruthy();
+    await fireEvent.press(screen.getByRole("button", { name: "Sets" }));
+    expect(await screen.findByText("1 exercise · 1 set")).toBeTruthy();
+    expect(screen.getByLabelText(/^Set 1, 2 reps .*a new record$/)).toBeTruthy();
+    await fireEvent.press(screen.getByRole("button", { name: "Recover" }));
+    expect(await screen.findByText("Hip flexor stretch")).toBeTruthy();
+    expect(screen.getByText("30 seconds each side")).toBeTruthy();
+    expect(screen.getByText("Drink about 500 ml of water in the next 30 minutes.")).toBeTruthy();
+  });
+
+  it("after it: the stars are saved to the workout, the last one pressed kept", async () => {
+    const server = withAfter();
+    await finishSquat(server.ask);
+    expect(await screen.findByText("Tap a star")).toBeTruthy();
+    await fireEvent.press(screen.getByRole("button", { name: "4 of 5: Challenging" }));
+    await fireEvent.press(screen.getByRole("button", { name: "3 of 5: Just right" }));
+    expect(await screen.findByText("Just right · Saved")).toBeTruthy();
+    const id = server.saves[0]?.body.workoutId ?? "";
+    expect(server.efforts.map((e) => [e.path, e.body.effort])).toEqual([
+      [`/v1/training/workouts/${id}/effort`, 4],
+      [`/v1/training/workouts/${id}/effort`, 3],
+    ]);
+  });
+
+  it("after it with no internet: what the phone holds shows, the stars wait on the phone, the rest says when it comes", async () => {
+    const server = withAfter(undefined, noInternet);
+    await finishSquat(server.ask);
+    expect(await screen.findByText("Saved on this phone")).toBeTruthy();
+    expect(screen.getByText("Your XP and records show here once this workout reaches your account.")).toBeTruthy();
+    expect(screen.getByLabelText("Kcal, not yet known")).toBeTruthy();
+    await fireEvent.press(screen.getByRole("button", { name: "3 of 5: Just right" }));
+    expect(await screen.findByText("Just right · Saved on this phone")).toBeTruthy();
+    await settle(50);
+    const stars = new File(Paths.document, `workout-effort-${RAVI.id}.json`);
+    expect((JSON.parse(await stars.text()) as { waiting: { effort: number }[] }).waiting.map((e) => e.effort)).toEqual([3]);
+    expect(server.efforts).toHaveLength(0);
+    await fireEvent.press(screen.getByRole("button", { name: "Sets" }));
+    expect(await screen.findByText("1 exercise · 1 set")).toBeTruthy();
+    await fireEvent.press(screen.getByRole("button", { name: "Recover" }));
+    expect(await screen.findByText("Meal ideas show here once this workout reaches your account.")).toBeTruthy();
+    expect(screen.getByText("Hip flexor stretch")).toBeTruthy();
+  });
+
+  it("after it: a summary that cannot be read says so, and Try again reads it", async () => {
+    let fails = true;
+    await finishSquat(withAfter((id) => (fails ? { status: 500, body: { error: "internal" } } : { status: 200, body: afterOf(id) })).ask);
+    expect(await screen.findByText("Couldn't load your XP and records.")).toBeTruthy();
+    fails = false;
+    await fireEvent.press(screen.getByRole("button", { name: "Try again" }));
+    expect(await screen.findByText("+60 XP")).toBeTruthy();
+  });
+
+  it("after it, a first workout: no records box and no streak line", async () => {
+    await finishSquat(withAfter((id) => ({ status: 200, body: afterOf(id, { records: [], streak: { days: 0, today: false }, xp: { ...afterOf(id).xp, earned: 50, forStreak: 0 } }) })).ask);
+    expect(await screen.findByText("+50 XP")).toBeTruthy();
+    expect(screen.getByText("50 for the workout")).toBeTruthy();
+    expect(screen.queryByText(/^New records/)).toBeNull();
+    expect(screen.queryByText(/-day streak$/)).toBeNull();
+  });
+
+  it("after it: New workout opens the Library", async () => {
+    await finishSquat(withAfter().ask);
+    await fireEvent.press(screen.getByRole("button", { name: "New workout" }));
+    expect(await screen.findByText("3 Exercises")).toBeTruthy();
+  });
+
+  it("after it, round one L2: the stars say Saved only once the server has them", async () => {
+    const gate: { open: () => void } = { open: () => undefined };
+    const hold = new Promise<void>((resolve) => {
+      gate.open = resolve;
+    });
+    const server = withAfter(undefined, undefined, { hold });
+    await finishSquat(server.ask);
+    expect(await screen.findByText("Tap a star")).toBeTruthy();
+    await fireEvent.press(screen.getByRole("button", { name: "3 of 5: Just right" }));
+    expect(await screen.findByText("Just right")).toBeTruthy();
+    await settle(100);
+    expect(screen.queryByText("Just right · Saved")).toBeNull();
+    expect(server.efforts).toHaveLength(0);
+    gate.open();
+    expect(await screen.findByText("Just right · Saved")).toBeTruthy();
+    expect(server.efforts).toHaveLength(1);
+  });
+
+  it("after it, round one L1: a person who has given their weight is told their next workouts use it, never asked again", async () => {
+    await finishSquat(withAfter((id) => ({ status: 200, body: afterOf(id, { weightKg: null }) })).ask);
+    expect(await screen.findByText("About 118 kcal, at 70 kg")).toBeTruthy();
+    expect(screen.queryByText("Your weight is saved. Your next workouts use it.")).toBeNull();
+    await screen.unmount();
+    forgetStores();
+    await finishSquat(withAfter((id) => ({ status: 200, body: afterOf(id, { weightKg: null }) }), undefined, { weightKg: 82 }).ask);
+    expect(await screen.findByText("About 118 kcal, at 70 kg")).toBeTruthy();
+    expect(await screen.findByText("Your weight is saved. Your next workouts use it.")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Add your weight" })).toBeNull();
+  });
+
+  it("after it, round one L5: a workout the server refused says on Results why it earns nothing", async () => {
+    await finishSquat(withAfter(undefined, () => ({ status: 400, body: { error: "validation_error", message: "x" } })).ask);
+    expect(await screen.findByText("This workout couldn't be saved.")).toBeTruthy();
+    expect(screen.getByText("This workout wasn't saved, so it earns no XP or records.")).toBeTruthy();
+    expect(screen.queryByText("How hard was it?")).toBeNull();
   });
 });

@@ -70,13 +70,20 @@ export interface WorkoutRow {
   kcal_point: number | null;
   kcal_calc_version: number | null;
   platform: string;
+  /** The camera's form score for the whole workout; null for one with no camera set. */
+  avg_form_score: number | null;
+  /** The body weight its calories were worked out at, in grams; null where none was given (70 kg). */
+  kcal_weight_grams: number | null;
+  /** When the server saved it: the badges this save awarded are told from it. */
+  created_at: Date;
 }
 
 /** The person's own workout, or null for one that is not theirs or does not exist. */
 export async function ownWorkout(sql: Sql, userId: string, workoutId: string): Promise<WorkoutRow | null> {
   const rows = await sql<WorkoutRow[]>`
     SELECT id, name, started_at, ended_at, time_zone, started_from, effort, heart_avg, heart_max,
-           duration_ms, kcal_point, kcal_calc_version, platform
+           duration_ms, kcal_point, kcal_calc_version, platform, avg_form_score,
+           kcal_weight_grams, created_at
     FROM workouts WHERE id = ${workoutId} AND user_id = ${userId}`;
   return rows[0] ?? null;
 }
@@ -214,4 +221,15 @@ export async function workoutDaysOf(sql: Sql, userId: string, workoutIds: readon
 export async function exerciseIdOf(sql: Sql, slug: string): Promise<string | null> {
   const rows = await sql<{ id: string }[]>`SELECT id FROM exercises WHERE slug = ${slug}`;
   return rows[0]?.id ?? null;
+}
+
+/** When the person next saved a workout or a run after this workout's own save; null for none yet. A badge awarded after
+ *  it is that save's, never this workout's (job 64a-iii, round one L7). */
+export async function nextSaveAfter(sql: Sql, userId: string, workoutId: string, createdAt: Date): Promise<Date | null> {
+  const rows = await sql<{ at: Date | null }[]>`
+    SELECT LEAST(
+      (SELECT min(created_at) FROM workouts WHERE user_id = ${userId} AND id <> ${workoutId} AND created_at >= ${createdAt}),
+      (SELECT min(created_at) FROM runs WHERE user_id = ${userId} AND created_at >= ${createdAt})
+    ) AS at`;
+  return rows[0]?.at ?? null;
 }

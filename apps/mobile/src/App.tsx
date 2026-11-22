@@ -49,7 +49,7 @@ import { BodyOutboxProvider } from "./screens/progress/BodyOutbox";
 import { MealOutboxProvider } from "./screens/food/MealOutbox";
 import { PhotoSheetStoreProvider } from "./screens/food/PhotoSheetStore";
 import type { TextStore } from "./screens/food/outbox";
-import { MeScreen, WorkoutScreen, openAchievements, openRunning } from "./screens/tabs";
+import { MeScreen, WorkoutScreen, openAchievements, openExercises, openRunning } from "./screens/tabs";
 
 /** The five tabs, in their order (spec Part 6 §16.3a). A tab's name is the word under its icon. */
 export const TABS = [
@@ -159,6 +159,12 @@ const openTappedTab = (tapped: Tapped | GymTapped) => {
   if (tabsRef.isReady()) tabsRef.navigate(tabOfTap(tapped));
   else heldTab = tabOfTap(tapped);
 };
+/** New workout on a workout's last screen: the Workout tab, on its Exercises. */
+const openNewWorkout = () => {
+  openExercises();
+  if (tabsRef.isReady()) tabsRef.navigate("Workout");
+  else heldTab = "Workout";
+};
 const openHeldTab = () => {
   if (heldTab !== null && tabsRef.isReady()) tabsRef.navigate(heldTab);
   heldTab = null;
@@ -171,7 +177,7 @@ function FiveTabs({ mealStore, bodyStore, runStore }: Stores) {
         <BodyOutboxProvider store={bodyStore}>
           <RunOutboxProvider store={runStore}>
             <RunLayerProvider>
-              <WorkoutLayerProvider>
+              <WorkoutLayerProvider onNewWorkout={openNewWorkout}>
                 <NotificationsProvider onTapped={openTappedTab}>
                   <TabsOfPlaces />
                 </NotificationsProvider>

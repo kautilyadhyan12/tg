@@ -504,14 +504,14 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
      - V1-e-i. [x] **Pages, actions and settings** · merged 2026-11-18 · PR #584
      - V1-e-ii. [x] **People** · merged 2026-11-19 · PR #589
    - V1-f. [x] **Payments overview** · merged 2026-11-19 · PR #594
-   - V0-d. **The boards not drawn yet, in the third look**, from `kit3.css`, every button of the real page kept, each looked at in the 24 screen shapes (Kd, 2026-11-19). No code. In three (2026-11-19):
+   - V0-d. [x] **The boards not drawn yet, in the third look**, from `kit3.css`, every button of the real page kept, each looked at in the 24 screen shapes (Kd, 2026-11-19). No code. In three (2026-11-19):
      - V0-d-i. [x] **The four ways a box opens, Sell and Memberships** · merged 2026-11-19 · PR #597
      - V0-d-ii. [x] **Attendance, Classes and Leads**, in two (2026-11-20):
        - V0-d-ii-a. [x] **Attendance, the front desk, Leads and At risk** · merged 2026-11-20 · PR #601
        - V0-d-ii-b. [x] **Classes and personal training** · merged 2026-11-20 · PR #603
-     - V0-d-iii. **Reports and Settings**, in two (2026-11-20: Settings has 13 sections and Your account):
+     - V0-d-iii. [x] **Reports and Settings**, in two (2026-11-20: Settings has 13 sections and Your account):
        - V0-d-iii-a. [x] **Reports, and Settings' side list with its first six sections** · merged 2026-11-20 · PR #606
-       - V0-d-iii-b. [ ] **Settings' other seven sections and Your account**
+       - V0-d-iii-b. [x] **Settings' other seven sections and Your account** · merged 2026-11-22 · PR #612
 23. **A gym finds its way** (Kd, RULINGS 2026-10-07: the console read as "a maze"). Each page was clear alone and the fault was between pages. Four jobs in this order, built in Folder A before 17e-ii.
    - 23a. **One answer for membership**, split 2026-10-07 in two (the list's read and Add member's form are more than one terminal):
      - 23a-i. [x] **The Members list shows what each person holds** — merged 2026-10-07 (PR #187).
@@ -862,7 +862,8 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
     - 64a. **By hand and by timer** (after 61 and 63). Split 2026-11-20 by its terminal in six, each a terminal of its own.
       - 64a-i. [x] **Set up your workout** — merged 2026-11-21 (PR #610).
       - 64a-ii. [x] **Do it** — merged 2026-11-21 (PR #614).
-      - 64a-iii. [ ] **After it**: the summary set by set, calories, XP and level, streak, records, effort stars, meal ideas, stretches.
+      - 64a-iii. [x] **After it** — merged 2026-11-22 (PR #616).
+      - 64a-ii-b. [ ] **Time trained, never time paused** (Kd, 2026-11-21, next in this folder, before 64a-iv): a saved workout's length leaves its pauses out, so Hours Trained, the minutes challenge, goals and the gym's numbers count only time trained; 64a-ii's save sent the whole (a workout left paused for hours paid a "120 minutes" challenge's 200 XP).
       - 64a-iv. [ ] **Saved workouts**: save, list, load and delete (61c's routes), with a question first.
       - 64a-v. [ ] **History**: the month, a day's workouts and one workout set by set (61b's routes).
       - 64a-vi. [ ] **Heart rate and sounds**: the monitor of 37f-i during a workout and kept with it (Kd, 2026-11-12); the sounds at a rep, a set's end and the last 3 seconds.

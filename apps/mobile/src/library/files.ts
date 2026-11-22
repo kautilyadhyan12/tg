@@ -105,3 +105,6 @@ export const workoutRunFile = (userId: string): TextStore => personFile(userId, 
 
 /** A person's finished workouts not yet on the server (64a-ii). */
 export const workoutsWaitingFile = (userId: string): TextStore => personFile(userId, `workouts-${userId}.json`);
+
+/** The effort stars a person gave their workouts, not yet on the server (64a-iii). */
+export const effortWaitingFile = (userId: string): TextStore => personFile(userId, `workout-effort-${userId}.json`);

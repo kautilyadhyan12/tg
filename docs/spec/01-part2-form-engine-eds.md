@@ -2821,6 +2821,42 @@ with a screen reader.
   phone · It goes to your account as soon as it can."; the time shown is the time trained, every pause left out.
 - **Not in 64a-ii:** the summary (64a-iii), saved workouts (64a-iv), history (64a-v), heart rate and sounds (64a-vi), the camera (64b).
 
+**As built in 64a-iii (2026-11-21, Kd's drawing of that day, its fonts and glow brought down at his word).** A workout's last
+screen (`apps/mobile/src/screens/workout/Summary.tsx`, words `afterWords.ts`, table-tested):
+- **What the phone holds shows at once, with no internet:** confetti (none under Reduce motion), the wall timer with the time,
+  calories and sets (calories unlit until the server's are known), whether it is saved, then three tabs. **Sets:** every set
+  done, exercise by exercise, "8 reps of 10" where a set stopped short, the weight, what each exercise lifted in all, a gold PR
+  on the set that made a record. **Recover:** the cool-down stretches and the water reminder (500 ml in 30 minutes, 17 fl oz
+  beside it in imperial). `Finished` now carries the sets done and the exercises as they were at Start.
+- **What the server works out** fills in once the workout is saved: `GET /v1/training/workouts/:id/summary`
+  (`workoutAfterSchema`, `apps/api/src/modules/training/summary.ts`), the person's own workout only (somebody else's, a broken
+  id or none is 404), within the 120 reads a minute of the history. It gives the calories the save worked out and the weight
+  they are reckoned at (null: 70 kg, said so, with Add your weight), the stars as kept, XP earned (the workout's 50 and its form
+  bonus, plus 10 for the day's first workout continuing the streak, the same rule the total counts) with the level now, the
+  streak now, each new record with what it was (61b's records, the heaviest, the estimate and most lifted in grams, most reps,
+  the longest hold in seconds), and the meal ideas after a workout (the one rule of 34d-ii) with the allergy warning, which
+  the phone's reading refuses empty, so no idea is drawn without it. **Results:** XP with where it came from, the level bar,
+  the streak, New records under a bell, and How hard was it?. Waiting: "Adding up your XP and records…"; on the phone: "…
+  show here once this workout reaches your account."; unread: "Couldn't load your XP and records." with Try again.
+- **The stars** (Too easy, Easy, Just right, Challenging, Very hard): `PUT /v1/training/workouts/:id/effort`
+  (`workoutEffortSchema`, 1 to 5), 200 with what the workout holds, 404 for somebody else's, 30 a minute for the person.
+  On the phone each press waits in the one shared list (`library/effortSaving.ts`, `workout-effort-<id>.json`, removed with the
+  account) under its own id, sent in the order pressed so the last pressed is kept, and only once its workout is on the server.
+  A 404 or 400 is let go with no words (nothing the person could do); no answer, 401, 429 and 5xx are tried again.
+- **The stretches** (`stretchesFor` in `packages/shared`): the old summary's words, picked by the plain names of the Library's
+  main muscles of the workout's exercises, read from the Library kept on the phone. The old summary route and its
+  `summaryContent.ts` stay as they are for the web's frozen page.
+- **New workout** closes the screen onto Workout → Exercises; Done onto where the person was.
+- **Round one (2026-11-21):** the weight beside the calories is the one the save worked them out at, kept on the workout
+  (`kcal_weight_grams`, migration 0246, empty where none was given; a weigh-in after the save never changes the line); a
+  person who has given a weight since reads "Your weight is saved. Your next workouts use it." in place of Add your weight;
+  the XP adds the badges the save awarded (`forBadges`: a badge a workout can earn, never a meal's, awarded within 10 s of
+  the workout's save and before the person's next workout or run; "· 50 for a new badge"); the streak says "Train today to keep it" where today is not yet one of its days (`streak.today`); a press of the
+  stars counts as waiting until the server has it, and one the full list could not keep says "These stars couldn't be saved.
+  Try again later."; a refused workout's Results says "This workout wasn't saved, so it earns no XP or records."; the shared
+  waiting list takes `ready`, so stars waiting for their workout keep their place and never hold up another workout's.
+- **Not in 64a-iii:** the form score and grade (64b, with the camera); the share card (item 39).
+
 ### 13.7 The jobs (ROADMAP Stage 5, exercise folder 2; ROADMAP wins where they differ)
 
 | Job | What it builds | Waits for |

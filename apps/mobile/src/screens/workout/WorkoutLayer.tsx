@@ -1,6 +1,6 @@
-import type { RefusedWorkout, RunExercise, WorkoutRun, WorkoutSave } from "@app/shared";
+import type { RefusedWorkout, RunExercise, WaitingEffort, WorkoutRun, WorkoutSave } from "@app/shared";
 import { activateKeepAwakeAsync, deactivateKeepAwake } from "expo-keep-awake";
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { AppState, Platform, Pressable, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { appVersion } from "../../appExtra";
@@ -8,7 +8,8 @@ import { BottomRoom, useBottomRoom } from "../../look/BottomRoom";
 import { colours, shadows, sizes } from "../../look/colours";
 import { Modal } from "../../look/Modal";
 import { fonts, Txt } from "../../look/Txt";
-import { workoutRunFile, workoutsWaitingFile } from "../../library/files";
+import { effortWaitingFile, workoutRunFile, workoutsWaitingFile } from "../../library/files";
+import { effortSender, effortWaiting, type EffortWaiting } from "../../library/effortSaving";
 import type { Units } from "../../library/records";
 import { newWorkoutId } from "../../library/workoutId";
 import { setOf, shownAt, type Press } from "../../library/workoutRun";
@@ -53,15 +54,25 @@ export const useWorkoutLayer = (): WorkoutLayerValue | null => useContext(Contex
 export interface WorkoutFiles {
   run: (userId: string) => TextStore;
   waiting: (userId: string) => TextStore;
+  effort: (userId: string) => TextStore;
 }
 
-const PHONE_FILES: WorkoutFiles = { run: workoutRunFile, waiting: workoutsWaitingFile };
+const PHONE_FILES: WorkoutFiles = { run: workoutRunFile, waiting: workoutsWaitingFile, effort: effortWaitingFile };
+const NONE_EFFORT: WaitingView<WaitingEffort, WaitingEffort> = { waiting: [], refused: [], sent: [], held: false, unsaved: false };
 
-export function WorkoutLayerProvider({ children, files = PHONE_FILES }: { children: ReactNode; files?: WorkoutFiles }) {
+/** The stars of a finished workout, on its last screen: what waits for the server, and a press. */
+export interface EffortHand {
+  view: WaitingView<WaitingEffort, WaitingEffort>;
+  /** "kept": the press is in the waiting list's file. "held": its file could not be written, so it waits in memory and is
+   *  written again. "lost": the list was full and it is nowhere. */
+  give: (workoutId: string, stars: number) => Promise<"kept" | "held" | "lost">;
+}
+
+export function WorkoutLayerProvider({ children, files = PHONE_FILES, onNewWorkout }: { children: ReactNode; files?: WorkoutFiles; onNewWorkout?: () => void }) {
   const { session, state } = useSession();
   const me = state.kind === "in" ? state.user.id : null;
   const units: Units = (state.kind === "in" ? accountUnits(state.user.units) : null) ?? "metric";
-  const [made, setMade] = useState<{ store: RunStore; waiting: WorkoutWaiting } | null>(null);
+  const [made, setMade] = useState<{ store: RunStore; waiting: WorkoutWaiting; effort: EffortWaiting } | null>(null);
   const [shown, setShown] = useState(false);
   const [now, setNow] = useState(() => Date.now());
 
@@ -70,20 +81,35 @@ export function WorkoutLayerProvider({ children, files = PHONE_FILES }: { childr
     if (me === null) return undefined;
     const waiting = workoutWaiting(files.waiting(me), workoutSender((request, shape) => session.signedIn(request, shape)));
     const store = createRunStore({ file: files.run(me), waiting, platform: Platform.OS === "ios" ? "ios" : "android", appVersion: appVersion(), clock: Date.now });
-    setMade({ store, waiting });
+    // The stars wait while their workout is still on the phone, and go as soon as it is on the server.
+    const effort = effortWaiting(
+      files.effort(me),
+      effortSender((request, shape) => session.signedIn(request, shape)),
+      (id) => store.keeping() === id || waiting.view().waiting.some((w) => w.workoutId === id),
+    );
+    setMade({ store, waiting, effort });
     void waiting.start().then(() => waiting.send(true));
+    void effort.start().then(() => effort.send(true));
+    const sendStars = () => {
+      if (effort.view().waiting.length > 0 || effort.view().unsaved) void effort.send(true);
+    };
+    const unheard = waiting.subscribe(sendStars);
     const timer = setInterval(() => {
       store.retry();
       if (waiting.view().waiting.length > 0 || waiting.view().unsaved) void waiting.send();
+      if (effort.view().waiting.length > 0 || effort.view().unsaved) void effort.send();
     }, SEND_AGAIN_MS);
     const heard = AppState.addEventListener("change", (next) => {
       if (next !== "active") return;
       store.press({ kind: "back" }, Date.now());
       store.retry();
       void waiting.send(true);
+      void effort.send(true);
     });
     return () => {
       waiting.stop();
+      effort.stop();
+      unheard();
       clearInterval(timer);
       heard.remove();
       setMade(null);
@@ -98,6 +124,25 @@ export function WorkoutLayerProvider({ children, files = PHONE_FILES }: { childr
   const keeping = useSyncExternalStore(subscribe, () => store?.keeping() ?? null);
   const listen = useCallback((told: () => void) => made?.waiting.subscribe(told) ?? (() => undefined), [made]);
   const waiting = useSyncExternalStore(listen, () => made?.waiting.view() ?? NONE_WAITING);
+  const listenStars = useCallback((told: () => void) => made?.effort.subscribe(told) ?? (() => undefined), [made]);
+  const stars = useSyncExternalStore(listenStars, () => made?.effort.view() ?? NONE_EFFORT);
+  const pressed = useRef(0);
+  const effortHand = useMemo<EffortHand>(
+    () => ({
+      view: stars,
+      give: async (workoutId, n) => {
+        const list = made?.effort;
+        if (list === undefined) return "lost";
+        pressed.current += 1;
+        const id = `${workoutId}.${String(Date.now())}.${String(pressed.current)}`;
+        const kept = await list.add({ id, workoutId, effort: n });
+        void list.send(true);
+        if (kept) return "kept";
+        return list.view().waiting.some((e) => e.id === id) ? "held" : "lost";
+      },
+    }),
+    [stars, made],
+  );
 
   // A workout that ended by itself while its screen was put away (its last timer ran out) shows its last screen.
   const finishedId = finished?.workoutId ?? null;
@@ -191,6 +236,7 @@ export function WorkoutLayerProvider({ children, files = PHONE_FILES }: { childr
             finished={finished}
             keeping={finished !== null && keeping === finished.workoutId}
             waiting={waiting}
+            effort={effortHand}
             units={units}
             press={press}
             onPutAway={() => {
@@ -203,6 +249,11 @@ export function WorkoutLayerProvider({ children, files = PHONE_FILES }: { childr
             onFinished={() => {
               store?.closeFinished();
               setShown(false);
+            }}
+            onNewWorkout={() => {
+              store?.closeFinished();
+              setShown(false);
+              onNewWorkout?.();
             }}
           />
         ) : null}

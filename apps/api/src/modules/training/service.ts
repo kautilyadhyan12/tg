@@ -98,6 +98,7 @@ export async function saveWorkout(deps: SaveDeps, userId: string, input: Workout
       effort: input.effort,
       heartAvg: heart?.avg ?? null,
       heartMax: heart?.max ?? null,
+      kcalWeightGrams: ctx.weightKg !== null && ctx.weightKg > 0 ? Math.round(ctx.weightKg * 1000) : null,
     });
     if (!made) {
       // Another request made it between the first question and this insert: it is the person's own
