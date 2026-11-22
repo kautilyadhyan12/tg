@@ -2256,7 +2256,9 @@ moved with it). *Measured:* every proper squat of the 23 squat sets with a count
 as filmed and under every held replay; all 23 count by eye; none is told to go lower, as filmed, under any held replay or
 in the phone's own runs. The kettlebell push press counts 0 (3 of its 4 dips before; its knees 120° to 127°); its dips that
 went three quarters of the way are told "Go lower to count.": the squat's movement does not read the arms, so to the camera
-they are a quarter squat, told as a quarter squat is (written on its video, `told`; every other movement says nothing). The
+they are a quarter squat, told as a quarter squat is (written on its video, `told`; every other movement says nothing).
+Kd's ruling after five ways of telling it apart were measured and none kept every proper squat (its knees, its speed, the
+hands' rise, the arm pointing up, the last two together; the rulings file has each number): keep it. The
 shallowest man of the nine counts his 3 with his own videos left out, and so done twice as slowly (2 before). **Back up once
 standing tall.** A rep is also back up once the person stands tall again: for the whole of the last 0.2 s every condition of
 the movement's standing ready held (both knees within 20° of straight, the trunk within 20° of upright), each read on both
