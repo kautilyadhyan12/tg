@@ -31,8 +31,8 @@
 // one, in turn.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import type { Movement, MovementFrame, MovementRule } from "@app/shared";
-import { FOOT_ROOM, MovementMatcher, NEVER_JUMP, SLOWEST_RATE, parseMovement, type RepResult } from "../src/index.js";
+import type { ExerciseCamera, Movement, MovementFrame, MovementRule } from "@app/shared";
+import { FOOT_ROOM, MATCH_LIMITS, MovementMatcher, NEVER_JUMP, SLOWEST_RATE, parseExercise, parseMovement, type RepResult } from "../src/index.js";
 import { readKept, videoOf, type Video } from "./bodyCheck.js";
 import { runOf } from "./measureCheck.js";
 import { MOVEMENT_VIDEOS, framesOf, labelOf, type MovementVideo } from "./movementVideos.js";
@@ -40,6 +40,7 @@ import { REPLAYS, type Replay } from "./replays.js";
 
 const TEST = join(import.meta.dirname, "../test");
 export const MOVEMENTS = join(import.meta.dirname, "../movements");
+export const EXERCISES = join(import.meta.dirname, "../exercises");
 
 /** While the reps are found to set the numbers from, a rep starts at half of this drop, in legs: about 7 cm. */
 export const MEASURING_DEPTH = 0.15;
@@ -62,6 +63,11 @@ export const LEAD_IN = 1000;
 
 export function readMovement(name: string): Movement {
   return parseMovement(JSON.parse(readFileSync(join(MOVEMENTS, `${name}.json`), "utf8")));
+}
+
+/** An exercise's camera file, checked against its movement. */
+export function readExercise(id: string, movement: Movement = readMovement(id)): ExerciseCamera {
+  return parseExercise(JSON.parse(readFileSync(join(EXERCISES, `${id}.json`), "utf8")), movement);
 }
 
 export interface ProofVideo {
@@ -106,9 +112,10 @@ export function withLeadIn(video: Video): Video {
   return out;
 }
 
-export function runMovement(movement: Movement, video: Video): Run {
+/** `exercise`: its checked mistakes are judged in each counted rep (`RepResult.form`). */
+export function runMovement(movement: Movement, video: Video, exercise: ExerciseCamera | null = null): Run {
   const { steady, measured } = runOf(withLeadIn(video));
-  const matcher = new MovementMatcher(movement);
+  const matcher = new MovementMatcher(movement, MATCH_LIMITS, exercise);
   const reps: RepResult[] = [];
   let count = 0;
   steady.forEach((body, i) => {
@@ -137,6 +144,17 @@ export function measuringMovement(movement: Movement): Movement {
   };
 }
 
+/** The exercise with no line on any mistake: every one read, none made. */
+export function measuringExercise(exercise: ExerciseCamera): ExerciseCamera {
+  return {
+    ...exercise,
+    mistakes: exercise.mistakes.map((m) => {
+      if (m.camera !== "checked") return m;
+      return m.atLeast !== undefined ? { ...m, atLeast: Number.NEGATIVE_INFINITY } : { ...m, atMost: Number.POSITIVE_INFINITY };
+    }),
+  };
+}
+
 export interface RuleSeen {
   readonly rule: string;
   /** Every rep's reading, and the middle of the readings while standing ready. */
@@ -149,13 +167,13 @@ export interface RuleSeen {
  *  judge are left out. */
 const measured = new WeakMap<readonly MovementFrame[], Map<string, readonly RepResult[]>>();
 /** Every dip of a video under the measuring movement, run once for each video and movement. */
-function dipsOf(measuring: Movement, video: Video): readonly RepResult[] {
-  const key = JSON.stringify(measuring);
+function dipsOf(measuring: Movement, video: Video, exercise: ExerciseCamera | null): readonly RepResult[] {
+  const key = JSON.stringify([measuring, exercise]);
   const own = measured.get(video.frames) ?? new Map<string, readonly RepResult[]>();
   measured.set(video.frames, own);
   const known = own.get(key);
   if (known !== undefined) return known;
-  const fresh = runMovement(measuring, video).reps;
+  const fresh = runMovement(measuring, video, exercise).reps;
   own.set(key, fresh);
   return fresh;
 }
@@ -172,7 +190,8 @@ export function asReplayed(v: ProofVideo, replays: readonly Replay[] = REPLAYS):
   return made;
 }
 
-export function repsOf(movement: Movement, videos: readonly ProofVideo[]): RepResult[] {
+/** `exercise`: read its mistakes in each of those reps too, with no line (`measuringExercise`). */
+export function repsOf(movement: Movement, videos: readonly ProofVideo[], exercise: ExerciseCamera | null = null): RepResult[] {
   const measuring = measuringMovement(movement);
   const depthRule = movement.rules.find((r) => r.read.kind === "drop" && r.role === "count");
   const depthOf = (r: RepResult): number => (depthRule === undefined ? 0 : (r.readings[depthRule.name] ?? 0));
@@ -180,7 +199,7 @@ export function repsOf(movement: Movement, videos: readonly ProofVideo[]): RepRe
     // The deepest dips first, as many as were counted, and only then those the camera could not judge left out: a rep
     // that could not be judged is never replaced by a smaller dip.
     // A dip longer than any rep of its kind (`judgeLong`: another movement, with no rule) is no rep either (round one).
-    const dips = dipsOf(measuring, v.video).filter((r) => !(r.verdict === "other" && r.rule === null));
+    const dips = dipsOf(measuring, v.video, exercise === null ? null : measuringExercise(exercise)).filter((r) => !(r.verdict === "other" && r.rule === null));
     const deepest = [...dips].sort((a, b) => depthOf(b) - depthOf(a)).slice(0, v.entry.reps ?? 0);
     return dips.filter((r) => deepest.includes(r) && r.verdict !== "unseen");
   });
@@ -232,19 +251,31 @@ const overlap = (a: RepResult, b: RepResult): number => Math.max(0, Math.min(a.e
  *  best, is left out: never two different reps paired by their order (round one: a replay that lost one rep and gained
  *  another would have paired them). */
 export function roomOf(movement: Movement, rule: MovementRule, videos: readonly ProofVideo[]): { size: number; pairs: number } {
+  return roomOfReading(movement, videos, (r) => r.readings[rule.name] ?? null, rule.atMost !== undefined);
+}
+
+/** The camera's room on any reading of a rep (`get`), the way `up` (a line that is an upper bound) or down. `exercise`:
+ *  the reps' mistakes are read too, for a reading of one. */
+export function roomOfReading(
+  movement: Movement,
+  videos: readonly ProofVideo[],
+  get: (r: RepResult) => number | null,
+  up: boolean,
+  exercise: ExerciseCamera | null = null,
+): { size: number; pairs: number } {
   const best = (r: RepResult, among: readonly RepResult[]): RepResult | undefined =>
     among.reduce<RepResult | undefined>((top, x) => (overlap(r, x) > (top === undefined ? 0 : overlap(r, top)) ? x : top), undefined);
   const changes = videos.flatMap((v) => {
-    const filmed = repsOf(movement, [v]);
+    const filmed = repsOf(movement, [v], exercise);
     return asReplayed(v).flatMap((replay) => {
-      const again = repsOf(movement, [replay]);
+      const again = repsOf(movement, [replay], exercise);
       return again.flatMap((r) => {
         const own = best(r, filmed);
         // Paired only both ways: the filmed rep's own best among the replayed reps is this one.
         if (own === undefined || best(own, again) !== r) return [];
-        const a = r.readings[rule.name] ?? null;
-        const b = own.readings[rule.name] ?? null;
-        return a === null || b === null ? [] : [rule.atMost !== undefined ? a - b : b - a];
+        const a = get(r);
+        const b = get(own);
+        return a === null || b === null ? [] : [up ? a - b : b - a];
       });
     });
   });
@@ -377,7 +408,7 @@ export interface ReplayRow {
 }
 
 /** The same seed for the same video and replay, every run. */
-function seedOf(label: string, replay: string): number {
+export function seedOf(label: string, replay: string): number {
   let h = 2166136261;
   for (const ch of `${label}|${replay}`) h = Math.imul(h ^ ch.charCodeAt(0), 16777619);
   return h >>> 0;

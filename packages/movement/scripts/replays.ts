@@ -364,7 +364,7 @@ export function tempo(k: number) {
 }
 
 // ── A phone standing on the floor, redrawn from the 3D points (52a-ii-b-ii-a) ───────────────────────────────────────
-type V3 = [number, number, number];
+export type V3 = [number, number, number];
 const dot3 = (a: readonly number[], b: readonly number[]): number => (a[0] ?? 0) * (b[0] ?? 0) + (a[1] ?? 0) * (b[1] ?? 0) + (a[2] ?? 0) * (b[2] ?? 0);
 
 /** A phone's main lens, 26 mm in 35 mm terms (the usual main camera): its focal length is 26/36 of the picture's long
@@ -466,7 +466,7 @@ function laid(p: SeenPerson, aspect: number): { readonly x: number; readonly y: 
  *  camera all through the video (a phone stands still and so do the feet of most exercises), the distance that puts
  *  the body, the middle of the video over, as far away as its size on the picture says through `focal`; the hips move
  *  about them, and across and down the picture as the picture has them. A frame with no 3D points or no size: null. */
-function fromCamera(frames: Frames, focal: number): (V3[] | null)[] {
+export function fromCamera(frames: Frames, focal: number): (V3[] | null)[] {
   const lays = frames.map((f) => {
     const p = f.people[0];
     return p === undefined ? null : laid(p, f.aspect);
@@ -540,7 +540,7 @@ function fromCamera(frames: Frames, focal: number): (V3[] | null)[] {
   return placed;
 }
 
-const project = (q: readonly number[], aspect: number, focal: number): readonly [number, number] => [
+export const project = (q: readonly number[], aspect: number, focal: number): readonly [number, number] => [
   (focal * (q[0] ?? 0)) / (q[2] ?? 1) / aspect + 0.5,
   (focal * (q[1] ?? 0)) / (q[2] ?? 1) + 0.5,
 ];
