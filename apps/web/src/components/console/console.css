@@ -2331,3 +2331,27 @@
     min-height: 44px;
   }
 }
+/* A member's page sets its boxes in columns narrower than the window: a button or a choice is never
+   wider than its box, and its words wrap inside it rather than run past the edge ("A parent or
+   guardian, for someone under 18"). One line still keeps each button's own height. */
+.c-person .c-btn,
+.c-person .c-chip {
+  max-width: 100%;
+  height: auto;
+  white-space: normal;
+}
+.c-person .c-btn { min-height: 40px; }
+.c-person .c-btn-lg { min-height: 48px; }
+.c-person .c-btn-sm { min-height: 32px; }
+.c-person .c-btn-xs { min-height: 28px; }
+.c-person .c-chip { min-height: 36px; padding-top: 6px; padding-bottom: 6px; }
+@media (pointer: coarse) {
+  .c-person .c-btn,
+  .c-person .c-chip { min-height: 44px; }
+}
+.c-person .c-btn-link,
+.c-person .c-btn-quiet { min-height: 32px; }
+@media (pointer: coarse) {
+  .c-person .c-btn-link,
+  .c-person .c-btn-quiet { min-height: 44px; }
+}
