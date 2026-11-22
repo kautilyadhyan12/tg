@@ -3,7 +3,7 @@
 // time. No database.
 import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
-import { KCAL_REST_MET, KCAL_WEIGHT_UNKNOWN_KG, kcalPerMinute, workoutSaveSchema, type SavedSet } from "@app/shared";
+import { KCAL_REST_MET, KCAL_WEIGHT_UNKNOWN_KG, kcalPerMinute, trainedMsOf, workoutSaveSchema, type SavedSet } from "@app/shared";
 import { kcalForSave, type KcalSet } from "../src/modules/training/calories.js";
 import { DEFAULT_WEIGHT_KG, REST_MET } from "../src/modules/workouts/calories.js";
 
@@ -97,9 +97,37 @@ describe("what a phone may report in a saved workout", () => {
     ["an app version of nothing", workout({ appVersion: "" }), "appVersion"],
     ["started from a plan of the gym's", workout({ startedFrom: "gym_plan" }), "ok"],
     ["started from a word the server does not know", workout({ startedFrom: "friend" }), "startedFrom"],
+    // The time trained (64a-ii-b): within the workout's length, never shorter than its sets and rests (one set of
+    // 40 s and a minute's rest: 100 s, 1 s of slack), a whole number of milliseconds, no more than 12 hours.
+    ["no time trained (a phone from before 64a-ii-b)", workout(), "ok"],
+    ["trained the whole workout", workout({ trainedMs: 30 * 60_000 }), "ok"],
+    ["trained a millisecond longer than the workout", workout({ trainedMs: 30 * 60_000 + 1 }), "trainedMs"],
+    ["trained only its sets and rests, the rest paused", workout({ trainedMs: 100_000 }), "ok"],
+    ["trained its sets and rests less the slack", workout({ trainedMs: 99_000 }), "ok"],
+    ["trained shorter than its sets and rests and the slack", workout({ trainedMs: 98_999 }), "trainedMs"],
+    ["trained nothing, with a set done", workout({ trainedMs: 0 }), "trainedMs"],
+    ["trained nothing, ending as it starts", workout({ endedAt: START, sets: [set({ durationMs: 0, restSeconds: null })], trainedMs: 0 }), "ok"],
+    ["trained 12 hours", workout({ endedAt: at(12 * 3_600_000), trainedMs: 12 * 3_600_000 }), "ok"],
+    ["trained past 12 hours", workout({ endedAt: at(12 * 3_600_000), trainedMs: 12 * 3_600_000 + 1 }), "trainedMs"],
+    ["trained half a millisecond", workout({ trainedMs: 100_000.5 }), "trainedMs"],
+    ["trained below nothing", workout({ trainedMs: -1 }), "trainedMs"],
+    ["trained as words", workout({ trainedMs: "1800000" }), "trainedMs"],
+    ["trained as null", workout({ trainedMs: null }), "trainedMs"],
   ];
   it.each(cases)("%s", (_name, body, expected) => {
     expect(verdict(body)).toBe(expected);
+  });
+});
+
+describe("what a saved workout counts as trained (64a-ii-b)", () => {
+  const two = [set(), set({ position: 1, durationMs: 30_000, restSeconds: null })];
+  it.each<[string, Parameters<typeof trainedMsOf>[0], number]>([
+    ["the phone's time trained", { startedAt: START, endedAt: at(5 * 3_600_000), sets: two, trainedMs: 600_000 }, 600_000],
+    ["the phone's time trained of nothing", { startedAt: START, endedAt: START, sets: [set({ durationMs: 0, restSeconds: null })], trainedMs: 0 }, 0],
+    ["from a phone before it sent one, paused for hours: its sets and rests", { startedAt: START, endedAt: at(5 * 3_600_000), sets: two }, 130_000],
+    ["from a phone before it sent one, its sets and rests past its length within the slack: its length", { startedAt: START, endedAt: at(129_000), sets: two }, 129_000],
+  ])("%s", (_name, w, expected) => {
+    expect(trainedMsOf(w)).toBe(expected);
   });
 });
 

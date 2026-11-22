@@ -1,4 +1,4 @@
-import { WORKOUT_SAVE_LIMITS, type RunExercise, type SavedSet, type WorkoutRun, type WorkoutSave } from "@app/shared";
+import { setsAndRestsMs, WORKOUT_SAVE_LIMITS, type RunExercise, type SavedSet, type WorkoutRun, type WorkoutSave } from "@app/shared";
 import type { Units } from "./records";
 import { stepTime, stepWeight } from "./workoutSetup";
 
@@ -96,7 +96,7 @@ export function firstSets(exercises: readonly RunExercise[]): RunExercise[] {
 
 /** What a save allows of a workout's sets and rests together, left after the sets done so far: a set or a rest left
  *  open for longer is kept as no longer than that (round one, H2), so every workout stays one the server takes. */
-const timeLeftMs = (r: WorkoutRun): number => Math.max(0, L.lengthMostMs - r.done.reduce((t, s) => t + s.durationMs + (s.restSeconds ?? 0) * 1000, 0));
+const timeLeftMs = (r: WorkoutRun): number => Math.max(0, L.lengthMostMs - setsAndRestsMs(r.done));
 
 const exerciseOf = (r: WorkoutRun): RunExercise => {
   const e = r.exercises[r.ex];
@@ -280,11 +280,13 @@ export function leftOf(r: WorkoutRun): { leftMs: number; ofMs: number } | null {
 export const setsInAll = (r: WorkoutRun): number => r.exercises.reduce((n, e) => n + e.sets.length, 0);
 
 /** The finished workout as the server takes it, under its own id. Its length is no more than a save allows and never
- *  less than its sets and rests; null with no set done. */
+ *  less than its sets and rests; its time trained (64a-ii-b) is the time its screen showed, every pause left out, held
+ *  the same way and within the length. Null with no set done. */
 export function toSave(r: WorkoutRun, platform: WorkoutSave["platform"], appVersion: string): WorkoutSave | null {
   if (r.done.length === 0) return null;
-  const used = r.done.reduce((t, s) => t + s.durationMs + (s.restSeconds ?? 0) * 1000, 0);
+  const used = setsAndRestsMs(r.done);
   const lengthMs = Math.max(used, Math.min(L.lengthMostMs, r.totalMs));
+  const trainedMs = Math.min(lengthMs, Math.max(used, Math.min(L.lengthMostMs, r.activeMs)));
   const started = Date.parse(r.startedAt);
   const name = r.name.trim();
   return {
@@ -299,5 +301,6 @@ export function toSave(r: WorkoutRun, platform: WorkoutSave["platform"], appVers
     platform,
     appVersion: appVersion.slice(0, 40),
     sets: r.done.map((s, position) => ({ ...s, position })),
+    trainedMs,
   };
 }

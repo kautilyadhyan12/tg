@@ -77,6 +77,8 @@ const workout = (over: Record<string, unknown> = {}) => ({
     set({ exercise: "barbell_curl", position: 1, target: 10, done: 8, weightGrams: 20_000, restSeconds: 90, durationMs: 30_000 }),
     set({ exercise: "plank", position: 2, measuredIn: "time", target: 30, done: 30, restSeconds: null, durationMs: 30_500, counted: "timer" }),
   ],
+  /** Trained the whole 30 minutes, no pause (64a-ii-b; training.trained.routes.test.ts holds the pauses). */
+  trainedMs: 30 * 60_000,
   ...over,
 });
 
@@ -377,7 +379,7 @@ d("saving a workout from the phone (real Postgres)", () => {
 
     it("sets and rests longer than the workout are refused", async () => {
       const a = await person();
-      const res = await save(a, workout({ endedAt: at(60_000) }));
+      const res = await save(a, workout({ endedAt: at(60_000), trainedMs: 60_000 }));
       expect(res.statusCode).toBe(400);
       expect(res.json()).toMatchObject({ message: expect.stringContaining("longer than the workout") as unknown });
     });

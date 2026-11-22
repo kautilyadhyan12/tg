@@ -2592,6 +2592,15 @@ items 36 and 24b take as it is):
   delete; 200 people saving 200 sets at the same instant took 0.9 s in all and the server answered nobody for at
   most 23.7 ms. The publish's question was measured over this folder's 3 Library rows only (2.6 ms).
 
+**As built in 64a-ii-b (2026-11-22; Kd's "yes" of 2026-11-21).** A workout counts its time trained, never its pauses: the
+save carries `trainedMs` (the time the workout's screen showed, every pause and every away-time past 10 minutes left out), no
+longer than its length and never shorter than its sets and rests (a second a set of slack), a whole number of milliseconds up to 12
+hours, else 400. The server keeps it as `workouts.duration_ms`, which Hours Trained, the minutes challenges, goals and the gym's
+numbers read; the start and end stay the workout's own, and the calories are unchanged (version 4: a pause was never charged). A
+workout kept on a phone before it sent the field still saves, counting its sets and rests within its length (`trainedMsOf` in
+`packages/shared`). Workouts saved before it keep the length they were saved with: only the folders' own test accounts have any,
+as the testers' store version (17 November) has no Start workout.
+
 ### 13.6 The phone (jobs 63 and 64)
 
 - **The list is kept on the phone** and searched there, so search answers at once and works
@@ -2760,7 +2769,7 @@ with a screen reader.
   once it is there is the workout's own file emptied; a phone that dies between the two hands it over again, kept once by its id.
   Then `POST /v1/workouts` (61a) with the workout's id as its Idempotency-Key, made by `expo-crypto`. Its sets: by hand `hand`, a
   timer `timer`; `startedFrom` "none" until 64a-iv; no heart rate until 64a-vi; at most 12 hours long, never shorter than its sets
-  and rests.
+  and rests; its time trained beside it since 64a-ii-b (§13.5).
 - **The screen** (`apps/mobile/src/screens/workout/`): over every tab, as a run is; the exercise's picture with "Exercise 1 of 3 · Set 2
   of 3" (in a rest, "Coming up next" and that set), the LED wall timer (reps red, target amber, the rest's ring green, get-ready
   amber, PAUSED with a capital D), the set-up box's weight plate, Next up, one main button saying what it keeps. The screen stays

@@ -70,6 +70,17 @@ function openApp(runFile: TextStore, waitingFile: TextStore, send: (w: WorkoutSa
 }
 
 describe("a finished workout is never lost, and reaches the server once", () => {
+  it("a workout waiting from before the phone sent its time trained (64a-ii-b) is still read and sent", async () => {
+    const old = { workoutId: ID, name: "Legs", startedAt: "2026-11-21T10:00:00.000Z", endedAt: "2026-11-21T15:00:00.000Z", timeZone: "UTC", startedFrom: "none", effort: null, heart: [], platform: "android", appVersion: "phone 1", sets: [{ exercise: "plank", position: 0, measuredIn: "time", target: 30, done: 30, weightGrams: null, restSeconds: null, durationMs: 30_000, counted: "timer" }] };
+    const srv = server();
+    const waiting = workoutWaiting(file(JSON.stringify({ version: 1, waiting: [old], refused: [] })), srv.send, () => T0);
+    await waiting.start();
+    expect(waiting.view().waiting.map((w) => w.workoutId)).toEqual([ID]);
+    await waiting.send(true);
+    expect(srv.saved.get(ID)).toEqual(old);
+    waiting.stop();
+  });
+
   it("the app closed and opened again at every step, with no signal until the end", async () => {
     const runFile = file();
     const waitingFile = file();

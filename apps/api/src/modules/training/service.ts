@@ -8,7 +8,7 @@
 // heart rate's average and highest, and (after the commit) the streak and XP from history, which is
 // what makes a second send give nothing twice.
 import type { Sql } from "postgres";
-import { heartSums, type WorkoutSave } from "@app/shared";
+import { heartSums, trainedMsOf, type WorkoutSave } from "@app/shared";
 import { onWorkoutSynced } from "../gamification/service.js";
 import { getUserSyncContext } from "../users/service.js";
 import { KCAL_CALC_VERSION_SAVE, kcalForSave } from "./calories.js";
@@ -85,7 +85,9 @@ export async function saveWorkout(deps: SaveDeps, userId: string, input: Workout
       appVersion: input.appVersion,
       setsCount: sets.length,
       totalReps: sets.reduce((sum, s) => sum + (s.measuredIn === "reps" ? s.done : 0), 0),
-      durationMs: lengthMs,
+      // The time trained, never the pauses (64a-ii-b): what Hours Trained, the minutes challenges, goals and the
+      // gym's numbers read. The start and end stay the workout's own.
+      durationMs: trainedMsOf(input),
       kcalPoint: kcalForSave(
         sets.map((s) => ({ met: exerciseOf(s.exercise).met, durationMs: s.durationMs, done: s.done, restSeconds: s.restSeconds })),
         ctx.weightKg,
