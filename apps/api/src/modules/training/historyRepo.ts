@@ -36,6 +36,22 @@ export async function monthDays(sql: Sql, userId: string, month: string, fallbac
     GROUP BY day ORDER BY day`;
 }
 
+/** The days from `from` to `to` (both "YYYY-MM-DD", both included) the person worked out on, and how many
+ *  workouts on each, by the same rule as `monthDays`. */
+export async function rangeDays(sql: Sql, userId: string, from: string, to: string, fallbackZone: string, floor: Date | null): Promise<{ day: string; n: number }[]> {
+  return sql<{ day: string; n: number }[]>`
+    WITH w AS (
+      SELECT (started_at AT TIME ZONE COALESCE(time_zone, ${fallbackZone}))::date AS day
+      FROM workouts
+      WHERE user_id = ${userId}
+        AND started_at >= (${from}::date - 1)::timestamp AT TIME ZONE 'UTC'
+        AND started_at < (${to}::date + 2)::timestamp AT TIME ZONE 'UTC'
+        AND (${floor === null} OR started_at >= ${floor}))
+    SELECT to_char(day, 'YYYY-MM-DD') AS day, count(*)::int AS n
+    FROM w WHERE day BETWEEN ${from}::date AND ${to}::date
+    GROUP BY day ORDER BY day`;
+}
+
 /** A day's workouts in the order they started, the first `most`; each row carries how many there are. */
 export async function dayWorkouts(sql: Sql, userId: string, day: string, fallbackZone: string, floor: Date | null, most: number): Promise<ListedRow[]> {
   return sql<ListedRow[]>`

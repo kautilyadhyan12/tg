@@ -4,7 +4,7 @@
 //     Library exercises (46,800 sets), weighted;
 //   - beside them, the rest of the launch shape (20 gyms of 200): 3,999 people of 20 workouts of 10 sets,
 //     so the database chooses its way as it would with everybody's sets in the table.
-// For each read the heavy person makes (a month, a day, their newest workout with its new records against
+// For each read the heavy person makes (a month, the calendar's year (64a-v), a day, their newest workout with its new records against
 // everything before it, and one exercise's records with its last seven times (63c)), it measures the median time of a read and the
 // longest the server's process went without answering anybody while it ran. Everybody it makes is
 // removed after. Run from apps/api:
@@ -12,7 +12,7 @@
 import { monitorEventLoopDelay, performance } from "node:perf_hooks";
 import postgres from "postgres";
 import { createMemoryRedis } from "../src/redis.js";
-import { historyDay, historyMonth, historyWorkout, recordsOf } from "../src/modules/training/history.js";
+import { historyDay, historyMonth, historyRange, historyWorkout, recordsOf } from "../src/modules/training/history.js";
 import * as repo from "../src/modules/training/historyRepo.js";
 import { exerciseRecords, recentBests, unitAndDone } from "../src/modules/training/records.js";
 
@@ -101,6 +101,10 @@ async function main(): Promise<void> {
     SELECT id, to_char(started_at AT TIME ZONE 'Asia/Calcutta', 'YYYY-MM-DD') AS day FROM workouts WHERE user_id = ${heavy.id} ORDER BY started_at DESC LIMIT 1`;
   if (newest === undefined) throw new Error("no workout");
   await measure("a month", () => historyMonth(deps, heavy.id, newest.day.slice(0, 7)));
+  // The calendar's year (64a-v): a free plan's, read back 90 days, and a plan with no limit's, all 365 days.
+  const yearFrom = new Date(Date.parse(`${newest.day}T00:00:00Z`) - 364 * 86_400_000).toISOString().slice(0, 10);
+  await measure("the calendar's year, a free plan's 90 days", () => historyRange(deps, heavy.id, yearFrom, newest.day));
+  await measure("the calendar's year, all 365 days", () => repo.rangeDays(sql, heavy.id, yearFrom, newest.day, "UTC", null));
   await measure("a day", () => historyDay(deps, heavy.id, newest.day));
   await measure("the newest workout, new records vs 5 years", () => historyWorkout(deps, heavy.id, newest.id));
   await measure("squat's records, a free plan's 90 days", () => recordsOf(deps, heavy.id, "squat"));

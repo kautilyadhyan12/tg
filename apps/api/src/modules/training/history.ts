@@ -10,6 +10,7 @@ import {
   type ExerciseRecords,
   type HistoryDay,
   type HistoryMonth,
+  type HistoryRange,
   type HistorySet,
   type HistoryWorkout,
 } from "@app/shared";
@@ -28,6 +29,13 @@ export async function historyMonth(deps: HistoryDeps, userId: string, month: str
   const gate = await historyGate(deps, userId);
   const days = await repo.monthDays(deps.sql, userId, month, gate.timeZone, gate.floor);
   return { month, days: days.map((d) => ({ day: d.day, workouts: d.n })), limitedToDays: gate.limitedToDays };
+}
+
+/** The days from `from` to `to` the person worked out on (64a-v): the calendar's year, months and days by one rule. */
+export async function historyRange(deps: HistoryDeps, userId: string, from: string, to: string): Promise<HistoryRange> {
+  const gate = await historyGate(deps, userId);
+  const days = await repo.rangeDays(deps.sql, userId, from, to, gate.timeZone, gate.floor);
+  return { from, to, days: days.map((d) => ({ day: d.day, workouts: d.n })), limitedToDays: gate.limitedToDays };
 }
 
 export async function historyDay(deps: HistoryDeps, userId: string, day: string): Promise<HistoryDay> {
@@ -110,6 +118,7 @@ export async function historyWorkout(deps: HistoryDeps, userId: string, workoutI
     durationMs: w.duration_ms,
     kcalPoint: w.kcal_point,
     kcalCalcVersion: w.kcal_calc_version,
+    kcalWeightKg: w.kcal_weight_grams === null ? null : w.kcal_weight_grams / 1000,
     platform: platformSchema.parse(w.platform),
     sets: sets.map((s) => {
       const f = fact(s);

@@ -5,7 +5,7 @@
 import { z } from "zod";
 import { xpViewSchema } from "../gamification.js";
 import { mealIdeaSchema } from "../nutrition.js";
-import { RECORD_KINDS } from "./workoutHistory.js";
+import { estimatedOneRepMaxGrams, RECORD_KINDS, type HistoryWorkout } from "./workoutHistory.js";
 import { EXERCISE_MUSCLE_LABELS } from "./words.js";
 
 /** A new record in this workout, with what it was: grams for the heaviest, the estimated one-rep max and most
@@ -21,6 +21,32 @@ export const afterRecordSchema = z.object({
   value: z.number().int(),
 });
 export type AfterRecord = z.infer<typeof afterRecordSchema>;
+
+/** What each new record of a workout was, from the set that made it (or, for most lifted, every set in reps of its
+ *  exercise): the summary after a workout and the workout's page in History (64a-v) name them by this one rule. */
+export function recordValues(w: Pick<HistoryWorkout, "sets" | "newRecords">): AfterRecord[] {
+  const out: AfterRecord[] = [];
+  for (const r of w.newRecords) {
+    const named = w.sets.find((s) => s.exercise === r.exercise);
+    const exerciseName = named?.exerciseName ?? null;
+    if (r.kind === "most_lifted") {
+      const grams = w.sets
+        .filter((s) => s.exercise === r.exercise && s.measuredIn === "reps")
+        .reduce((sum, s) => sum + s.done * (s.weightGrams ?? 0), 0);
+      out.push({ ...r, exerciseName, value: grams });
+      continue;
+    }
+    const set = w.sets.find((s) => s.position === r.position);
+    if (set === undefined) continue;
+    const value =
+      r.kind === "heaviest" ? set.weightGrams
+      : r.kind === "best_estimated_1rm" ? estimatedOneRepMaxGrams(set.weightGrams, set.done)
+      : set.done;
+    if (value === null) continue;
+    out.push({ ...r, exerciseName, value });
+  }
+  return out;
+}
 
 /** When to eat an idea, counted from the workout: something small soon, then a meal. */
 export const afterIdeaSchema = z.object({ when: z.enum(["soon", "meal"]), idea: mealIdeaSchema });
