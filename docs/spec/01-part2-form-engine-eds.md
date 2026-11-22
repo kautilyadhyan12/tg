@@ -2917,8 +2917,12 @@ workouts are kept day by day (Part 6 §2: Progress holds history), with doors to
   and while finished workouts wait on the phone the calendar says "1 workout is saved on this phone. It shows here once it reaches
   your account."
 - **A day** (`GET /v1/training/days/:day`): its workouts, each with its picture (its first exercise's), its name ("Workout" for one
-  never named), "7:05 am · 42 min · 9 sets", its exercises ("Bench Press, Barbell Curl and Plank", past three "… and 2 more"),
-  named from the Library kept on the phone (`useNamed`; one it does not hold by its id word made readable), and its calories.
+  never named), "7:05 am · 42 min · 9 sets" (a workout under a minute is "1 min", never "0 min"), its exercises ("Bench Press,
+  Barbell Curl and Plank", past three "… and 2 more"), and its calories. An exercise is named by ONE rule on the day and on the
+  workout's page (`serverFirst`, round one L2): the server's Library name (the day's read carries `exerciseNames` since 64a-v),
+  then the Library kept on the phone (`useNamed`), then its id word made readable. Today's box, which lies over the calendar,
+  says the workouts still on the phone itself, never "No workout this day" (round one H1), and the day open is read again when
+  the server takes one; pages read again from the newest workout sent (`useSentCount`), as the waiting list keeps only 50 ids.
 - **One workout** (`apps/mobile/src/screens/workout/PastWorkout.tsx`, `GET /v1/training/workouts/:id`): the screen after a workout's
   own pieces (`WorkoutParts.tsx`, shared with the summary): the wall timer with the time trained, calories and sets, "About 238
   kcal for you, at 82 kg" (the weight the save used, `kcalWeightKg` on the read since 64a-v), how hard it was as the stars kept,
