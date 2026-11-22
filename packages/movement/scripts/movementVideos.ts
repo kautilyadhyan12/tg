@@ -16,8 +16,9 @@ export interface MovementVideo {
   /** The body-points file, under packages/movement/test, without its ending. */
   readonly file: string;
   /** One set of a video that holds several (52a-ii-b-i): from and to, seconds of the video's own clock, its first frame
-   *  at 0. A person who turns to face the phone another way starts a new set (nobody turns in the middle of one), so each
-   *  way of facing is played as a set of its own, the engine started afresh for it as a live set is. */
+   *  at 0. A person who turns to face the phone another way between squats starts a new set here, so each way of facing
+   *  is played as a set of its own, the engine started afresh for it as a live set is; a turn in the middle of a set
+   *  played whole is 52d's, and the whole still counts where one was cut (usual_v04, 3 of 3: movementFloor.test.ts). */
   readonly cut?: readonly [number, number];
   /** Filmed with the phone standing on the floor (52a-ii-b-ii-a): the floor's replay is not tried on it. */
   readonly floor?: boolean;

@@ -38,8 +38,8 @@ export const FOOT_ROOM = 0.01;
  *  that leaves the floor carries both ends up; away from the bottom of a rep, where both feet are read, a foot whose ends
  *  disagree by more is the model's misreading (on a man's raised phone a toe point slid 8 cm down the picture as he
  *  stood up while its heel rose with the jump), and the other foot decides. Set on the jumps of 8 to 12 cm drawn on
- *  his ten sets (900, movementHops.test.ts): at 2.5 and 3 cm 9 are counted, at 2 cm 15, 3.5 cm 11, 4 cm 14, 5 cm 19
- *  (with every foot read together, 25); more than twice what the phone's own chip moves a heel against its toes (0.75
+ *  his ten sets (900, movementHops.test.ts): at 3 cm 9 are counted, at 2.5 cm 10, 3.5 cm 11, 2 cm 16, 4 cm 14, 5 cm 25
+ *  (with every foot read together, 39); more than twice what the phone's own chip moves a heel against its toes (0.75
  *  to 1.1 cm in 95 of 100, 51b-i). */
 export const FOOT_ENDS_AGREE = 0.03;
 
@@ -669,14 +669,9 @@ export class MovementMatcher {
     const placed = feet.map((p, k) => (rep.placed[k] === true && along[k] !== null ? p : null));
     const reads: Record<string, number | null> = {};
     const jointly: Record<string, number | null> = {};
-    // For leaving the floor away from the bottom, only the foot points seen in the moment before the rep (`liftOf`): a
-    // frame in which only a foot first seen during the rep is read has its feet unseen, so a jump with the other foot
-    // hidden in the air is never let through.
-    const deep = drop !== null && drop >= this.depth;
-    const known = deep ? along : along.map((v, k) => ((rep.before[k] ?? null) === null ? null : v));
     for (const rule of this.movement.rules) {
       // Leaving the floor is worked out when the rep is judged (`liftOf`); a frame says only whether the feet were read.
-      reads[rule.name] = rule.read.kind === "lift" ? (bothEnds(known) ? 0 : null) : this.read(rule.read, measured, rep.standing, placed, heights);
+      reads[rule.name] = rule.read.kind === "lift" ? (bothEnds(along) ? 0 : null) : this.read(rule.read, measured, rep.standing, placed, heights);
       if (rule.read.kind === "travel") jointly[rule.name] = feetMoved(placed, rep.standing).together;
     }
     return { t, drop, reads, jointly, feet: along };
@@ -717,13 +712,13 @@ export class MovementMatcher {
    *  feet stay, and a foot point under where the foot stands is refused. Not the middle of the rep: at the bottom the
    *  toe points ride higher on the picture, and an 8 cm hop seen at 8 pictures a second then read under 4 cm. Every
    *  frame is judged, the bottom too, there with both feet read: a hop from the bottom is a hop. For each foot the
-   *  lesser of its heel and toes, and the lesser of the two feet where both are read (`liftOfFrame`). Away from the
-   *  bottom, only a foot point seen in the moment before the rep is read: side on, the far foot, hidden behind the near
-   *  one while he stands, shows during a squat where the model guesses it, and read so the lesser of the two feet hid
-   *  jumps (on a man's ten sets, 55 of 900 drawn jumps of 8 to 12 cm counted, 25 without that foot). At the bottom both
-   *  feet are read as they come: there a guessed far foot only ever makes the lift read less, and the squat's numbers
-   *  with his videos left out are set from it (without it, from the eight people filmed at hip height, "feet stay down"
-   *  falls to 3 cm). Null when no frame read both ends of a foot against a resting place. */
+   *  lesser of its heel and toes, and the lesser of the two feet where both are read (`liftOfFrame`). A foot point not
+   *  seen in the moment before the rep (side on, the far foot, hidden behind the near one while he stands, shows during
+   *  the squat) rests where it was lowest, never where it stood once back up: in a jump from the top the feet are in the
+   *  air for most of that moment, and a resting place taken there read the jump at a few centimetres, so the lesser of
+   *  the two feet hid it (on a man's ten sets, 55 of 900 drawn jumps of 8 to 12 cm counted; with this and
+   *  `FOOT_ENDS_AGREE`, 9). It stays in the reading: set aside instead, a proper squat whose other foot slid was refused
+   *  (round one). Null when no frame read both ends of a foot against a resting place. */
   private liftOf(rep: Rep): number | null {
     const size = rep.standing.size;
     if (!(size > 0)) return null;
@@ -736,23 +731,22 @@ export class MovementMatcher {
       if (seen.length === 0) return null;
       const lowest = Math.max(...seen.map((x) => x.v));
       // Never lower than a little under where the foot stands: the lower of where it stood in the moment before the rep
-      // and the middle of where it stood once back up (a foot that moved during the rep stands there now).
+      // and the middle of where it stood once back up (a foot that moved during the rep stands there now). A point not
+      // seen before the rep rests where it was lowest: once back up it may be in the air.
       const after = median(seen.filter((x) => x.t >= back).map((x) => x.v));
       const before = rep.before[k] ?? null;
-      const stands = after === null ? before : before === null ? after : Math.max(after, before);
+      const stands = before === null ? null : after === null ? before : Math.max(after, before);
       return stands === null ? lowest : Math.min(lowest, stands + FOOT_ROOM * size);
     });
     let most: number | null = null;
     for (const s of rep.samples) {
-      // At the bottom only with both feet read: side on, the shin's tilt moves the near foot's points up the picture
-      // while the far foot is hidden behind it (the green-mat man, 2.6 to 3.1 cm), and a hop lifts both feet. Away from
-      // it, only the foot points seen in the moment before the rep.
-      const deep = s.drop !== null && s.drop >= this.depth;
       const rise = s.feet.map((v, k) => {
         const r = rest[k] ?? null;
-        if (!deep && (rep.before[k] ?? null) === null) return null;
         return v === null || r === null ? null : Math.max(0, (r - v) / size);
       });
+      // At the bottom only with both feet read: side on, the shin's tilt moves the near foot's points up the picture
+      // while the far foot is hidden behind it (the green-mat man, 2.6 to 3.1 cm), and a hop lifts both feet.
+      const deep = s.drop !== null && s.drop >= this.depth;
       const body = deep && !FOOT_ENDS.every(([heel, toes]) => (rise[heel] ?? null) !== null && (rise[toes] ?? null) !== null) ? null : liftOfFrame(rise, deep);
       if (body !== null) most = Math.max(most ?? 0, body);
     }

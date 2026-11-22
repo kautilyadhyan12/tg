@@ -63,7 +63,7 @@ describe("the worst thing: the floor view held as proof while it does not read a
   });
 
   it.each([
-    ["floor_phone_test 0-12 s", 8, ["feet stay in place", "hips, picture against 3D, standing"], 0.038],
+    ["floor_phone_test 0-12 s", 7, ["feet stay in place", "hips, picture against 3D, standing"], 0.038],
     ["floor_phone_test 13.9-21.1 s", 7, ["feet stay down", "feet stay in place", "hips, picture against 3D, standing"], 0.038],
     ["floor_phone_test 22.3-31.4 s", 9, ["feet stay down", "hips, picture against 3D, standing"], 0.032],
     ["usual_v04 9.8-17.5 s", 7, ["feet stay in place", "hips, picture against 3D", "hips, picture against 3D, standing"], 0.037],
@@ -166,8 +166,8 @@ describe("the pose model's own foot wander near the floor, measured on his floor
   const sets = floorSquatSets();
 
   it("is the model's own: while his knees are straight around a squat, no floor set's foot point lies a step (10 cm) from where it stood before that squat", () => {
-    // A step or a turn is the person moving, never the model's wander (round one: on his dull floor he turned to face
-    // the phone between his second and third squats, his heel 35 cm across, and a reference taken over the whole set
+    // A step or a turn is the person moving, never the model's wander (round one: on his dull floor he turned round
+    // between his second and third squats, his heel 35 cm across, and a reference taken over the whole set
     // read that turn as wander).
     // After he turns round on his dull floor (52a-ii-b-ii-b-ii) his left knee reads 149 to 157 degrees in 3D while he
     // stands, so that set has no frame read with both knees straight; taken by the straighter knee alone, its last half
@@ -218,7 +218,7 @@ describe("the pose model's own foot wander near the floor, measured on his floor
     ["floor_phone_test 0-12 s", 4, ["feet stay in place", "hips, picture against 3D, standing"], 0.082],
     ["floor_phone_test 13.9-21.1 s", 10, ["hips, picture against 3D", "hips, picture against 3D, standing"], 0.029],
     ["floor_phone_test 22.3-31.4 s", 6, ["feet stay down", "hips, picture against 3D, standing"], 0.029],
-    ["usual_v04 9.8-17.5 s", 4, ["feet stay down", "feet stay in place"], 0.092],
+    ["usual_v04 9.8-17.5 s", 4, ["feet stay in place"], 0.092],
     ["usual_v04 19.2-23.2 s", 2, ["feet stay in place", "hips, picture against 3D", "hips, picture against 3D, standing"], 0.09],
   ] as const)("the wander from %s alone: %s of 10 counted; short of his floor: %j; feet stay in place %s", (set, counted, failing, travel) => {
     const f = faithful(FLOOR_LEAN, LENS_MM, undefined, [set]);

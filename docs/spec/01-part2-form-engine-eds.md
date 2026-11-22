@@ -2168,8 +2168,8 @@ measured on his four floor sets (`wanderOf`, `floorWander` in `scripts/replays.t
 own, from half a second before it to half a second after, each foot point's place on the picture against where it lay
 while he stood tall in the half second before that squat, in his body's size then. A planted foot does not move in a
 properly done squat, so every move is the model's; a person may step or turn between squats (round one found that, on
-his dull floor, he turns to face the phone between his second and third squats, his heel 35 cm across, which a place
-taken over the whole set had read as wander; that set's entry still says "three squats side on", for 52a-ii-b-ii-b-ii).
+his dull floor, he turns round between his second and third squats, his heel 35 cm across, which a place taken over
+the whole set had read as wander; a set of its own each way since 52a-ii-b-ii-b-ii, below).
 While his knees are straight around a squat, no floor set's foot point lies 10 cm from where it stood (pinned). His five
 raised sets are measured the same way, since the redraw already carries their wander: over his squats the foot points
 spread 3.2 cm across and 3.9 down on his floor, 2.5 and 2.6 from his raised phone (root mean square, `floor-view` prints
@@ -2199,17 +2199,21 @@ live tries and 54's own videos.
 first, on his sets frame by frame, what let the drawn jumps through: the lesser of the two feet, read where both are, was a
 foot the model reads poorly. Side on, the far foot, hidden behind the near one while he stands, shows during a squat where the
 model guesses it; on his raised phone one foot's toe point slides 8 cm down the picture as he stands up while its heel rises.
-**Two rules in the matcher, the squat's numbers untouched:** away from the bottom of a rep, a foot point not seen in the moment
-before the rep decides nothing about the feet leaving the floor, and a frame in which only such a point is read has its feet
-unseen (so a jump with the near foot hidden in the air is never let through); and away from the bottom, where both feet are
-read, a foot whose heel and toes rise apart by more than 3 cm (`FOOT_ENDS_AGREE`) while the other's agree is set aside and the
-other foot decides. At the bottom both feet are read together as before: set aside there too, a weight-plate goblet squat
-shaken 1 cm lost a squat, and with his videos left out "feet stay down" fell from 4 to 3 cm. **His dull-floor set is two:**
+Read so, such a far foot rested where it stood once back up, and in a jump from the top the feet are in the air for most
+of that moment, so it read the jump at a few centimetres. **Two rules in the matcher, the squat's numbers untouched:** a foot
+point not seen in the moment before the rep rests where it was lowest in the rep, never where it stood once back up; and away
+from the bottom of a rep, where both feet are read, a foot whose heel and toes rise apart by more than 3 cm (`FOOT_ENDS_AGREE`)
+while the other's agree is set aside and the other foot decides. At the bottom both feet are read together as before: set
+aside there too, a weight-plate goblet squat shaken 1 cm lost a squat. First built as "such a foot point decides nothing away
+from the bottom": round one found it refused a proper squat (his last raised pair, his left foot hidden while he stood and
+seen through each squat: his right foot read alone, its toe point sliding as he stood up, 4.7 cm, and his first squat lost),
+so the far foot stays in the reading and only its resting place changed; with that foot hidden while he stands, on every
+judged squat set and either foot, heel or toes, the counts are the engine's before the job, case for case. **His dull-floor set is two:**
 from 16.9 to 19.0 s he turns round, through facing the phone, to side on the other way (his shoulder line in 3D from 73 to
 -75°), so his first two squats (9.8 to 17.5 s) and his third (19.2 to 23.2 s) are each a set of their own; his ten sets count
 2 and 1 there, as by eye. **Measured:** jumps of 8 to 12 cm drawn on his ten sets, 9 of 900 counted (55 without the two
-rules, 25 with the first alone; the 3 cm: 9 at 2.5 and 3, 15 at 2, 11 at 3.5, 14 at 4, 19 at 5), all 8 cm, all on his shiny
-floor, taking off 0.1 or 0.2 s before the rep is back up, one of them as filmed; of 15 and 20 cm, none of 720 on his ten sets
+rules, 39 with either alone; the 3 cm: 9 at 3, 10 at 2.5, 11 at 3.5, 16 at 2, 14 at 4, 25 at 5), all 8 cm, all on his shiny
+floor, taking off 0.1 or 0.2 s before the rep is back up, one of them as filmed; of 15 and 20 cm, none of 780 on his ten sets
 and the three squat videos of 52a-ii-a; the 270 jumps on those three, and the jumps from the bottom, none, as before. Every
 squat set counts as before, as filmed and under every held replay, with every person's numbers and with each left out, and
 the squat's numbers are as they were; every other movement counts 0 as before, but a squat jack done twice as slowly now 1

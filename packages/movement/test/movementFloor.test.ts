@@ -25,6 +25,13 @@ describe("the worst thing: good squats with the phone on the floor are counted, 
     expect(sets.reduce((n, s) => n + s.run.count, 0)).toBe(total);
   });
 
+  it("his dull-floor video played whole, his turn round between his second and third squats in it, still counts its 3", () => {
+    const whole = MOVEMENT_VIDEOS.find((v) => v.file === "movement-points/usual_v04" && v.reps === 2);
+    if (whole === undefined) throw new Error("no dull-floor set");
+    const [v] = proofVideos([{ ...whole, cut: [9.8, 23.2], reps: 3 }]);
+    expect(v === undefined ? null : runMovement(SQUAT, v.video).count).toBe(3);
+  });
+
   it("no rep of his squats is called short: they are good-form squats, and no advice is ever given on them", () => {
     for (const file of ["floor_phone_test", "usual_v04", "usual_v11"]) {
       for (const s of runs(file)) expect([s.label, s.run.reps.filter((r) => r.verdict === "short").map((r) => r.rule)]).toEqual([s.label, []]);
