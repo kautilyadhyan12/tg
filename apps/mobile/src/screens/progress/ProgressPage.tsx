@@ -14,7 +14,7 @@ import { Trends } from "./Trends";
 
 export { RECORDS_READ, PREDICTIONS_READ } from "./Overview";
 export { trendRead, distributionRead } from "./Trends";
-export { HEATMAP_READ } from "./CalendarTab";
+export { CALENDAR_DAYS_READ } from "./CalendarTab";
 export { MEASUREMENTS_READ } from "./BodyTab";
 
 const TAB_PAGES: Record<TabKey, ComponentType> = { overview: Overview, trends: Trends, calendar: CalendarTab, body: BodyTab };

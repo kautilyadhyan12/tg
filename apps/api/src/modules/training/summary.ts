@@ -3,7 +3,7 @@
 // by set with its new records (`historyWorkout`, keyed by the person, so somebody else's workout reads as absent),
 // XP and the streak through the gamification module, and the meal ideas from the one rule that makes them. The
 // phone shows the time, the sets and the stretches from what it holds; the server works out what has value.
-import { FOOD_ALLERGY_CAUTION, type AfterRecord, type HistoryWorkout, type WorkoutAfter } from "@app/shared";
+import { FOOD_ALLERGY_CAUTION, recordValues, type WorkoutAfter } from "@app/shared";
 import type { Sql } from "postgres";
 import { ACHIEVEMENTS, badgeXpForCodes } from "../gamification/badges.js";
 import { listEarned } from "../gamification/repo.js";
@@ -15,7 +15,6 @@ import { hasEarlierWorkoutOnDay } from "../workouts/repo.js";
 import type { RedisLike } from "../../redis.js";
 import { historyWorkout } from "./history.js";
 import { nextSaveAfter, ownWorkout } from "./historyRepo.js";
-import { estimatedOneRepMaxGrams } from "./records.js";
 import { setEffort } from "./repo.js";
 
 export interface SummaryDeps {
@@ -31,31 +30,6 @@ export const BADGES_OF_A_SAVE_MS = 10_000;
  *  same moment could award. */
 const MEAL_STATS = new Set(["total_meals", "protein_target_streak", "photo_meals_logged"]);
 const WORKOUT_BADGES = new Set(ACHIEVEMENTS.filter((a) => !MEAL_STATS.has(a.criteria.stat)).map((a) => a.code));
-
-/** What each new record was, from the set that made it (or, for most lifted, every set in reps of its exercise). */
-export function recordValues(w: Pick<HistoryWorkout, "sets" | "newRecords">): AfterRecord[] {
-  const out: AfterRecord[] = [];
-  for (const r of w.newRecords) {
-    const named = w.sets.find((s) => s.exercise === r.exercise);
-    const exerciseName = named?.exerciseName ?? null;
-    if (r.kind === "most_lifted") {
-      const grams = w.sets
-        .filter((s) => s.exercise === r.exercise && s.measuredIn === "reps")
-        .reduce((sum, s) => sum + s.done * (s.weightGrams ?? 0), 0);
-      out.push({ ...r, exerciseName, value: grams });
-      continue;
-    }
-    const set = w.sets.find((s) => s.position === r.position);
-    if (set === undefined) continue;
-    const value =
-      r.kind === "heaviest" ? set.weightGrams
-      : r.kind === "best_estimated_1rm" ? estimatedOneRepMaxGrams(set.weightGrams, set.done)
-      : set.done;
-    if (value === null) continue;
-    out.push({ ...r, exerciseName, value });
-  }
-  return out;
-}
 
 /** The summary of the person's own workout; null for one that is not theirs or does not exist. */
 export async function workoutSummary(deps: SummaryDeps, userId: string, workoutId: string): Promise<WorkoutAfter | null> {

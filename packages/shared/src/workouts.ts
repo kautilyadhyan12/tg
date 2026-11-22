@@ -58,6 +58,9 @@ export type WorkoutListQuery = z.infer<typeof workoutListQuerySchema>;
 
 export const workoutListItemSchema = z.object({
   id: z.uuid(),
+  /** The name the person gave it on the phone (64a-i); null for none, and for every workout the web saved. Read
+   *  as null where a server from before 64a-v sends none. */
+  name: z.string().nullable().default(null),
   startedAt: z.string(),
   platform: z.enum(["web", "android", "ios"]),
   setsCount: z.number().int(),

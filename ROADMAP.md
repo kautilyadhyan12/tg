@@ -868,7 +868,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
       - 64a-iii. [x] **After it** — merged 2026-11-22 (PR #616).
       - 64a-ii-b. [x] **Time trained, never time paused** — merged 2026-11-22 (PR #619).
       - 64a-iv. [x] **Saved workouts** — merged 2026-11-22 (PR #621).
-      - 64a-v. [ ] **History**: the month, a day's workouts and one workout set by set (61b's routes).
+      - 64a-v. [x] **History** — merged 2026-11-23 · PR #625
       - 64a-vi. [ ] **Heart rate and sounds**: the monitor of 37f-i during a workout and kept with it (Kd, 2026-11-12); the sounds at a rep, a set's end and the last 3 seconds.
     - 64b. [ ] **With the camera** (after 64a and item 53's screen): Camera or Count myself, picked every time.
 65. [ ] **Each exercise's Library page**, towards about 200 (§13.2; alongside, from 60): written and checked, never copied across from the old text; Kd's list of names. All camera rules are exercise folder 1's job 54.

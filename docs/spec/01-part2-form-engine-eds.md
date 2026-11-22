@@ -2968,6 +2968,36 @@ screen (`apps/mobile/src/screens/workout/Summary.tsx`, words `afterWords.ts`, ta
   file keeps the mark (`workoutRunSchema.startedFrom`, absent for one kept before).
 - **The policy** says the phone keeps a copy of saved workouts and each save or delete until it reaches the server.
 
+**As built in 64a-v (2026-11-22, Kd's drawing of that day).** History is Me → Progress → Calendar, the one place a person's
+workouts are kept day by day (Part 6 §2: Progress holds history), with doors to it:
+- **The calendar's days** are 61b's rule since 64a-v: `GET /v1/training/days?from=YYYY-MM-DD&to=YYYY-MM-DD` (`historyRangeQuerySchema`,
+  both days included, at most 366, else 400; the person's own; within the history's 120 reads a minute) counts each workout on
+  the day in the zone it was done in, as the month, the day and an exercise's records do; the phone asks for the year that ends on
+  its today. The old `/v1/progress/heatmap` stays for the web. The year is read again each time the server takes a finished workout,
+  and while finished workouts wait on the phone the calendar says "1 workout is saved on this phone. It shows here once it reaches
+  your account."
+- **A day** (`GET /v1/training/days/:day`): its workouts, each with its picture (its first exercise's), its name ("Workout" for one
+  never named), "7:05 am · 42 min · 9 sets" (a workout under a minute is "1 min", never "0 min"), its exercises ("Bench Press,
+  Barbell Curl and Plank", past three "… and 2 more"), and its calories. An exercise is named by ONE rule on the day and on the
+  workout's page (`serverFirst`, round one L2): the server's Library name (the day's read carries `exerciseNames` since 64a-v),
+  then the Library kept on the phone (`useNamed`), then its id word made readable. Today's box, which lies over the calendar,
+  says the workouts still on the phone itself, never "No workout this day" (round one H1), and the day open is read again when
+  the server takes one; pages read again from the newest workout sent (`useSentCount`), as the waiting list keeps only 50 ids.
+- **One workout** (`apps/mobile/src/screens/workout/PastWorkout.tsx`, `GET /v1/training/workouts/:id`): the screen after a workout's
+  own pieces (`WorkoutParts.tsx`, shared with the summary): the wall timer with the time trained, calories and sets, "About 238
+  kcal for you, at 82 kg" (the weight the save used, `kcalWeightKg` on the read since 64a-v), how hard it was as the stars kept,
+  the heart rate where one was kept, the new records with what each was (`recordValues` and Epley's formula now in
+  `packages/shared`, one rule for both screens), then every set, exercise by exercise, a gold PR on the set that made a record.
+  A workout of any age opens. Not found: "This workout is no longer in your history."; unread: "Your workout couldn't load." with
+  Try again. An answer for a workout left, coming late, is never drawn on the next one's page.
+- **Doors:** Today's Recent Activity names a workout as the person did (the old `/v1/workouts` list carries `name` since 64a-v) and
+  opens it, as a run's row opens the run; a row that opens a page has an arrow. My Workout has **History** ("Your past workouts,
+  day by day") under the saved workouts, opening Progress on the calendar.
+- **Measured** (2026-11-22, `apps/api/tools/measure-training-history.ts`, local database, 846,685 sets in the table): for the person
+  of five years, the calendar's year held the server answering nobody for at most 1.8 ms (a free plan's 90 days, 2 KB) and 1.2 ms
+  (all 365 days, 8 KB).
+- **Not in 64a-v:** stars given from History; a workout deleted or repeated from History (neither the web nor the phone has them).
+
 ### 13.7 The jobs (ROADMAP Stage 5, exercise folder 2; ROADMAP wins where they differ)
 
 | Job | What it builds | Waits for |

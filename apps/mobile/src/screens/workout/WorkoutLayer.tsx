@@ -54,6 +54,21 @@ const Context = createContext<WorkoutLayerValue | null>(null);
 /** The workout layer; null outside the tabs (a screen test of one page). */
 export const useWorkoutLayer = (): WorkoutLayerValue | null => useContext(Context);
 
+/** Grows by one each time the server takes another finished workout, for a page that reads again then (64a-v): read from
+ *  the newest workout sent, as the list keeps only its last 50 ids (round one L1). 0 until one is sent while it is open. */
+export function useSentCount(): number {
+  const sent = useWorkoutLayer()?.waiting.sent;
+  const newest = sent === undefined ? null : (sent[sent.length - 1] ?? null);
+  const seen = useRef(newest);
+  const [count, setCount] = useState(0);
+  useEffect(() => {
+    if (newest === seen.current) return;
+    seen.current = newest;
+    setCount((n) => n + 1);
+  }, [newest]);
+  return count;
+}
+
 export interface WorkoutFiles {
   run: (userId: string) => TextStore;
   waiting: (userId: string) => TextStore;

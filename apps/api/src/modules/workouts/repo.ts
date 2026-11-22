@@ -156,6 +156,7 @@ export async function syncWorkout(
 
 export interface WorkoutRow {
   id: string;
+  name: string | null;
   startedAt: Date;
   platform: string;
   setsCount: number;
@@ -171,6 +172,7 @@ export interface WorkoutRow {
 
 interface WorkoutDbRow {
   id: string;
+  name: string | null;
   started_at: Date;
   platform: string;
   sets_count: number;
@@ -186,6 +188,7 @@ interface WorkoutDbRow {
 
 const toWorkoutRow = (r: WorkoutDbRow): WorkoutRow => ({
   id: r.id,
+  name: r.name,
   startedAt: r.started_at,
   platform: r.platform,
   setsCount: r.sets_count,
@@ -217,7 +220,7 @@ export async function listWorkouts(
   },
 ): Promise<WorkoutRow[]> {
   const rows = await sql<WorkoutDbRow[]>`
-    SELECT id, started_at, platform, sets_count, total_reps, avg_form_score,
+    SELECT id, name, started_at, platform, sets_count, total_reps, avg_form_score,
            duration_ms, kcal_point, kcal_calc_version, quality_flags,
            engine_version, bundle_version
     FROM workouts
@@ -281,7 +284,7 @@ export async function getWorkoutDetail(
   workoutId: string,
 ): Promise<{ workout: WorkoutRow; sets: SetRow[] } | null> {
   const rows = await sql<WorkoutDbRow[]>`
-    SELECT id, started_at, platform, sets_count, total_reps, avg_form_score,
+    SELECT id, name, started_at, platform, sets_count, total_reps, avg_form_score,
            duration_ms, kcal_point, kcal_calc_version, quality_flags,
            engine_version, bundle_version
     FROM workouts WHERE id = ${workoutId} AND user_id = ${userId}`;
