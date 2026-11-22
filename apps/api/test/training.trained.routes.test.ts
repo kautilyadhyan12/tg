@@ -174,13 +174,16 @@ d("time trained, never time paused (real Postgres)", () => {
       expect(row?.ended_at.toISOString()).toBe(at(5.5 * HOUR));
     });
 
-    it("two workouts, one paused for hours: the challenge's minutes are the 60 trained, so a 120-minute challenge is not paid", async () => {
+    it("two workouts, one paused for hours: the training minutes the challenges read are the 60 trained", async () => {
       const a = await person();
+      const second = at(5.5 * HOUR + MIN);
       expect((await save(a, workout({ endedAt: at(5.5 * HOUR) }))).statusCode).toBe(201);
-      expect((await save(a, workout({ startedAt: at(5.5 * HOUR + MIN), endedAt: at(5.5 * HOUR + 31 * MIN) }))).statusCode).toBe(201);
-      const c = await counted(a);
-      expect(c.challengeMinutes).toBe(60);
-      expect(c.challengeMinutes).toBeLessThan(120);
+      expect((await save(a, workout({ startedAt: second, endedAt: at(5.5 * HOUR + 31 * MIN) }))).statusCode).toBe(201);
+      // A Monday may fall between the two starts: each week is asked for, and their minutes added.
+      const weeks = await sql<{ w: string }[]>`
+        SELECT DISTINCT date_trunc('week', t AT TIME ZONE 'UTC')::date::text AS w FROM unnest(ARRAY[${START}::timestamptz, ${second}::timestamptz]) AS t`;
+      const facts = await weekFacts(sql, a.id, "UTC", weeks.map((r) => r.w));
+      expect(facts.reduce((sum, f) => sum + f.trainingMinutes, 0)).toBe(60);
     });
 
     it("a workout with no pause counts its whole length, as before", async () => {
