@@ -6,9 +6,10 @@
 // Every rule reads the body in the person's own terms: how far the hips went down from where THIS person stands, how
 // far a foot rose above where it stood, a joint's angle. Two roles:
 //   - "count": how far the rep went. A rep that matched the movement but fell short of it is not counted, and says
-//     why ("go lower");
+//     why, in the rule's own words (`short`: "Go lower to count.");
 //   - "match": what kind of movement it was. A rep that breaks one is another movement (a jump, a lunge, a deadlift):
 //     no count and no word (Kd, 2026-11-16: "count only what matches").
+// A rule the camera must see says what to do when it could not (`unseen`: "Keep your feet in view.").
 import { z } from "zod";
 
 export const MOVEMENT_FORMAT = 1;
@@ -48,6 +49,13 @@ export const movementReadSchema = z.discriminatedUnion("kind", [
 /** Where a number came from, in a line: which videos and which rule, or which source. */
 const from = z.string().min(1).max(400);
 
+/** Words for the screen: one short whole sentence that says what to do ("Go lower to count."). */
+const words = z
+  .string()
+  .min(2)
+  .max(80)
+  .regex(/^[A-Z][^\n]*[.!]$/);
+
 export const movementRuleSchema = z
   .object({
     /** A short name, the same in the proof table and in a rep's reason: letters, digits and spaces only (a name like
@@ -66,11 +74,23 @@ export const movementRuleSchema = z
     /** "always": the camera must see it, or the rep decides nothing. "when-seen": checked where the camera can see it
      *  from where the phone stands, and marked "the camera cannot see this from here" where it cannot. */
     seen: z.enum(["always", "when-seen"]),
+    /** A count rule set from the exercise's form standard, never from how shallow its people went: `at` is the
+     *  standard's own line; `room` "camera": the tool that sets the numbers moves it the forgiving way by the camera's
+     *  room on that reading, measured on the videos; "none": the line is already the least the body allows, and is used
+     *  as it is. `source` says where the line comes from. */
+    standard: z.object({ at: z.number(), room: z.enum(["camera", "none"]), source: from }).strict().optional(),
+    /** For a count rule: what the screen says when a rep that tried falls short of it. */
+    short: words.optional(),
+    /** For a rule the camera must see: what the screen says when it could not. */
+    unseen: words.optional(),
     from,
   })
   .strict()
   .refine((r) => (r.atLeast === undefined) !== (r.atMost === undefined), { message: "a rule has exactly one bound" })
-  .refine((r) => r.read.kind !== "time" || r.at === "rep", { message: "a rep's time is read over the rep" });
+  .refine((r) => r.read.kind !== "time" || r.at === "rep", { message: "a rep's time is read over the rep" })
+  .refine((r) => (r.role === "count") === (r.short !== undefined), { message: "a count rule, and only a count rule, says what to do when a rep falls short of it" })
+  .refine((r) => (r.seen === "always") === (r.unseen !== undefined), { message: "a rule the camera must see, and only such a rule, says what to do when it could not" })
+  .refine((r) => r.standard === undefined || r.role === "count", { message: "only a count rule is set from a form standard" });
 
 /** One condition of standing ready, before a rep may begin. */
 export const movementReadySchema = z

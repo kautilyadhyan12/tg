@@ -55,6 +55,13 @@ if (values.write) {
   const people = folds.map((f) => f.person);
   const words = (f: Fitted): string => {
     const rule = movement.rules.find((r) => r.name === f.rule);
+    if (rule?.standard?.room === "none") {
+      return `Set by movement-check from the form standard, ${num(rule.standard.at)} (its source beside it), the least the body allows, so with no room of its own; rounded the forgiving way. The people's shallowest rep reads ${num(Math.round(f.from * 100) / 100)}.`;
+    }
+    if (rule?.standard !== undefined && f.room !== undefined) {
+      const way = rule.atLeast !== undefined ? "less" : "more";
+      return `Set by movement-check from the form standard, ${num(rule.standard.at)} (its source beside it), ${way} the camera's own room on this reading: the same rep's change from as filmed to each replay that sets numbers, in 99 reps of 100 (${String(f.room.pairs)} reps, ${String(people.length)} people): ${num(Math.round(f.room.size * 1000) / 1000)}; rounded the forgiving way. Their shallowest rep reads ${num(Math.round(f.from * 100) / 100)}.`;
+    }
     const how = rule?.role === "count" ? "a quarter of the way back towards standing from the shallowest rep" : "beyond the furthest rep by half its distance from the middle rep";
     const ceiling = rule?.read.kind === "lift" ? `, and no higher than an 8 cm jump seen at 8 pictures a second less 2 cm (LIFT_CEILING in scripts/movementCheck.ts, ${LIFT_CEILING.toFixed(3)})` : "";
     return `Set by movement-check from ${String(people.length)} people's videos (scripts/movementVideos.ts), as filmed and as each replay that sets numbers (scripts/replays.ts), ${String(f.reps)} reps: ${how} (${num(Math.round(f.from * 100) / 100)}; standing ${num(Math.round(f.standing * 100) / 100)})${ceiling}.`;
@@ -66,7 +73,8 @@ if (values.write) {
 }
 
 if (values.replays) {
-  const rows = replayTable(movement);
+  // With --write, the numbers just written: never the file as it was before.
+  const rows = replayTable(values.write ? withNumbers(movement, fitted) : movement);
   const replays = [...new Set(rows.map((r) => r.replay))];
   console.log(`\nEach judged video played again the ways the world changes it (scripts/replays.ts)`);
   for (const replay of replays) {

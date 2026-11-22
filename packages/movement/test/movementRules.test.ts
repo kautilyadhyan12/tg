@@ -37,8 +37,9 @@ interface Body {
   /** How far the heels and toes are moved on the picture, picture heights. */
   feetX: number;
   feetY: number;
-  /** Knees read at all. */
+  /** Knees read at all; the right knee alone hidden. */
   kneesSeen: boolean;
+  rightKneeHidden: boolean;
   /** For one foot point, how far it alone is moved on the picture (picture heights), or "hidden". */
   each: Map<number, readonly [number, number] | "hidden">;
 }
@@ -48,8 +49,14 @@ const ASPECT = 9 / 16;
 const SIZE = 0.5;
 const FEET: readonly number[] = [KP.left_heel, KP.left_foot_index, KP.right_heel, KP.right_foot_index];
 
-/** A rep made by hand at 30 frames a second for 5 s, changed by `change`, run through the matcher. */
+/** A rep made by hand at 30 frames a second for 5 s, changed by `change`, run through the matcher: each judged rep's
+ *  verdict and rule. */
 function run(change?: Change, fast = false) {
+  return repsOf(change, fast).map((r) => [r.verdict, r.rule]);
+}
+
+/** The same rep's judged reps, whole. */
+function repsOf(change?: Change, fast = false) {
   const m = new MovementMatcher(SQUAT);
   const reps = [];
   for (let n = 0; n * (1000 / 30) <= 5000; n++) {
@@ -66,13 +73,14 @@ function run(change?: Change, fast = false) {
       feetX: 0,
       feetY: 0,
       kneesSeen: true,
+      rightKneeHidden: false,
       each: new Map(),
     };
     change?.(t, p, b);
     const value = new Map<string, number | null>([
       ["hips height", b.hips],
       ["left knee", b.kneesSeen ? b.knee : null],
-      ["right knee", b.kneesSeen ? b.knee : null],
+      ["right knee", b.kneesSeen && !b.rightKneeHidden ? b.knee : null],
       ["left hip", b.hipAngle],
       ["right hip", b.hipAngle],
       ["trunk lean", b.trunk],
@@ -104,7 +112,7 @@ function run(change?: Change, fast = false) {
   }
   const last = m.finish();
   if (last?.rep) reps.push(last.rep);
-  return reps.map((r) => [r.verdict, r.rule]);
+  return reps;
 }
 
 describe("each rule of the squat refuses on its own, by its own name", () => {
@@ -137,6 +145,61 @@ describe("each rule of the squat refuses on its own, by its own name", () => {
 
   it.each(cases)("%s", (_name, change, verdict) => {
     expect(change === "fast" ? run(undefined, true) : run(change)).toEqual([verdict]);
+  });
+});
+
+// 52b-i: what the screen says about a rep not counted, and what the camera saw deciding before what it did not.
+describe("each rep not counted says why in the movement's own words, and what was seen decides first", () => {
+  const HIDE_FEET: Change = (t, _p, b) => {
+    if (t > 1400 && t < 3700) for (const i of FEET) b.each.set(i, "hidden");
+  };
+  const both = (...changes: Change[]): Change => (t, p, b) => {
+    for (const c of changes) c(t, p, b);
+  };
+  const said = (change?: Change) => repsOf(change).map((r) => [r.verdict, r.rule, r.reason]);
+
+  const SAID: readonly (readonly [string, Change | undefined, readonly [string, string | null, string | null]])[] = [
+    ["counted: nothing to say", undefined, ["counted", null, null]],
+    ["the hips not deep enough: go lower", (_t, p, b) => (b.hips = 1.15 - bound("depth") * 0.8 * p), ["short", "depth", "Go lower to count."]],
+    ["the knees not bent enough: go lower", (_t, p, b) => ((b.knee = 175 - (175 - bound("knees bent") - 12) * p), (b.hipAngle = b.knee - 8)), ["short", "knees bent", "Go lower to count."]],
+    ["the feet hidden all through a good rep: keep them in view", HIDE_FEET, ["unseen", "feet stay down", "Keep your feet in view."]],
+    ["the knees hidden all through a good rep: keep the whole body in view", (t, _p, b) => (b.kneesSeen = !(t > 1400 && t < 3700)), ["unseen", "knees bent", "Keep your whole body in view."]],
+    ["a deadlift (the hips bend far more than the knees): nothing", (_t, p, b) => (b.hipAngle = 168 - (85 + bound("hips and knees together") + 15) * p), ["other", "hips and knees together", null]],
+  ];
+
+  it.each(SAID)("%s", (_name, change, verdict) => {
+    expect(said(change)).toEqual([verdict]);
+  });
+
+  it("a deadlift whose feet are hidden all through is another movement, silent: never told the camera could not see the feet", () => {
+    const deadlift: Change = (_t, p, b) => (b.hipAngle = 168 - (85 + bound("hips and knees together") + 15) * p);
+    expect(said(both(deadlift, HIDE_FEET))).toEqual([["other", "hips and knees together", null]]);
+  });
+
+  it("a dip that never tried, its feet hidden all through, is another movement, silent", () => {
+    const barely: Change = (_t, p, b) => ((b.hips = 1.15 - (bound("depth") + 0.05) * p), (b.knee = 175 - 30 * p), (b.hipAngle = b.knee - 8));
+    expect(said(both(barely, HIDE_FEET))).toEqual([["other", "knees bent", null]]);
+  });
+
+  it("a rep that falls short with its feet hidden is not told to go lower: what the camera could not see leaves it undecided", () => {
+    const shallow: Change = (_t, p, b) => ((b.knee = 175 - (175 - bound("knees bent") - 12) * p), (b.hipAngle = b.knee - 8));
+    expect(said(both(shallow, HIDE_FEET))).toEqual([["unseen", "feet stay down", "Keep your feet in view."]]);
+  });
+
+  it("back up once standing tall, however low the hips read against the first standing: the rep counts", () => {
+    // After the rep the hips read 0.09 of a leg under where she first stood, the knees straight and the trunk upright,
+    // as the plate goblet squat's did between her third and fourth reps: never back by the hips alone (within 0.08).
+    expect(run((t, p, b) => (b.hips = 1.15 - 0.45 * p - (t > 2800 ? 0.09 : 0)))).toEqual([["counted", null]]);
+  });
+
+  it("never back up on one knee alone: the other hidden, a straight knee in view is not standing tall", () => {
+    // The same lower hips after the rep, and the right knee hidden once he is up: not back, so nothing is judged (a
+    // passer-by hiding a lunge's front leg left its straight back knee alone in view).
+    const oneKnee: Change = (t, p, b) => {
+      b.hips = 1.15 - 0.45 * p - (t > 2800 ? 0.09 : 0);
+      if (t > 3300) b.rightKneeHidden = true;
+    };
+    expect(run(oneKnee)).toEqual([]);
   });
 });
 
@@ -220,8 +283,21 @@ describe("a movement file the engine cannot use rightly is refused before it is 
     expect(movementSchema.safeParse({ ...SQUAT, rules: [...SQUAT.rules, { ...depth, name: "depth again" }] }).success).toBe(false);
   });
 
+  it("refuses a rule without its words for the screen, or with words it can never say, and a standard on a match rule", () => {
+    const depth = SQUAT.rules[at("depth")];
+    const chest = SQUAT.rules[at("chest up")];
+    expect(movementSchema.safeParse(withRule(at("depth"), { short: undefined })).success).toBe(false);
+    expect(movementSchema.safeParse(withRule(at("chest up"), { short: "Go lower to count." })).success).toBe(false);
+    expect(movementSchema.safeParse(withRule(at("chest up"), { unseen: undefined })).success).toBe(false);
+    expect(movementSchema.safeParse(withRule(at("hips alike"), { unseen: "Keep your whole body in view." })).success).toBe(false);
+    expect(movementSchema.safeParse(withRule(at("chest up"), { standard: depth?.standard })).success).toBe(false);
+    expect(movementSchema.safeParse(withRule(at("depth"), { short: "go lower" })).success).toBe(false);
+    expect(movementSchema.safeParse(withRule(at("depth"), { short: "Go lower.\nNow." })).success).toBe(false);
+    expect([depth?.short, chest?.unseen]).toEqual(["Go lower to count.", "Keep your whole body in view."]);
+  });
+
   it("refuses a time read at the bottom", () => {
-    const pace = { name: "pace", role: "match", at: "bottom", read: { kind: "time" }, atLeast: 0.3, seen: "always", from: "a test of the file's shape" };
+    const pace = { name: "pace", role: "match", at: "bottom", read: { kind: "time" }, atLeast: 0.3, seen: "always", unseen: "Keep your whole body in view.", from: "a test of the file's shape" };
     expect(movementSchema.safeParse({ ...SQUAT, rules: [...SQUAT.rules, pace] }).success).toBe(false);
     expect(movementSchema.safeParse({ ...SQUAT, rules: [...SQUAT.rules, { ...pace, at: "rep" }] }).success).toBe(true);
   });

@@ -27,7 +27,9 @@ describe("the worst thing: no other movement is counted as a squat however the w
 
   it.each(ROWS.filter((r) => r.tried && !openRow(r)).map((r) => [`${r.replay.name}: ${r.label}`, r] as const))("%s counts 0 and says nothing", (_name, r) => {
     expect(r.count).toBe(0);
-    expect(r.reps.filter((x) => x.verdict === "short").length).toBe(0);
+    // The push press's dips, a quarter squat to the camera, are told to go lower as a quarter squat is (its video says so).
+    if (r.entry.told === undefined) expect(r.reps.filter((x) => x.verdict === "short").length).toBe(0);
+    else expect([...new Set(r.reps.filter((x) => x.verdict === "short").map((x) => x.reason))]).toEqual(["Go lower to count."]);
   });
 
   it("the rows open today are listed here, each with the job that closes it, and say nothing", () => {
