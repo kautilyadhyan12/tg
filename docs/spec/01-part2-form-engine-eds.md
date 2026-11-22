@@ -2168,8 +2168,8 @@ measured on his four floor sets (`wanderOf`, `floorWander` in `scripts/replays.t
 own, from half a second before it to half a second after, each foot point's place on the picture against where it lay
 while he stood tall in the half second before that squat, in his body's size then. A planted foot does not move in a
 properly done squat, so every move is the model's; a person may step or turn between squats (round one found that, on
-his dull floor, he turns to face the phone between his second and third squats, his heel 35 cm across, which a place
-taken over the whole set had read as wander; that set's entry still says "three squats side on", for 52a-ii-b-ii-b-ii).
+his dull floor, he turns round between his second and third squats, his heel 35 cm across, which a place taken over
+the whole set had read as wander; a set of its own each way since 52a-ii-b-ii-b-ii, below).
 While his knees are straight around a squat, no floor set's foot point lies 10 cm from where it stood (pinned). His five
 raised sets are measured the same way, since the redraw already carries their wander: over his squats the foot points
 spread 3.2 cm across and 3.9 down on his floor, 2.5 and 2.6 from his raised phone (root mean square, `floor-view` prints
@@ -2194,6 +2194,51 @@ from. **So the floor view stays shown, never held, and the replay "on the floor"
 can be made again when more floor videos exist (job 53's live tries). **Limits, in plain sight:** one man, four floor sets;
 a phone on the floor is proven only on his real floor videos (52a-ii-b-i) and, for the other exercises, waits for job 53's
 live tries and 54's own videos.
+
+**As built, the floor mended in the engine (52a-ii-b-ii-b-ii, 2026-11-22; `rulings/2026-11-22-52a-ii-b-ii-b-ii.md`).** Measured
+first, on his sets frame by frame, what let the drawn jumps through: the lesser of the two feet, read where both are, was a
+foot the model reads poorly. Side on, the far foot, hidden behind the near one while he stands, shows during a squat where the
+model guesses it; on his raised phone one foot's toe point slides 8 cm down the picture as he stands up while its heel rises.
+Read so, such a far foot rested where it stood once back up, and in a jump from the top the feet are in the air for most
+of that moment, so it read the jump at a few centimetres. **Two rules in the matcher, the squat's numbers untouched:** a foot
+point not seen in the moment before the rep rests where it was lowest in the rep, never where it stood once back up; and away
+from the bottom of a rep, where both feet are read, a foot whose heel and toes rise apart by more than 3 cm (`FOOT_ENDS_AGREE`)
+while the other's agree is set aside and the other foot decides. At the bottom both feet are read together as before: set
+aside there too, a weight-plate goblet squat shaken 1 cm lost a squat. First built as "such a foot point decides nothing away
+from the bottom": round one found it refused a proper squat (his last raised pair, his left foot hidden while he stood and
+seen through each squat: his right foot read alone, its toe point sliding as he stood up, 4.7 cm, and his first squat lost),
+so the far foot stays in the reading and only its resting place changed; with that foot hidden while he stands, on every
+judged squat set and either foot, heel or toes, the counts are the engine's before the job, case for case. **His dull-floor set is two:**
+from 16.9 to 19.0 s he turns round, through facing the phone, to side on the other way (his shoulder line in 3D from 73 to
+-75°), so his first two squats (9.8 to 17.5 s) and his third (19.2 to 23.2 s) are each a set of their own; his ten sets count
+2 and 1 there, as by eye. **Measured:** jumps of 8 to 12 cm drawn on his ten sets, 9 of 900 counted (55 without the two
+rules, 39 with either alone; the 3 cm: 9 at 3, 10 at 2.5, 11 at 3.5, 16 at 2, 14 at 4, 25 at 5), all 8 cm, all on his shiny
+floor, taking off 0.1 or 0.2 s before the rep is back up, one of them as filmed; of 15 and 20 cm, none of 780 on his ten sets
+and the three squat videos of 52a-ii-a; the 270 jumps on those three, and the jumps from the bottom, none, as before. Every
+squat set counts as before, as filmed and under every held replay, with every person's numbers and with each left out, and
+the squat's numbers are as they were; every other movement counts 0 as before, but a squat jack done twice as slowly now 1
+(was 2: open, 52b-i); under the small model's gap, shown only (the app does not use that model), 27 of 57 squats, 29 before:
+each sumo squat loses one, one foot's heel and toes set apart by its noise and the other foot alone reading 4.5 and 5.1 cm (the
+heel-and-toe rule off, 29); the phone's own runs, 92 of 100 sets the same (his squats 19 of 22, as before). The floor view, judged
+against his five floor sets, still does not read as his floor at any lean and stays shown (`movementFloorView.test.ts` pins
+each lean and fold again; with his first shiny set left out of the wander, 7 of his 10 raised squats, 8 before round one's
+fix); at the replay's lean the hips below standing now go past his floor's (0.088 of a leg redrawn, his
+floor 0.073, his raised phone 0.063); jumps drawn on his raised sets seen from the floor, 4 of 150 counted (14 before), none
+from the raised phone itself (12 before). **Tried and not kept,
+each measured:** a jump read against where the feet were just before and just after it (his squats right but one rep under
+three replays, 158 of 810 jumps), or against the higher of where they stood before the rep and where they settled after, with the rep judged
+only once the feet are down (114); the knees rising and falling with the feet (119, and a real squat lost); the hips rising
+above standing (a proper squat's hips stand up to 0.18 of a leg above the standing first taken); the hips rising and falling
+in the moment after (two of his open rows put right, yet a Smith machine split squat's step, a foot up while the hips stay,
+counted); a middle of each foot point over 0.1 s (6 more jumps of 810, and the phone's one-picture foot on his dull floor is
+read by the feet's travel too). **Open, for job 53's live tries of a floor phone, each written on its video:** side on, on
+his shiny floor, the model settles his near foot's points 4 to 5 cm higher on the picture after each squat he stands up from,
+so a reading of the foot points that keeps these squats measures an 8 cm jump at 4 cm or under (the 9 jumps above), and his
+first set under 8 pictures a second, uneven pictures, shake, the chip's gap and the reps done faster still loses squats;
+half turned, his toe point lies on the floor's reflection, up to 8 cm down the picture, and his third squat there done 1.5 or
+2 times as slowly, and on the phone as filmed, reads its feet over 4 cm; on the phone his dull floor's second squat, a foot
+put 10 cm up for one picture; and with his videos left out, "feet stay in place" set at 5 cm from the eight people filmed at
+hip height, under his first set's and his last raised pair's 5 to 6 cm.
 
 An exercise that does not pass is published as "count by hand", never with a wrong camera
 count. Kd tries one exercise of each kind of movement on the phone, about a dozen, never
@@ -2592,6 +2637,15 @@ items 36 and 24b take as it is):
   delete; 200 people saving 200 sets at the same instant took 0.9 s in all and the server answered nobody for at
   most 23.7 ms. The publish's question was measured over this folder's 3 Library rows only (2.6 ms).
 
+**As built in 64a-ii-b (2026-11-22; Kd's "yes" of 2026-11-21).** A workout counts its time trained, never its pauses: the
+save carries `trainedMs` (the time the workout's screen showed, every pause and every away-time past 10 minutes left out), no
+longer than its length and never shorter than its sets and rests (a second a set of slack), a whole number of milliseconds up to 12
+hours, else 400. The server keeps it as `workouts.duration_ms`, which Hours Trained, the minutes challenges, goals and the gym's
+numbers read; the start and end stay the workout's own, and the calories are unchanged (version 4: a pause was never charged). A
+workout kept on a phone before it sent the field still saves, counting its sets and rests within its length (`trainedMsOf` in
+`packages/shared`). Workouts saved before it keep the length they were saved with: only the folders' own test accounts have any,
+as the testers' store version (17 November) has no Start workout.
+
 ### 13.6 The phone (jobs 63 and 64)
 
 - **The list is kept on the phone** and searched there, so search answers at once and works
@@ -2760,7 +2814,7 @@ with a screen reader.
   once it is there is the workout's own file emptied; a phone that dies between the two hands it over again, kept once by its id.
   Then `POST /v1/workouts` (61a) with the workout's id as its Idempotency-Key, made by `expo-crypto`. Its sets: by hand `hand`, a
   timer `timer`; `startedFrom` "none" until 64a-iv; no heart rate until 64a-vi; at most 12 hours long, never shorter than its sets
-  and rests.
+  and rests; its time trained beside it since 64a-ii-b (§13.5).
 - **The screen** (`apps/mobile/src/screens/workout/`): over every tab, as a run is; the exercise's picture with "Exercise 1 of 3 · Set 2
   of 3" (in a rest, "Coming up next" and that set), the LED wall timer (reps red, target amber, the rest's ring green, get-ready
   amber, PAUSED with a capital D), the set-up box's weight plate, Next up, one main button saying what it keeps. The screen stays

@@ -173,7 +173,7 @@ describe("the squat's own videos count what a person counts by eye", () => {
       ["prisoner_squat_2", 3, 2],
       ["floor_phone_test 0-12 s", 3, 2],
     ]);
-    expect(open.every((r) => /^52(b-i|a-ii-b-ii-b-ii), /.test(r.entry.leftOutOpen?.why ?? ""))).toBe(true);
+    expect(open.every((r) => /^(52b-i|53), /.test(r.entry.leftOutOpen?.why ?? ""))).toBe(true);
   });
 
   it.each(TABLE.rows.filter((r) => r.entry.movement === "squat" && !r.sets && r.entry.reps !== null && r.entry.open === undefined).map((r) => [r.label, r] as const))(

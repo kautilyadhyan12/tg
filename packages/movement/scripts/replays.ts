@@ -626,7 +626,7 @@ export interface WanderFrame {
 
 /** Each squat the movement counts is read on its own, from half a second before it to half a second after, against
  *  where the feet stood in that half second before it: a person may step or turn between squats (on his dull floor he
- *  turned to face the phone between his second and third, his heel 35 cm across), never during one. */
+ *  turned round between his second and third, his heel 35 cm across; a set of its own since 52a-ii-b-ii-b-ii), never during one. */
 const AROUND_SQUAT = 500;
 
 /** His squat sets, by label: those filmed from the floor and those from his raised phone (movementVideos.ts). */

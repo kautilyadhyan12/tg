@@ -16,8 +16,9 @@ export interface MovementVideo {
   /** The body-points file, under packages/movement/test, without its ending. */
   readonly file: string;
   /** One set of a video that holds several (52a-ii-b-i): from and to, seconds of the video's own clock, its first frame
-   *  at 0. A person who turns to face the phone another way starts a new set (nobody turns in the middle of one), so each
-   *  way of facing is played as a set of its own, the engine started afresh for it as a live set is. */
+   *  at 0. A person who turns to face the phone another way between squats starts a new set here, so each way of facing
+   *  is played as a set of its own, the engine started afresh for it as a live set is; a turn in the middle of a set
+   *  played whole is 52d's, and the whole still counts where one was cut (usual_v04, 3 of 3: movementFloor.test.ts). */
   readonly cut?: readonly [number, number];
   /** Filmed with the phone standing on the floor (52a-ii-b-ii-a): the floor's replay is not tried on it. */
   readonly floor?: boolean;
@@ -188,43 +189,51 @@ export const MOVEMENT_VIDEOS: readonly MovementVideo[] = [
     leftOutOpen: {
       count: 2,
       why:
-        "52a-ii-b-ii-b-ii, the floor mended in the engine: with his own videos left out, the numbers come from the eight people filmed from about hip height, and " +
-        "\"feet stay in place\" is 5 cm; side on, on the shiny floor, the slide of his foot points reads 5 to 6 cm on one of his proper squats.",
+        "53, where a phone on the floor is tried in front of a live person: with his own videos left out, the numbers come from the eight people filmed from " +
+        "about hip height, and \"feet stay in place\" is 5 cm; side on, on the shiny floor, the slide of his foot points reads 5 to 6 cm on one of his proper squats.",
     },
     replayOpen: {
       replays: ["8 a second", "uneven", "shaky", "chip's gap", "faster"],
       why:
-        "52a-ii-b-ii-b-ii, the floor mended in the engine: side on, on the shiny floor, the model slides his near foot's heel and toes about on the picture, so his " +
-        "proper squats read the feet 3 to 4 cm off the floor as filmed (the rule is 4 cm, held there by the jumps it must refuse); a centimetre " +
-        "of shake, the chip's gap, pictures skipped or the same reps done faster put a rep over it, or leave its feet unseen.",
+        "53, where a phone on the floor is tried in front of a live person: side on, on the shiny floor, the model slides his near foot's heel and toes about on " +
+        "the picture and, after he stands up from each squat, settles them 4 to 5 cm higher, so his proper squats read the feet 3 to 4 cm off the floor as " +
+        "filmed (the rule is 4 cm, held there by the jumps it must refuse); a centimetre of shake, the chip's gap, pictures skipped or the same reps done " +
+        "faster put a rep over it, or leave its feet unseen. Measured in 52a-ii-b-ii-b-ii: read from the foot points alone, every way that keeps these " +
+        "squats lets 8 cm jumps through on this set (taken against where the feet settle, 114 of 810; against where they were just before and after, 158), " +
+        "and the hips' own rise and fall, which would tell them apart, also lets a split squat's step through.",
     } },
   { file: "movement-points/floor_phone_test", cut: [13.9, 21.1], floor: true, movement: "squat", person: FLOOR_PERSON, view: "between", reps: 3, sets: true, sha256: "023bdc68c259df01ea372e9cb1be961e3c56be8c7e3ca9fb0b8797511a0920a1",
     seen: "2026-11-20 (52a-ii-b-i), 16 frames of the set drawn with the model's points: the one man, followed in each. The phone on a shiny floor: three squats half turned to it, the floor's reflection under his toes.",
     phoneOpen: {
       why:
-        "52a-ii-b-ii-b-ii, the floor mended in the engine: on the phone's reading his third squat's feet read about 4 cm off the floor (the laptop's 3), over the " +
-        "rule held at 4 by the jumps it must refuse.",
+        "53, where a phone on the floor is tried in front of a live person: on the phone's reading his third squat's feet read about 4 cm off the floor (the " +
+        "laptop's 3), over the rule held at 4 by the jumps it must refuse.",
       differences: ["the laptop counts 3, the phone 2", "the phone does not say 19.3 s counted"],
     },
     replayOpen: {
       replays: ["slower", "twice as slow"],
       why:
-        "52a-ii-b-ii-b-ii, the floor mended in the engine: the same reps done 1.5 or 2 times as slowly read the third squat's feet over the 4 cm rule, as the " +
-        "phone's reading does as filmed.",
+        "53, where a phone on the floor is tried in front of a live person: the same reps done 1.5 or 2 times as slowly read the third squat's feet over the 4 cm " +
+        "rule, as the phone's reading does as filmed: half turned on the shiny floor his toe point lies on the floor's reflection, up to 8 cm down the " +
+        "picture, and his heel 5 cm up from the first moment of that squat.",
     } },
   { file: "movement-points/floor_phone_test", cut: [22.3, 31.4], floor: true, movement: "squat", person: FLOOR_PERSON, view: "front", reps: 3, sets: true, sha256: "023bdc68c259df01ea372e9cb1be961e3c56be8c7e3ca9fb0b8797511a0920a1",
     seen: "2026-11-20 (52a-ii-b-i), 16 frames of the set drawn with the model's points: the one man, followed in each. The phone on a shiny floor: three squats facing it." },
   { file: "movement-points/usual_v04", cut: [0, 9.2], floor: true, movement: "squat", person: FLOOR_PERSON, view: "front", reps: null, sets: false,
     seen: "The phone on a dull floor: one deep squat held about 5 s facing the phone, hands to the floor (3.6 to 9.0 s). Reported, never judged: a hold is not a rep." },
-  { file: "movement-points/usual_v04", cut: [9.8, 23.2], floor: true, movement: "squat", person: FLOOR_PERSON, view: "side", reps: 3, sets: true, sha256: "490c374accbcd5e80d72c67af894dfbd4045fff42c1ce8f90becc99cfa65375f",
-    seen: "2026-11-20 (52a-ii-b-i), 16 frames of the set drawn with the model's points: the one man, followed in each. The phone on a dull floor: three squats side on; sandals.",
+  { file: "movement-points/usual_v04", cut: [9.8, 17.5], floor: true, movement: "squat", person: FLOOR_PERSON, view: "side", reps: 2, sets: true, sha256: "490c374accbcd5e80d72c67af894dfbd4045fff42c1ce8f90becc99cfa65375f",
+    seen: "2026-11-20 (52a-ii-b-i), 16 frames drawn with the model's points over 9.8 to 23.2 s, this set and the next: the one man, followed in each. The phone on a dull floor: two squats side on; sandals. From 16.9 to 19.0 s he turns round, through facing the phone, to side on the other way (his shoulder line in 3D from 73 to -75 degrees; 52a-ii-b-ii-b-ii).",
     phoneOpen: {
       why:
-        "52a-ii-b-ii-b-ii, the floor mended in the engine: in the first picture of his second squat the phone's model puts his near foot 10 cm up, in the next 2 cm " +
-        "(the laptop's stays down), a picture no real foot can be in, read as the feet leaving the floor (9 cm) and moving (10 cm). Letting a " +
-        "foot reading count only where a picture beside it agrees let 14 of 540 drawn jumps count, and was not kept.",
-      differences: ["the laptop counts 3, the phone 2", "the laptop says 15.6 s counted, the phone 19.7 s counted", "the phone does not say 19.7 s counted"],
+        "53, where the camera screen tries a phone on the floor in front of a live person: in the first picture of his second squat the phone's model " +
+        "puts his near foot 10 cm up, in the next 2 cm (the laptop's stays down), a picture no real foot can be in, read as the feet leaving the floor " +
+        "(9 cm) and moving (10 cm). Letting a foot reading count only where a picture beside it agrees let 14 of 540 drawn jumps count (52a-ii-b-i), " +
+        "and a middle of each foot point over 0.1 s, tried in 52a-ii-b-ii-b-ii, did not take it away (the foot's travel reads it too) and let 6 " +
+        "more of 810 count: neither was kept.",
+      differences: ["the laptop counts 2, the phone 1", "the phone does not say 15.6 s counted"],
     } },
+  { file: "movement-points/usual_v04", cut: [19.2, 23.2], floor: true, movement: "squat", person: FLOOR_PERSON, view: "side", reps: 1, sets: true, sha256: "490c374accbcd5e80d72c67af894dfbd4045fff42c1ce8f90becc99cfa65375f",
+    seen: "2026-11-20 (52a-ii-b-i), 16 frames drawn with the model's points over 9.8 to 23.2 s, this set and the one before: the one man, followed in each. The phone on a dull floor: after turning round he squats once side on, facing the other way (52a-ii-b-ii-b-ii)." },
   { file: "movement-points/usual_v11", cut: [1.3, 7.4], movement: "squat", person: FLOOR_PERSON, view: "between", reps: 2, sets: true, sha256: "e9f6f3f98f7b27d7b5737c32734a3ad8025a0e88af06d0ca668c485f42e36707",
     seen: "2026-11-20 (52a-ii-b-i), 16 frames of the set drawn with the model's points: the one man, followed in each. The phone raised to about his knees or hips (not measured), upright; barefoot: two squats half turned." },
   { file: "movement-points/usual_v11", cut: [8.3, 14.2], movement: "squat", person: FLOOR_PERSON, view: "side", reps: 2, sets: true, sha256: "e9f6f3f98f7b27d7b5737c32734a3ad8025a0e88af06d0ca668c485f42e36707",
@@ -238,9 +247,9 @@ export const MOVEMENT_VIDEOS: readonly MovementVideo[] = [
     replayOpen: {
       replays: ["shaky", "chip's gap", "slower"],
       why:
-        "52a-ii-b-ii-b-ii, the floor mended in the engine: right with every person's numbers under all three; with his own videos left out, the numbers come from " +
-        "the eight people filmed from about hip height, and a centimetre of shake, the chip's gap or the same reps done 1.5 times as slowly " +
-        "put one of these two squats over them.",
+        "53, where a phone on the floor is tried in front of a live person: right with every person's numbers under all three; with his own videos left out, " +
+        "the numbers come from the eight people filmed from about hip height (\"feet stay in place\" 5 cm, his own pair reading 4.8 to 5.3), and a " +
+        "centimetre of shake, the chip's gap or the same reps done 1.5 times as slowly put one of these two squats over them.",
     } },
   // ── Twins of the squat, tried and never setting a number: a count here is expected, not a fault ─────────
   {
@@ -299,7 +308,8 @@ export const MOVEMENT_VIDEOS: readonly MovementVideo[] = [
       why:
         "52b-i, where a dip that is plainly another movement says nothing: as filmed he never stands still between jacks long enough to be " +
         "read standing, so no dip begins a rep; done 1.5 or 2 times as slowly he does, and two of his jacks read their feet 2 to 6 cm moved " +
-        "and 1 cm up, under the rules, while \"stance holds\" reads nothing on this video. Two are counted.",
+        "and 1 cm up, under the rules, while \"stance holds\" reads nothing on this video. Two are counted done 1.5 times as slowly, one twice as " +
+        "slowly (two until 52a-ii-b-ii-b-ii set aside, away from the bottom, a foot whose heel and toes disagree).",
     },
   },
   other("movement-points/deadlift_kettlebell", "kettlebell deadlift", "side", "A kettlebell deadlift."),

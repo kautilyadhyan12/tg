@@ -169,7 +169,7 @@ describe("every proof video, as the phone's chosen set-up read it (51b-ii; kept 
       "fresh_lunge_forward_barbell_2",
       "romanian_deadlift_barbell",
       "usual_v03",
-      "usual_v04 9.8-23.2 s",
+      "usual_v04 9.8-17.5 s",
       "usual_v12",
       "usual_v14",
     ]);

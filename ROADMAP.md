@@ -831,7 +831,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
                     - 52a-ii-b-ii-a. [x] **Every proof video seen by a phone on the floor, and what a floor phone sees of each position** — merged 2026-11-21 (PR #613).
                     - 52a-ii-b-ii-b. **The floor mended** (split 2026-11-21 in two, the floor view first; `handoff/2026-11-21-52a-ii-b-ii-b-i.md` keeps its line as first written):
                         - 52a-ii-b-ii-b-i. [x] **The floor's own foot wander, measured and tried on the floor view** — merged 2026-11-21 (PR #615).
-                        - 52a-ii-b-ii-b-ii. [ ] **The floor mended in the engine** (after -i): in the shared engine, never by loosening the squat's numbers, what 52a-ii-b-i left open on his real floor videos (his first set side on under five replays and left out, his half-turned set done slowly, his last raised pair, 55 of 810 drawn jumps, two squats the phone misses), and his dull-floor set's third squat, done facing the phone after a turn, cut as a set of its own. The floor view stays shown (52a-ii-b-ii-b-i): its misses are shown, never proof.
+                        - 52a-ii-b-ii-b-ii. [x] **The floor mended in the engine** — merged 2026-11-22 (PR #617).
         - 52a-iii. [x] **The phone's own runs judged by the laptop's count and reasons** — merged 2026-11-20 (PR #600).
     - 52b. **The form judge, the reason for a rep not counted, and the summary** (§12.1, §2.4; split 2026-11-20 in three, `handoff/2026-11-20-floor-phone-plan.md` keeps its line as first written):
         - 52b-i. [ ] **Why a rep did not count, and the squat's depth**: each rep not counted carries one short reason for the screen ("Go lower to count."); the depth is set from the squat's form standard (Kd's research file: thighs level with the floor, knees about 90°) with room measured from the videos, so a quarter squat stops counting; a dip that is plainly another movement says nothing, its feet hidden or not (52a-iii's three open cases); with it the line a rep is back up at moves (52a-ii-b-i's two open cases at that line). First test: the kettlebell push press counts 0 (today 3); then no rep that reaches the standard is told to go lower.
@@ -841,7 +841,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
     - 52d. [ ] **One person locked on**: a busy gym, a passer-by, a mirror (§11.8). Since 51c the phone asks the model for one
       person, so the model itself picks the body: the job is to notice when the body followed has changed (51c's plain sign,
       `bodyChanges`, misses a body of the same size in the same place) and to pause, never count, until it is the person again. Since 52a-ii-b-i: a body new within 3 s keeps the one before's leg and trunk for up to a minute; and a turn in a set, the camera left on, counts a man's own floor videos 8 of 9, 3 of 3 and 8 of 10.
-53. [ ] **The camera screen**: its look as pictures first, then the reference picture, the live skeleton, the count, the reason a rep did not count, "Count this set myself" and Follow-along; the coach's shared lines and the tool that cuts and checks them (§12.6). It tries a set begun just after walking back from the phone (on the phone a first squat 0.8 s after it was missed, 52a-ii-b-i).
+53. [ ] **The camera screen**: its look as pictures first, then the reference picture, the live skeleton, the count, the reason a rep did not count, "Count this set myself" and Follow-along; the coach's shared lines and the tool that cuts and checks them (§12.6). It tries a set begun just after walking back from the phone (on the phone a first squat 0.8 s after it was missed, 52a-ii-b-i), and a phone on the floor in front of a live person: on his shiny floor the model settles his foot points 4 to 5 cm higher after each squat, the open cases of 52a-ii-b-ii-b-ii, each written on its video.
 54. [ ] **Exercises, movement by movement** (§12.4), towards about 200, with no fixed first list: Kd names one and gives its videos and research file; an exercise that does not pass the proof is published as "count by hand".
 55. Folded into 54 on 2026-11-16.
 
@@ -865,7 +865,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
       - 64a-i. [x] **Set up your workout** — merged 2026-11-21 (PR #610).
       - 64a-ii. [x] **Do it** — merged 2026-11-21 (PR #614).
       - 64a-iii. [x] **After it** — merged 2026-11-22 (PR #616).
-      - 64a-ii-b. [ ] **Time trained, never time paused** (Kd, 2026-11-21, next in this folder, before 64a-iv): a saved workout's length leaves its pauses out, so Hours Trained, the minutes challenge, goals and the gym's numbers count only time trained; 64a-ii's save sent the whole (a workout left paused for hours paid a "120 minutes" challenge's 200 XP).
+      - 64a-ii-b. [x] **Time trained, never time paused** — merged 2026-11-22 (PR #619).
       - 64a-iv. [ ] **Saved workouts**: save, list, load and delete (61c's routes), with a question first.
       - 64a-v. [ ] **History**: the month, a day's workouts and one workout set by set (61b's routes).
       - 64a-vi. [ ] **Heart rate and sounds**: the monitor of 37f-i during a workout and kept with it (Kd, 2026-11-12); the sounds at a rep, a set's end and the last 3 seconds.
