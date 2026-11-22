@@ -422,14 +422,20 @@ describe("5b-v-c: the one main button, and Invite asks first (spec Part 3 §18.6
     ['under 18', { dateOfBirth: '2015-03-14', app: { word: 'not_in_app', tone: 'grey', at: null, line: 'Under 18', lineTone: 'plain' } }, 'Edit'],
     ['a past member', { formerAt: '2026-08-01T10:00:00.000Z' }, 'Put back on your list'],
   ];
-  it.each(cases)('%s: one orange button, and it is the right one', async (_label, over, main) => {
+  // The main button by their state comes first beside the name. The page's one orange button is
+  // the strip's under the name (V2a, §17.11; `personPage.render.test.jsx`), so beside the name it
+  // is plain; a past member's Put back on your list stays orange while the strip has none.
+  it.each(cases)('%s: the right main button first beside the name', async (_label, over, main) => {
     orgService.getMemberListEntry.mockResolvedValue(entryAnswer(person(ADA, 'Ada Lovelace', over)));
     openBox(ADA);
     await dialog().findByRole('heading', { name: 'Ada Lovelace' });
+    const head = within(screen.getByTestId('member-person').querySelector('header'));
+    const pressable = head.getAllByRole('button').filter((b) => b.getAttribute('aria-label') !== 'Close');
+    expect(pressable[0].textContent).toBe(main);
     const orange = dialog()
       .getAllByRole('button')
       .filter((b) => b.classList.contains('c-btn-p'));
-    expect(orange.map((b) => b.textContent)).toEqual([main]);
+    expect(orange.map((b) => b.textContent)).toEqual(over.formerAt ? [main] : []);
   });
 
   it('Invite to app names the person and the address first; Cancel sends nothing', async () => {

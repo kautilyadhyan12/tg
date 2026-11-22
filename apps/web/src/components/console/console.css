@@ -2310,3 +2310,24 @@
 .c-person-narrow { width: 100%; max-width: 720px; }
 /* Drawn outside the console (a test drawing it alone): over the whole window. */
 .c-page-over { background: var(--page); }
+/* On a narrow phone (a folding phone's cover screen) a button's words wrap inside it rather than
+   run past the edge: "Sell a product to Maya Fernandes". */
+@media (max-width: 479px) {
+  .c-person .c-btn {
+    max-width: 100%;
+    height: auto;
+    min-height: 44px;
+    padding-top: 8px;
+    padding-bottom: 8px;
+    white-space: normal;
+    text-align: center;
+  }
+}
+/* On a touch screen, a tablet or an opened folding phone too, every button is 44 px to touch. */
+@media (pointer: coarse) {
+  .c-person .c-btn,
+  .c-person .c-person-back {
+    height: auto;
+    min-height: 44px;
+  }
+}

@@ -151,6 +151,15 @@ describe('the strip under the name', () => {
     expect(drawn.props.stripAsk.n).toBe(2);
   });
 
+  it("the page's one orange button is the strip's; Edit and More beside the name are plain", async () => {
+    drawn.answer = answer([held(1, '2026-10-04', false)]);
+    draw();
+    await strip();
+    const orange = screen.getAllByRole('button').filter((b) => b.classList.contains('c-btn-p'));
+    expect(orange.map((b) => b.textContent)).toEqual(['Record payment']);
+    expect(within(screen.getByTestId('next-step')).getByRole('button', { name: 'Record payment' })).toBe(orange[0]);
+  });
+
   it('draws nothing until Memberships has an answer, never "Nothing due" before it knows', async () => {
     draw();
     await screen.findByRole('heading', { name: 'Ada Lovelace', level: 1 });

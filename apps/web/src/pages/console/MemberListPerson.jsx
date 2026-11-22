@@ -1353,13 +1353,14 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
     </form>
   );
 
-  /** The buttons a person's state calls for (§18.7): its one main button first, orange,
-   *  then Edit when that is not the main one, then More. */
-  const renderButtons = (p, action) => {
+  /** The buttons a person's state calls for (§18.7) beside the name: its main one first, then Edit, then
+   *  More. The strip under the name holds the page's one orange button (§17.11), so these are plain; a past
+   *  member's Put back on your list is orange while the strip has no button. */
+  const renderButtons = (p, action, quiet) => {
     if (p.formerAt !== null) {
       return (
         <div className="flex flex-wrap gap-2">
-          <button type="button" onClick={() => void putBack()} disabled={busy || readOnly} className={MAIN}>
+          <button type="button" onClick={() => void putBack()} disabled={busy || readOnly} className={quiet ? PLAIN : MAIN}>
             <UserPlus aria-hidden="true" className="w-4 h-4" />
             Put back on your list
           </button>
@@ -1388,12 +1389,12 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
     return (
       <div className="flex flex-wrap gap-2">
         {main !== null ? (
-          <button type="button" onClick={main.onPick} disabled={busy || readOnly} className={`${MAIN} whitespace-nowrap`}>
+          <button type="button" onClick={main.onPick} disabled={busy || readOnly} className={`${PLAIN} whitespace-nowrap`}>
             <Mail aria-hidden="true" className="w-4 h-4" />
             {main.label}
           </button>
         ) : null}
-        <button type="button" onClick={startEdit} disabled={busy || readOnly} className={main === null ? MAIN : PLAIN}>
+        <button type="button" onClick={startEdit} disabled={busy || readOnly} className={PLAIN}>
           Edit
         </button>
         <MoreMenu
@@ -2015,7 +2016,7 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
             {/* It leaves this page, so it asks first while a form is open on it. */}
             {inv?.detail && !(mode === 'view' && pastInApp(shown)) ? <SentencePlace kind={inv.place} gym={gym} guard={mode !== 'view'} /> : null}
             </div>
-            {viewing ? renderButtons(shown, inviteNow) : null}
+            {viewing ? renderButtons(shown, inviteNow, step?.button != null) : null}
             {inShell ? null : (
               <button type="button" aria-label="Close" onClick={onClose} className="c-icon-btn flex-shrink-0">
                 <X aria-hidden="true" className="w-5 h-5" />

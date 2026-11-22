@@ -167,7 +167,9 @@ const STOP = 'c-btn c-btn-danger c-btn-sm';
 /** A payment or refund staff voided: crossed out, in the page's quiet colour. */
 const VOIDED = { color: 'var(--t3)', textDecoration: 'line-through' };
 // A payment or a refund: columns with its button at the end; on a phone, one under another.
-const LINE = 'flex flex-col gap-1.5 md:flex-row md:items-center md:gap-x-3';
+// Side by side where there is room, else the buttons wrap under the words: a member's page puts this box in a
+// column of its own (V2a), narrower than the window says.
+const LINE = 'flex flex-col gap-1.5 md:flex-row md:flex-wrap md:items-center md:gap-x-3';
 /** A cancel in the app not kept, on a membership still running: only the member can undo it (18l-ii-b). */
 const appCancelStands = (m) => m.appCancel !== null && m.appCancel !== undefined && m.appCancel.keptOn === null && (m.view.status === 'active' || m.view.status === 'frozen');
 /** Refusals that mean the page is out of date: it is read again. */
@@ -1031,7 +1033,7 @@ export default function MemberMemberships({
             <span className="c-s13 c-w6 whitespace-nowrap" style={r.voided === null ? { color: 'var(--bad)' } : VOIDED}>
               {r.amount}
             </span>
-            <span className="c-s13 c-t2 md:flex-1 flex flex-col">
+            <span className="c-s13 c-t2 md:flex-[1_1_10rem] min-w-0 flex flex-col">
               <span>{r.detail}</span>
               {r.note === null ? null : <span style={{ color: 'var(--warn)' }}>{r.note}</span>}
               {r.voided === null ? null : <span>{r.voided}</span>}
@@ -1116,11 +1118,11 @@ export default function MemberMemberships({
                 {renderFeeAppPaying(m, fee)}
                 {row.payments.map((p) => (
                   <div key={p.id} className="flex flex-col gap-2 px-3 py-2" style={SPLIT} data-testid={p.voided === null ? 'held-fee-payment' : 'held-fee-voided-payment'}>
-                    <div className="flex flex-col gap-1.5 md:flex-row md:items-center md:gap-x-3">
+                    <div className={LINE}>
                       <span className="c-s14 c-w6 whitespace-nowrap" style={p.voided === null ? { minWidth: 84, color: 'var(--good)' } : { minWidth: 84, ...VOIDED }}>
                         {p.amount}
                       </span>
-                      <span className="c-s13 c-t2 md:flex-1 flex flex-col">
+                      <span className="c-s13 c-t2 md:flex-[1_1_10rem] min-w-0 flex flex-col">
                         <span>{p.detail}</span>
                         {p.voided === null ? null : <span>{p.voided}</span>}
                       </span>
@@ -1832,7 +1834,7 @@ export default function MemberMemberships({
                       <span className="c-s14 c-w6 whitespace-nowrap" style={p.voided === null ? { minWidth: 84, color: 'var(--good)' } : { minWidth: 84, ...VOIDED }}>
                         {p.amount}
                       </span>
-                      <span className="c-s13 c-t2 md:flex-1 flex flex-col">
+                      <span className="c-s13 c-t2 md:flex-[1_1_10rem] min-w-0 flex flex-col">
                         <span>{p.detail}</span>
                         {p.voided === null ? null : <span>{p.voided}</span>}
                       </span>
