@@ -2270,9 +2270,10 @@
     grid-template-areas: 'who have' 'pays have';
   }
 }
+/* The board's columns: who they are and who pays at 300 px, what they have in the rest. */
 @container (min-width: 960px) {
   .c-person-cols {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: 300px minmax(0, 1fr) 300px;
     grid-template-rows: auto;
     grid-template-areas: 'who have pays';
   }
@@ -2306,6 +2307,34 @@
 .c-strip-good .c-strip-detail { color: var(--good); }
 .c-strip-plain .c-strip-detail { color: var(--t2); }
 .c-strip-good .c-strip-title { color: var(--good); }
+/* A membership's price, dates and payment (V2a-ii): side by side where they fit, each at least
+   160 px, one under another in a narrow column or on a phone. */
+.c-held-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 4px 0;
+}
+/* A panel left alone on its row stretches across it. */
+.c-held-fact {
+  flex: 1 1 160px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: var(--raise);
+  overflow-wrap: anywhere;
+}
+.c-held-fact-label { color: var(--t2); }
+.c-held-fact-value { color: var(--t1); }
+.c-held-fact-warn { background: var(--warn-bg); }
+.c-held-fact-warn .c-held-fact-label,
+.c-held-fact-warn .c-held-fact-value { color: var(--warn); }
+.c-held-fact-bad { background: var(--bad-bg); }
+.c-held-fact-bad .c-held-fact-label,
+.c-held-fact-bad .c-held-fact-value { color: var(--bad); }
 /* A form or a question on a member's page keeps a form's width. */
 .c-person-narrow { width: 100%; max-width: 720px; }
 /* Drawn outside the console (a test drawing it alone): over the whole window. */

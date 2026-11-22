@@ -927,7 +927,7 @@ function throwOnBillFailure(outcome: billsRepo.BillWriteOutcome): void {
       throw new OrgsError(
         409,
         "payment_too_much",
-        `That is more than is left to pay. ${formatMinor(outcome.leftMinor, outcome.currency)} is left.`,
+        `That is more than is due. ${formatMinor(outcome.leftMinor, outcome.currency)} is due.`,
       );
     case "not_allowed":
       throw new OrgsError(

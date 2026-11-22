@@ -30,7 +30,7 @@ export default function AppBuying({ gymId, entryId, shown, timezone, canAct, onC
   const markChecked = (id) => press(id, () => orgService.markAppPurchaseChecked(gymId, entryId, id), () => APP_BUY_CHECKED_WORDS, "We couldn't mark it as resolved. Try again.");
   const saidFor = (id) =>
     said !== null && said.id === id ? (
-      <span className="c-s13 c-t2" role="status">
+      <span className="c-s14 c-t2" role="status">
         {said.text}
       </span>
     ) : null;
@@ -40,7 +40,7 @@ export default function AppBuying({ gymId, entryId, shown, timezone, canAct, onC
     <div className="flex flex-col items-start gap-2" data-testid="app-buying">
       {open !== null ? (
         <div className="flex flex-col items-start gap-1.5">
-          <span className="c-s13 c-w5" style={{ color: 'var(--warn)' }}>
+          <span className="c-s14 c-w5" style={{ color: 'var(--warn)' }}>
             {open.line}
           </span>
           {canAct && open.closable ? (
@@ -53,7 +53,7 @@ export default function AppBuying({ gymId, entryId, shown, timezone, canAct, onC
       ) : null}
       {checks.map((c) => (
         <div key={c.id} className="flex flex-col items-start gap-1.5" data-testid="app-buy-check" data-check={`purchase:${c.id}`}>
-          <span className="c-s13 c-w5" style={{ color: 'var(--bad)' }}>
+          <span className="c-s14 c-w5" style={{ color: 'var(--bad)' }}>
             {c.line}
           </span>
           {canAct ? (
@@ -65,7 +65,7 @@ export default function AppBuying({ gymId, entryId, shown, timezone, canAct, onC
         </div>
       ))}
       {said !== null && !shownIds.has(said.id) ? (
-        <span className="c-s13 c-t2" role="status">
+        <span className="c-s14 c-t2" role="status">
           {said.text}
         </span>
       ) : null}

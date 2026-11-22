@@ -925,7 +925,7 @@ d("a gym's notebook: bills and payments on a person's memberships (real Postgres
       });
       expect((await rowsOf(gymId))[0]?.paid_periods).toBe(0);
       // More than the rest is refused, and says what is left.
-      expect(await pay("2026-01-24T12:00:00Z", 3000)).toBe("payment_too_much: That is more than is left to pay. £29.99 is left.");
+      expect(await pay("2026-01-24T12:00:00Z", 3000)).toBe("payment_too_much: That is more than is due. £29.99 is due.");
       expect(await paymentsOf(gymId)).toHaveLength(1);
       // The rest, by card: paid, and the month counts.
       expect(await pay("2026-01-24T12:00:00Z", 2999, 0, "card_at_desk")).toBe("ok");

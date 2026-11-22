@@ -37,6 +37,9 @@ export interface MovementVideo {
   readonly seen: string;
   /** A known wrong count, kept in the table in plain sight until the job named here fixes it. */
   readonly open?: string;
+  /** Another movement whose dips the squat's own words reach, counted 0: why, in plain sight. Every other movement says
+   *  nothing. */
+  readonly told?: string;
   /** A known wrong count with this video's person left out of the numbers (`count`), the video right with every person's
    *  numbers: kept in plain sight until the job named in `why` fixes it. `replays`: the replays under which the count with
    *  the person left out is that same one (`holds` lets it through there only). */
@@ -48,11 +51,6 @@ export interface MovementVideo {
    *  named in `why` closes it: `differences` are the judge's words for it, exactly; any other difference is a fault. */
   readonly phoneOpen?: { readonly why: string; readonly differences: readonly string[] };
 }
-
-/** 52a-iii: what closes the dips of another movement that one side marks unseen (two since 52a-ii-b-i). */
-const UNSEEN_FIRST =
-  "Whether a dip whose seen readings already make it another movement, or a dip that never tried, is called unseen at all, and " +
-  "whether an unseen dip says anything on the screen, is the reason for a rep not counted (52b).";
 
 const other = (file: string, person: string, view: View, seen: string): MovementVideo => ({ file, movement: null, person, view, reps: 0, sets: false, seen });
 
@@ -115,20 +113,6 @@ export const MOVEMENT_VIDEOS: readonly MovementVideo[] = [
     sets: true,
     sha256: "e14dc998fa5bbebb6db97a3c1971be8fa7cffab8131f4cfe3f8f8864925481d8",
     seen: "2026-11-19, 16 frames: the one man, a little turned, in each; at the end he talks to the camera, arms down.",
-    leftOutOpen: {
-      count: 2,
-      replays: ["nearer", "farther", "tilted left", "tilted right", "15 a second", "uneven", "shaky", "passer-by", "slower"],
-      why:
-        "52b-i, where the squat's depth is set from its form standard: his first rep is the shallowest of the nine people (the hips 0.226 of a " +
-        "leg down), and the depth set without him is a quarter of the way back from the next shallowest (0.307), 0.23. Since 52a-ii-b-i his " +
-        "leg is read straight, 4 in 100 longer than the middle of the last 3 s of both legs it was, so his depth reads that much less.",
-    },
-    replayOpen: {
-      replays: ["twice as slow"],
-      why:
-        "52b-i, the same: done twice as slowly, with his own videos left out, two of his three reps read 0.207 and 0.209 of a leg deep " +
-        "against the 0.23 set without him.",
-    },
   },
   {
     file: "movement-points/prisoner_squat_3",
@@ -286,14 +270,7 @@ export const MOVEMENT_VIDEOS: readonly MovementVideo[] = [
   //    them: the test on videos nobody had looked at. Reps counted by eye before the engine was run on them. ────────
   { file: "movement-points/fresh_back_squat_barbell", movement: "squat", person: "woman, barbell on the back", view: "side", reps: null, sets: false, seen: "Fresh: a barbell back squat, side on, three reps by eye; the camera pans and zooms with her (the rack moves on the picture by her feet's 14 cm), so it is reported, never judged." },
   { file: "movement-points/fresh_squat_smith", movement: "squat", person: "man, Smith machine", view: "front", reps: 0, sets: false, seen: "Fresh: 3.5 s of a Smith machine squat that starts at the bottom and rises: no rep from standing." },
-  { file: "movement-points/fresh_goblet_squat_plate", movement: "squat", person: "woman, plate at the chest", view: "side", reps: 4, sets: false, seen: "Fresh: a weight-plate goblet squat; it starts low and rises (not a rep), then four reps.",
-    replayOpen: {
-      replays: ["uneven"],
-      why:
-        "52b-i, where the depth, and with it the line a rep is back up at (half the depth, 0.08 of a leg), is set afresh: she stands 0.08 of " +
-        "a leg taller at the start than between her third and fourth reps (since 52a-ii-b-i her leg is read the same all through), and with " +
-        "pictures skipped she comes back to 0.085 of her tallest standing there, so the two reps are one.",
-    } },
+  { file: "movement-points/fresh_goblet_squat_plate", movement: "squat", person: "woman, plate at the chest", view: "side", reps: 4, sets: false, seen: "Fresh: a weight-plate goblet squat; it starts low and rises (not a rep), then four reps." },
   { file: "movement-points/fresh_front_squat_kettlebell", movement: "squat", person: "man, kettlebells in front", view: "front", reps: null, sets: false, seen: "Fresh: a kettlebell front squat facing the phone, three reps by eye; the camera tilts down in its first 0.6 s and moves later (the wall's foot and the bikes shift): reported, never judged." },
   // ── Every other movement: 0 and silence ──────────────────────────────────────────────────────────────
   other("movement-points/squat_jump_1", "woman, squat jump, dark gym", "side", "Squat jumps: the feet leave the floor at the top."),
@@ -306,24 +283,16 @@ export const MOVEMENT_VIDEOS: readonly MovementVideo[] = [
     replayOpen: {
       replays: ["slower", "twice as slow"],
       why:
-        "52b-i, where a dip that is plainly another movement says nothing: as filmed he never stands still between jacks long enough to be " +
-        "read standing, so no dip begins a rep; done 1.5 or 2 times as slowly he does, and two of his jacks read their feet 2 to 6 cm moved " +
-        "and 1 cm up, under the rules, while \"stance holds\" reads nothing on this video. Two are counted done 1.5 times as slowly, one twice as " +
-        "slowly (two until 52a-ii-b-ii-b-ii set aside, away from the bottom, a foot whose heel and toes disagree).",
+        "52c, where jumps are counted as a kind of their own: as filmed he never stands still between jacks long enough to be read standing, " +
+        "so no dip begins a rep; done 1.5 or 2 times as slowly he does, and two of his jacks read their feet 2 to 6 cm moved and 1 cm up, " +
+        "under the rules, while \"stance holds\" reads nothing on this video. Two are counted done 1.5 times as slowly, one twice as slowly. " +
+        "Measured in 52b-i: the standing before each is taken as his feet jump out, both moving 3.9 to 4.1 cm in that 0.2 s, where a real " +
+        "squat's feet move up to 3.8 cm in the standing taken before it, so the feet's stillness cannot tell them apart.",
     },
   },
   other("movement-points/deadlift_kettlebell", "kettlebell deadlift", "side", "A kettlebell deadlift."),
   other("movement-points/deadlift_barbell", "barbell deadlift", "side", "A conventional barbell deadlift."),
-  {
-    ...other("movement-points/romanian_deadlift_barbell", "barbell Romanian deadlift", "side", "A barbell Romanian deadlift."),
-    phoneOpen: {
-      why:
-        "52b: the laptop finds no dip here. The phone finds one in the video's last frames (5.77 to 6.00 s), as he leaves the picture " +
-        "(nobody is seen in the last frame by either), its hips and knees 54 degrees apart (another movement: the rule is 34) and its feet's rule " +
-        "reading nothing, and marks it 'the camera could not see the feet'. " + UNSEEN_FIRST,
-      differences: ["the phone also says 5.8 s unseen (feet stay down)"],
-    },
-  },
+  other("movement-points/romanian_deadlift_barbell", "barbell Romanian deadlift", "side", "A barbell Romanian deadlift."),
   other("movement-points/romanian_deadlift_dumbbell", "dumbbell Romanian deadlift", "side", "A dumbbell Romanian deadlift."),
   other("movement-points/good_morning_barbell", "barbell good morning", "side", "A barbell good morning."),
   other("movement-points/swing_kettlebell", "kettlebell swing", "side", "A two-handed kettlebell swing."),
@@ -352,9 +321,10 @@ export const MOVEMENT_VIDEOS: readonly MovementVideo[] = [
   other("movement-points/fresh_swing_one_hand", "fresh: one-handed kettlebell swing, one", "side", "Fresh: a one-handed kettlebell swing."),
   {
     ...other("movement-points/fresh_push_press_kettlebell", "fresh: kettlebell push press, one", "between", "Fresh: a kettlebell push press."),
-    open:
-      "52b: its dip (knees 120 to 127 degrees, the hips 0.15 to 0.19 of a leg down) is as deep as the shallowest real squat of the people its numbers are set from, " +
-      "so the forgiving depth counts 3 of its 4 dips. How deep a squat must go is set from the squat's form standard (the research file), never moved by hand after seeing this.",
+    told:
+      "Its dip bends the knees to 120 to 127 degrees, a quarter squat by the squat's own form standard (110 to 140), so it counts 0 since 52b-i (3 of 4 " +
+      "dips before); the squat's movement does not read the arms, so to the camera the dips that went most of the way are a quarter squat, told " +
+      "\"Go lower to count.\", as a quarter squat is.",
   },
   other("movement-points/fresh_snatch_kettlebell", "fresh: kettlebell snatch, one", "side", "Fresh: a kettlebell snatch."),
   other("movement-points/fresh_row_kettlebell", "fresh: one-arm kettlebell row, one", "side", "Fresh: a one-arm kettlebell row."),
@@ -375,15 +345,7 @@ export const MOVEMENT_VIDEOS: readonly MovementVideo[] = [
   other("movement-points/fresh_split_squat_smith_0", "fresh: Smith machine split squats, 0", "side", "Fresh: Smith machine split squats."),
   other("movement-points/fresh_split_squat_smith_2", "fresh: Smith machine split squats, 2", "between", "Fresh: Smith machine split squats."),
   other("movement-points/fresh_split_squat_smith_3", "fresh: Smith machine split squats, 3", "side", "Fresh: Smith machine split squats."),
-  {
-    ...other("movement-points/fresh_lunge_forward_barbell_2", "fresh: Barbell forward lunges, 2", "side", "Fresh: Barbell forward lunges."),
-    phoneOpen: {
-      why:
-        "52b: both sides read every lunge as another movement, its feet far from where they stood; at the last (9.40 to 10.80 s) the phone's " +
-        "feet break off as he steps and it marks the lunge 'the camera could not see' instead. " + UNSEEN_FIRST,
-      differences: ["the phone also says 9.4 s unseen (feet stay in place)"],
-    },
-  },
+  other("movement-points/fresh_lunge_forward_barbell_2", "fresh: Barbell forward lunges, 2", "side", "Fresh: Barbell forward lunges."),
   other("movement-points/fresh_lunge_forward_plate", "fresh: Weight-plate forward lunges, one", "side", "Fresh: Weight-plate forward lunges."),
   other("movement-points/fresh_overhead_press_plate", "fresh: weight-plate overhead press, one", "front", "Fresh: a weight-plate overhead press."),
   other("movement-points/fresh_overhead_press_barbell", "fresh: barbell overhead press, one", "front", "Fresh: a barbell overhead press."),
@@ -392,7 +354,7 @@ export const MOVEMENT_VIDEOS: readonly MovementVideo[] = [
   other("movement-points/fresh_curl_ez_bar_1", "fresh: standing EZ-bar curl, 1", "front", "Fresh: a standing EZ-bar curl."),
   // ── A phone on the floor or raised, the usual positions of other exercises (52a-ii-b-i): no squat in any ───────────
   floorOther("usual_v02", "floor", "front", "The phone on the floor, upright: he stands and turns round slowly."),
-  { ...floorOther("usual_v03", "floor", "front", "The phone on the floor, on its long side: he stands and turns round."), phoneOpen: { why: `52b: as he turns, one more dip on the phone, called unseen. ${UNSEEN_FIRST}`, differences: ["the phone also says 34.6 s unseen"] } },
+  floorOther("usual_v03", "floor", "front", "The phone on the floor, on its long side: he stands and turns round."),
   floorOther("usual_v05", "floor", "front", "The phone on the floor, upright: he sits cross-legged and turns round."),
   floorOther("usual_v06", "floor", "side", "The phone on the floor, on its long side: on all fours, he turns round."),
   floorOther("usual_v07", "floor", "side", "The phone on the floor, on its long side: he lies on the floor, raises a leg, sits up."),
@@ -408,7 +370,7 @@ export const MOVEMENT_VIDEOS: readonly MovementVideo[] = [
   },
   floorOther("usual_v09", "floor", "side", "The phone on the floor, upright: he stands at a chair, one leg lifted and bent."),
   floorOther("usual_v10", "floor", "side", "The phone on the floor, on its long side: he sits on a chair, gets up, sits (54)."),
-  { ...floorOther("usual_v12", "raised", "between", "The phone raised, upright: he sits on a chair from the front and the side, stands, puts one knee on the chair."), phoneOpen: { why: `52b: one dip called unseen on the laptop only. ${UNSEEN_FIRST}`, differences: ["the phone does not say 47.2 s unseen"] } },
+  floorOther("usual_v12", "raised", "between", "The phone raised, upright: he sits on a chair from the front and the side, stands, puts one knee on the chair."),
   floorOther("usual_v13", "raised", "side", "The phone raised, on its long side: he lies on a bed, raises a leg, sits up."),
-  { ...floorOther("usual_v14", "raised", "front", "The phone raised, upright: he stands and turns round."), phoneOpen: { why: `52b: as he turns, dips called unseen, for another reason or only on the phone. ${UNSEEN_FIRST}`, differences: ["the laptop says 6.7 s unseen, the phone 6.7 s unseen (feet stay down)", "the phone also says 19.3 s unseen"] } },
+  floorOther("usual_v14", "raised", "front", "The phone raised, upright: he stands and turns round."),
 ];

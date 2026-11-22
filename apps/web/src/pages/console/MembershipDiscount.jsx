@@ -85,7 +85,7 @@ export function MembershipDiscountPicker({ page, type, discountId, setDiscountId
               {note}
             </p>
           ) : (
-            <p className="c-s13 c-t3 m-0">If the member gives a code, type it here and press Apply.</p>
+            <p className="c-s14 c-t3 m-0">If the member gives a code, type it here and press Apply.</p>
           )}
         </div>
       ) : null}
@@ -120,7 +120,7 @@ export function MembershipTotal({ summary }) {
           </div>
         ))}
       </dl>
-      {summary.later !== null ? <p className="c-s13 c-t2 m-0">{summary.later}</p> : null}
+      {summary.later !== null ? <p className="c-s14 c-t2 m-0">{summary.later}</p> : null}
     </div>
   );
 }

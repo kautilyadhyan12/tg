@@ -485,7 +485,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
      - V1-b. [x] **The building blocks** · merged 2026-11-18 · PR #576
    - V2a. **A member's page, a whole page**, in two (2026-11-22; the `Person*` pages and `PhonePerson`):
      - V2a-i. [x] **The page, its three columns and the next step under the name** · merged 2026-11-22 · PR #620
-     - V2a-ii. [ ] **Memberships and bills in the third look's words and sizes** (`MemberMemberships` and the boxes inside it).
+     - V2a-ii. [x] **Memberships and bills in the third look's words and sizes** · merged 2026-11-22 · PR #623
    - V2b. [ ] **A member's page: its boxes** (web folder 1): Add member, edit, add a membership, record a payment, a quick look, freeze, cancel, money back, receipt, remove, merge (`Person*`, `AddMember`, `PhoneRecordPayment`, `PhoneForm`).
    - V3a. [ ] **Members: Your list** (web folder 1): the one-press picks, the list, people ticked and the bar, Send message, Tags, Remove, Filter from the right (`MembersNew*`).
    - V3b. [ ] **Members: In the app, waiting to join, and Staff** (web folder 1): a staff member's panel, Invite staff, Staff activity (`MembersNewApp`, `MembersNewStaff*`).
@@ -834,10 +834,11 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
                         - 52a-ii-b-ii-b-ii. [x] **The floor mended in the engine** — merged 2026-11-22 (PR #617).
         - 52a-iii. [x] **The phone's own runs judged by the laptop's count and reasons** — merged 2026-11-20 (PR #600).
     - 52b. **The form judge, the reason for a rep not counted, and the summary** (§12.1, §2.4; split 2026-11-20 in three, `handoff/2026-11-20-floor-phone-plan.md` keeps its line as first written):
-        - 52b-i. [ ] **Why a rep did not count, and the squat's depth**: each rep not counted carries one short reason for the screen ("Go lower to count."); the depth is set from the squat's form standard (Kd's research file: thighs level with the floor, knees about 90°) with room measured from the videos, so a quarter squat stops counting; a dip that is plainly another movement says nothing, its feet hidden or not (52a-iii's three open cases); with it the line a rep is back up at moves (52a-ii-b-i's two open cases at that line). First test: the kettlebell push press counts 0 (today 3); then no rep that reaches the standard is told to go lower.
+        - 52b-i. [x] **Why a rep did not count, and the squat's depth** — merged 2026-11-22 (PR #622).
         - 52b-ii. [ ] **The form check and each rep's score**: the squat's mistakes from the research file, each checked by the camera or marked "the camera cannot see this from here", judged only inside a counted rep; no advice on any good-form video, Kd's own floor videos among them.
         - 52b-iii. [ ] **The set's summary** (§2.4), which the workout reads as it does today.
-    - 52c. [ ] **The other kinds of counting**: one side at a time, holds, fast rhythm, timed only, jumps, floor work.
+    - 52c. [ ] **The other kinds of counting**: one side at a time, holds, fast rhythm, timed only, jumps, floor work. Since 52b-i: a
+      squat jack done 1.5 or 2 times as slowly counts 2 and 1 as squats, its standing taken as the feet jump out (`squat_jack_2`).
     - 52d. [ ] **One person locked on**: a busy gym, a passer-by, a mirror (§11.8). Since 51c the phone asks the model for one
       person, so the model itself picks the body: the job is to notice when the body followed has changed (51c's plain sign,
       `bodyChanges`, misses a body of the same size in the same place) and to pause, never count, until it is the person again. Since 52a-ii-b-i: a body new within 3 s keeps the one before's leg and trunk for up to a minute; and a turn in a set, the camera left on, counts a man's own floor videos 8 of 9, 3 of 3 and 8 of 10.

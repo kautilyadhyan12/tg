@@ -11,6 +11,11 @@
 // replaced by a smaller dip); then, for each rule:
 //   - a "count" rule (how far the rep goes) is placed a quarter of the way back towards standing from the shallowest
 //     rep any of those people did: counting is a little forgiving (§12.1, principle 4);
+//   - unless it is set from the exercise's form standard (`standard`, 52b-i): then it is placed at the standard's own
+//     line, never by how shallow anybody went, moved the forgiving way by the camera's own room on that reading (room
+//     "camera"): how much the same rep's reading changes between the video as filmed and each replay that changes only
+//     how the camera reads a body, in 99 reps of 100 (`STANDARD_SHARE`); or used as it is (room "none"), a line that
+//     is already the least the body allows;
 //   - a "match" rule (what kind of movement) is placed beyond the furthest rep any of those people did, by half of how
 //     far that rep lay from the middle rep (the middle of each person's own middle rep, each person counted once): a body
 //     never seen is given room, and every other movement is still far outside; the feet leaving the floor never above
@@ -42,6 +47,9 @@ export const MEASURING_DEPTH = 0.15;
 export const COUNT_SHARE = 0.75;
 /** A match rule is placed beyond the furthest rep by this share of its distance from the middle rep. */
 export const MATCH_SHARE = 0.5;
+/** A count rule set from a form standard is moved by the camera's room: how much a rep's reading changes under the
+ *  replays that set numbers, in this share of the reps (99 in 100). */
+export const STANDARD_SHARE = 0.99;
 /** The most a rule on the feet leaving the floor may be, metres (52a-ii-b-i): the smallest jump never counted, seen at the
  *  slowest the engine takes (its highest picture at most half a picture's time from its top: 1.9 cm lower at 8 a second),
  *  less the room a foot point is given under where the foot stands and a centimetre more. With a phone on the floor the
@@ -171,7 +179,8 @@ export function repsOf(movement: Movement, videos: readonly ProofVideo[]): RepRe
   return videos.flatMap((v) => {
     // The deepest dips first, as many as were counted, and only then those the camera could not judge left out: a rep
     // that could not be judged is never replaced by a smaller dip.
-    const dips = dipsOf(measuring, v.video);
+    // A dip longer than any rep of its kind (`judgeLong`: another movement, with no rule) is no rep either (round one).
+    const dips = dipsOf(measuring, v.video).filter((r) => !(r.verdict === "other" && r.rule === null));
     const deepest = [...dips].sort((a, b) => depthOf(b) - depthOf(a)).slice(0, v.entry.reps ?? 0);
     return dips.filter((r) => deepest.includes(r) && r.verdict !== "unseen");
   });
@@ -208,10 +217,44 @@ export interface Fitted {
   readonly from: number;
   readonly standing: number;
   readonly reps: number;
+  /** For a rule set from a form standard: the camera's room the standard's line was moved by, and how many reps, as
+   *  filmed and replayed, it was measured on. */
+  readonly room?: { readonly size: number; readonly pairs: number };
+}
+
+/** How long two reps overlap in time, ms (0 when they do not). */
+const overlap = (a: RepResult, b: RepResult): number => Math.max(0, Math.min(a.end, b.end) - Math.max(a.start, b.start));
+
+/** How much one rule's reading of the same rep changes between each video as filmed and each replay that sets numbers,
+ *  the way a rule's bound must move to keep it (up for "at most", down for "at least"), never below 0: the camera's room
+ *  on that reading, in `STANDARD_SHARE` of the reps. The same rep is the one it overlaps most in time (every replay that
+ *  sets numbers keeps the video's own clock), and a replayed rep that overlaps none, or no filmed rep that is its own
+ *  best, is left out: never two different reps paired by their order (round one: a replay that lost one rep and gained
+ *  another would have paired them). */
+export function roomOf(movement: Movement, rule: MovementRule, videos: readonly ProofVideo[]): { size: number; pairs: number } {
+  const best = (r: RepResult, among: readonly RepResult[]): RepResult | undefined =>
+    among.reduce<RepResult | undefined>((top, x) => (overlap(r, x) > (top === undefined ? 0 : overlap(r, top)) ? x : top), undefined);
+  const changes = videos.flatMap((v) => {
+    const filmed = repsOf(movement, [v]);
+    return asReplayed(v).flatMap((replay) => {
+      const again = repsOf(movement, [replay]);
+      return again.flatMap((r) => {
+        const own = best(r, filmed);
+        // Paired only both ways: the filmed rep's own best among the replayed reps is this one.
+        if (own === undefined || best(own, again) !== r) return [];
+        const a = r.readings[rule.name] ?? null;
+        const b = own.readings[rule.name] ?? null;
+        return a === null || b === null ? [] : [rule.atMost !== undefined ? a - b : b - a];
+      });
+    });
+  });
+  const sorted = [...changes].sort((a, b) => a - b);
+  const at = sorted[Math.min(sorted.length - 1, Math.floor(STANDARD_SHARE * sorted.length))] ?? 0;
+  return { size: Math.max(0, at), pairs: sorted.length };
 }
 
 /** Sets every rule's number from the reps of the videos given, as filmed and as each replay that sets numbers, by the
- *  two rules above. */
+ *  rules above. */
 export function fit(movement: Movement, videos: readonly ProofVideo[]): Fitted[] {
   const reps = repsOf(movement, videos.flatMap((v) => [v, ...asReplayed(v)]));
   // Each person's own reps, for the middle rep: each person counts once there, as each is left out once (52a-ii-b-i).
@@ -244,12 +287,22 @@ export function fit(movement: Movement, videos: readonly ProofVideo[]): Fitted[]
       });
       return mine.length === 0 ? [] : [middle(mine)];
     });
-    const raw = rule.role === "count" ? standing + COUNT_SHARE * (extreme - standing) : extreme + MATCH_SHARE * (extreme - middle(own));
+    // A count rule set from the form standard: the standard's line, moved the forgiving way by the camera's own room.
+    const room = rule.standard === undefined ? undefined : rule.standard.room === "none" ? { size: 0, pairs: 0 } : roomOf(movement, rule, videos);
+    const fromStandard = rule.standard === undefined || room === undefined ? null : rule.standard.at + (atLeast ? -room.size : room.size);
+    const raw = fromStandard ?? (rule.role === "count" ? standing + COUNT_SHARE * (extreme - standing) : extreme + MATCH_SHARE * (extreme - middle(own)));
     // A count rule is rounded the forgiving way (counting is a little forgiving, §12.1); a match rule towards the reps, its
     // room already given (what kind of movement it was is strict): rounded outward, a kettlebell swing read 34.07 with
     // pictures skipped where "hips and knees together" was 34.24, and was counted (52a-ii-b-i).
     const bound = rounded(raw, step(rule), rule.role === "count" ? !atLeast : atLeast);
-    return { rule: rule.name, bound: rule.read.kind === "lift" ? Math.min(bound, rounded(LIFT_CEILING, step(rule), false)) : bound, from: extreme, standing, reps: values.length };
+    return {
+      rule: rule.name,
+      bound: rule.read.kind === "lift" ? Math.min(bound, rounded(LIFT_CEILING, step(rule), false)) : bound,
+      from: extreme,
+      standing,
+      reps: values.length,
+      ...(room === undefined ? {} : { room }),
+    };
   });
 }
 

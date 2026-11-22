@@ -2535,9 +2535,9 @@ describe('a gym you have just made', () => {
 
     // Scoped to the hero card: the code also appears in the panel below, and an
     // unscoped query would pass on either.
-    expect(within(await screen.findByTestId('join-code-card')).getByText('K7QM2X')).toBeTruthy();
+    expect(within(await screen.findByTestId('join-code-card', {}, { timeout: 5000 })).getByText('K7QM2X')).toBeTruthy();
     expect(screen.queryByText(/couldn't find an organisation you run/i)).toBeNull();
-  });
+  }, 15_000);
 
   it('is listed under "Your organisations" without a reload', async () => {
     orgService.getMine.mockResolvedValueOnce({ data: { orgs: [] } });

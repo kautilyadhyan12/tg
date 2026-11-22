@@ -319,6 +319,19 @@ describe('read without leaning in (Kd, 2026-11-19, V1-f): no words under 14 px',
     '../../pages/console/MemberPayer.jsx',
     '../../pages/console/MemberCard.jsx',
     '../../pages/console/MealPlanGiving.jsx',
+    // V2a-ii: Memberships and bills, and the boxes drawn inside them.
+    '../../pages/console/MemberMemberships.jsx',
+    '../../pages/console/MembershipAgreement.jsx',
+    '../../pages/console/MembershipChoice.jsx',
+    '../../pages/console/MembershipDiscount.jsx',
+    '../../pages/console/AppBuying.jsx',
+    '../../pages/console/FriendGift.jsx',
+    '../../pages/console/TerminalPayBox.jsx',
+    '../../pages/console/CardRefundBox.jsx',
+    '../../pages/console/ChargebackLines.jsx',
+    './PtSessionsEnding.jsx',
+    './ReceiptBox.jsx',
+    './MoreMenu.jsx',
   ];
   it.each(REDESIGNED)('%s has no 12 or 13 px words', (file) => {
     const text = readFileSync(fileURLToPath(new URL(file, import.meta.url)), 'utf8');

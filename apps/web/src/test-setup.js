@@ -60,3 +60,15 @@ afterEach(() => {
       seen.map((s) => `  · ${s.split('\n')[0]}`).join('\n'),
   );
 });
+
+// WAITS LONG ENOUGH FOR GITHUB. A find or waitFor gives up after one second by default.
+// On 2026-11-22 GitHub's machine ran every package about 40 % slower than on master's run
+// the hour before, and three different heavy pages (Overview after Create, Opening hours
+// after Try again) took more than a second to draw, in three runs in a row, each passing
+// here. Five seconds for every render test, and fifteen for a test as a whole; a file
+// may still set its own. A wait that succeeds returns as soon as it can, so this costs
+// time only in a test that is already failing.
+if (typeof document !== 'undefined') {
+  const { configure } = await import('@testing-library/react');
+  configure({ asyncUtilTimeout: 5000 });
+}

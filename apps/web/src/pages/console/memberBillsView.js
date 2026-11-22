@@ -240,7 +240,7 @@ export function billRow(bill, currency, today) {
   const open = bill.state === 'due' || bill.state === 'overdue';
   const left = bill.amountMinor - bill.paidMinor;
   let when = null;
-  if (bill.state === 'overdue') when = `Was due ${dayWords(bill.dueOn)}`;
+  if (bill.state === 'overdue') when = `Due ${dayWords(bill.dueOn)}`;
   else if (bill.state === 'due') when = bill.dueOn === today ? 'Due today' : `Due ${dayWords(bill.dueOn)}`;
   return {
     id: bill.id,
@@ -257,7 +257,7 @@ export function billRow(bill, currency, today) {
     gift: bill.gift === null || bill.gift === undefined ? null : memberGiftBillLine(bill.gift.offMinor, bill.gift.currency, bill.gift.friendName ?? null),
     when,
     // Part paid: what is still owed, said in money.
-    left: open && bill.paidMinor > 0 ? `${formatMinor(bill.paidMinor, currency)} paid · ${formatMinor(left, currency)} left` : null,
+    left: open && bill.paidMinor > 0 ? `${formatMinor(bill.paidMinor, currency)} paid · ${formatMinor(left, currency)} due` : null,
     cancelled,
     ...cardLines(bill),
     payments: paymentLines(bill.payments, bill.voidedPayments ?? [], currency),
@@ -308,7 +308,7 @@ export function feeForWords(fee) {
 }
 
 /** A fee paid, or taken off, after its booking stopped counting (18h-i, round one). */
-export const noLongerOwed = (fee) => `No longer owed: ${whyNotOwed(fee)}.`;
+export const noLongerOwed = (fee) => `No longer outstanding: ${whyNotOwed(fee)}.`;
 
 /** Kept on Overview's Refunds to review (18d-iv-b-iii): who decided and when. */
 const keptWords = (fee) => (fee.kept === null || fee.kept === undefined ? '' : ` Kept${fee.kept.by === null ? '' : ` by ${fee.kept.by}`} on ${dayWords(fee.kept.on)}.`);
@@ -320,7 +320,7 @@ export function feeRow(fee, currency, today) {
   const partRefunded = fee.state === 'paid' && (fee.refundedMinor ?? 0) > 0;
   const state = refundPending(fee) ? REFUND_PENDING_TAG : lostInFull(fee) ? CHARGEBACK_LOST_TAG : partRefunded ? { tag: 'Part refunded', tone: 'soft' } : (FEE_TAGS[fee.state] ?? STATE_TAGS.due);
   let when = null;
-  if (fee.state === 'overdue') when = `Was due ${dayWords(fee.dueOn)}`;
+  if (fee.state === 'overdue') when = `Due ${dayWords(fee.dueOn)}`;
   else if (fee.state === 'due') when = fee.dueOn === today ? 'Due today' : `Due ${dayWords(fee.dueOn)}`;
   return {
     id: fee.id,
@@ -411,7 +411,7 @@ export function voidFeePaymentWords(fee, currency, name) {
   if (fee.stillOwed === false) {
     return {
       question: `Void this ${amount} payment for ${name}'s ${feeName(fee)}?`,
-      detail: `${capital(name)} no longer owes this fee: ${whyNotOwed(fee)}. Voiding the payment takes the fee off too, so nothing is owed. Do it if you gave the money back. The payment stays on this page, crossed out, with who voided it and why.`,
+      detail: `${capital(name)} no longer owes this fee: ${whyNotOwed(fee)}. Voiding the payment takes the fee off too, so nothing is outstanding. Do it if you gave the money back. The payment stays on this page, crossed out, with who voided it and why.`,
       label: 'Why are you voiding it?',
       button: 'Void payment',
       done: `Payment voided. ${capital(name)} owes nothing for this fee.`,
@@ -419,7 +419,7 @@ export function voidFeePaymentWords(fee, currency, name) {
   }
   return {
     question: `Void this ${amount} payment for ${name}'s ${feeName(fee)}?`,
-    detail: `Only do this if it was recorded by mistake. The fee will be owed again. The payment stays on this page, crossed out, with who voided it and why.`,
+    detail: `Only do this if it was recorded by mistake. The fee will be outstanding again. The payment stays on this page, crossed out, with who voided it and why.`,
     label: 'Why are you voiding it?',
     button: 'Void payment',
     done: `Payment voided. ${capital(name)} owes the ${amount} ${feeName(fee)} again. If they paid, record it.`,
@@ -443,7 +443,7 @@ export function cancelBillWords(m, name, live) {
     question: `Void this ${amount} bill for ${name}'s ${m.typeName}?`,
     detail: `It is the bill${days}. ${capital(name)} will owe nothing for it.${keeps} The bill stays on this page, marked Voided, with who voided it and why. This can't be undone.`,
     button: 'Void bill',
-    done: `That ${amount} bill was voided. Nothing is owed for it.`,
+    done: `That ${amount} bill was voided. Nothing is outstanding for it.`,
   };
 }
 
@@ -457,9 +457,9 @@ export const MENU_WORDS = {
   cardRefund: { label: 'Refund to card', hint: 'Square sends the money back to the card that paid.' },
   refund: { label: 'Note a refund', hint: 'You gave some or all of it back.' },
   refundElsewhere: { label: 'Note a refund', hint: 'You gave it back another way, such as cash.' },
-  voidPayment: { label: 'Void payment', hint: 'It was recorded by mistake. The bill is owed again.' },
+  voidPayment: { label: 'Void payment', hint: 'It was recorded by mistake. The bill is outstanding again.' },
   voidRefund: { label: 'Void refund', hint: 'It was noted by mistake. It will no longer count.' },
-  voidBill: { label: 'Void bill', hint: 'Nothing is owed for these days.' },
+  voidBill: { label: 'Void bill', hint: 'Nothing is outstanding for these days.' },
 };
 
 /** Said where the payment was, once it is voided: who owes what again, and what to press
@@ -582,7 +582,7 @@ export function paymentWords(m, name, today) {
   const left = formatMinor(pay.leftMinor, m.currency);
   const what = pay.covers === null ? '' : ` for ${dayWords(pay.covers.from)} to ${dayWords(pay.covers.to)}`;
   const early = paysEarly(m, today) ? ` It is not due until ${dayWords(pay.dueOn)}.` : '';
-  const leftWords = `${left} is left to pay${what}.${early}`;
+  const leftWords = `${left} is due${what}.${early}`;
   return {
     title: `Record a payment for ${name}'s ${m.typeName}`,
     detail: `${leftWords} This only writes it in your records: no money is taken.`,
@@ -600,7 +600,7 @@ export function paymentBody(m, draft) {
     return { problem: decimals === 0 ? 'Type the amount they paid, as a whole number.' : 'Type the amount they paid, like 20 or 20.50.', body: null };
   }
   if (amountMinor > pay.leftMinor) {
-    return { problem: `That is more than is left to pay. ${formatMinor(pay.leftMinor, m.currency)} is left.`, body: null };
+    return { problem: `That is more than is due. ${formatMinor(pay.leftMinor, m.currency)} is due.`, body: null };
   }
   if (draft.method === '') return { problem: 'Choose a payment method.', body: null };
   return { problem: null, body: { requestKey: draft.requestKey, periodIndex: pay.periodIndex, amountMinor, method: draft.method } };
@@ -611,7 +611,7 @@ export function paymentBody(m, draft) {
 export function paidWords(m, amountMinor) {
   const left = m.billing.pay.leftMinor - amountMinor;
   const amount = formatMinor(amountMinor, m.currency);
-  return left > 0 ? `${amount} recorded. ${formatMinor(left, m.currency)} is still left to pay.` : `${amount} recorded. That bill is paid.`;
+  return left > 0 ? `${amount} recorded. ${formatMinor(left, m.currency)} is still due.` : `${amount} recorded. That bill is paid.`;
 }
 
 /** The box the Void payment button opens, and the question Undo mark paid asks for an
@@ -633,10 +633,10 @@ export function undoWords(m, name) {
     link: 'Void payment',
     question: `Void ${what} for ${name}'s ${m.typeName}?`,
     detail:
-      'Use this when a payment was recorded by mistake. The bill is owed again. The payment stays on this page, crossed out, with who voided it and why. No money moves: to give money back, use Note a refund instead.',
+      'Use this when a payment was recorded by mistake. The bill is outstanding again. The payment stays on this page, crossed out, with who voided it and why. No money moves: to give money back, use Note a refund instead.',
     label: 'Why are you voiding it?',
     button: 'Void payment',
-    done: `The payment for ${m.typeName} was voided. That bill is owed again.`,
+    done: `The payment for ${m.typeName} was voided. That bill is outstanding again.`,
   };
 }
 

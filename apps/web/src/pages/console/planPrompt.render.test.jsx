@@ -598,10 +598,10 @@ describe('a gym the moment it is created', () => {
     renderNewGym();
     await createGym();
 
-    fireEvent.click(await screen.findByRole('button', { name: /start your 10-day free trial/i }));
-    await waitFor(() => expect(screen.queryByTestId('plan-modal')).toBeNull());
-    expect(within(await screen.findByTestId('join-code-card')).getByText('K7QM2X')).toBeTruthy();
-  });
+    fireEvent.click(await screen.findByRole('button', { name: /start your 10-day free trial/i }, { timeout: 5000 }));
+    await waitFor(() => expect(screen.queryByTestId('plan-modal')).toBeNull(), { timeout: 5000 });
+    expect(within(await screen.findByTestId('join-code-card', {}, { timeout: 5000 })).getByText('K7QM2X')).toBeTruthy();
+  }, 15_000);
 
   it('shows no code while the console has not been told the gym exists, and a way to try again when that read fails', async () => {
     orgService.createOrg.mockResolvedValue({

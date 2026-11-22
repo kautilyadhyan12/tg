@@ -132,7 +132,7 @@ describe('Who pays', () => {
 
     const row = await screen.findByTestId('owed-item');
     expect(within(row).getByText('Gold Monthly · 20 Oct – 19 Nov 2026')).toBeTruthy();
-    expect(within(row).getByText('₹1,500.00 left')).toBeTruthy();
+    expect(within(row).getByText('₹1,500.00 due')).toBeTruthy();
     fireEvent.click(within(row).getByRole('button', { name: 'Record payment' }));
     const form = screen.getByTestId('payer-pay');
     expect(within(form).getByText(/The receipt says Priya Sharma paid\./)).toBeTruthy();
