@@ -1482,3 +1482,22 @@ describe("saved workouts (64a-iv)", () => {
     expect(loads()).toEqual(["Load Legs", "Load Arms", "Load Core", "Load Legs", "Load Arms", "Load Core", "Load Push day"]);
   });
 });
+
+// 64a-v. A person on My Workout finds their past workouts there: History opens Progress on its calendar, the one place
+// they are kept, and its ✕ comes back to My Workout.
+describe("History on My Workout (64a-v)", () => {
+  it("opens Progress on the calendar, and its ✕ comes back to My Workout", async () => {
+    await openLibrary(libraryServer().ask);
+    await fireEvent.press(await screen.findByRole("button", { name: /^My Workout/ }));
+    const closes = screen.queryAllByRole("button", { name: "Close" });
+    await fireEvent.press(await screen.findByRole("button", { name: "History, your past workouts, day by day" }));
+    expect((await screen.findByRole("tab", { name: "Calendar" })).props.accessibilityState).toEqual({ selected: true });
+    const progressClose = screen.getAllByRole("button", { name: "Close" }).find((c) => !closes.includes(c));
+    if (progressClose === undefined) throw new Error("Progress has no Close");
+    await fireEvent.press(progressClose);
+    await waitFor(() => {
+      expect(screen.queryByRole("tab", { name: "Calendar" })).toBeNull();
+    });
+    expect(screen.getByRole("button", { name: "History, your past workouts, day by day" })).toBeTruthy();
+  });
+});

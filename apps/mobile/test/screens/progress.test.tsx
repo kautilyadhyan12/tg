@@ -1,7 +1,7 @@
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react-native";
 import { App } from "../../src/App";
 import type { Ask, AskInit } from "../../src/session/calls";
-import { HEATMAP_READ, MEASUREMENTS_READ, PREDICTIONS_READ, RECORDS_READ } from "../../src/screens/progress/ProgressPage";
+import { CALENDAR_DAYS_READ, MEASUREMENTS_READ, PREDICTIONS_READ, RECORDS_READ } from "../../src/screens/progress/ProgressPage";
 import { dayKey, fakeServer, kept, memoryStore, refusal, tokens, type Reply } from "../kit";
 
 const extra = { copyName: "Feature 2", apiUrl: "http://localhost:3000" };
@@ -27,34 +27,46 @@ const PREDICTIONS = {
 const day = (back: number, workouts: number, kcal: number) => ({ date: dayKey(back), workouts, kcal, durationMs: workouts * 30 * 60_000 });
 const trend = (points: ReturnType<typeof day>[], limitedToDays: number | null = null) => ({ points, runDays: [], limitedToDays });
 const FAMILIES = { families: [{ family: "F1", sets: 24 }], limitedToDays: null };
-const HEATMAP = { days: [{ date: dayKey(0), count: 1, kcal: 21 }, { date: dayKey(1), count: 2, kcal: 42 }], limitedToDays: null };
+const DAYS = { from: dayKey(364), to: dayKey(0), days: [{ day: dayKey(1), workouts: 2 }, { day: dayKey(0), workouts: 1 }], limitedToDays: null };
 const MEASUREMENTS = { items: [{ id: "76f3008b-7b75-4846-af4e-9e8278028445", measuredAt: new Date().toISOString(), weightKg: 69.85, metrics: {}, source: "self_reported", createdAt: new Date().toISOString() }], nextCursor: null };
 
 type Answer = Reply | Promise<Reply>;
 const ok = (body: unknown) => (): Reply => ({ status: 200, body });
 
-/** The server: the trend and the families answered by their period, a day's workouts by its window
+const NO_WORKOUT = (day: string): Reply => ({ status: 200, body: { day, workouts: [], total: 0, limitedToDays: null } });
+
+/** The server: the trend and the families answered by their period, a day's workouts by its day, and a workout by its id
  *  (the kit's fake reads only the path). */
-function progressServer(byPeriod: Record<string, () => Answer>, more: Record<string, () => Answer> = {}, byDay: (from: string, to: string) => Answer = () => ({ status: 200, body: { items: [], nextCursor: null, limitedToDays: null, hasAnyWorkouts: false } })) {
+function progressServer(
+  byPeriod: Record<string, () => Answer>,
+  more: Record<string, () => Answer> = {},
+  byDay: (day: string) => Answer = NO_WORKOUT,
+  byWorkout: (id: string) => Answer = () => ({ status: 404, body: { error: "not_found", message: "workout not found" } }),
+) {
   const server = fakeServer({
     "/v1/auth/refresh": () => ({ status: 200, body: { tokens: tokens(2) } }),
     [PREDICTIONS_READ]: ok(PREDICTIONS),
     [RECORDS_READ]: ok(RECORDS),
-    [HEATMAP_READ]: ok(HEATMAP),
+    [CALENDAR_DAYS_READ]: ok(DAYS),
     [MEASUREMENTS_READ.split("?")[0] ?? ""]: ok(MEASUREMENTS),
     "/v1/progress/distribution": ok(FAMILIES),
     ...more,
   });
   const periods: string[] = [];
-  const days: { from: string; to: string }[] = [];
+  const days: string[] = [];
+  const workouts: string[] = [];
   const ask: Ask = async (url: string, init: AskInit) => {
     const u = new URL(url);
-    if (u.pathname === "/v1/workouts") {
-      const from = u.searchParams.get("from") ?? "";
-      const to = u.searchParams.get("to") ?? "";
-      // The Dashboard's recent workouts read the list too, with no day.
-      if (from !== "") days.push({ from, to });
-      const reply = await byDay(from, to);
+    const day = /^\/v1\/training\/days\/(.+)$/.exec(u.pathname)?.[1];
+    if (day !== undefined) {
+      days.push(day);
+      const reply = await byDay(day);
+      return { ok: reply.status < 300, status: reply.status, json: () => Promise.resolve(reply.body) };
+    }
+    const workout = /^\/v1\/training\/workouts\/([^/]+)$/.exec(u.pathname)?.[1];
+    if (workout !== undefined) {
+      workouts.push(workout);
+      const reply = await byWorkout(workout);
       return { ok: reply.status < 300, status: reply.status, json: () => Promise.resolve(reply.body) };
     }
     if (u.pathname !== "/v1/progress/trend") return server.ask(url, init);
@@ -64,15 +76,40 @@ function progressServer(byPeriod: Record<string, () => Answer>, more: Record<str
     const reply = route === undefined ? { status: 200, body: trend([]) } : await route();
     return { ok: reply.status < 300, status: reply.status, json: () => Promise.resolve(reply.body) };
   };
-  return { ask, periods, days, asked: server.asked };
+  return { ask, periods, days, workouts, asked: server.asked };
 }
 
-/** A workout of the day `back` days ago, at `hour` on the phone's clock, as the server lists it. */
-const listed = (id: string, back: number, hour: number, minutes: number, form: number) => {
+/** A workout of the day `back` days ago, at `hour` on the phone's clock, as the server lists a day's (64a-v). */
+const listed = (workoutId: string, back: number, hour: number, minutes: number, name: string | null, exercises: string[] = ["squat"]) => {
   const at = new Date();
   at.setDate(at.getDate() - back);
   at.setHours(hour, 30, 0, 0);
-  return { id, startedAt: at.toISOString(), platform: "android", setsCount: 3, totalReps: 30, avgFormScore: form, durationMs: minutes * 60_000, kcalPoint: 21, kcalCalcVersion: 1, qualityFlags: [] };
+  return { workoutId, name, startedAt: at.toISOString(), endedAt: null, durationMs: minutes * 60_000, setsCount: 3, kcalPoint: 21, exercises };
+};
+const dayOf = (day: string, items: ReturnType<typeof listed>[]): Reply => ({ status: 200, body: { day, workouts: items, total: items.length, limitedToDays: null } });
+
+/** The ✕ of the page opened since `before` was read: the day box and Progress keep theirs. */
+const pageClose = (before: readonly unknown[]) => {
+  const close = screen.getAllByRole("button", { name: "Close" }).find((one) => !before.includes(one));
+  if (close === undefined) throw new Error("no new page open");
+  return close;
+};
+
+const PUSH = "8d1b5b8e-1c3e-4f53-9d0e-8a9c2b1f0a11";
+const LEGS = "2f6a9c4d-7e1b-4a8f-b3c2-5d6e7f8a9b0c";
+/** A workout set by set as the server sends it (GET /v1/training/workouts/:id): curl 10 × 30 kg, 8 × 32.5 kg (a new
+ *  heaviest), plank 1:00 and 1:15 of 1:00. */
+const pastWorkout = (workoutId: string, name: string | null, back: number) => {
+  const at = new Date();
+  at.setDate(at.getDate() - back);
+  at.setHours(7, 5, 0, 0);
+  const set = (position: number, exercise: string, exerciseName: string, measuredIn: "reps" | "time", target: number, done: number, weightGrams: number | null) => ({ position, exercise, exerciseName, measuredIn, target, done, weightGrams, restSeconds: 60, durationMs: 40_000, counted: "hand" });
+  return {
+    workoutId, name, startedAt: at.toISOString(), endedAt: null, timeZone: "Asia/Kolkata", startedFrom: "none", effort: 3, heartAvg: null, heartMax: null,
+    durationMs: (42 * 60 + 10) * 1000, kcalPoint: 238, kcalCalcVersion: 4, kcalWeightKg: 82, platform: "android",
+    sets: [set(0, "barbell_curl", "Barbell Curl", "reps", 10, 10, 30_000), set(1, "barbell_curl", "Barbell Curl", "reps", 10, 8, 32_500), set(2, "plank", "Plank", "time", 60, 60, null), set(3, "plank", "Plank", "time", 60, 75, null)],
+    newRecords: [{ exercise: "barbell_curl", measuredIn: "reps", kind: "heaviest", position: 1 }],
+  };
 };
 const pickPeriod = async (now: string, to: string) => {
   await fireEvent.press(screen.getByRole("button", { name: `Period: ${now}. Change` }));
@@ -182,27 +219,24 @@ describe("Me → Progress", () => {
     yesterday.setDate(yesterday.getDate() - 1);
     const keyOf = (d: Date) => `${String(d.getFullYear())}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
     let late: (r: Reply) => void = () => undefined;
-    const server = progressServer({}, {}, (from) => {
-      if (new Date(from).getDate() === yesterday.getDate()) return new Promise<Reply>((resolve) => { late = resolve; });
-      return { status: 200, body: { items: [listed("8d1b5b8e-1c3e-4f53-9d0e-8a9c2b1f0a11", 0, 7, 25, 91)], nextCursor: null, limitedToDays: null, hasAnyWorkouts: true } };
+    const server = progressServer({}, {}, (day) => {
+      if (day === keyOf(yesterday)) return new Promise<Reply>((resolve) => { late = resolve; });
+      return dayOf(day, [listed(PUSH, 0, 7, 25, "Push day")]);
     });
     await openProgress(server.ask);
     await openTab("Calendar");
     // Yesterday is on this month's page unless today is the 1st; the year's squares hold it either way.
     if (new Date().getDate() === 1) await fireEvent.press(screen.getByRole("radio", { name: "Year" }));
     await fireEvent.press(await screen.findByRole("button", { name: /, 2 workouts$/ }));
-    await waitFor(() => { expect(server.days).toHaveLength(1); });
-    const asked = server.days[0];
-    expect(asked === undefined ? "" : keyOf(new Date(asked.from))).toBe(keyOf(yesterday));
-    expect(asked === undefined ? 0 : Date.parse(asked.to) - Date.parse(asked.from)).toBeGreaterThanOrEqual(23 * 3_600_000);
+    await waitFor(() => { expect(server.days).toEqual([keyOf(yesterday)]); });
     await fireEvent.press(within(screen.getByTestId("sheet")).getByRole("button", { name: "Close" }));
     await fireEvent.press(screen.getByRole("button", { name: /, today, 1 workout$/ }));
-    expect(await screen.findByLabelText("7:30 am · 25 min, 3 sets · 30 reps · form 91, 21 kcal")).toBeTruthy();
+    expect(await screen.findByRole("button", { name: "Push day, 7:30 am · 25 min · 3 sets, Squat, 21 kcal" })).toBeTruthy();
     await act(async () => {
-      late({ status: 200, body: { items: [listed("2f6a9c4d-7e1b-4a8f-b3c2-5d6e7f8a9b0c", 1, 18, 40, 84), listed("5a4b3c2d-1e0f-4a9b-8c7d-6e5f4a3b2c1d", 1, 18, 35, 83)], nextCursor: null, limitedToDays: null, hasAnyWorkouts: true } });
+      late(dayOf(keyOf(yesterday), [listed(LEGS, 1, 18, 40, "Leg day"), listed("5a4b3c2d-1e0f-4a9b-8c7d-6e5f4a3b2c1d", 1, 18, 35, null)]));
       await Promise.resolve();
     });
-    expect(screen.queryByLabelText(/form 84/)).toBeNull();
+    expect(screen.queryByText("Leg day")).toBeNull();
     expect(screen.getByLabelText("1 workout")).toBeTruthy();
   });
 
@@ -230,7 +264,7 @@ describe("Me → Progress", () => {
   // workouts (never "no workout", which a member whose older workouts are saved would read as false),
   // and they cannot be opened.
   it("Calendar on a 90-day plan: a day before its first is never said to have no workout, and cannot be opened", async () => {
-    const server = progressServer({}, { [HEATMAP_READ]: ok({ ...HEATMAP, limitedToDays: 90 }) });
+    const server = progressServer({}, { [CALENDAR_DAYS_READ]: ok({ ...DAYS, limitedToDays: 90 }) });
     await openProgress(server.ask);
     await openTab("Calendar");
     const now = new Date();
@@ -254,7 +288,7 @@ describe("Me → Progress", () => {
   // plan, which the server's floor has passed. The two reads then disagree, as here: the calendar's
   // year reaches the day, the list's plan does not. The box says the plan hides it, not "No workout".
   it("Calendar: a day the plan's list no longer shows says the plan hides it, never no workout", async () => {
-    const server = progressServer({}, {}, () => ({ status: 200, body: { items: [], nextCursor: null, limitedToDays: 90, hasAnyWorkouts: true } }));
+    const server = progressServer({}, {}, (day) => ({ status: 200, body: { day, workouts: [], total: 0, limitedToDays: 90 } }));
     await openProgress(server.ask);
     await openTab("Calendar");
     const old = new Date();
@@ -277,7 +311,75 @@ describe("Me → Progress", () => {
     await openTab("Overview");
     expect(screen.getByLabelText("Total workouts, 9")).toBeTruthy();
     expect(server.asked.filter((a) => a.path === RECORDS_READ)).toHaveLength(1);
-    expect(server.asked.filter((a) => a.path === HEATMAP_READ)).toHaveLength(1);
+    expect(server.asked.filter((a) => a.path === CALENDAR_DAYS_READ)).toHaveLength(1);
+  });
+
+  // 64a-v. The calendar asks for its year by the days it draws: today the last, 365 of them.
+  it("Calendar asks the server for the year it draws, today the last day", async () => {
+    const server = progressServer({});
+    await openProgress(server.ask);
+    await openTab("Calendar");
+    expect(await screen.findByLabelText(/, today, 1 workout$/)).toBeTruthy();
+    const asked = server.asked.find((a) => a.path === CALENDAR_DAYS_READ);
+    expect(asked?.search).toBe(`?from=${dayKey(364)}&to=${dayKey(0)}`);
+  });
+
+  // 64a-v's worst thing on the phone: one workout's sets shown under another. A workout pressed reads its own id; an
+  // answer for the one left, coming late, is never drawn on the page of the one opened after it.
+  it("Calendar: a day's workout opens set by set, and a late answer for the workout left is never drawn", async () => {
+    let late: (r: Reply) => void = () => undefined;
+    const server = progressServer(
+      {},
+      {},
+      (day) => dayOf(day, [listed(LEGS, 0, 6, 30, "Leg day"), listed(PUSH, 0, 7, 42, "Push day", ["barbell_curl", "plank"])]),
+      (id) => (id === LEGS ? new Promise<Reply>((resolve) => { late = resolve; }) : { status: 200, body: pastWorkout(PUSH, "Push day", 0) }),
+    );
+    await openProgress(server.ask);
+    await openTab("Calendar");
+    await fireEvent.press(await screen.findByRole("button", { name: /, today, 1 workout$/ }));
+    const closes = await screen.findAllByRole("button", { name: "Close" });
+    await fireEvent.press(await screen.findByRole("button", { name: /^Leg day, / }));
+    expect(await screen.findByText("Loading your workout…")).toBeTruthy();
+    await fireEvent.press(pageClose(closes));
+    await fireEvent.press(await screen.findByRole("button", { name: "Push day, 7:30 am · 42 min · 3 sets, Barbell curl and Plank, 21 kcal" }));
+    expect(await screen.findByLabelText("Time, 42:10")).toBeTruthy();
+    // Its name and when it began over its picture.
+    expect(screen.getAllByText("Push day")).toHaveLength(2);
+    expect(screen.getByText(/ · 7:05 am$/)).toBeTruthy();
+    expect(screen.getByLabelText("Kcal, about 238 calories")).toBeTruthy();
+    expect(screen.getByText("About 238 kcal for you, at 82 kg")).toBeTruthy();
+    expect(screen.getByLabelText("How hard it was: 3 of 5, Just right")).toBeTruthy();
+    expect(screen.getByLabelText("New record, Heaviest, Barbell Curl · set 2, 32.5 kg")).toBeTruthy();
+    expect(screen.getByText("2 exercises · 4 sets")).toBeTruthy();
+    expect(screen.getByLabelText("Set 2, 8 reps of 10 32.5 kg, a new record")).toBeTruthy();
+    expect(screen.getByLabelText("Set 2, 1:15  ")).toBeTruthy();
+    expect(server.workouts).toEqual([LEGS, PUSH]);
+    await act(async () => {
+      late({ status: 200, body: pastWorkout(LEGS, "Leg day", 0) });
+      await Promise.resolve();
+    });
+    // Leg day stays a row of the day only; the page open is Push day's.
+    expect(screen.getAllByText("Leg day")).toHaveLength(1);
+    expect(screen.getAllByText("Push day")).toHaveLength(2);
+    expect(screen.getByText("2 exercises · 4 sets")).toBeTruthy();
+  });
+
+  it("Calendar: a workout the server no longer has says so, and one that cannot load offers Try again", async () => {
+    let answer: Reply = { status: 404, body: { error: "not_found", message: "workout not found" } };
+    const server = progressServer({}, {}, (day) => dayOf(day, [listed(PUSH, 0, 7, 42, null)]), () => answer);
+    await openProgress(server.ask);
+    await openTab("Calendar");
+    await fireEvent.press(await screen.findByRole("button", { name: /, today, 1 workout$/ }));
+    const closes = await screen.findAllByRole("button", { name: "Close" });
+    await fireEvent.press(await screen.findByRole("button", { name: /^Workout, 7:30 am/ }));
+    expect(await screen.findByText("This workout is no longer in your history.")).toBeTruthy();
+    await fireEvent.press(pageClose(closes));
+    answer = { status: 503, body: { error: "unavailable", message: "" } };
+    await fireEvent.press(await screen.findByRole("button", { name: /^Workout, 7:30 am/ }));
+    expect(await screen.findByText("Your workout couldn't load.")).toBeTruthy();
+    answer = { status: 200, body: pastWorkout(PUSH, null, 0) };
+    await fireEvent.press(screen.getByRole("button", { name: "Try your workout again" }));
+    expect(await screen.findByText("2 exercises · 4 sets")).toBeTruthy();
   });
 
   it("Body shows the newest weight in the person's units, and its entries", async () => {

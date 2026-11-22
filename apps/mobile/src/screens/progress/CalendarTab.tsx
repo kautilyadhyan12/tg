@@ -1,12 +1,19 @@
 import { useMemo, useRef, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, View } from "react-native";
-import { progressHeatmapSchema, workoutPageSchema, type ProgressHeatmap } from "@app/shared";
+import { Image, Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { historyDayOutSchema, historyRangeOutSchema, HISTORY_DAY_WORKOUTS_MOST, type HistoryRange } from "@app/shared";
 import { chalk, chalkShadows, colours, orangeGradient, shadows, sizes } from "../../look/colours";
 import { Icon } from "../../look/Icon";
 import { Rise } from "../../look/Motion";
 import { Sheet } from "../../look/Sheet";
 import { fonts, Txt } from "../../look/Txt";
+import { pictures } from "../../look/pictures";
+import { exercisePicture } from "../../library/pictures";
+import { useSession } from "../../session/SessionProvider";
 import { useZoneSaved } from "../../session/TimeZoneSync";
+import { useNamed } from "../library/useLibrary";
+import { accountUnits } from "../setup/Setup";
+import { PastWorkout } from "../workout/PastWorkout";
+import { useWorkoutLayer } from "../workout/WorkoutLayer";
 import { useRead } from "../dashboard/useRead";
 import { count } from "../dashboard/words";
 import {
@@ -15,7 +22,6 @@ import {
   dayTitle,
   daySaid,
   daySum,
-  dayWindow,
   dayWorkouts,
   level,
   monthCells,
@@ -27,8 +33,10 @@ import {
   nextMonth,
   sameMonth,
   squareSaid,
+  waitingWords,
   windowWorkouts,
   yearColumns,
+  yearRange,
   type Month,
   type MonthPick,
 } from "./calendarRules";
@@ -36,30 +44,39 @@ import { ArtBox, BoxTitle, Flame, ReadOr } from "./parts";
 import { addDays, dayKeyOf, planWords } from "./progressRules";
 
 // Progress's Calendar (ROADMAP Stage 5 35c-i): the web's month and its year of activity in one box,
-// a flame on each day trained, under the trainer and its footprints.
+// a flame on each day trained, under the trainer and its footprints. Since 64a-v it is the person's workout history:
+// its days are counted as a workout's records and its page count them (61b's rule), a day's workouts carry their names
+// and exercises, and each opens set by set.
 
-export const HEATMAP_READ = "/v1/progress/heatmap";
-/** The server's year of days (its heatmap reads the last 365). */
+/** The calendar's days (64a-v): a year of them in one read. */
+export const CALENDAR_DAYS_READ = "/v1/training/days";
+/** The calendar's year. */
 const YEAR_DAYS = 365;
 
 export function CalendarTab() {
-  const heatmap = useRead(HEATMAP_READ, progressHeatmapSchema, useZoneSaved());
+  const today = dayKeyOf(new Date());
+  const { from, to } = yearRange(today, YEAR_DAYS);
+  const layer = useWorkoutLayer();
+  // A workout the server has just taken shows at once: the year is read again each time one reaches it.
+  const sent = layer?.waiting.sent.length ?? 0;
+  const days = useRead(`${CALENDAR_DAYS_READ}?from=${from}&to=${to}`, historyRangeOutSchema, useZoneSaved() + sent);
+  const onPhone = layer?.waiting.waiting.length ?? 0;
   return (
     <Rise delay={60}>
       <ArtBox picture="steps" focus="top">
-        <ReadOr read={heatmap.read} again={heatmap.again} what="Your calendar">
-          {(h) => <Activity heatmap={h} />}
+        <ReadOr read={days.read} again={days.again} what="Your calendar">
+          {(h) => <Activity answer={h} onPhone={onPhone} />}
         </ReadOr>
       </ArtBox>
     </Rise>
   );
 }
 
-function Activity({ heatmap }: { heatmap: ProgressHeatmap }) {
+function Activity({ answer, onPhone }: { answer: HistoryRange; onPhone: number }) {
   const today = dayKeyOf(new Date());
-  const days = heatmap.limitedToDays === null ? YEAR_DAYS : Math.min(YEAR_DAYS, heatmap.limitedToDays);
+  const days = answer.limitedToDays === null ? YEAR_DAYS : Math.min(YEAR_DAYS, answer.limitedToDays);
   // Only the days the calendar draws: the year's or the plan's, today the last (35c-i review).
-  const workouts = useMemo(() => windowWorkouts(heatmap.days, today, days), [heatmap, today, days]);
+  const workouts = useMemo(() => windowWorkouts(answer.days, today, days), [answer, today, days]);
   const firstDay = addDays(today, -(days - 1));
   const range = monthRange(today, days);
   const [view, setView] = useState<"month" | "year">("month");
@@ -94,6 +111,14 @@ function Activity({ heatmap }: { heatmap: ProgressHeatmap }) {
       />
       {/* Room for the trainer's drawing above the days. */}
       <View style={styles.room} />
+      {onPhone === 0 ? null : (
+        <View style={styles.waitLine}>
+          <Icon name="phone" size={18} colour="orangeLight" />
+          <Txt kind="small" colour="text" style={styles.grow}>
+            {waitingWords(onPhone)}
+          </Txt>
+        </View>
+      )}
       {view === "month" ? (
         <MonthView
           month={month}
@@ -204,15 +229,16 @@ function MonthPicker({ years, month, onPick }: { years: readonly { year: number;
   );
 }
 
-const WORKOUTS_MOST = 100;
-
 function DayBox({ day }: { day: string }) {
-  const { from, to } = dayWindow(day);
-  const list = useRead(`/v1/workouts?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&limit=${String(WORKOUTS_MOST)}`, workoutPageSchema);
+  const { state } = useSession();
+  const units = (state.kind === "in" ? accountUnits(state.user.units) : null) ?? "metric";
+  const list = useRead(`/v1/training/days/${day}`, historyDayOutSchema);
+  const named = useNamed();
+  const [open, setOpen] = useState<string | null>(null);
   return (
     <ReadOr read={list.read} again={list.again} what="This day’s workouts">
       {(page) => {
-        if (page.items.length === 0) {
+        if (page.workouts.length === 0) {
           const hidden = page.limitedToDays !== null && beyondPlan(day, dayKeyOf(new Date()), page.limitedToDays);
           return (
             <View style={styles.dayNone}>
@@ -222,20 +248,33 @@ function DayBox({ day }: { day: string }) {
             </View>
           );
         }
-        const sum = daySum(page.items);
+        const sum = daySum(page.workouts);
         return (
           <View style={styles.dayBox}>
             <View style={styles.daySum}>
-              <DayStat value={sum.workouts} label={page.items.length === 1 ? "workout" : "workouts"} />
+              <DayStat value={sum.workouts} label={page.workouts.length === 1 ? "workout" : "workouts"} />
               {sum.trained === null ? null : <DayStat value={sum.trained} label="trained" />}
               {sum.kcal === null ? null : <DayStat value={sum.kcal} label="kcal" warm />}
             </View>
-            {dayWorkouts(page.items).map((w) => (
-              <View key={w.id} style={styles.dayWorkout} accessible accessibilityLabel={w.said}>
-                <Flame size={28} glow />
+            {dayWorkouts(page.workouts, named).map((w) => (
+              <Pressable
+                key={w.id}
+                accessibilityRole="button"
+                accessibilityLabel={w.said}
+                onPress={() => {
+                  setOpen(w.id);
+                }}
+                style={({ pressed }) => [styles.dayWorkout, pressed ? styles.pressed : null]}
+              >
+                <Image source={pictures[w.first === null ? "exhero" : exercisePicture(w.first, named(w.first).kind)]} resizeMode="cover" style={styles.dayThumb} accessible={false} />
                 <View style={styles.grow}>
-                  <Txt kind="strong">{w.when}</Txt>
-                  <Txt kind="tiny">{w.what}</Txt>
+                  <Txt kind="strong" numberOfLines={1}>
+                    {w.name}
+                  </Txt>
+                  <Txt kind="small" numberOfLines={1}>
+                    {w.when}
+                  </Txt>
+                  {w.exercises === "" ? null : <Txt kind="small">{w.exercises}</Txt>}
                 </View>
                 {w.kcal === null ? null : (
                   <View style={styles.dayKcal}>
@@ -245,9 +284,17 @@ function DayBox({ day }: { day: string }) {
                     <Txt kind="tiny">kcal</Txt>
                   </View>
                 )}
-              </View>
+                <Icon name="go" size={18} colour="textFaint" />
+              </Pressable>
             ))}
-            {page.nextCursor === null ? null : <Txt kind="tiny">{`Showing the first ${String(WORKOUTS_MOST)} workouts of the day`}</Txt>}
+            {page.total > page.workouts.length ? <Txt kind="tiny">{`Showing the first ${String(HISTORY_DAY_WORKOUTS_MOST)} workouts of the day`}</Txt> : null}
+            <PastWorkout
+              workoutId={open}
+              units={units}
+              onClose={() => {
+                setOpen(null);
+              }}
+            />
           </View>
         );
       }}
@@ -469,7 +516,9 @@ const styles = StyleSheet.create({
   centre: { textAlign: "center" },
   daySum: { flexDirection: "row", gap: 8, marginBottom: 6 },
   dayStat: { flex: 1, minHeight: 64, justifyContent: "center", paddingHorizontal: 12, paddingVertical: 8, borderRadius: 14, backgroundColor: colours.fill, borderWidth: 1, borderColor: colours.line },
-  dayWorkout: { flexDirection: "row", alignItems: "center", gap: 12, padding: 12, borderRadius: 16, backgroundColor: colours.fill, borderWidth: 1, borderColor: colours.line },
+  dayWorkout: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 10, paddingLeft: 10, paddingRight: 6, borderRadius: 16, backgroundColor: colours.fill, borderWidth: 1, borderColor: colours.line },
+  dayThumb: { width: 52, height: 52, borderRadius: 12, backgroundColor: colours.box },
+  waitLine: { flexDirection: "row", alignItems: "flex-start", gap: 10, paddingHorizontal: 12, paddingVertical: 10, borderRadius: 14, backgroundColor: colours.fill, borderWidth: 1, borderColor: colours.line },
   dayKcal: { alignItems: "flex-end" },
   grow: { flex: 1 },
   head: { fontFamily: fonts.bold, letterSpacing: 0.8 },

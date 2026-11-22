@@ -1,10 +1,12 @@
-import type { WorkoutListItem } from "@app/shared";
+import type { HistoryWorkoutListed } from "@app/shared";
 import { count, hoursWords } from "../dashboard/words";
-import { addDays } from "./progressRules";
+import { exercisesLine, type Named } from "../workout/pastWords";
+import { addDays, dayKeyOf } from "./progressRules";
 
 // Progress's Calendar (ROADMAP Stage 5 35c-i): a month of days with a flame on each day trained, and
-// the year as squares. The days are the server's, keyed in the person's own zone ("YYYY-MM-DD"); the
-// phone's today ends them. Pure, so tested alone.
+// the year as squares. The days are the server's (`GET /v1/training/days`, 64a-v): each workout on the day in the
+// zone it was done in, as a workout's records and its page tell it ("YYYY-MM-DD"); the phone's today ends them. Pure,
+// so tested alone.
 
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"] as const;
 const SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"] as const;
@@ -53,10 +55,13 @@ export interface DayCell {
 
 /** The server's days the calendar draws: from the window's first day (`span` days back, today the
  *  last) to today. A day sent outside it, such as part of the day before, is counted nowhere. */
-export function windowWorkouts(days: readonly { date: string; count: number }[], today: string, span: number): Map<string, number> {
+export function windowWorkouts(days: readonly { day: string; workouts: number }[], today: string, span: number): Map<string, number> {
   const first = addDays(today, -(span - 1));
-  return new Map(days.filter((d) => d.date >= first && d.date <= today).map((d) => [d.date, d.count]));
+  return new Map(days.filter((d) => d.day >= first && d.day <= today).map((d) => [d.day, d.workouts]));
 }
+
+/** The days the calendar asks the server for: `span` days, today the last. */
+export const yearRange = (today: string, span: number): { from: string; to: string } => ({ from: addDays(today, -(span - 1)), to: today });
 
 /** A month, Monday first: blanks before its first day, then each day with its workouts; `firstDay`
  *  is the first day the server sent. */
@@ -161,13 +166,6 @@ export function monthsToPick(first: Month, last: Month, workouts: ReadonlyMap<st
 /** What a screen reader says for a month to pick: "October 2026, 7 active days". */
 export const monthPickSaid = (p: MonthPick) => `${monthWords(p.month)}, ${p.active === 1 ? "1 active day" : `${count(p.active)} active days`}`;
 
-/** A day as the phone's clock has it, from its midnight to the next, as instants: the window the
- *  server's list of workouts is read over (`from` in, `to` out). */
-export function dayWindow(key: string): { from: string; to: string } {
-  const { y, m, d } = parts(key);
-  return { from: new Date(y, m - 1, d).toISOString(), to: new Date(y, m - 1, d + 1).toISOString() };
-}
-
 /** The day box's title: "Monday 26 October", with its year when it is not this year's. */
 export function dayTitle(key: string, today: string): string {
   const names = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
@@ -182,12 +180,20 @@ export function clockWords(at: Date): string {
   return `${String(h % 12 === 0 ? 12 : h % 12)}:${pad(at.getMinutes())} ${h < 12 ? "am" : "pm"}`;
 }
 
+/** When a workout began, for its page: "Wednesday 18 November · 7:05 am", on the phone's clock, with its year when it is
+ *  not this year's. */
+export const pastWhen = (at: Date, today: string): string => `${dayTitle(dayKeyOf(at), today)} · ${clockWords(at)}`;
+
 export interface DayWorkout {
   id: string;
-  /** "6:30 pm · 40 min". */
+  /** Its name, or "Workout" for one with none. */
+  name: string;
+  /** "6:30 pm · 40 min · 9 sets". */
   when: string;
-  /** "3 sets · 30 reps · form 84". */
-  what: string;
+  /** "Bench Press, Barbell Curl and Plank". */
+  exercises: string;
+  /** Its first exercise, for its picture; null for a workout with no sets. */
+  first: string | null;
   /** "21", or null where the workout has no calories. */
   kcal: string | null;
   said: string;
@@ -195,20 +201,24 @@ export interface DayWorkout {
 
 const many = (n: number, one: string, more: string) => `${count(n)} ${n === 1 ? one : more}`;
 
-/** A day's workouts, earliest first, in the words of the day box. */
-export function dayWorkouts(items: readonly WorkoutListItem[]): DayWorkout[] {
+/** A workout's name, or "Workout" for one never named. */
+export const workoutName = (name: string | null): string => (name === null || name.trim() === "" ? "Workout" : name.trim());
+
+/** A day's workouts, earliest first, in the words of the day box; `named` names an exercise from the Library on the phone. */
+export function dayWorkouts(items: readonly HistoryWorkoutListed[], named: Named): DayWorkout[] {
   return [...items]
     .sort((a, b) => Date.parse(a.startedAt) - Date.parse(b.startedAt))
     .map((w) => {
-      const when = [clockWords(new Date(w.startedAt)), w.durationMs === null ? null : hoursWords(w.durationMs)].filter((x) => x !== null).join(" · ");
-      const what = [many(w.setsCount, "set", "sets"), many(w.totalReps, "rep", "reps"), w.avgFormScore === null ? null : `form ${String(w.avgFormScore)}`].filter((x) => x !== null).join(" · ");
+      const name = workoutName(w.name);
+      const when = [clockWords(new Date(w.startedAt)), w.durationMs === null ? null : hoursWords(w.durationMs), many(w.setsCount, "set", "sets")].filter((x) => x !== null).join(" · ");
+      const exercises = exercisesLine(w.exercises, named);
       const kcal = w.kcalPoint === null ? null : count(w.kcalPoint);
-      return { id: w.id, when, what, kcal, said: [when, what, kcal === null ? null : `${kcal} kcal`].filter((x) => x !== null).join(", ") };
+      return { id: w.workoutId, name, when, exercises, first: w.exercises[0] ?? null, kcal, said: [name, when, exercises, kcal === null ? null : `${kcal} kcal`].filter((x) => x !== null && x !== "").join(", ") };
     });
 }
 
 /** The day's three numbers above its workouts: how many, the time trained, the calories. */
-export function daySum(items: readonly WorkoutListItem[]): { workouts: string; trained: string | null; kcal: string | null } {
+export function daySum(items: readonly HistoryWorkoutListed[]): { workouts: string; trained: string | null; kcal: string | null } {
   const ms = items.reduce((n, w) => n + (w.durationMs ?? 0), 0);
   const withKcal = items.filter((w) => w.kcalPoint !== null);
   return {
@@ -217,6 +227,10 @@ export function daySum(items: readonly WorkoutListItem[]): { workouts: string; t
     kcal: withKcal.length === 0 ? null : count(withKcal.reduce((n, w) => n + (w.kcalPoint ?? 0), 0)),
   };
 }
+
+/** Above the calendar, while finished workouts wait on the phone for the server: so nobody thinks one is lost. */
+export const waitingWords = (n: number): string =>
+  n === 1 ? "1 workout is saved on this phone. It shows here once it reaches your account." : `${count(n)} workouts are saved on this phone. They show here once they reach your account.`;
 
 /** A day older than the plan's last days, by the server's own word on the read (`limitedToDays`):
  *  its workouts, if any, are saved but not shown, so the day box says so rather than "No workout"

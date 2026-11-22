@@ -52,11 +52,25 @@ const KIND_WORDS: Readonly<Record<AfterRecord["kind"], string>> = {
   most_lifted: "Most lifted in one workout",
 };
 
+/** A set as the summary and a workout's page in History show it (64a-v). `place` is its place in the whole workout,
+ *  the place a record names; `target` is null for a set saved before targets were kept. */
+export interface ShownSet {
+  exercise: string;
+  measuredIn: "reps" | "time";
+  target: number | null;
+  done: number;
+  weightGrams: number | null;
+  place: number;
+}
+
+/** What the phone holds of a workout just done, each set at its place in it. */
+const placed = (done: readonly SavedSet[]): ShownSet[] => done.map((s, place) => ({ ...s, place }));
+
 /** The set's number within its own exercise ("set 2" of Barbell Curl), from its place in the whole workout. */
-function setNumber(done: readonly SavedSet[], position: number): number | null {
-  const set = done[position];
+function setNumber(sets: readonly ShownSet[], place: number): number | null {
+  const set = sets.find((s) => s.place === place);
   if (set === undefined) return null;
-  return done.slice(0, position + 1).filter((s) => s.exercise === set.exercise).length;
+  return sets.filter((s) => s.exercise === set.exercise && s.place <= place).length;
 }
 
 export interface RecordRow {
@@ -66,10 +80,13 @@ export interface RecordRow {
   value: string;
 }
 
+/** A new record as a row, of a workout just done: what it is, which exercise and set, and what it was. */
+export const recordRow = (r: AfterRecord, done: readonly SavedSet[], units: Units): RecordRow => recordRowOf(r, placed(done), units);
+
 /** A new record as a row: what it is, which exercise and set, and what it was. */
-export function recordRow(r: AfterRecord, done: readonly SavedSet[], units: Units): RecordRow {
+export function recordRowOf(r: AfterRecord, sets: readonly ShownSet[], units: Units): RecordRow {
   const name = r.exerciseName ?? r.exercise;
-  const n = r.position === null ? null : setNumber(done, r.position);
+  const n = r.position === null ? null : setNumber(sets, r.position);
   const value =
     r.kind === "most_lifted" ? liftedWords(r.value, units)
     : r.kind === "heaviest" || r.kind === "best_estimated_1rm" ? weightWords(r.value, units)
@@ -98,26 +115,38 @@ export interface ExerciseBlock {
   sets: SetRow[];
 }
 
-/** Every set done, exercise by exercise in the order each was first done, from what the phone holds. A set that made a
- *  record is marked PR. An exercise twice in a workout is one block. */
+/** Every set done of a workout just done, from what the phone holds, its exercises named as they were at Start. */
 export function exerciseBlocks(done: readonly SavedSet[], plan: readonly RunExercise[], records: readonly AfterRecord[], units: Units): ExerciseBlock[] {
+  return blocksOf(
+    placed(done),
+    (exercise) => {
+      const ex = plan.find((p) => p.exercise === exercise);
+      return { name: ex?.name ?? exercise, kind: ex?.kind ?? "strength" };
+    },
+    records,
+    units,
+  );
+}
+
+/** Every set done, exercise by exercise in the order each was first done. A set that made a record is marked PR. An
+ *  exercise twice in a workout is one block. `named` gives an exercise its name and its kind (for its picture). */
+export function blocksOf(sets: readonly ShownSet[], named: (exercise: string) => { name: string; kind: string }, records: readonly AfterRecord[], units: Units): ExerciseBlock[] {
   const prAt = new Set(records.flatMap((r) => (r.position === null ? [] : [r.position])));
   const blocks = new Map<string, ExerciseBlock & { grams: number }>();
-  done.forEach((s, position) => {
+  [...sets].sort((a, b) => a.place - b.place).forEach((s) => {
     let b = blocks.get(s.exercise);
     if (b === undefined) {
-      const ex = plan.find((p) => p.exercise === s.exercise);
-      b = { key: s.exercise, exercise: s.exercise, name: ex?.name ?? s.exercise, kind: ex?.kind ?? "strength", line: "", sets: [], grams: 0 };
+      b = { key: s.exercise, exercise: s.exercise, ...named(s.exercise), line: "", sets: [], grams: 0 };
       blocks.set(s.exercise, b);
     }
     if (s.measuredIn === "reps" && s.weightGrams !== null) b.grams += s.done * s.weightGrams;
     b.sets.push({
-      key: String(position),
+      key: String(s.place),
       n: String(b.sets.length + 1),
       done: doneWords(s.measuredIn, s.done),
-      of: s.done < s.target ? `of ${doneWords(s.measuredIn, s.target).replace(/ reps?$/, "")}` : "",
+      of: s.target !== null && s.done < s.target ? `of ${doneWords(s.measuredIn, s.target).replace(/ reps?$/, "")}` : "",
       weight: s.weightGrams === null ? "" : weightWords(s.weightGrams, units),
-      pr: prAt.has(position),
+      pr: prAt.has(s.place),
     });
   });
   return [...blocks.values()].map(({ grams, ...b }) => {

@@ -103,6 +103,7 @@ describe("this week, Monday to Sunday on the phone's own calendar", () => {
 
 const workout = (more: Partial<WorkoutListItem>): WorkoutListItem => ({
   id: "4f1d2c3b-0a9e-4d8c-b7a6-5e4f3d2c1b0a",
+  name: null,
   startedAt: new Date(2026, 9, 26, 18, 30).toISOString(),
   platform: "android",
   setsCount: 4,
@@ -158,6 +159,9 @@ describe("Recent Activity: everything done lately, whatever kind", () => {
     // The name the person gave it (37c-i), whatever the old app called its route; miles for somebody on miles.
     expect(runRow(run({ name: "Canal loop", routeName: "Old name" })).name).toBe("Canal loop");
     expect(runRow(run({}), "imperial")).toMatchObject({ value: "3.24 mi", runId: run({}).id });
+    // A workout says the name the person gave it, as History does, and opens set by set (64a-v); one never named is a Workout.
+    expect(workoutRow(workout({ name: "Push day" }))).toMatchObject({ name: "Push day", workoutId: workout({}).id });
+    expect(workoutRow(workout({ name: "  " })).name).toBe("Workout");
   });
 
   it("what the server does not have is left out, never shown as 0", () => {

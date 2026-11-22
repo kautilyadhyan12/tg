@@ -36,7 +36,8 @@ export function MyWorkoutPart({ parts, units, onBrowse, file }: { parts: ReactNo
   const [setUp, setSetUp] = useState<string | null>(null);
   const [reorder, setReorder] = useState(false);
   const [asking, setAsking] = useState(false);
-  const [weighing, setWeighing] = useState(false);
+  // Progress over My Workout: on Body for Add your weight, on Calendar for History (64a-v).
+  const [progress, setProgress] = useState<"body" | "calendar" | null>(null);
   // Start workout pressed while the last workout is still being kept on the phone (round one, H3).
   const [busy, setBusy] = useState(false);
   const nameBox = useRef<TextInput>(null);
@@ -108,7 +109,7 @@ export function MyWorkoutPart({ parts, units, onBrowse, file }: { parts: ReactNo
               small
               style={styles.start2}
               onPress={() => {
-                setWeighing(true);
+                setProgress("body");
               }}
             />
           )}
@@ -218,6 +219,24 @@ export function MyWorkoutPart({ parts, units, onBrowse, file }: { parts: ReactNo
       )}
       {/* One place on the page whatever My Workout holds, so what it last said stays when a workout is loaded. */}
       {mine === null ? null : <SavedPart mine={mine} planned={planned} entryOf={entryOf} />}
+      {/* The workouts done, day by day: Progress's calendar, so nobody has to know it lives under Me (64a-v). */}
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="History, your past workouts, day by day"
+        onPress={() => {
+          setProgress("calendar");
+        }}
+        style={({ pressed }) => (pressed ? styles.pressed : null)}
+      >
+        <Card style={styles.history}>
+          <Badge icon="calendar" />
+          <View style={styles.grow}>
+            <Txt kind="strong">History</Txt>
+            <Txt kind="small">Your past workouts, day by day</Txt>
+          </View>
+          <Icon name="go" size={18} colour="textFaint" />
+        </Card>
+      </Pressable>
       {settingUp === null || settingPlan === null || setUp === null ? null : (
         <SetUpSheet
           entry={settingUp}
@@ -266,11 +285,11 @@ export function MyWorkoutPart({ parts, units, onBrowse, file }: { parts: ReactNo
         </View>
       </Sheet>
       <ProgressPage
-        open={weighing}
-        first="body"
+        open={progress !== null}
+        first={progress ?? "body"}
         onClose={() => {
-          setWeighing(false);
-          facts.again();
+          if (progress === "body") facts.again();
+          setProgress(null);
         }}
       />
       {opened === null ? null : (
@@ -363,6 +382,7 @@ const RUN_SETS_LIMIT = WORKOUT_SAVE_LIMITS.setsMost;
 
 const styles = StyleSheet.create({
   grow: { flex: 1 },
+  history: { flexDirection: "row", alignItems: "center", gap: 12 },
   pressed: { opacity: 0.85 },
   faint: { opacity: 0.25 },
   centre: { textAlign: "center" },
