@@ -59,7 +59,7 @@ describe('bought at the desk', () => {
       notShown: 3,
     });
     open();
-    const box = await screen.findByRole('region', { name: 'Bought at the desk' });
+    const box = await screen.findByRole('region', { name: 'Purchases' });
     expect(svc.purchases).toHaveBeenCalledWith('g1', 'e1');
     expect(within(box).getAllByTestId('purchase-row').map((r) => r.textContent)).toEqual(['2 × Water12 Oct 2026 · Cash · $0.33 tax$4.31View receipt', '1 × Water12 Oct 2026 · Cash · $0.16 taxVoided 12 October 2026 by Priya Desk · Brought back$2.15View receipt']);
     expect(within(box).getByText('Showing the newest 2.')).toBeTruthy();
@@ -76,7 +76,7 @@ describe('bought at the desk', () => {
   it('a read that fails is said in the box, and raises no alert on the person’s page', async () => {
     svc.purchases.mockRejectedValue(Object.assign(new Error('down'), { response: { status: 500, data: {} } }));
     open();
-    const box = await screen.findByRole('region', { name: 'Bought at the desk' });
+    const box = await screen.findByRole('region', { name: 'Purchases' });
     expect(within(box).getByText("We couldn't load what they bought.")).toBeTruthy();
     expect(screen.queryByRole('alert')).toBeNull();
   });
@@ -84,14 +84,14 @@ describe('bought at the desk', () => {
   it('drawn with no router around it, lists the purchases and offers no link', async () => {
     svc.purchases.mockResolvedValue({ sales: [sale()], notShown: 0 });
     render(<MemberPurchases gymId="g1" gym={GYM} entryId="e1" name="Maya Patel" past={false} />);
-    const box = await screen.findByRole('region', { name: 'Bought at the desk' });
+    const box = await screen.findByRole('region', { name: 'Purchases' });
     expect(within(box).getAllByTestId('purchase-row')).toHaveLength(1);
     expect(within(box).queryByRole('link')).toBeNull();
   });
 
   it('is not drawn, and nothing is asked, for staff who cannot record a payment', () => {
     open({ ...GYM, staffRole: 'trainer', privileges: ['members.confirm'] });
-    expect(screen.queryByRole('region', { name: 'Bought at the desk' })).toBeNull();
+    expect(screen.queryByRole('region', { name: 'Purchases' })).toBeNull();
     expect(svc.purchases).not.toHaveBeenCalled();
   });
 });
@@ -101,7 +101,7 @@ describe("refund a sale from the person's page (18p)", () => {
     svc.purchases.mockResolvedValue({ sales: [sale({ canUndo: false, canRefund: true, refundedMinor: 0, refunds: [] })], notShown: 0 });
     svc.refundSale.mockResolvedValue({ receiptNumber: 9 });
     open();
-    const box = await screen.findByRole("region", { name: "Bought at the desk" });
+    const box = await screen.findByRole("region", { name: "Purchases" });
     fireEvent.click(within(box).getByRole("button", { name: "More for the sale of 2 × Water" }));
     fireEvent.click(within(box).getByRole("menuitem", { name: /^Refund sale/ }));
     const form = within(box).getByTestId("sale-refund-form");
@@ -117,12 +117,12 @@ describe("refund a sale from the person's page (18p)", () => {
   it("a gym that needs a plan, or a voided sale, offers no Refund sale", async () => {
     svc.purchases.mockResolvedValue({ sales: [sale({ canRefund: true, refundedMinor: 0, refunds: [] })], notShown: 0 });
     open({ ...GYM, consoleReadOnly: true });
-    const box = await screen.findByRole("region", { name: "Bought at the desk" });
+    const box = await screen.findByRole("region", { name: "Purchases" });
     expect(within(box).queryByRole("button", { name: "More for the sale of 2 × Water" })).toBeNull();
     cleanup();
     svc.purchases.mockResolvedValue({ sales: [sale({ undone: true, canRefund: false, refunds: [] })], notShown: 0 });
     open();
-    const voided = await screen.findByRole("region", { name: "Bought at the desk" });
+    const voided = await screen.findByRole("region", { name: "Purchases" });
     expect(within(voided).queryByRole("button", { name: "More for the sale of 2 × Water" })).toBeNull();
   });
 });

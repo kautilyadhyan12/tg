@@ -88,7 +88,7 @@ export const CARD_FORM_DIDNT_LOAD = "Square's card form didn't load. Check your 
 export const CARD_NOT_TAKEN = 'Check the card details, then try again.';
 
 // ── Save card on Terminal (ROADMAP 18d-ii-b-ii): the person agrees and gives their card on the gym's
-// Square Terminal; typing the card stays, as "Type card instead". ──
+// Square Terminal; typing the card stays, as "Enter card manually". ──
 
 /** The box under Save card on Terminal, while it waits: who does what at the Terminal, in Square's
  *  order. `entry` is how the card goes in where the gym is. */

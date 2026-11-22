@@ -167,7 +167,9 @@ const STOP = 'c-btn c-btn-danger c-btn-sm';
 /** A payment or refund staff voided: crossed out, in the page's quiet colour. */
 const VOIDED = { color: 'var(--t3)', textDecoration: 'line-through' };
 // A payment or a refund: columns with its button at the end; on a phone, one under another.
-const LINE = 'flex flex-col gap-1.5 md:flex-row md:items-center md:gap-x-3';
+// Side by side where there is room, else the buttons wrap under the words: a member's page puts this box in a
+// column of its own (V2a), narrower than the window says.
+const LINE = 'flex flex-col gap-1.5 md:flex-row md:flex-wrap md:items-center md:gap-x-3';
 /** A cancel in the app not kept, on a membership still running: only the member can undo it (18l-ii-b). */
 const appCancelStands = (m) => m.appCancel !== null && m.appCancel !== undefined && m.appCancel.keptOn === null && (m.view.status === 'active' || m.view.status === 'frozen');
 /** Refusals that mean the page is out of date: it is read again. */
@@ -212,6 +214,12 @@ export default function MemberMemberships({
   hasEmail = false,
   /** A Terminal payment asked to keep the card: Card on file reads again (18d-vi-c). */
   onCardAsked = null,
+  /** Told this box's answer each time it changes, null while there is none: the strip under the
+   *  person's name reads it (V2a), so the two never disagree. */
+  onHeld = null,
+  /** A press of the strip's button (V2a): { n, what: 'pay' | 'add' | 'agreement', membershipId, feeBillId },
+   *  `n` new each press. It opens the box this box's own button opens, and brings it into view. */
+  stripAsk = null,
 }) {
   const payMethods = paymentMethodsFor(gym?.country);
   /** The answer on screen, and the record it is about: never shown under another. */
@@ -309,6 +317,9 @@ export default function MemberMemberships({
   }, [gymId, entryId, attempt]);
 
   const shown = held !== null && held.entryId === entryId ? held : null;
+  useEffect(() => {
+    onHeld?.(shown);
+  }, [onHeld, shown]);
   // Live updates (ROADMAP Stage 4 item 18): when the person signs from an emailed link in another
   // window or on their phone, or another member of staff changes their memberships, the server tells
   // this page and it reads them again, quietly; and again when its line opens after being away, or
@@ -493,6 +504,16 @@ export default function MemberMemberships({
     listed?.toMemberships === true ||
     (shown !== null && shown.types.length === 0 && (open?.what === 'add' || shown.memberships.length === 0));
   useCameBack(membershipsTo !== null && sendsToMemberships, () => setAttempt((n) => n + 1));
+  /** The strip's last press this box has seen. A box drawn afresh (after Edit, or for another record) takes the
+   *  press it was drawn with as seen, so only a new press opens anything. `askOpened`: the press it answered,
+   *  whose box is brought into view. */
+  const [askSeen, setAskSeen] = useState(stripAsk);
+  const [askOpened, setAskOpened] = useState(null);
+  useEffect(() => {
+    if (askOpened === null) return;
+    const row = askOpened.membershipId === undefined ? null : document.querySelector(`[data-held-id="${askOpened.membershipId}"]`);
+    (row ?? document.querySelector('[data-testid="held-add"]'))?.scrollIntoView?.({ block: 'center' });
+  }, [askOpened]);
 
   if (loadError !== null && shown === null) {
     return (
@@ -795,6 +816,22 @@ export default function MemberMemberships({
     setOpen({ what, id: m.id });
   };
 
+  // The strip under the name was pressed (V2a): the same box this box's own button opens.
+  if (stripAsk !== null && stripAsk.n !== askSeen?.n) {
+    setAskSeen(stripAsk);
+    setAskOpened(stripAsk);
+    const m = stripAsk.membershipId === undefined ? undefined : shown.memberships.find((x) => x.id === stripAsk.membershipId);
+    if (stripAsk.what === 'add') {
+      if (canAct && !nothingToSell) startAdd();
+    } else if (stripAsk.what === 'agreement' && m !== undefined) {
+      setAgreementFor({ id: m.id, justGiven: false });
+    } else if (stripAsk.what === 'pay' && m !== undefined && !readOnly && m.billing !== null && !appPageOpenOn(m)) {
+      const fee = stripAsk.feeBillId === null ? undefined : (m.billing.fees ?? []).find((x) => x.id === stripAsk.feeBillId && x.can.pay);
+      if (fee !== undefined) startFee(m, 'payFee', fee);
+      else if (stripAsk.feeBillId === null && m.billing.pay !== null) startPay(m);
+    }
+  }
+
   /** The box a fee's button opened, drawn inside that fee. */
   const renderFeeBox = (m, fee) => {
     const path = `fees/${encodeURIComponent(fee.id)}`;
@@ -1000,7 +1037,7 @@ export default function MemberMemberships({
             <span className="c-s13 c-w6 whitespace-nowrap" style={r.voided === null ? { color: 'var(--bad)' } : VOIDED}>
               {r.amount}
             </span>
-            <span className="c-s13 c-t2 md:flex-1 flex flex-col">
+            <span className="c-s13 c-t2 md:flex-[1_1_10rem] min-w-0 flex flex-col">
               <span>{r.detail}</span>
               {r.note === null ? null : <span style={{ color: 'var(--warn)' }}>{r.note}</span>}
               {r.voided === null ? null : <span>{r.voided}</span>}
@@ -1085,11 +1122,11 @@ export default function MemberMemberships({
                 {renderFeeAppPaying(m, fee)}
                 {row.payments.map((p) => (
                   <div key={p.id} className="flex flex-col gap-2 px-3 py-2" style={SPLIT} data-testid={p.voided === null ? 'held-fee-payment' : 'held-fee-voided-payment'}>
-                    <div className="flex flex-col gap-1.5 md:flex-row md:items-center md:gap-x-3">
+                    <div className={LINE}>
                       <span className="c-s14 c-w6 whitespace-nowrap" style={p.voided === null ? { minWidth: 84, color: 'var(--good)' } : { minWidth: 84, ...VOIDED }}>
                         {p.amount}
                       </span>
-                      <span className="c-s13 c-t2 md:flex-1 flex flex-col">
+                      <span className="c-s13 c-t2 md:flex-[1_1_10rem] min-w-0 flex flex-col">
                         <span>{p.detail}</span>
                         {p.voided === null ? null : <span>{p.voided}</span>}
                       </span>
@@ -1801,7 +1838,7 @@ export default function MemberMemberships({
                       <span className="c-s14 c-w6 whitespace-nowrap" style={p.voided === null ? { minWidth: 84, color: 'var(--good)' } : { minWidth: 84, ...VOIDED }}>
                         {p.amount}
                       </span>
-                      <span className="c-s13 c-t2 md:flex-1 flex flex-col">
+                      <span className="c-s13 c-t2 md:flex-[1_1_10rem] min-w-0 flex flex-col">
                         <span>{p.detail}</span>
                         {p.voided === null ? null : <span>{p.voided}</span>}
                       </span>
@@ -2345,7 +2382,7 @@ export default function MemberMemberships({
     const BAR = 'flex flex-wrap gap-2 pt-3 mt-1';
     const BAR_LINE = { borderTop: '1px solid var(--line)' };
     return (
-      <li key={m.id} className="py-3 flex flex-col gap-1.5" style={{ borderTop: '1px solid var(--line)' }} data-testid="held-membership">
+      <li key={m.id} className="py-3 flex flex-col gap-1.5" style={{ borderTop: '1px solid var(--line)' }} data-testid="held-membership" data-held-id={m.id}>
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
           <span className="c-s15 c-w6 c-t1 break-words min-w-0">{m.typeName}</span>
           <span className={`c-tag ${TAG_TONES[tag.tone]} whitespace-nowrap`}>{tag.tag}</span>

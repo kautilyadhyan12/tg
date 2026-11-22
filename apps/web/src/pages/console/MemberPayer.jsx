@@ -241,7 +241,7 @@ function PaidForRow({ gymId, gym, person, payerName, canBill, canChange, members
           <div className="flex flex-wrap items-center justify-between gap-2">
             <span className="flex flex-col min-w-0">
               <span className="c-s14 c-t1">{item.title}</span>
-              <span className="c-s13 c-t2 c-num">{item.amount}</span>
+              <span className="c-s14 c-t2 c-num">{item.amount}</span>
             </span>
             <span className="flex items-center gap-2">
               <span className={`c-tag ${item.overdue ? 'c-tag-bad' : 'c-tag-warn'} whitespace-nowrap`}>{item.tag}</span>
@@ -361,8 +361,8 @@ export default function MemberPayer({ gymId, gym, entryId, name, readOnly, onCha
   const answer = state.answer;
   if (answer === null) {
     return (
-      <section className="c-card px-4 py-3 md:px-5 md:py-4 flex flex-col gap-2" aria-label="Who pays">
-        <h3 className="c-h2">Who pays</h3>
+      <section className="c-card px-4 py-3 md:px-5 md:py-4 flex flex-col gap-2" aria-label="Payer">
+        <h3 className="c-h2">Payer</h3>
         <p className="c-s14 c-t2 m-0">{state.error}</p>
       </section>
     );
@@ -371,8 +371,8 @@ export default function MemberPayer({ gymId, gym, entryId, name, readOnly, onCha
   const payerName = answer.paidBy?.name || 'No name on their record';
 
   return (
-    <section className="c-card px-4 py-3 md:px-5 md:py-4 flex flex-col gap-2" aria-label="Who pays" data-testid="who-pays">
-      <h3 className="c-h2">Who pays</h3>
+    <section className="c-card px-4 py-3 md:px-5 md:py-4 flex flex-col gap-2" aria-label="Payer" data-testid="who-pays">
+      <h3 className="c-h2">Payer</h3>
       {answer.paidBy !== null ? (
         <p className="c-s15 c-t1 m-0">
           <span>Paid by </span>
@@ -435,7 +435,7 @@ export default function MemberPayer({ gymId, gym, entryId, name, readOnly, onCha
                 setOpen({ kind: 'find', mode: 'payer' });
               }}
             >
-              {answer.paidBy === null ? 'Choose who pays' : 'Change who pays'}
+              Change payer
             </button>
           ) : null}
           {answer.paidBy === null ? (

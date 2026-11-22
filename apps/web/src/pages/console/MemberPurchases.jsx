@@ -66,8 +66,8 @@ export default function MemberPurchases({ gymId, gym, entryId, name, past, squar
   const who = name && name.trim() !== '' ? name : 'this person';
 
   return (
-    <section className="c-card px-4 py-3 md:px-5 md:py-4 flex flex-col gap-2" aria-label="Bought at the desk">
-      <h3 className="c-h2">Bought at the desk</h3>
+    <section className="c-card px-4 py-3 md:px-5 md:py-4 flex flex-col gap-2" aria-label="Purchases">
+      <h3 className="c-h2">Purchases</h3>
       {state.found === null ? (
         // Said quietly: this box is a side note on the person's page, and its read failing
         // is not an alarm about anything staff just did there.
@@ -89,8 +89,8 @@ export default function MemberPurchases({ gymId, gym, entryId, name, past, squar
                       <span style={line.undone ? { textDecoration: 'line-through' } : undefined}>{line.title}</span>
                       {line.refundTag !== null ? <span className="c-tag c-tag-warn ml-2">{line.refundTag}</span> : null}
                     </span>
-                    <span className="c-s13 c-t3">{line.facts}</span>
-                    {line.voided !== null ? <span className="c-s13 c-t3">{line.voided}</span> : null}
+                    <span className="c-s14 c-t3">{line.facts}</span>
+                    {line.voided !== null ? <span className="c-s14 c-t3">{line.voided}</span> : null}
                   </span>
                   <span className="flex flex-col items-end gap-1 flex-shrink-0">
                     <span className="c-s14 c-t1 c-num" style={line.undone ? { textDecoration: 'line-through' } : undefined}>
@@ -128,7 +128,7 @@ export default function MemberPurchases({ gymId, gym, entryId, name, past, squar
           })}
         </ul>
       )}
-      {state.found !== null && state.found.notShown > 0 ? <p className="c-s13 c-t3 m-0">{`Showing the newest ${String(saleBaskets(state.found.sales).length)}.`}</p> : null}
+      {state.found !== null && state.found.notShown > 0 ? <p className="c-s14 c-t3 m-0">{`Showing the newest ${String(saleBaskets(state.found.sales).length)}.`}</p> : null}
       {sellTo !== null && routed ? (
         <Link to={sellTo} state={{ sellTo: { entryId, name: who, past: past === true } }} className="c-btn c-btn-s c-btn-sm self-start">
           {`Sell a product to ${who}`}

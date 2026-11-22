@@ -304,7 +304,7 @@ export async function chargebackStartPreview(sql: SqlOrTx, gymId: string, id: st
 
 export type StartChargesOutcome = "done" | "not_found" | "not_lost";
 
-/** Resume automatic payments, on a lost or accepted chargeback alone: it frees every lost one of whoever pays, as a stolen card loses
+/** Resume autopay, on a lost or accepted chargeback alone: it frees every lost one of whoever pays, as a stolen card loses
  *  several and only the gym's one decision is left. One still open goes on stopping them. The same press twice is one. */
 export async function startChargesAgain(sql: Sql, gymId: string, id: string, userId: string, now: Date): Promise<StartChargesOutcome> {
   return await sql.begin(async (tx): Promise<StartChargesOutcome> => {
