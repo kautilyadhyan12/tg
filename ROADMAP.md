@@ -834,10 +834,11 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
                         - 52a-ii-b-ii-b-ii. [x] **The floor mended in the engine** — merged 2026-11-22 (PR #617).
         - 52a-iii. [x] **The phone's own runs judged by the laptop's count and reasons** — merged 2026-11-20 (PR #600).
     - 52b. **The form judge, the reason for a rep not counted, and the summary** (§12.1, §2.4; split 2026-11-20 in three, `handoff/2026-11-20-floor-phone-plan.md` keeps its line as first written):
-        - 52b-i. [ ] **Why a rep did not count, and the squat's depth**: each rep not counted carries one short reason for the screen ("Go lower to count."); the depth is set from the squat's form standard (Kd's research file: thighs level with the floor, knees about 90°) with room measured from the videos, so a quarter squat stops counting; a dip that is plainly another movement says nothing, its feet hidden or not (52a-iii's three open cases); with it the line a rep is back up at moves (52a-ii-b-i's two open cases at that line). First test: the kettlebell push press counts 0 (today 3); then no rep that reaches the standard is told to go lower.
+        - 52b-i. [x] **Why a rep did not count, and the squat's depth** — merged 2026-11-22 (PR #622).
         - 52b-ii. [ ] **The form check and each rep's score**: the squat's mistakes from the research file, each checked by the camera or marked "the camera cannot see this from here", judged only inside a counted rep; no advice on any good-form video, Kd's own floor videos among them.
         - 52b-iii. [ ] **The set's summary** (§2.4), which the workout reads as it does today.
-    - 52c. [ ] **The other kinds of counting**: one side at a time, holds, fast rhythm, timed only, jumps, floor work.
+    - 52c. [ ] **The other kinds of counting**: one side at a time, holds, fast rhythm, timed only, jumps, floor work. Since 52b-i: a
+      squat jack done 1.5 or 2 times as slowly counts 2 and 1 as squats, its standing taken as the feet jump out (`squat_jack_2`).
     - 52d. [ ] **One person locked on**: a busy gym, a passer-by, a mirror (§11.8). Since 51c the phone asks the model for one
       person, so the model itself picks the body: the job is to notice when the body followed has changed (51c's plain sign,
       `bodyChanges`, misses a body of the same size in the same place) and to pause, never count, until it is the person again. Since 52a-ii-b-i: a body new within 3 s keeps the one before's leg and trunk for up to a minute; and a turn in a set, the camera left on, counts a man's own floor videos 8 of 9, 3 of 3 and 8 of 10.
@@ -866,7 +867,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
       - 64a-ii. [x] **Do it** — merged 2026-11-21 (PR #614).
       - 64a-iii. [x] **After it** — merged 2026-11-22 (PR #616).
       - 64a-ii-b. [x] **Time trained, never time paused** — merged 2026-11-22 (PR #619).
-      - 64a-iv. [ ] **Saved workouts**: save, list, load and delete (61c's routes), with a question first.
+      - 64a-iv. [x] **Saved workouts** — merged 2026-11-22 (PR #621).
       - 64a-v. [ ] **History**: the month, a day's workouts and one workout set by set (61b's routes).
       - 64a-vi. [ ] **Heart rate and sounds**: the monitor of 37f-i during a workout and kept with it (Kd, 2026-11-12); the sounds at a rep, a set's end and the last 3 seconds.
     - 64b. [ ] **With the camera** (after 64a and item 53's screen): Camera or Count myself, picked every time.

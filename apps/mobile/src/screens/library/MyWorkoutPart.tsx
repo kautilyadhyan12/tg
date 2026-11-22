@@ -1,5 +1,5 @@
 import { RUN_SETS_MOST, WORKOUT_SAVE_LIMITS, type PhoneLibraryEntry, type RunExercise } from "@app/shared";
-import { useState, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import { Image, Pressable, StyleSheet, TextInput, View } from "react-native";
 import { Button } from "../../look/Button";
 import { Badge, Card } from "../../look/Card";
@@ -10,7 +10,7 @@ import { pictures } from "../../look/pictures";
 import { PictureTop } from "../../look/PictureTop";
 import { Sheet } from "../../look/Sheet";
 import { fonts, Txt } from "../../look/Txt";
-import { NAME_MOST, type Item } from "../../library/myWorkout";
+import { EMPTY, NAME_MOST, type Item } from "../../library/myWorkout";
 import { exercisePicture } from "../../library/pictures";
 import type { Units } from "../../library/records";
 import type { LibraryFile } from "../../library/store";
@@ -18,7 +18,9 @@ import { estimate, planLine, planOf, summaryLine } from "../../library/workoutSe
 import { clock } from "../workout/words";
 import { useWorkoutLayer } from "../workout/WorkoutLayer";
 import { ProgressPage } from "../progress/ProgressPage";
+import { savedState, toPlanned } from "../../library/savedWorkouts";
 import { ExercisePage } from "./ExercisePage";
+import { SavedPart } from "./SavedPart";
 import { SetUpSheet } from "./SetUpSheet";
 import { useLibrary, useMyWorkout, useSetupFacts } from "./useLibrary";
 
@@ -37,6 +39,7 @@ export function MyWorkoutPart({ parts, units, onBrowse, file }: { parts: ReactNo
   const [weighing, setWeighing] = useState(false);
   // Start workout pressed while the last workout is still being kept on the phone (round one, H3).
   const [busy, setBusy] = useState(false);
+  const nameBox = useRef<TextInput>(null);
   const library = state.kind === "ready" ? state.library : null;
   const entryOf = (id: string): PhoneLibraryEntry | null => library?.exercises.find((e) => e.id === id) ?? null;
   const liveOf = (id: string): PhoneLibraryEntry | null => {
@@ -61,6 +64,9 @@ export function MyWorkoutPart({ parts, units, onBrowse, file }: { parts: ReactNo
     return [{ exercise: entry.id, name: entry.text.en.name, kind: entry.kind, measuredIn: plan.measuredIn, barbell: entry.equipment.includes("barbell"), sets: plan.sets.slice(0, RUN_SETS_MOST) }];
   });
   const setCount = toDo.reduce((n, e) => n + e.sets.length, 0);
+  // As a saved workout holds it (64a-iv), and whether My Workout is one of the person's saved workouts.
+  const planned = toPlanned(mine?.workout ?? EMPTY, liveOf);
+  const fromSaved = savedState(mine?.workout ?? EMPTY, layer?.saved?.view.list ?? [], (id) => planOf({ id, plan: null }, entryOf(id))).linked !== null;
 
   const top = (
     <PictureTop
@@ -71,6 +77,7 @@ export function MyWorkoutPart({ parts, units, onBrowse, file }: { parts: ReactNo
         <View style={styles.foot}>
           <View style={styles.nameRow}>
             <TextInput
+              ref={nameBox}
               value={mine?.workout.name ?? ""}
               onChangeText={(t) => {
                 mine?.rename(t);
@@ -82,7 +89,16 @@ export function MyWorkoutPart({ parts, units, onBrowse, file }: { parts: ReactNo
               returnKeyType="done"
               style={styles.name}
             />
-            <Icon name="pen" size={16} colour="textSoft" />
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Rename workout"
+              hitSlop={12}
+              onPress={() => {
+                nameBox.current?.focus();
+              }}
+            >
+              <Icon name="pen" size={16} colour="textSoft" />
+            </Pressable>
           </View>
           {count === 0 ? null : <Txt kind="body">{summaryLine(count, sum, units)}</Txt>}
           {count === 0 || sum.assumedKg === null || sum.kcal === null ? null : (
@@ -186,7 +202,7 @@ export function MyWorkoutPart({ parts, units, onBrowse, file }: { parts: ReactNo
                 raised
                 disabled={layer === null || toDo.length === 0}
                 onPress={() => {
-                  setBusy(layer?.start(mine?.workout.name ?? "", toDo) === "busy");
+                  setBusy(layer?.start(mine?.workout.name ?? "", toDo, fromSaved ? "saved" : "none") === "busy");
                 }}
               />
             ) : (
@@ -200,6 +216,8 @@ export function MyWorkoutPart({ parts, units, onBrowse, file }: { parts: ReactNo
           </View>
         </>
       )}
+      {/* One place on the page whatever My Workout holds, so what it last said stays when a workout is loaded. */}
+      {mine === null ? null : <SavedPart mine={mine} planned={planned} entryOf={entryOf} />}
       {settingUp === null || settingPlan === null || setUp === null ? null : (
         <SetUpSheet
           entry={settingUp}

@@ -65,13 +65,12 @@ describe("the worst thing: no other movement is ever counted as a squat", () => 
     expect(r.count).toBe(0);
   });
 
-  it("the open cases stay in the table in plain sight, each wrong count written and the job that closes it named", () => {
-    const open = TABLE.rows.filter((r) => r.entry.open !== undefined);
-    expect(open.map((r) => [r.label, r.count])).toEqual([["fresh_push_press_kettlebell", 3]]);
-    expect(open.every((r) => /^52b: /.test(r.entry.open ?? ""))).toBe(true);
+  it("no other movement is open any more: the kettlebell push press, counted 3 until the depth was set from the squat's form standard, counts 0", () => {
+    expect(TABLE.rows.filter((r) => r.entry.open !== undefined).map((r) => [r.label, r.count])).toEqual([]);
+    expect(row("fresh_push_press_kettlebell").count).toBe(0);
   });
 
-  it("every set of numbers made with one person left out also counts 0 on every other movement but the open case", () => {
+  it("every set of numbers made with one person left out also counts 0 on every other movement, the push press among them", () => {
     expect(TABLE.folds.length).toBe(9);
     expect(TABLE.worstOther).toBe(0);
   });
@@ -146,9 +145,20 @@ describe("the worst thing: no other movement is ever counted as a squat", () => 
     expect(deep.map((r) => [r.verdict, r.rule])).toEqual(deep.map(() => ["other", "feet stay in place"]));
   });
 
-  it("no other movement is given a word: no rep of theirs is called short, but the open case's", () => {
-    for (const r of others.filter((x) => x.entry.open === undefined)) {
-      expect([r.label, r.reps.filter((x) => x.verdict === "short").length]).toEqual([r.label, 0]);
+  it("no other movement is given a word as filmed, but the one written on its video: nothing short, nothing said", () => {
+    // Round one: every word counted, what the camera could not see included (under some replays an unseen dip speaks:
+    // movementReplaysOthers1 and 2).
+    for (const r of others.filter((x) => x.entry.told === undefined)) {
+      expect([r.label, r.reps.filter((x) => x.verdict === "short" || x.reason !== null).map((x) => x.reason)]).toEqual([r.label, []]);
+    }
+  });
+
+  it("the one told: the push press's dips, a quarter squat to the camera, are told to go lower as a quarter squat is, and none counts", () => {
+    const told = others.filter((r) => r.entry.told !== undefined);
+    expect(told.map((r) => r.label)).toEqual(["fresh_push_press_kettlebell"]);
+    for (const r of told) {
+      expect(r.count).toBe(0);
+      expect([...new Set(r.reps.filter((x) => x.verdict === "short").map((x) => `${x.rule ?? ""}: ${x.reason ?? ""}`))]).toEqual(["knees bent: Go lower to count."]);
     }
   });
 });
@@ -168,12 +178,15 @@ describe("the squat's own videos count what a person counts by eye", () => {
 
   it("the counts wrong with their person left out stay in the table in plain sight, the job that closes each named", () => {
     const open = TABLE.rows.filter((r) => r.entry.leftOutOpen !== undefined);
-    expect(open.map((r) => r.label)).toEqual(["prisoner_squat_2", "floor_phone_test 0-12 s"]);
-    expect(open.map((r) => [r.label, r.count, r.leftOut])).toEqual([
-      ["prisoner_squat_2", 3, 2],
-      ["floor_phone_test 0-12 s", 3, 2],
-    ]);
-    expect(open.every((r) => /^(52b-i|53), /.test(r.entry.leftOutOpen?.why ?? ""))).toBe(true);
+    expect(open.map((r) => [r.label, r.count, r.leftOut])).toEqual([["floor_phone_test 0-12 s", 3, 2]]);
+    expect(open.every((r) => /^53, /.test(r.entry.leftOutOpen?.why ?? ""))).toBe(true);
+  });
+
+  it("the shallowest man of the nine counts his 3 with his own videos left out: the depth is set from the form standard, never from him", () => {
+    // Until 52b-i the depth was a quarter of the way back from the shallowest person's rep, so without him it rose to 0.23,
+    // over his first rep (0.226 of a leg).
+    expect([row("prisoner_squat_2").count, row("prisoner_squat_2").leftOut]).toEqual([3, 3]);
+    for (const fold of TABLE.folds) expect([fold.person, fold.fitted.find((f) => f.rule === "depth")?.bound]).toEqual([fold.person, 0.16]);
   });
 
   it.each(TABLE.rows.filter((r) => r.entry.movement === "squat" && !r.sets && r.entry.reps !== null && r.entry.open === undefined).map((r) => [r.label, r] as const))(
@@ -228,7 +241,7 @@ describe("the camera must see enough, or nothing is decided", () => {
     );
     const run = runMovement(SQUAT, edited(video, frames));
     expect(run.count).toBe(2);
-    expect(run.reps.some((r) => r.verdict === "unseen")).toBe(true);
+    expect(run.reps.filter((r) => r.verdict === "unseen").map((r) => [r.rule, r.reason])).toEqual([["depth", "Keep your whole body in view."]]);
   });
 
   it("a rep whose shoulders are hidden throughout, the hips and feet seen, decides nothing: the trunk could not be judged", () => {
@@ -269,7 +282,10 @@ describe("the camera must see enough, or nothing is decided", () => {
     // Seven pictures hidden: a break of 267 ms.
     const long = runMovement(SQUAT, hiddenFor(220));
     expect(long.count).toBe(1);
-    expect(long.reps.filter((r) => r.verdict === "unseen").map((r) => r.rule)).toEqual(["feet stay down", "feet stay down"]);
+    expect(long.reps.filter((r) => r.verdict === "unseen").map((r) => [r.rule, r.reason])).toEqual([
+      ["feet stay down", "Keep your whole body in view."],
+      ["feet stay down", "Keep your whole body in view."],
+    ]);
   });
 
   it("pictures the phone did not send leave a break judged as any other: the body may be in the air then too", () => {

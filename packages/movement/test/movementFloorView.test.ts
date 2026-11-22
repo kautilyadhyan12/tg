@@ -63,11 +63,11 @@ describe("the worst thing: the floor view held as proof while it does not read a
   });
 
   it.each([
-    ["floor_phone_test 0-12 s", 7, ["feet stay in place", "hips, picture against 3D, standing"], 0.038],
-    ["floor_phone_test 13.9-21.1 s", 7, ["feet stay down", "feet stay in place", "hips, picture against 3D, standing"], 0.038],
-    ["floor_phone_test 22.3-31.4 s", 9, ["feet stay down", "hips, picture against 3D, standing"], 0.032],
-    ["usual_v04 9.8-17.5 s", 7, ["feet stay in place", "hips, picture against 3D", "hips, picture against 3D, standing"], 0.037],
-    ["usual_v04 19.2-23.2 s", 8, ["feet stay down", "feet stay in place", "hips, picture against 3D, standing"], 0.042],
+    ["floor_phone_test 0-12 s", 7, ["feet stay in place", "hips, picture against 3D, standing"], 0.041],
+    ["floor_phone_test 13.9-21.1 s", 8, ["feet stay down", "hips, picture against 3D, standing"], 0.028],
+    ["floor_phone_test 22.3-31.4 s", 9, ["feet stay down", "hips, picture against 3D, standing"], 0.034],
+    ["usual_v04 9.8-17.5 s", 9, ["feet stay in place", "hips, picture against 3D", "hips, picture against 3D, standing"], 0.037],
+    ["usual_v04 19.2-23.2 s", 8, ["feet stay in place", "hips, picture against 3D, standing"], 0.042],
   ] as const)("the wander measured without %s: %s of his 10 raised squats counted from the floor; short of his floor: %j; feet stay in place %s; the floor view is not held", (left, counted, failing, travel) => {
     const f = faithful(FLOOR_LEAN, LENS_MM, undefined, floorSets.filter((s) => s !== left));
     expect(f.redrawn.reduce((n, s) => n + s.count, 0)).toBe(counted);
@@ -91,13 +91,13 @@ describe("the worst thing, as 52a-ii-b-ii-a first wrote it: a jump drawn on a sq
     }
   });
 
-  it("on his five raised sets, 4 of 150 count from the floor, every one a case the raised phone refuses (from the raised phone itself none, 14 from the floor until 52a-ii-b-ii-b-ii), in plain sight: the floor view is shown, never proof", () => {
+  it("on his five raised sets, 3 of 150 count from the floor, every one a case the raised phone refuses (from the raised phone itself none; 14 from the floor until 52a-ii-b-ii-b-ii, 4 until 52b-i), in plain sight: the floor view is shown, never proof", () => {
     const raised = proofVideos(MOVEMENT_VIDEOS.filter((e) => e.file === "movement-points/usual_v11" && e.reps !== null));
     expect(raised.map((v) => [v.video.label, jumpsCounted(v.video)])).toEqual([
       ["usual_v11 1.3-7.4 s", []],
       ["usual_v11 8.3-14.2 s", []],
       ["usual_v11 15.3-21.6 s", []],
-      ["usual_v11 22-29.5 s", ["0.08 | -200 | as filmed | 1", "0.08 | 200 | 8 a second | 1"]],
+      ["usual_v11 22-29.5 s", ["0.08 | 200 | 8 a second | 1"]],
       ["usual_v11 30-39 s", ["0.08 | -200 | as filmed | 1", "0.08 | -200 | 8 a second | 1"]],
     ]);
   });
@@ -129,9 +129,11 @@ describe("his raised squats, redrawn from the floor, do not yet read as his real
     [12.6, 10, ["feet stay down", "hips, picture against 3D, standing"]],
     [13.7, 10, ["feet stay down", "hips, picture against 3D, standing"]],
     [FLOOR_LEAN, 10, ["feet stay down", "hips, picture against 3D, standing"]],
-    [14.3, 9, ["feet stay down", "hips, picture against 3D, standing"]],
-    [14.4, 9, ["feet stay down", "hips, picture against 3D, standing"]],
-    [14.5, 9, ["feet stay down", "hips, picture against 3D, standing"]],
+    // At 14.3 to 14.5 degrees one squat of his pair at 22 s was lost until 52b-i: a rep begun while he still stood,
+    // before he moved, took his settling feet in; a rep no longer begins while the person stands tall.
+    [14.3, 10, ["feet stay down", "hips, picture against 3D, standing"]],
+    [14.4, 10, ["feet stay down", "hips, picture against 3D, standing"]],
+    [14.5, 10, ["feet stay down", "hips, picture against 3D, standing"]],
   ] as const)("leaning back %s degrees: %s of 10 counted; short of his floor: %j", (lean, counted, failing) => {
     const f = faithful(lean);
     expect(f.real.map((s) => s.label)).toEqual(["floor_phone_test 0-12 s", "floor_phone_test 13.9-21.1 s", "floor_phone_test 22.3-31.4 s", "usual_v04 9.8-17.5 s", "usual_v04 19.2-23.2 s"]);
@@ -181,11 +183,13 @@ describe("the pose model's own foot wander near the floor, measured on his floor
     expect(checked).toEqual(sets.floor.map((label) => [label, label !== "usual_v04 19.2-23.2 s", true]));
   });
 
-  it("spreads further on his floor than from his raised phone: 3.2 and 3.9 cm across and down against 2.5 and 2.6", () => {
+  // From his raised phone 2.5 cm across until 52b-i: one squat of his last raised pair began 0.9 s before he moved, while
+  // he stood, so the half second before it, his foot's reference, was not that squat's own standing.
+  it("spreads further on his floor than from his raised phone: 3.2 and 3.9 cm across and down against 1.7 and 2.6", () => {
     const cm = (v: readonly [number, number]): number[] => v.map((x) => Math.round(x * 1000) / 10);
     expect([cm(wanderSpread(sets.floor)), cm(wanderSpread(sets.raised))]).toEqual([
       [3.2, 3.9],
-      [2.5, 2.6],
+      [1.7, 2.6],
     ]);
   });
 
@@ -194,15 +198,15 @@ describe("the pose model's own foot wander near the floor, measured on his floor
   });
 
   // With all five floor sets' wander, at each of his six leans and the replay's: how many of his ten raised squats count
-  // (without it 9 at 6.4 and 14.3 to 14.5, 10 at the others) and which judged readings fall short.
+  // (without it 9 at 6.4 and 6.5, 10 at the others) and which judged readings fall short.
   it.each([
-    [6.4, 8, ["feet stay down", "hips, picture against 3D", "hips, picture against 3D, standing"], 0.025],
-    [12.6, 9, ["feet stay down", "hips, picture against 3D, standing"], 0.032],
-    [13.7, 8, ["feet stay down", "hips, picture against 3D, standing"], 0.032],
-    [FLOOR_LEAN, 8, ["feet stay down", "hips, picture against 3D, standing"], 0.032],
-    [14.3, 7, ["hips, picture against 3D, standing"], 0.033],
-    [14.4, 7, ["feet stay down", "hips, picture against 3D, standing"], 0.033],
-    [14.5, 7, ["feet stay down", "hips, picture against 3D, standing"], 0.033],
+    [6.4, 8, ["hips, picture against 3D", "hips, picture against 3D, standing"], 0.029],
+    [12.6, 9, ["hips, picture against 3D, standing"], 0.029],
+    [13.7, 8, ["hips, picture against 3D, standing"], 0.029],
+    [FLOOR_LEAN, 8, ["hips, picture against 3D, standing"], 0.029],
+    [14.3, 8, ["hips, picture against 3D, standing"], 0.03],
+    [14.4, 8, ["hips, picture against 3D, standing"], 0.03],
+    [14.5, 9, ["hips, picture against 3D, standing"], 0.03],
   ] as const)("leaning back %s degrees with the floor's wander: %s of 10 counted; short of his floor: %j; feet stay in place %s", (lean, counted, failing, travel) => {
     const f = faithful(lean, LENS_MM, undefined, null);
     expect(f.redrawn.reduce((n, s) => n + s.count, 0)).toBe(counted);
@@ -215,11 +219,11 @@ describe("the pose model's own foot wander near the floor, measured on his floor
   // Taken from one floor set alone: it depends on the set. From his half-turned set every raised squat counts, yet both
   // hips readings fall short; from his side-on set on the shiny floor 4 of 10 count.
   it.each([
-    ["floor_phone_test 0-12 s", 4, ["feet stay in place", "hips, picture against 3D, standing"], 0.082],
-    ["floor_phone_test 13.9-21.1 s", 10, ["hips, picture against 3D", "hips, picture against 3D, standing"], 0.029],
-    ["floor_phone_test 22.3-31.4 s", 6, ["feet stay down", "hips, picture against 3D, standing"], 0.029],
-    ["usual_v04 9.8-17.5 s", 4, ["feet stay in place"], 0.092],
-    ["usual_v04 19.2-23.2 s", 2, ["feet stay in place", "hips, picture against 3D", "hips, picture against 3D, standing"], 0.09],
+    ["floor_phone_test 0-12 s", 4, ["feet stay in place", "hips, picture against 3D, standing"], 0.079],
+    ["floor_phone_test 13.9-21.1 s", 10, ["feet stay down", "hips, picture against 3D", "hips, picture against 3D, standing"], 0.035],
+    ["floor_phone_test 22.3-31.4 s", 5, ["feet stay down", "hips, picture against 3D, standing"], 0.029],
+    ["usual_v04 9.8-17.5 s", 4, ["feet stay in place"], 0.068],
+    ["usual_v04 19.2-23.2 s", 3, ["feet stay in place", "hips, picture against 3D", "hips, picture against 3D, standing"], 0.091],
   ] as const)("the wander from %s alone: %s of 10 counted; short of his floor: %j; feet stay in place %s", (set, counted, failing, travel) => {
     const f = faithful(FLOOR_LEAN, LENS_MM, undefined, [set]);
     expect(f.redrawn.reduce((n, s) => n + s.count, 0)).toBe(counted);
@@ -237,19 +241,19 @@ describe("every proof video seen through the floor view, shown: the numbers the 
   const replay = REPLAYS.find((r) => r.name === "on the floor");
   if (replay === undefined) throw new Error("no floor replay");
 
-  it("every other movement tried counts 0 and calls nothing short: 64 of its 72 videos, the 8 filmed from the floor not tried", () => {
+  it("every other movement tried counts 0 and calls nothing short: 65 of its 73 videos, the 8 filmed from the floor not tried", () => {
+    // The push press is judged since 52b-i, when it came to count 0: its dips, a quarter squat to the camera, are told to go
+    // lower as a quarter squat is (its video says so).
     const rows = replayTable(SQUAT, VIDEOS.filter((v) => v.entry.movement === null), [replay]);
-    expect([rows.length, rows.filter((r) => r.tried).length]).toEqual([72, 64]);
-    expect(rows.filter((r) => r.tried && (r.count > 0 || r.reps.some((x) => x.verdict === "short"))).map((r) => r.label)).toEqual([]);
+    expect([rows.length, rows.filter((r) => r.tried).length]).toEqual([73, 65]);
+    expect(rows.filter((r) => r.tried && (r.count > 0 || (r.entry.told === undefined && r.reps.some((x) => x.verdict === "short")))).map((r) => r.label)).toEqual([]);
   });
 
-  it("of the 18 squat sets tried, 16 count by eye; the two that do not, as written in the spec", () => {
+  it("of the 18 squat sets tried, 17 count by eye; the one that does not, as written in the spec", () => {
+    // His pair at 22 s with his own videos left out lost a squat until 52b-i (2 and 1).
     const rows = replayTable(SQUAT, VIDEOS.filter((v) => v.entry.movement === "squat"), [replay]).filter((r) => r.tried);
     expect(rows).toHaveLength(18);
-    expect(rows.filter((r) => !holds(r)).map((r) => [r.label, r.count, r.leftOut])).toEqual([
-      ["usual_v11 22-29.5 s", 2, 1],
-      ["fresh_front_squat_barbell", 2, null],
-    ]);
+    expect(rows.filter((r) => !holds(r)).map((r) => [r.label, r.count, r.leftOut])).toEqual([["fresh_front_squat_barbell", 2, null]]);
   });
 });
 

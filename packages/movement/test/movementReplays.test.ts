@@ -78,7 +78,6 @@ describe("each squat video counts what a person counts by eye, however the world
     expect(ROWS.filter(openRow).map((r) => `${r.label}: ${r.replay.name}`)).toEqual([
       "floor_phone_test 0-12 s: 8 a second",
       "floor_phone_test 0-12 s: uneven",
-      "fresh_goblet_squat_plate: uneven",
       "floor_phone_test 0-12 s: shaky",
       "usual_v11 30-39 s: shaky",
       "floor_phone_test 0-12 s: chip's gap",
@@ -86,12 +85,21 @@ describe("each squat video counts what a person counts by eye, however the world
       "floor_phone_test 0-12 s: faster",
       "floor_phone_test 13.9-21.1 s: slower",
       "usual_v11 30-39 s: slower",
-      "prisoner_squat_2: twice as slow",
       "floor_phone_test 13.9-21.1 s: twice as slow",
     ]);
-    expect(ROWS.filter(openRow).every((r) => /^(52b-i|53), /.test(r.entry.replayOpen?.why ?? ""))).toBe(true);
+    expect(ROWS.filter(openRow).every((r) => /^53, /.test(r.entry.replayOpen?.why ?? ""))).toBe(true);
     // An open row only ever misses squats: never one more than by eye, with every person's numbers or with its own left out.
     expect(ROWS.filter(openRow).filter((r) => r.count > r.most || (r.leftOut ?? 0) > r.most).map((r) => `${r.label}: ${r.replay.name}`)).toEqual([]);
+  });
+
+  it("no rep of any squat video is told to go lower under any replay that must hold: they are proper squats (52b-i)", () => {
+    const told = ROWS.filter((r) => r.tried).flatMap((r) => r.reps.filter((x) => x.verdict === "short").map((x) => `${r.replay.name}: ${r.label} ${((x.start - 1000) / 1000).toFixed(1)} s ${x.rule ?? ""}`));
+    expect(told).toEqual([]);
+  });
+
+  it("the plate goblet squat with pictures skipped counts her 4: back up once she stands tall, her hips reading 0.09 of a leg under her first standing (52b-i)", () => {
+    const plate = ROWS.find((r) => r.label === "fresh_goblet_squat_plate" && r.replay.name === "uneven");
+    expect(plate?.count).toBe(4);
   });
 
   it.each(["passer-by", "passer-by at the bottom"])("%s hides at most the rep it covers: that rep decides nothing and is never called short", (name) => {
