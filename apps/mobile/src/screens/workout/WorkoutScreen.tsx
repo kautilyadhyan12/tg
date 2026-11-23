@@ -427,19 +427,19 @@ const styles = StyleSheet.create({
   self: { alignSelf: "center" },
   pressed: { opacity: 0.85 },
   faint: { opacity: 0.35 },
-  // The top's buttons in one panel over the picture, on one line and one height (Kd's click-through: "not layout properly
-  // and scattered around").
-  tops: { padding: 6, marginHorizontal: -10, borderRadius: 33, backgroundColor: colours.overWords, borderWidth: 1, borderColor: colours.lineStrong },
+  // The top's buttons on one line and one height over the picture, each on its own see-through backing (Kd's click-through:
+  // "scattered around"; then, of a dark panel behind them, "why is there black background?").
+  tops: { marginHorizontal: -10 },
   topBar: { flexDirection: "row", alignItems: "center", gap: 6 },
   // The heart rate and the sound switch under the top's buttons, over the picture (64a-vi).
   pills: { flexDirection: "row", flexWrap: "wrap", alignItems: "stretch", gap: 8 },
   heartRoom: { flexGrow: 1, flexBasis: 180 },
   soundPill: { flexDirection: "row", alignItems: "center", gap: 7, minHeight: PILL, paddingHorizontal: 14, borderRadius: sizes.round, backgroundColor: colours.raised, borderWidth: 1, borderColor: colours.lineStrong },
   // Pause and End are pressed mid-set, from a step back: big enough to hit at a glance (Kd: "pause, end is too small").
-  topRound: { width: TOP, height: TOP, borderRadius: TOP / 2, alignItems: "center", justifyContent: "center", backgroundColor: colours.raised, borderWidth: 1, borderColor: colours.lineStrong },
-  topPill: { flexDirection: "row", gap: 8, minHeight: TOP, paddingHorizontal: 16, borderRadius: TOP / 2, alignItems: "center", justifyContent: "center", backgroundColor: colours.raised, borderWidth: 1, borderColor: colours.lineStrong },
+  topRound: { width: TOP, height: TOP, borderRadius: TOP / 2, alignItems: "center", justifyContent: "center", backgroundColor: colours.overWords, borderWidth: 1, borderColor: colours.lineStrong },
+  topPill: { flexDirection: "row", gap: 8, minHeight: TOP, paddingHorizontal: 16, borderRadius: TOP / 2, alignItems: "center", justifyContent: "center", backgroundColor: colours.overWords, borderWidth: 1, borderColor: colours.lineStrong },
   topMiddle: { flex: 1 },
-  topEnd: { minHeight: TOP, paddingHorizontal: 18, borderRadius: TOP / 2, alignItems: "center", justifyContent: "center", backgroundColor: colours.raised, borderWidth: 1, borderColor: colours.lineStrong },
+  topEnd: { minHeight: TOP, paddingHorizontal: 18, borderRadius: TOP / 2, alignItems: "center", justifyContent: "center", backgroundColor: colours.overWords, borderWidth: 1, borderColor: colours.lineStrong },
   body: { paddingHorizontal: 16, paddingTop: 6, gap: 12 },
   wall: { paddingHorizontal: 14, paddingVertical: 4, borderRadius: 22, borderWidth: 1, borderColor: colours.timerEdge, backgroundColor: colours.timerFace },
   label: { fontFamily: fonts.bold, letterSpacing: 1.1, color: colours.timerWords },

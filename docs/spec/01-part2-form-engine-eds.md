@@ -3057,7 +3057,7 @@ workouts are kept day by day (Part 6 §2: Progress holds history), with doors to
 
 **As built in 64a-vi (2026-11-23, Kd's drawing of that day).** Heart rate and sounds in a workout:
 - **Heart rate** from the person's own saved monitor (37f-i), on the workout's screen in a row under the exercise's name, beside
-  Sound (Kd's click-through: the top's buttons are one row in one panel over the picture) (`heart/HeartPill.tsx`, shared with
+  Sound (Kd's click-through: the top's buttons are one row over the picture, each on its own see-through backing) (`heart/HeartPill.tsx`, shared with
   the run's pill, larger): "142 bpm · Zone 3" in the zone's colour where a maximum heart rate is known, "No signal"
   where there is no reading in the last 5 s, never 0 or an old number; none at all with no monitor. Kept with the workout
   (`workoutRunSchema.heart`, `withHeart` in `library/workoutRun.ts`, table-tested): only while its clocks run, never while paused,
