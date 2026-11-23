@@ -223,6 +223,8 @@ describe('the worst thing: one person tapped, another shown or changed', () => {
     fireEvent.change(dialog().getByLabelText('Email'), { target: { value: 'bea@members.example' } });
     fireEvent.click(dialog().getByRole('button', { name: 'Save' }));
     fireEvent.click(await dialog().findByRole('button', { name: 'Open that record' }));
+    // What was typed is asked about first, as at every way out of the panel.
+    fireEvent.click(dialog().getByRole('button', { name: 'Close without saving' }));
 
     expect(dialog().queryByText('Ada Lovelace')).toBeNull();
     expect(dialog().queryByDisplayValue('bea@members.example')).toBeNull();
@@ -245,6 +247,8 @@ describe('the worst thing: one person tapped, another shown or changed', () => {
     fireEvent.change(dialog().getByLabelText('Email'), { target: { value: 'bea@members.example' } });
     fireEvent.click(dialog().getByRole('button', { name: 'Save' }));
     fireEvent.click(await dialog().findByRole('button', { name: 'Open that record' }));
+    // What was typed is asked about first, as at every way out of the panel.
+    fireEvent.click(dialog().getByRole('button', { name: 'Close without saving' }));
     // While Bea is read, nothing of Ada's stays: not her name, not her App word.
     expect(dialog().queryByText('In the app')).toBeNull();
     expect(dialog().queryByRole('heading', { name: 'Ada Lovelace' })).toBeNull();
@@ -1354,6 +1358,8 @@ describe('Add member', () => {
     fireEvent.click(dialog().getByRole('button', { name: 'Add member' }));
     expect(await dialog().findByText(message)).toBeTruthy();
     fireEvent.click(dialog().getByRole('button', { name: 'Open that record' }));
+    // What was typed is asked about first, as at every way out of the panel.
+    fireEvent.click(dialog().getByRole('button', { name: 'Close without saving' }));
     await waitFor(() => expect(orgService.getMemberListEntry).toHaveBeenCalledWith(GYM, ADA));
   });
 
