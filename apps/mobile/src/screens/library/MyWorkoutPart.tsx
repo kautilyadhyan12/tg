@@ -1,3 +1,4 @@
+import { useIsFocused } from "@react-navigation/native";
 import { RUN_SETS_MOST, WORKOUT_SAVE_LIMITS, type PhoneLibraryEntry, type RunExercise } from "@app/shared";
 import { useRef, useState, type ReactNode } from "react";
 import { Image, Pressable, StyleSheet, TextInput, View } from "react-native";
@@ -9,6 +10,8 @@ import { Page } from "../../look/Page";
 import { pictures } from "../../look/pictures";
 import { PictureTop } from "../../look/PictureTop";
 import { Sheet } from "../../look/Sheet";
+import { bpmWords, HeartMonitorSheet, monitorName } from "../../heart/HeartMonitor";
+import { useHeartNow } from "../../heart/monitor";
 import { fonts, Txt } from "../../look/Txt";
 import { EMPTY, NAME_MOST, type Item } from "../../library/myWorkout";
 import { exercisePicture } from "../../library/pictures";
@@ -16,7 +19,7 @@ import type { Units } from "../../library/records";
 import type { LibraryFile } from "../../library/store";
 import { estimate, planLine, planOf, summaryLine } from "../../library/workoutSetup";
 import { clock } from "../workout/words";
-import { useWorkoutLayer } from "../workout/WorkoutLayer";
+import { useWorkoutLayer, WorkoutClock } from "../workout/WorkoutLayer";
 import { ProgressPage } from "../progress/ProgressPage";
 import { savedState, toPlanned } from "../../library/savedWorkouts";
 import { ExercisePage } from "./ExercisePage";
@@ -209,9 +212,13 @@ export function MyWorkoutPart({ parts, units, onBrowse, file }: { parts: ReactNo
             ) : (
               <>
                 <Button label="Open workout" wide raised onPress={() => layer?.open()} />
-                <Txt kind="small" style={styles.centre}>
-                  {`${going.paused ? "Paused" : "In progress"} · ${clock(going.activeMs)}`}
-                </Txt>
+                <WorkoutClock run={going}>
+                  {(ms) => (
+                    <Txt kind="small" style={styles.centre}>
+                      {`${going.paused ? "Paused" : "In progress"} · ${clock(ms)}`}
+                    </Txt>
+                  )}
+                </WorkoutClock>
               </>
             )}
           </View>
@@ -237,6 +244,7 @@ export function MyWorkoutPart({ parts, units, onBrowse, file }: { parts: ReactNo
           <Icon name="go" size={18} colour="textFaint" />
         </Card>
       </Pressable>
+      <MonitorLine />
       {settingUp === null || settingPlan === null || setUp === null ? null : (
         <SetUpSheet
           entry={settingUp}
@@ -403,4 +411,48 @@ const styles = StyleSheet.create({
   start2: { alignSelf: "flex-start" },
   two: { flexDirection: "row", gap: 10 },
   half: { flex: 1 },
+});
+
+/** The heart rate monitor for workouts (64a-vi), under History: the same box as Settings and the Running page, so a
+ *  person who never runs finds it where they train. Its heart rate now while the page is on screen. */
+function MonitorLine() {
+  const [open, setOpen] = useState(false);
+  // Connected only while the Workout tab shows it, as the Running page's row is.
+  const { monitor, bpm } = useHeartNow(useIsFocused());
+  return (
+    <>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={monitor === null ? "Heart rate monitor. Connect a chest strap or watch" : `Heart rate monitor, ${monitorName(monitor.name)}. Change`}
+        onPress={() => {
+          setOpen(true);
+        }}
+        style={({ pressed }) => (pressed ? monitorStyles.pressed : null)}
+      >
+        <Card style={monitorStyles.line}>
+          <Badge icon="heart" />
+          <View style={monitorStyles.grow}>
+            <Txt kind="strong">Heart rate monitor</Txt>
+            <Txt kind="small" numberOfLines={2}>
+              {monitor === null ? "Connect a chest strap or watch" : `${monitorName(monitor.name)} · ${bpmWords(bpm)}`}
+            </Txt>
+          </View>
+          <Icon name="go" size={18} colour="textFaint" />
+        </Card>
+      </Pressable>
+      <HeartMonitorSheet
+        open={open}
+        monitor={monitor}
+        onClose={() => {
+          setOpen(false);
+        }}
+      />
+    </>
+  );
+}
+
+const monitorStyles = StyleSheet.create({
+  line: { flexDirection: "row", alignItems: "center", gap: 12 },
+  grow: { flex: 1 },
+  pressed: { opacity: 0.85 },
 });

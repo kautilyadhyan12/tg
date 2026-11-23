@@ -36,7 +36,7 @@ import {
   xpWhy,
 } from "./afterWords";
 import { clock } from "./words";
-import { RecordsBox, SetBlocks, Tile, Wall } from "./WorkoutParts";
+import { HeartLine, RecordsBox, SetBlocks, Tile, Wall } from "./WorkoutParts";
 import type { EffortHand } from "./WorkoutLayer";
 
 // A workout's last screen (ROADMAP Stage 5 64a-iii, Kd's drawing of 2026-11-21, its fonts and glow brought down at his
@@ -187,6 +187,7 @@ export function Summary({ finished, keeping, waiting, effort, units, onDone, onN
               </View>
             </Rise>
           )}
+          {finished.heart === null ? null : <HeartLine avg={finished.heart.avg} max={finished.heart.max} />}
           <View style={[styles.saveLine, saved ? styles.saveGood : refused ? styles.saveBad : styles.saveWait]}>
             <Icon name={saved ? "check" : refused ? "warn" : "phone"} size={22} colour={saved ? "goodText" : refused ? "badText" : "orangeLight"} />
             <View style={styles.grow}>

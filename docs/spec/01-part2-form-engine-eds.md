@@ -2787,7 +2787,7 @@ as the testers' store version (17 November) has no Start workout.
 - **Ids** are made from the phone's proper random source, never `Math.random`.
 - **Goals' exercise picker** reads this list (names, and "measured in reps") from job 63.
 - Sound in a workout uses one player, shared with job 53; whichever job comes first asks
-  Kd for the package.
+  Kd for the package. (64a-vi came first: expo-audio 57.0.5, `apps/mobile/src/sound/soundNative.ts`, Kd's "go".)
 
 **As built in 63a (2026-11-19).** Workout → Exercises is the Library (`apps/mobile/src/screens/library/`, rules in
 `apps/mobile/src/library/`), drawn from Kd's approved drawing of that day.
@@ -3054,6 +3054,39 @@ workouts are kept day by day (Part 6 §2: Progress holds history), with doors to
   of five years, the calendar's year held the server answering nobody for at most 1.8 ms (a free plan's 90 days, 2 KB) and 1.2 ms
   (all 365 days, 8 KB).
 - **Not in 64a-v:** stars given from History; a workout deleted or repeated from History (neither the web nor the phone has them).
+
+**As built in 64a-vi (2026-11-23, Kd's drawing of that day).** Heart rate and sounds in a workout:
+- **Heart rate** from the person's own saved monitor (37f-i), on the workout's screen in a row under the exercise's name, beside
+  Sound (Kd's click-through: the top's buttons are one row over the picture, each on its own see-through backing) (`heart/HeartPill.tsx`, shared with
+  the run's pill, larger): "142 bpm · Zone 3" in the zone's colour where a maximum heart rate is known, "No signal"
+  where there is no reading in the last 5 s, never 0 or an old number; none at all with no monitor. Kept with the workout
+  (`workoutRunSchema.heart`, `withHeart` in `library/workoutRun.ts`, table-tested): only while its clocks run, never while paused,
+  after more than 10 minutes away, before the workout was last moved on, or once it is done; each reading on the workout's whole
+  clock by when it came, one a second at most, none past 12 hours; the save sends only those within its length, so a heart rate
+  never makes the server refuse a workout. The workout takes its readings from a queue of its own (`heartQueue` in
+  `heart/monitor.ts`), so a run and a workout on at once each get every reading; a monitor being tried, another device and a
+  reading with no heart behind it never reach it. The monitor is held connected while a workout is on. The server is unchanged
+  (61a keeps the average and highest); the summary shows "Heart rate 138 average · 171 highest" worked out on the phone by the
+  server's own rule (`heartSums`), the same line as History (`HeartLine`), and none with under a minute of it.
+- **Sounds** (`library/workoutSounds.ts`, pure and table-tested; the browser's four tones, made as the app's own files by
+  `apps/mobile/tools/make-workout-sounds.mjs`): a tick for a rep counted by +, two beeps when a set ends, a beep at each of the last
+  3 seconds of a rest, a get-ready or a set measured in time, a rising "go" when the next set starts after a rest or a get-ready.
+  None while paused, for Pause or Resume, on coming back to the app, or after a tick more than 1.5 s late. The one player
+  (`sound/soundNative.ts`, expo-audio 57.0.5) mixes with the person's music, never pausing it, and asks for no microphone; a copy
+  of the app built before it plays nothing. Sound on or off beside the heart rate, kept for the person
+  (`workout-sounds-<id>.json`, removed with the account). Sounds play while the app is open; with the phone locked or the app
+  left, a rest ends silently.
+- **My Workout** has "Heart rate monitor" under History, opening the same box as Settings and the Running page, whose words now
+  say runs or workouts.
+- **Found on the walk and fixed:** while a workout ran, every page reading the workout layer (the Dashboard, My Workout, the
+  calendar) was drawn again four times a second, as the layer's value held the ticking workout (since 64a-ii; `master` the
+  same): on Kd's phone the app's JavaScript ran at 100 % and presses landed seconds late. Pages now get the workout's place,
+  changed only when something happens (`placeKey`); a page showing its time draws `WorkoutClock` alone, as often as the
+  workout's screen. Measured on the phone (development copy): 22 to 50 % on the workout screen, 0 to 11 % on the Dashboard.
+  A sound's first play in a session comes 0.5 to 1.3 s after the screen in the development copy (each file loaded from the
+  bundler at first use), later ones 0.1 to 0.2 s; loading them ahead lost the set's end once on the phone and was taken out.
+- **Not in 64a-vi:** a heart rate chart or zones kept for a workout (a run's 37f-ii-a); a notification when a rest ends with the
+  phone locked.
 
 ### 13.7 The jobs (ROADMAP Stage 5, exercise folder 2; ROADMAP wins where they differ)
 

@@ -23,6 +23,21 @@ export function Tile({ label, text, colour, say }: { label: string; text: string
   );
 }
 
+/** A workout's average and highest heart rate (64a-v, 64a-vi): the same words on its last screen and in History. */
+export const heartWords = (avg: number, max: number | null): string =>
+  max === null ? `Heart rate ${String(avg)} average` : `Heart rate ${String(avg)} average · ${String(max)} highest`;
+
+export function HeartLine({ avg, max }: { avg: number; max: number | null }) {
+  return (
+    <View style={styles.row}>
+      <Icon name="heart" size={18} colour="badText" />
+      <Txt kind="body" colour="text" style={styles.grow}>
+        {heartWords(avg, max)}
+      </Txt>
+    </View>
+  );
+}
+
 /** The wall timer holding its tiles in a row. */
 export function Wall({ children }: { children: ReactNode }) {
   return <View style={[styles.wall, styles.tiles]}>{children}</View>;

@@ -78,6 +78,9 @@ let holds = 0;
 let generation = 0;
 let latest: (Reading & { device: string }) | null = null;
 let pending: Reading[] = [];
+/** Each workout's own queue of the saved monitor's readings (64a-vi), beside the run's `pending`: a run and a workout
+ *  on at the same time each get every reading, never only the ones the other left. */
+const queues = new Set<Reading[]>();
 let changes = 0;
 const listeners = new Set<() => void>();
 
@@ -106,6 +109,7 @@ export function resetHeart(withNative: HeartNative | null = heartNative, withFil
   generation += 1;
   latest = null;
   pending = [];
+  queues.clear();
   tell();
 }
 
@@ -148,6 +152,7 @@ export function forgetMonitor(): void {
   if (person !== null) files.remove(fileFor(person));
   saved = null;
   pending = [];
+  for (const q of queues) q.length = 0;
   rewatch();
   tell();
 }
@@ -197,6 +202,10 @@ export function pullHeart(): void {
     if (trying === null && same(sample.device, saved?.id ?? null)) {
       pending.push({ at: sample.at, bpm: reading.bpm });
       if (pending.length > PENDING_MOST) pending = pending.slice(-PENDING_MOST);
+      for (const q of queues) {
+        q.push({ at: sample.at, bpm: reading.bpm });
+        if (q.length > PENDING_MOST) q.splice(0, q.length - PENDING_MOST);
+      }
     }
   }
   if (moved) tell();
@@ -208,6 +217,25 @@ export function takeHeartReadings(): Reading[] {
   const out = pending;
   pending = [];
   return out;
+}
+
+/** A queue of its own of the saved monitor's readings, for a workout (64a-vi): `take` hands over those since its last
+ *  take, as `takeHeartReadings` does for the run; a monitor being tried, another monitor, or a reading with no heart
+ *  beating behind it never reaches it. `close` stops it. A person who signs out takes theirs away (`resetHeart`,
+ *  `forgetMonitor` empty it). */
+export function heartQueue(): { take: () => Reading[]; close: () => void } {
+  const q: Reading[] = [];
+  queues.add(q);
+  return {
+    take: () => {
+      pullHeart();
+      return q.splice(0, q.length);
+    },
+    close: () => {
+      queues.delete(q);
+      q.length = 0;
+    },
+  };
 }
 
 /** The heart rate now from the watched monitor, or null: none yet, another monitor's, or older than
