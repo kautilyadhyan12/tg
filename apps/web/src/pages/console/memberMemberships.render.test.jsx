@@ -2584,6 +2584,25 @@ describe('V2b-ii: the money questions ask in the middle', () => {
     expect(within(rowOf(GOLD_ID)).getByRole('button', { name: 'Cancel membership' })).toBeTruthy();
   });
 
+  it('while Freeze is sending, Escape and pressing outside leave the box open; the refusal is then said in it', async () => {
+    const slow = later();
+    orgService.getHeldMemberships.mockResolvedValue(two());
+    orgService.changeHeldMembership.mockReturnValueOnce(slow.promise);
+    render(draw(ADA, 'Ada Lovelace'));
+    await screen.findByText('Silver Monthly');
+    fireEvent.click(within(rowOf(SILVER_ID)).getByRole('button', { name: 'Freeze' }));
+    fireEvent.click(within(screen.getByTestId('held-ask-freeze')).getByRole('button', { name: 'Freeze' }));
+    fireEvent.keyDown(document, { key: 'Escape' });
+    fireEvent.click(screen.getByTestId('box-outside'));
+    expect(screen.getByTestId('held-ask-freeze')).toBeTruthy();
+    await act(async () => {
+      slow.resolve(Promise.reject(refusal(500, { error: 'internal', message: 'Something went wrong.' })));
+      await slow.promise.catch(() => undefined);
+    });
+    expect(await within(ask()).findByRole('alert')).toBeTruthy();
+    expect(screen.getByTestId('held-ask-freeze')).toBeTruthy();
+  });
+
   it('a refusal is said inside the box, which stays open on the same membership; nothing is said behind it', async () => {
     orgService.getHeldMemberships.mockResolvedValue(two());
     orgService.changeHeldMembership.mockRejectedValueOnce(refusal(500, { error: 'internal', message: 'Something went wrong.' }));
@@ -2596,7 +2615,7 @@ describe('V2b-ii: the money questions ask in the middle', () => {
     expect(within(screen.getByTestId('held-memberships')).queryByRole('alert')).toBeNull();
   });
 
-  it('the page moving to a second person closes the first one’s box: nothing is asked or sent about the first on the second’s page', async () => {
+  it('a box never draws on a membership the page does not hold: rendered for a second person, nothing is asked or sent about the first', async () => {
     orgService.getHeldMemberships.mockImplementation((_gym, id) =>
       Promise.resolve(id === ADA ? two() : answer([held(5, GOLD, '2026-10-04', true)], false, { types: [GOLD, PACK, SILVER] })),
     );

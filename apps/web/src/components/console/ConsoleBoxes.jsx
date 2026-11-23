@@ -304,6 +304,13 @@ function MiddleShell({ label, onClose, busy, error, testId, role, children }) {
     if (title.id === '') title.id = titleId;
     box.setAttribute('aria-labelledby', title.id);
   });
+  // A question that turns into another (the bookings a cancel ends, the Terminal's wait) unmounts the button that had
+  // the keys: they go to its Keep it or Back, or the box, never to the page behind.
+  useLayoutEffect(() => {
+    const box = boxRef.current;
+    if (!ready || box === null || box.contains(document.activeElement)) return;
+    (box.querySelector('[data-autofocus]') ?? box).focus();
+  });
   return draw(
     <InMiddle.Provider value>
       <div className="c-scrim" data-testid="box-outside" onClick={cancel} />

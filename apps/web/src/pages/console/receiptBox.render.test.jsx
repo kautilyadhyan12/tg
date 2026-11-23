@@ -103,7 +103,7 @@ describe('a receipt', () => {
     svc.purchases.mockResolvedValue({ sales: [sale()], notShown: 0 });
     svc.receipt.mockResolvedValue(receipt());
     open();
-    const row = await pressReceipt();
+    await pressReceipt();
     await screen.findByTestId('receipt');
     fireEvent.click(screen.getByRole('button', { name: 'Print' }));
     expect(printHtml).toHaveBeenCalledTimes(1);
@@ -116,7 +116,7 @@ describe('a receipt', () => {
     svc.purchases.mockResolvedValue({ sales: [sale({ undone: true, voided: { reason: 'returned', on: '2026-10-12', by: 'Sam Owner' }, canUndo: false })], notShown: 0 });
     svc.receipt.mockResolvedValue(receipt({ cancelled: true }));
     open();
-    const row = await pressReceipt();
+    await pressReceipt();
     expect((await screen.findByTestId('receipt-cancelled')).textContent).toBe('Voided. This sale no longer counts.');
   });
 
@@ -125,7 +125,7 @@ describe('a receipt', () => {
     svc.receipt.mockResolvedValueOnce(receipt({ gym: { name: 'Iron House', address: null } })).mockResolvedValueOnce(receipt({ gym: { name: 'Iron House', address: '9 Mill Lane' } }));
     updateOrg.mockResolvedValue({});
     open(OWNER);
-    const row = await pressReceipt();
+    await pressReceipt();
     const ask = await screen.findByTestId('receipt-no-address');
     expect(ask.textContent).toContain("Your gym's address is not on its receipts yet.");
     fireEvent.change(within(ask).getByLabelText('Postal address'), { target: { value: '9 Mill Lane' } });
@@ -140,7 +140,7 @@ describe('a receipt', () => {
     svc.purchases.mockResolvedValue({ sales: [sale()], notShown: 0 });
     svc.receipt.mockResolvedValue(receipt({ gym: { name: 'Iron House', address: null } }));
     open(DESK);
-    const row = await pressReceipt();
+    await pressReceipt();
     const ask = await screen.findByTestId('receipt-no-address');
     expect(ask.textContent).toBe("Your gym's address is not on its receipts yet.The owner can add it in Gym details.");
     expect(within(ask).queryByRole('textbox')).toBeNull();
@@ -151,7 +151,7 @@ describe('a receipt', () => {
     let answer;
     svc.receipt.mockRejectedValueOnce(Object.assign(new Error('down'), { response: { status: 500, data: {} } })).mockReturnValueOnce(new Promise((resolve) => (answer = resolve)));
     open();
-    const row = await pressReceipt();
+    await pressReceipt();
     expect((await screen.findByRole('alert')).textContent).toBe("We couldn't open this receipt. Try again.");
     fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
     expect(screen.getByText('Opening the receipt…')).toBeTruthy();

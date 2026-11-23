@@ -251,6 +251,8 @@ export default function MemberMemberships({
   /** Where `notice` belongs when it is about one payment: { paymentId, line, sent }, said under that payment, where it was pressed.
    *  `sent`: Square's answer to a Refund to card, so the sentence follows the refund. */
   const [saidAt, setSaidAt] = useState(null);
+  /** Refund to card is on its way to Square: its box in the middle stays open until Square answers. */
+  const [cardSending, setCardSending] = useState(false);
   const [refusal, setRefusal] = useState(null);
   const [showPast, setShowPast] = useState(false);
   /** The membership whose agreement box is open (18u-i): { id, justGiven }, or null. */
@@ -1029,7 +1031,7 @@ export default function MemberMemberships({
             readQuietly.current();
             setOpen(null);
           }}
-          busy={busy}
+          busy={busy || cardSending}
           error={refusal}
           label="Refund to card"
         >
@@ -1045,6 +1047,7 @@ export default function MemberMemberships({
           onClose={() => setOpen(null)}
           onNote={() => startRefund(m, paymentId)}
           onStopped={() => readQuietly.current()}
+          onSending={setCardSending}
           onDone={(words, sent) => {
             setOpen(null);
             setSaidAt({ paymentId, line: words, sent, read: shown });

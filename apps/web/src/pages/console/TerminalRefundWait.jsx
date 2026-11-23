@@ -135,7 +135,7 @@ export default function TerminalRefundWait({ gymId, press, showName, onAnswer, o
             {cancelling ? 'Cancelling' : 'Cancel'}
           </button>
         )}
-        <button type="button" className={PLAIN} onClick={onClose}>
+        <button type="button" className={PLAIN} onClick={onClose} data-autofocus>
           Back
         </button>
       </div>

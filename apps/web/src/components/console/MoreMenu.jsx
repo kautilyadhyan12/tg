@@ -12,6 +12,7 @@ const SMALL = 'c-btn c-btn-s c-btn-sm';
 export default function MoreMenu({ items, disabled = false, label = 'More', ariaLabel, alignRight = false, compact = false }) {
   const [open, setOpen] = useState(false);
   const wrap = useRef(null);
+  const button = useRef(null);
   useEffect(() => {
     if (!open) return undefined;
     const away = (e) => {
@@ -37,6 +38,7 @@ export default function MoreMenu({ items, disabled = false, label = 'More', aria
   return (
     <div ref={wrap} className="relative">
       <button
+        ref={button}
         type="button"
         aria-haspopup="menu"
         aria-expanded={open}
@@ -62,6 +64,8 @@ export default function MoreMenu({ items, disabled = false, label = 'More', aria
               role="menuitem"
               onClick={() => {
                 setOpen(false);
+                // The keys go back to the ⋯, so a box this opens hands them back there when it closes.
+                button.current?.focus();
                 item.onPick();
               }}
               className="w-full text-left rounded-[10px] px-3 py-2.5 min-h-[44px] flex items-start gap-3"

@@ -164,12 +164,12 @@ describe('Refund to card on a fee', () => {
     expect(orgService.getCardRefund).not.toHaveBeenCalled();
   });
 
-  it('opened from Refunds to review: its box is open under the payment, and asks Square first (18d-iv-b-iii)', async () => {
+  it('opened from Refunds to review: its box is open in the middle, and asks Square first (18d-iv-b-iii)', async () => {
     orgService.getHeldMemberships.mockResolvedValue(feePage());
     orgService.getCardRefund.mockResolvedValue({ data: { card: VISA, leftMinor: 1000, refundedInSquareMinor: 0, block: null } });
     const membershipId = feePage().data.memberships[0].id;
     draw({ refundNow: { membershipId, paymentId: FEE_PAYMENT, voidFeeId: null } });
-    const row = await feePayment();
+    await feePayment();
     await screen.findByTestId('card-refund-box');
     expect(orgService.getCardRefund).toHaveBeenCalledTimes(1);
     expect(orgService.refundToCard).not.toHaveBeenCalled();
@@ -348,6 +348,28 @@ describe('Refund to card: the worst thing first', () => {
     expect(body).toEqual({ requestKey: expect.stringMatching(/^[0-9a-f-]{36}$/), amountMinor: 2000, reason: 'paid_twice' });
     const said = await within(screen.getAllByTestId('held-bill-payment')[0]).findByTestId('held-payment-said');
     expect(said.textContent).toBe('Square is processing this $20.00 refund to Visa ending 1111. It can take up to 14 business days to reach the card, depending on the bank.');
+    expect(screen.queryByTestId('card-refund-box')).toBeNull();
+  });
+
+  it('while the press is on its way to Square, Escape and pressing outside leave the box open, and Square\'s answer is said in it', async () => {
+    let refuse;
+    orgService.refundToCard.mockReturnValue(
+      new Promise((_resolve, reject) => {
+        refuse = reject;
+      }),
+    );
+    draw();
+    const box = await openBox();
+    fireEvent.change(await box.findByLabelText('Why it is being refunded'), { target: { value: 'other' } });
+    fireEvent.click(box.getByRole('button', { name: 'Refund $49.99 to Visa ending 1111' }));
+    await waitFor(() => expect(orgService.refundToCard).toHaveBeenCalledTimes(1));
+    fireEvent.keyDown(document, { key: 'Escape' });
+    fireEvent.click(screen.getByTestId('box-outside'));
+    expect(screen.getByTestId('card-refund-box')).toBeTruthy();
+    refuse(Object.assign(new Error('refused'), { response: { status: 409, data: { error: 'card_refund_refused', message: "Your Square account doesn't have enough money for this refund. No money went back." } } }));
+    await waitFor(() => expect(within(screen.getByTestId('card-refund-box')).getByRole('alert').textContent).toContain('No money went back'));
+    // Square has answered: Escape is Back again.
+    fireEvent.keyDown(document, { key: 'Escape' });
     expect(screen.queryByTestId('card-refund-box')).toBeNull();
   });
 
