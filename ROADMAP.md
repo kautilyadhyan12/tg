@@ -491,7 +491,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
      - V2b-ii. [x] **In the middle, money** · merged 2026-11-23 · PR #631
      - V2b-iii. [x] **In the middle, people, and under the button** · merged 2026-11-23 · PR #634
    - V3a. **Members: Your list**, in two (2026-11-23; board `Members`):
-     - V3a-i. [ ] **The page, quick filters, the list, the bar and Filter from the right**
+     - V3a-i. [x] **The page, quick filters, the list, the bar and Filter from the right** · merged 2026-11-23 · PR #635
      - V3a-ii. [ ] **The boxes the bar opens**: Send message, Tags, Remove, Delete permanently, where `Boxes` says
    - V3b. [ ] **Members: In the app, waiting to join, and Staff** (web folder 1): a staff member's panel, Invite staff, Staff activity (`MembersNewApp`, `MembersNewStaff*`).
    - V4a. [ ] **Sell** (web folder 1): the register, a sale, products, tax (`Sell*`, `PhoneSell`); a sale's refund boxes and its receipt in the middle, on a member's Purchases too (V2b-ii).
