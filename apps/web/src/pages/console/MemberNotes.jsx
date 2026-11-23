@@ -193,11 +193,11 @@ export default function MemberNotes({ gymId, entryId, name, readOnly, timeZone =
           <p className="c-s14 c-t2 m-0">No tags yet.</p>
         )}
         {takingOff !== null && held.has(takingOff.id) && !readOnly ? (
-          <div className="flex flex-col gap-2" data-testid="member-tag-off" ref={(el) => el?.scrollIntoView?.({ block: 'nearest' })}>
+          <div className="c-inbox flex flex-col gap-2" data-testid="member-tag-off" ref={(el) => el?.scrollIntoView?.({ block: 'nearest' })}>
             <p className="c-s14 c-w6 c-t1 m-0">
               Take the tag {takingOff.name} off {who}? It stays one of your tags.
             </p>
-            <div className="flex gap-2 flex-wrap">
+            <div className="c-inbox-a">
               <button type="button" className="c-btn c-btn-p" disabled={busy} onClick={() => void takeTagOff(takingOff.id)}>
                 Take it off
               </button>
@@ -208,7 +208,7 @@ export default function MemberNotes({ gymId, entryId, name, readOnly, timeZone =
           </div>
         ) : null}
         {readOnly ? null : adding ? (
-          <div className="flex flex-col gap-3" data-testid="member-tag-add">
+          <div className="c-inbox flex flex-col gap-3" data-testid="member-tag-add">
             {others.length > 0 ? (
               <div className="flex flex-col gap-2">
                 <span className="c-label">Pick one of your tags</span>
@@ -232,16 +232,16 @@ export default function MemberNotes({ gymId, entryId, name, readOnly, timeZone =
               <label className="c-label" htmlFor="member-tag-new">
                 {others.length > 0 ? 'Or make a new tag' : 'Make a new tag'}
               </label>
-              <div className="flex gap-2 flex-wrap">
-                <input
-                  id="member-tag-new"
-                  className="c-input flex-1 min-w-[160px]"
-                  value={newTag}
-                  maxLength={MEMBER_TAG_MAX_CHARS}
-                  onChange={(e) => setNewTag(e.target.value)}
-                  disabled={busy}
-                  placeholder="Such as VIP or Beginner"
-                />
+              <input
+                id="member-tag-new"
+                className="c-input"
+                value={newTag}
+                maxLength={MEMBER_TAG_MAX_CHARS}
+                onChange={(e) => setNewTag(e.target.value)}
+                disabled={busy}
+                placeholder="Such as VIP or Beginner"
+              />
+              <div className="c-inbox-a pt-1">
                 <button type="submit" className="c-btn c-btn-p" disabled={busy || typed === ''}>
                   Add tag
                 </button>

@@ -143,8 +143,8 @@ function openBox(entryId, extra = {}) {
   );
 }
 
-/** The box on top: Add member's or Edit's panel from the right while it is open (V2b-i), else the page. */
-const dialog = () => within(screen.queryByTestId('person-form-panel') ?? screen.getAllByRole('dialog')[0]);
+/** The box on top: Add member's or Edit's panel from the right while it is open (V2b-i), a question in the middle (V2b-iii), else the page. */
+const dialog = () => within(screen.queryByTestId('person-form-panel') ?? screen.queryByTestId('person-ask') ?? screen.getAllByRole('dialog')[0]);
 /** Words said once a panel has closed: looked for in whichever box is on top by then. */
 const onTop = (text) => waitFor(() => dialog().getByText(text));
 /** Open "More" on a person's page and pick one of its items. */

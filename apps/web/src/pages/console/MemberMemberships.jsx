@@ -875,8 +875,7 @@ export default function MemberMemberships({
       return (
         <form
           noValidate
-          className="rounded-[14px] p-3 flex flex-col gap-3"
-          style={{ background: 'var(--raise)' }}
+          className="c-inbox flex flex-col gap-3"
           data-testid="held-fee-pay"
           onSubmit={(e) => {
             e.preventDefault();
@@ -896,7 +895,7 @@ export default function MemberMemberships({
             void run('payFee', m, () => orgService.changeHeldMembership(gymId, entryId, m.id, `${path}/payments`, body), feePaidWords(fee, m.currency));
           }}
         >
-          <p className="c-s15 c-w6 c-t1 m-0">{onTerminal || onCard ? take.title : `Record ${formatMinor(fee.amountMinor, m.currency)} for the ${MEMBER_FEE_WORDS[fee.fee].toLowerCase()}`}</p>
+          <p className="c-inbox-t c-s15 c-w6 c-t1 m-0">{onTerminal || onCard ? take.title : `Record ${formatMinor(fee.amountMinor, m.currency)} for the ${MEMBER_FEE_WORDS[fee.fee].toLowerCase()}`}</p>
           {onTerminal ? <p className="c-s14 c-t2 m-0">{terminalPayDetail(name, take.about)}</p> : null}
           {onCard ? <p className="c-s14 c-t2 m-0">{cardOnFileDetail(cardOnFile, fee.amountMinor, m.currency, name)}</p> : null}
           <label className="c-field">
@@ -934,7 +933,7 @@ export default function MemberMemberships({
               {said}
             </span>
           ) : null}
-          <div className="flex flex-wrap gap-2">
+          <div className="c-inbox-a">
             <button type="submit" className={MAIN} disabled={busy}>
               {busy ? (
                 <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" />
@@ -1558,11 +1557,12 @@ export default function MemberMemberships({
     const owed = terminalPay.feeBillId === null ? (m.billing?.pay ?? null) : null;
     const canAgain = !paidMaybe && again !== undefined && ((owed !== null && owed.leftMinor >= payment.amountMinor) || feeOwed);
     return (
-      <div className="rounded-[14px] p-3 flex flex-col gap-3" style={{ background: 'var(--raise)' }} data-testid="terminal-pay-ended">
+      <div className="c-inbox flex flex-col gap-3" data-testid="terminal-pay-ended">
         <p className="c-s14 m-0" style={{ color: paidMaybe ? 'var(--t1)' : 'var(--bad)' }} role="alert">
           {terminalPayOutcomeLine(payment, name, owed?.leftMinor ?? payment.amountMinor)}
         </p>
-        <div className="flex flex-wrap gap-2">
+        <div className="c-inbox-a">
+
           {canAgain ? (
             <button
               type="button"
@@ -1625,8 +1625,7 @@ export default function MemberMemberships({
     return (
       <form
         noValidate
-        className="rounded-[14px] p-3 flex flex-col gap-3"
-        style={{ background: 'var(--raise)' }}
+        className="c-inbox flex flex-col gap-3"
         data-testid="held-pay"
         onSubmit={(e) => {
           e.preventDefault();
@@ -1646,7 +1645,7 @@ export default function MemberMemberships({
           void run('pay', m, () => orgService.changeHeldMembership(gymId, entryId, m.id, 'payments', body), paidWords(m, body.amountMinor));
         }}
       >
-        <p className="c-s15 c-w6 c-t1 m-0">{onTerminal || onCard ? words.takeTitle : words.title}</p>
+        <p className="c-inbox-t c-s15 c-w6 c-t1 m-0">{onTerminal || onCard ? words.takeTitle : words.title}</p>
         <p className="c-s14 c-t2 m-0">{onTerminal ? terminalPayDetail(name, words.left) : onCard ? words.left : words.detail}</p>
         <label className="c-field">
           <span className="c-label">{`Amount paid (${m.currency})`}</span>
@@ -1700,7 +1699,7 @@ export default function MemberMemberships({
             {said}
           </span>
         ) : null}
-        <div className="flex flex-wrap gap-2">
+        <div className="c-inbox-a">
           <button type="submit" className={MAIN} disabled={busy}>
             {busy ? (
               <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" />

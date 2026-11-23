@@ -233,7 +233,8 @@ describe('Who pays', () => {
     expect(within(ask).getByText("Aarav Sharma pays their own bills from now on, including any still unpaid. Payments already recorded keep Priya Sharma's name.")).toBeTruthy();
     orgService.removePayer.mockRejectedValueOnce({ response: { status: 409, data: { error: 'gym_not_on_plan', message: 'Your gym needs a plan to change this.' } } });
     fireEvent.click(within(ask).getByRole('button', { name: 'Remove' }));
-    expect(await within(screen.getByTestId('payer-ask')).findByRole('alert')).toBeTruthy();
+    // Said at the top of the box in the middle (V2b-iii).
+    expect(await within(screen.getByRole('alertdialog')).findByRole('alert')).toBeTruthy();
     orgService.removePayer.mockResolvedValueOnce(payers());
     fireEvent.click(within(screen.getByTestId('payer-ask')).getByRole('button', { name: 'Remove' }));
     await screen.findByText('Aarav Sharma now pays their own bills.');

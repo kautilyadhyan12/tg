@@ -282,18 +282,18 @@ const InMiddle = createContext(false);
  *  buttons): the same box, its fields and buttons unchanged, over the page. Escape and pressing
  *  outside do what its own Keep it does (`onClose`), never while it is sending. `error` is said
  *  inside it, as the page behind is covered. A box inside one already in the middle is drawn
- *  where it is, so a question that turns into another stays one box. */
-export function MiddleBox({ label, onClose, busy = false, error = null, testId, role = 'alertdialog', children }) {
+ *  where it is, so a question that turns into another stays one box. `wide`: for two records side by side (Merge duplicate). */
+export function MiddleBox({ label, onClose, busy = false, error = null, testId, role = 'alertdialog', wide = false, children }) {
   const inside = useContext(InMiddle);
   if (inside) return children;
   return (
-    <MiddleShell label={label} onClose={onClose} busy={busy} error={error} testId={testId} role={role}>
+    <MiddleShell label={label} onClose={onClose} busy={busy} error={error} testId={testId} role={role} wide={wide}>
       {children}
     </MiddleShell>
   );
 }
 
-function MiddleShell({ label, onClose, busy, error, testId, role, children }) {
+function MiddleShell({ label, onClose, busy, error, testId, role, wide, children }) {
   const boxRef = useRef(null);
   const cancel = () => {
     if (!busy) onClose();
@@ -334,7 +334,7 @@ function MiddleShell({ label, onClose, busy, error, testId, role, children }) {
   return draw(
     <InMiddle.Provider value>
       <div className="c-scrim" data-testid="box-outside" onClick={cancel} />
-      <div ref={boxRef} role={role} aria-modal="true" aria-label={label} tabIndex={-1} className="c-ask" data-testid={testId}>
+      <div ref={boxRef} role={role} aria-modal="true" aria-label={label} tabIndex={-1} className={wide ? "c-ask c-ask-wide" : "c-ask"} data-testid={testId}>
         <span className="c-grab" aria-hidden="true" />
         {error !== null ? (
           <p role="alert" className="c-err m-0">
