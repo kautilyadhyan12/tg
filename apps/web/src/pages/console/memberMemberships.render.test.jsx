@@ -569,6 +569,23 @@ describe('adding a membership', () => {
     expect(screen.queryByTestId('held-add')).toBeNull();
   });
 
+  it('opened by itself, a membership picked in place of the one it opened with is asked about before the panel closes', async () => {
+    const cancelled = held(2, PACK, '2026-06-01', true, [[{ type: 'cancel', when: 'today' }, '2026-07-01']]);
+    orgService.getHeldMemberships.mockResolvedValue(answer([cancelled]));
+    render(draw(ADA, 'Ada Lovelace', { addNow: true }));
+    const form = within(await screen.findByTestId('held-add'));
+    expect(form.getByRole('combobox').value).toBe(PACK.id);
+    fireEvent.change(form.getByRole('combobox'), { target: { value: GOLD.id } });
+    fireEvent.click(form.getByRole('button', { name: 'Cancel' }));
+    expect(form.getByText("Your changes aren't saved. Close and lose them?")).toBeTruthy();
+    fireEvent.click(form.getByRole('button', { name: 'Keep editing' }));
+    expect(form.getByRole('combobox').value).toBe(GOLD.id);
+    fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' });
+    fireEvent.click(await form.findByRole('button', { name: 'Close without saving' }));
+    expect(screen.queryByTestId('held-add')).toBeNull();
+    expect(orgService.giveHeldMembership).not.toHaveBeenCalled();
+  });
+
   it('with a discount: offers the ones for the type picked, shows what it comes to, sends the price and what comes off, and the membership says what it was sold with', async () => {
     const base = { kind: 'percent', percentBp: 2000, amountMinor: null, currency: null, startsOn: null, endsOn: null, maxUses: null, uses: 0, archivedAt: null, updatedAt: '2026-10-12T10:00:00.000Z' };
     const reach = { forProducts: false, allProducts: true, productIds: [], forMemberships: true, allMembershipTypes: true, membershipTypeIds: [] };
@@ -1132,7 +1149,7 @@ describe('Add member, then their membership on their page', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Add member' }));
     await waitFor(() => expect(orgService.addMemberListEntry).toHaveBeenCalledTimes(1));
     expect(orgService.addMemberListEntry).toHaveBeenCalledWith(GYM, { fullName: 'Bea Hart', email: 'bea@members.example' });
-    expect(await screen.findByText('Member added. Add their membership below.')).toBeTruthy();
+    expect(await screen.findByText('Member added. Add their membership now.')).toBeTruthy();
     const form = within(await screen.findByTestId('held-add'));
     expect(form.getByText('Add a membership for Bea Hart')).toBeTruthy();
     expect(orgService.getHeldMemberships).toHaveBeenCalledWith(GYM, BEA);
@@ -1206,7 +1223,7 @@ describe('Add member, then their membership on their page', () => {
       expect(await screen.findByRole('heading', { name: 'Bea Hart' })).toBeTruthy();
       await waitFor(() => expect(orgService.getHeldMemberships).toHaveBeenCalledWith(GYM, BEA));
       expect(screen.queryByTestId('held-add'), outcome).toBeNull();
-      expect(screen.queryByText(/Add their membership below/), outcome).toBeNull();
+      expect(screen.queryByText(/Add their membership now/), outcome).toBeNull();
       expect(orgService.giveHeldMembership, outcome).not.toHaveBeenCalled();
       view.unmount();
     }

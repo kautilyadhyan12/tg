@@ -642,6 +642,14 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
       let backed = false;
       const onBack = () => {
         if (window.history.state?.personPage === mark) return;
+        // Something typed in Add member or Edit is not lost to Back: the step is put back and
+        // the panel asks, as its X does.
+        const panel = panelClose.current;
+        if (panel !== null && panel.unsaved) {
+          window.history.pushState({ ...(window.history.state ?? {}), personPage: mark, personScroll: leftAt }, '');
+          panel.close();
+          return;
+        }
         backed = true;
         closeNow.current();
       };
@@ -881,7 +889,7 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
       // At a gym that sells, the membership is given on their page, its form open already (Kd, 2026-11-04).
       if (res.data.outcome === 'added' && sells) {
         setAddNowFor(res.data.entry.entryId);
-        setNotice((said) => `${said} Add their membership below.`);
+        setNotice((said) => `${said} Add their membership now.`);
       }
       // The number shown was given to somebody else a moment before (5e-i): said where the
       // person added is, so a desk that wrote it down knows.
@@ -1967,7 +1975,16 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
               <p className="c-s14 c-t1 m-0">{refusal.message}</p>
               <div className="flex flex-wrap gap-2">
                 {refusal.openId !== null ? (
-                  <button type="button" onClick={() => openRecord(refusal.openId)} className={PLAIN}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const next = refusal.openId;
+                      // A typed change is asked about first, as at every other way out of the panel.
+                      if (panelClose.current === null) openRecord(next);
+                      else panelClose.current.leave(() => openRecord(next));
+                    }}
+                    className={PLAIN}
+                  >
                     Open that record
                   </button>
                 ) : null}

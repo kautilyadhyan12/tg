@@ -441,7 +441,10 @@ export default function MemberMemberships({
       .slice(0, 1)
       .find((m) => shown.types.some((t) => t.id === m.typeId));
     const form = addForm(shown.types, shown.today, giftId(shown));
-    setForm(had === undefined || form.typeId !== '' ? form : { ...form, typeId: had.typeId });
+    const picked = had === undefined || form.typeId !== '' ? form : { ...form, typeId: had.typeId };
+    // What it opened with, so a change to it is asked about before the panel closes.
+    setStartedAs(JSON.stringify(picked));
+    setForm(picked);
     setOpen({ what: 'add' });
   }, [addsNow, shown]);
   // Opened by Take payment on Failed payments: that bill's Record payment, as its own button
@@ -811,6 +814,7 @@ export default function MemberMemberships({
     setVoidForm(null);
     setFeeForm(null);
     setChangeDraft(null);
+    setStartedAs(null);
   };
 
   /** A fee's own box, opened by its button: pay it, waive it, or void its payment. */

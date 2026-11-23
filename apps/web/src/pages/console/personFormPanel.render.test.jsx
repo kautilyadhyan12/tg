@@ -4,11 +4,14 @@
 // whose name it shows, or closing it throws away typed details without asking. So the first
 // tests: the panel names the person whose page it opened from and Save sends their record and
 // no other, also after the page has moved to a second person; and every way out (the X, Cancel,
-// Escape) asks first while something typed is not saved, keeps it on "Keep editing", and
-// sends nothing on "Close without saving".
+// Escape, the browser's Back, Open that record) asks first while something typed is not saved,
+// keeps it on "Keep editing", and sends nothing on "Close without saving".
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, waitFor, cleanup, fireEvent, within } from '@testing-library/react';
+import { act, render, screen, waitFor, cleanup, fireEvent, within } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
+import { useState } from 'react';
 import { memberListEntryDetailSchema, memberListViewSchema } from '@app/shared';
+import { PageOverContext, usePageOverShell } from '../../components/console/pageOver';
 
 vi.mock('./MemberMemberships', () => ({ default: () => null }));
 vi.mock('./MemberNotes', () => ({ default: () => null }));
@@ -130,7 +133,14 @@ describe('the worst thing: the panel saves somebody else, or loses what was type
     fireEvent.click(panel().getByRole('button', { name: 'Save' }));
     // The refusal is said inside the panel, where the form is, never behind it.
     fireEvent.click(await panel().findByRole('button', { name: 'Open that record' }));
+    // The change typed is asked about first, as at every way out; Keep editing keeps it, on Ada.
+    fireEvent.click(panel().getByRole('button', { name: 'Keep editing' }));
+    expect(panel().getByLabelText('Email').value).toBe('bea@members.example');
+    expect(page().getByRole('heading', { name: 'Ada Lovelace' })).toBeTruthy();
+    fireEvent.click(panel().getByRole('button', { name: 'Open that record' }));
+    fireEvent.click(panel().getByRole('button', { name: 'Close without saving' }));
     expect(await page().findByRole('heading', { name: 'Bea Hart' })).toBeTruthy();
+    expect(orgService.changeMemberListEntry).toHaveBeenCalledTimes(1);
     expect(screen.queryByTestId('person-form-panel')).toBeNull();
 
     fireEvent.click(page().getByRole('button', { name: 'Edit' }));
@@ -227,6 +237,64 @@ describe('Add member from the right', () => {
     fireEvent.click(panel().getByRole('button', { name: 'Keep editing' }));
     expect(panel().getByLabelText('Name').value).toBe('Cy Young');
     fireEvent.click(panel().getByRole('button', { name: 'Cancel' }));
+    fireEvent.click(panel().getByRole('button', { name: 'Close without saving' }));
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(orgService.addMemberListEntry).not.toHaveBeenCalled();
+  });
+});
+
+describe("the browser's Back, in the console", () => {
+  function Shell({ entryId }) {
+    const { setSlot, pageOver } = usePageOverShell('Members & staff');
+    const [showing, setShowing] = useState(true);
+    return (
+      <PageOverContext.Provider value={pageOver}>
+        <div ref={setSlot} data-testid="slot" />
+        {showing && pageOver.slot !== null ? (
+          <MemberListPerson gymId={GYM} entryId={entryId} list={LIST} words={WORDS} readOnly={false} canRemove onClose={() => { onClose(); setShowing(false); }} onChanged={vi.fn()} />
+        ) : null}
+      </PageOverContext.Provider>
+    );
+  }
+  const drawShell = (entryId) => render(<MemoryRouter><Shell entryId={entryId} /></MemoryRouter>);
+  const back = () =>
+    act(() => {
+      window.history.replaceState({ idx: 0 }, '');
+      window.dispatchEvent(new PopStateEvent('popstate'));
+    });
+
+  beforeEach(() => {
+    window.history.replaceState({ idx: 0 }, '');
+  });
+
+  it('Back with a change typed in Edit asks first, keeps it on Keep editing, and the page stays open', async () => {
+    drawShell(ADA);
+    fireEvent.click(await page().findByRole('button', { name: 'Edit' }));
+    fireEvent.change(panel().getByLabelText('Phone'), { target: { value: '+447700900555' } });
+    back();
+    expect(onClose).not.toHaveBeenCalled();
+    expect(panel().getByText("Your changes aren't saved. Close and lose them?")).toBeTruthy();
+    // Its step of the history is put back, so a second Back still belongs to this page.
+    expect(typeof window.history.state?.personPage).toBe('string');
+    fireEvent.click(panel().getByRole('button', { name: 'Keep editing' }));
+    expect(panel().getByLabelText('Phone').value).toBe('+447700900555');
+    back();
+    fireEvent.click(panel().getByRole('button', { name: 'Close without saving' }));
+    expect(screen.queryByTestId('person-form-panel')).toBeNull();
+    expect(page().getByRole('heading', { name: 'Ada Lovelace' })).toBeTruthy();
+    expect(orgService.changeMemberListEntry).not.toHaveBeenCalled();
+    // Nothing typed any more: Back closes their page, as it always did.
+    back();
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('Back with a name typed in Add member asks first; Close without saving leaves it, adding nobody', async () => {
+    drawShell(null);
+    await screen.findByRole('dialog', { name: 'Add member' });
+    fireEvent.change(panel().getByLabelText('Name'), { target: { value: 'Cy Young' } });
+    back();
+    expect(onClose).not.toHaveBeenCalled();
+    expect(panel().getByLabelText('Name').value).toBe('Cy Young');
     fireEvent.click(panel().getByRole('button', { name: 'Close without saving' }));
     expect(onClose).toHaveBeenCalledTimes(1);
     expect(orgService.addMemberListEntry).not.toHaveBeenCalled();

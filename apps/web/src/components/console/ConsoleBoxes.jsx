@@ -168,7 +168,9 @@ export function OpenUnder({ anchorRef, label, onClose, children }) {
  *  page behind it does nothing. `formId` makes Save submit that form; otherwise `onSave`.
  *  `saveLabel` null draws no Save (a question in the panel has its own buttons);
  *  `cancelLabel` draws a button at the foot that closes it as the X does, asking first.
- *  `closeRef.current.close()` is that same close, for a button in the form that leaves it. */
+ *  `closeRef.current.close()` is that same close, for a button in the form that leaves it;
+ *  `leave(then)` asks the same, and goes to `then` in place of `onClose`; `unsaved` is read
+ *  by the page's own ways out (the browser's Back). */
 export function SidePanel({
   title,
   sub = null,
@@ -188,15 +190,24 @@ export function SidePanel({
   const boxRef = useRef(null);
   const titleId = useId();
   const [asking, setAsking] = useState(false);
+  // Where "Close without saving" goes: the panel's own close, or the place `leave` was given.
+  const leaveTo = useRef(null);
   const { ready, draw } = useLookHost();
   const tryClose = () => {
     if (busy) return;
+    leaveTo.current = null;
     if (unsaved) setAsking(true);
     else onClose();
   };
+  const tryLeave = (then) => {
+    if (busy) return;
+    leaveTo.current = then;
+    if (unsaved) setAsking(true);
+    else then();
+  };
   useBoxKeys(boxRef, tryClose, ready);
   useStillPage();
-  useImperativeHandle(closeRef, () => ({ close: tryClose }));
+  useImperativeHandle(closeRef, () => ({ close: tryClose, leave: tryLeave, unsaved }));
 
   return draw(
     <>
@@ -221,7 +232,7 @@ export function SidePanel({
                 question="Your changes aren't saved. Close and lose them?"
                 confirmLabel="Close without saving"
                 cancelLabel="Keep editing"
-                onConfirm={onClose}
+                onConfirm={() => (leaveTo.current ?? onClose)()}
                 onCancel={() => setAsking(false)}
               />
             </div>
