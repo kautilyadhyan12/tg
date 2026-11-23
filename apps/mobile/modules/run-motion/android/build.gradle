@@ -1,0 +1,17 @@
+// The phone's motion during a run (ROADMAP Stage 5 item 37i): this app's own Android code, linked by Expo from
+// apps/mobile/modules as any Expo package is.
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'expo.modules.runmotion'
+version = '1.0.0'
+
+android {
+  namespace "expo.modules.runmotion"
+  defaultConfig {
+    versionCode 1
+    versionName "1.0.0"
+  }
+}
