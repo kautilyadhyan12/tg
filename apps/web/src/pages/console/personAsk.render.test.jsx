@@ -28,6 +28,7 @@ vi.mock('../../api/orgsApi', async (importOriginal) => {
       deleteFormerMemberListEntry: vi.fn(),
       mergeMemberListEntries: vi.fn(),
       inviteMemberListEntry: vi.fn(),
+      notThem: vi.fn(),
       getDeskWaiver: vi.fn(),
     },
   };
@@ -114,6 +115,7 @@ describe('the worst thing: the box in the middle acts on somebody else', () => {
     await pickMore('Remove');
     const ask = screen.getByRole('alertdialog', { name: 'Remove Ada Lovelace?' });
     expect(ask.getAttribute('aria-modal')).toBe('true');
+    expect(screen.getByTestId('person-ask').className).not.toContain('c-ask-wide');
     // Their page stays behind the box, with their name and their details on it.
     expect(page().getByRole('heading', { name: 'Ada Lovelace' })).toBeTruthy();
     expect(within(ask).queryByText(/Bea/)).toBeNull();
@@ -133,6 +135,8 @@ describe('the worst thing: the box in the middle acts on somebody else', () => {
     openPage(ADA);
     await pickMore('Merge duplicate');
     expect(screen.getByRole('alertdialog', { name: 'Merge duplicate' })).toBeTruthy();
+    // Wide, for the two records side by side.
+    expect(screen.getByTestId('person-ask').className).toContain('c-ask-wide');
     expect(page().getByRole('heading', { name: 'Ada Lovelace' })).toBeTruthy();
     fireEvent.change(box().getByLabelText('Find the other record'), { target: { value: 'bea' } });
     fireEvent.click(await box().findByRole('button', { name: /bea@members\.example/ }));
@@ -176,6 +180,34 @@ describe('the worst thing: the box in the middle acts on somebody else', () => {
     expect(screen.getByRole('alertdialog', { name: 'Delete Ada Lovelace permanently?' })).toBeTruthy();
     expect(page().queryByRole('alert')).toBeNull();
     expect(orgService.deleteFormerMemberListEntry).toHaveBeenCalledWith(GYM, ADA);
+  });
+
+  it('Share the invitation opens in the middle with their own address, and Back closes it', async () => {
+    const invited = { state: 'pending', invitedAt: '2026-09-28T10:00:00.000Z', email: null, sentAgain: 0, waitingSince: null, notMeAt: null };
+    orgService.getMemberListEntry.mockResolvedValue(entryAnswer({ ...ada, invitation: invited, app: { word: 'invited', tone: 'grey', at: '2026-09-28T10:00:00.000Z', line: null, lineTone: 'plain' } }));
+    render(<MemberListPerson gymId={GYM} gym={{ id: GYM, name: 'Northside', slug: 'northside', privileges: [] }} entryId={ADA} list={LIST} words={WORDS} readOnly={false} canRemove onClose={vi.fn()} onChanged={vi.fn()} />);
+    await pickMore('Share the invitation');
+    const ask = screen.getByRole('alertdialog', { name: 'Share the invitation' });
+    expect(within(ask).getAllByText(/ada@members\.example/).length).toBeGreaterThan(0);
+    fireEvent.click(within(ask).getByRole('button', { name: 'Back' }));
+    expect(screen.queryByTestId('person-ask')).toBeNull();
+  });
+
+  it("Remove app access asks in the middle, naming who uses the app as them, and takes out only that account", async () => {
+    const DAN = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+    const daniel = { ...ada, inApp: true, removeEndsApp: true, app: { word: 'in_app', tone: 'green', at: null, line: null, lineTone: 'plain' }, members: [{ userId: DAN, displayName: 'du', joinedAt: '2026-09-07T10:00:00.000Z', visits: 0, lastVisitOn: null }] };
+    orgService.getMemberListEntry.mockResolvedValue(entryAnswer(daniel));
+    orgService.notThem.mockResolvedValue(written('not_them', { ...daniel, members: [] }));
+    openPage(ADA);
+    fireEvent.click(within(await screen.findByTestId('in-app-person')).getByRole('button', { name: 'Not Ada Lovelace?' }));
+    const ask = screen.getByRole('alertdialog', { name: "Remove du's app access?" });
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.queryByTestId('person-ask')).toBeNull();
+    expect(orgService.notThem).not.toHaveBeenCalled();
+    expect(ask.isConnected).toBe(false);
+    fireEvent.click(within(screen.getByTestId('in-app-person')).getByRole('button', { name: 'Not Ada Lovelace?' }));
+    fireEvent.click(within(screen.getByRole('alertdialog', { name: "Remove du's app access?" })).getByRole('button', { name: 'Remove access' }));
+    await waitFor(() => expect(orgService.notThem).toHaveBeenCalledWith(GYM, ADA, DAN));
   });
 
   it('Invite to app asks in the middle and invites only them', async () => {

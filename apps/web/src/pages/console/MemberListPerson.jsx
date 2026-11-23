@@ -1936,7 +1936,7 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
             placeholder="Name, email or phone"
             value={joinQuery}
             onChange={(e) => setJoinQuery(e.target.value)}
-            className="c-input" style={{ paddingLeft: 36 }}
+            className="c-input c-input-icon"
           />
         </label>
         {found?.error ? (
@@ -1968,7 +1968,7 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
           </ul>
         ) : null}
         <div className="c-inbox-a">
-          <button type="button" onClick={() => setMode('view')} className={PLAIN} data-autofocus>
+          <button type="button" onClick={() => backTo('view')} className={PLAIN} data-autofocus>
             Back
           </button>
         </div>
@@ -2090,7 +2090,6 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
       </p>
     ) : null;
   // A question (Invite, Remove, Delete permanently) or Merge duplicate opens in the middle, over their page (V2b-iii).
-
   const askBox = asking ? (
     <MiddleBox onClose={() => backTo('view')} busy={busy} wide={mode === 'join'} testId="person-ask" label={mode === 'join' ? 'Merge duplicate' : undefined}>
       {noticeLine}

@@ -210,6 +210,14 @@ describe("the second look's building blocks (V1-b)", () => {
     expect(declarations('.c-panel', COMPUTER).width).toBe('min(600px, 100%)');
   });
 
+  it("a member's page (V2b-iii): Merge duplicate's box is wider on a computer; a box under its button has full-width 44 px buttons on a phone, stopping above the menu at the foot", () => {
+    expect(declarations('.c-ask-wide', COMPUTER).width).toBe('min(760px, calc(100vw - 32px))');
+    expect(declarations('.c-person .c-inbox-a .c-btn', PHONE)).toMatchObject({ width: '100%', 'min-height': '44px' });
+    expect(declarations('.c-person .c-inbox-a', PHONE)['flex-direction']).toBe('column');
+    expect(declarations('.c-person .c-inbox .c-btn', PHONE)['scroll-margin-bottom']).toBe('80px');
+    expect(declarations('.c-input.c-input-icon')['padding-left']).toBe('36px');
+  });
+
   it("the panel's Save stays at its foot, above a phone's home bar", () => {
     expect(declarations('.c-panel-f')).toMatchObject({ position: 'sticky', bottom: '0' });
     expect(declarations('.c-panel-f')['padding-bottom']).toMatch(/safe-area-inset-bottom/);

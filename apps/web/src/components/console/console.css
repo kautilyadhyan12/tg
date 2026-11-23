@@ -1708,8 +1708,8 @@
   .c-person .c-inbox input,
   .c-person .c-inbox select { scroll-margin-bottom: 80px; }
 }
-
-
+/* A search field with its magnifier inside, at its left (Merge duplicate's search). */
+.c-input.c-input-icon { padding-left: 36px; }
 
 /* 4. A page of its own: a big setup in numbered parts, and a summary that fills in beside
    them on a wide screen, under them otherwise. */

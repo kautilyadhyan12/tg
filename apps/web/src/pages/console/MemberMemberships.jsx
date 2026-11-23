@@ -1562,7 +1562,6 @@ export default function MemberMemberships({
           {terminalPayOutcomeLine(payment, name, owed?.leftMinor ?? payment.amountMinor)}
         </p>
         <div className="c-inbox-a">
-
           {canAgain ? (
             <button
               type="button"

@@ -101,7 +101,6 @@ function FindPerson({ gymId, label, notId, disabled, onPick }) {
   );
 }
 
-/** A question box under the button that opened it: the change, who it changes, and Back. */
 /** Who pays for whom changes: asked in the middle, naming both (V2b-iii; spec Part 3 §17.11). A refusal is said at its top. */
 function AskBox({ words, busy, refusal, onYes, onBack, danger = false }) {
   return (
@@ -158,8 +157,7 @@ function PayForm({ gymId, country, item, person, payerName, today, onDone, onBac
         if (!busy) void send();
       }}
     >
-      <p className="c-inbox-t c-s15 c-w6 c-t1 m-0">{words === null ? `Record
- ${item.amount} for ${person.name}'s ${item.title.split(' · ')[0].toLowerCase()}` : words.title}</p>
+      <p className="c-inbox-t c-s15 c-w6 c-t1 m-0">{words === null ? `Record ${item.amount} for ${person.name}'s ${item.title.split(' · ')[0].toLowerCase()}` : words.title}</p>
       <p className="c-s14 c-t2 m-0">{`${words === null ? '' : `${words.detail} `}The receipt says ${payerName} paid.`}</p>
       {item.kind === 'bill' ? (
         <label className="c-field">

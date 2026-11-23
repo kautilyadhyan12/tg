@@ -242,6 +242,20 @@ describe('Who pays', () => {
     expect(screen.getByRole('button', { name: 'Change payer' })).toBeTruthy();
   });
 
+  it.each([
+    ['Escape', () => fireEvent.keyDown(document, { key: 'Escape' })],
+    ['pressing outside', () => fireEvent.click(screen.getByTestId('box-outside'))],
+  ])("Remove payer in the middle: %s changes nobody's payer", async (_way, leave) => {
+    orgService.getPayers.mockResolvedValue(payers({ paidBy: person(PRIYA, 'Priya Sharma') }));
+    render(draw(AARAV, 'Aarav Sharma'));
+    fireEvent.click(await screen.findByRole('button', { name: 'Remove' }));
+    expect(screen.getByRole('alertdialog', { name: 'Stop Priya Sharma paying for Aarav Sharma?' })).toBeTruthy();
+    leave();
+    expect(screen.queryByTestId('payer-ask')).toBeNull();
+    expect(orgService.removePayer).not.toHaveBeenCalled();
+    expect(orgService.setPayer).not.toHaveBeenCalled();
+  });
+
   it('staff who may not record payments read who pays, are told who can change it, and see no bills', async () => {
     orgService.getPayers.mockResolvedValue(payers({ paysFor: [person(AARAV, 'Aarav Sharma')], canChange: false }));
     render(draw(PRIYA, 'Priya Sharma', { ...IRON, privileges: ['members.confirm'] }));
