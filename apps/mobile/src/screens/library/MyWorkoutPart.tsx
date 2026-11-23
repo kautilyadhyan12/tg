@@ -19,7 +19,7 @@ import type { Units } from "../../library/records";
 import type { LibraryFile } from "../../library/store";
 import { estimate, planLine, planOf, summaryLine } from "../../library/workoutSetup";
 import { clock } from "../workout/words";
-import { useWorkoutLayer } from "../workout/WorkoutLayer";
+import { useWorkoutLayer, WorkoutClock } from "../workout/WorkoutLayer";
 import { ProgressPage } from "../progress/ProgressPage";
 import { savedState, toPlanned } from "../../library/savedWorkouts";
 import { ExercisePage } from "./ExercisePage";
@@ -212,9 +212,13 @@ export function MyWorkoutPart({ parts, units, onBrowse, file }: { parts: ReactNo
             ) : (
               <>
                 <Button label="Open workout" wide raised onPress={() => layer?.open()} />
-                <Txt kind="small" style={styles.centre}>
-                  {`${going.paused ? "Paused" : "In progress"} · ${clock(going.activeMs)}`}
-                </Txt>
+                <WorkoutClock run={going}>
+                  {(ms) => (
+                    <Txt kind="small" style={styles.centre}>
+                      {`${going.paused ? "Paused" : "In progress"} · ${clock(ms)}`}
+                    </Txt>
+                  )}
+                </WorkoutClock>
               </>
             )}
           </View>

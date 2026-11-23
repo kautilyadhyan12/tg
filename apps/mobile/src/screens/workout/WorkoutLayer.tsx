@@ -39,7 +39,10 @@ const TICK_MS = 250;
 export const WORKOUT_BAR_ROOM = 92;
 
 export interface WorkoutLayerValue {
-  /** The workout being done, its clocks moved on to now; null for none. */
+  /** The workout being done, as it was when something last happened (a press, a set, a pause): its place, never
+   *  its clocks moved on, so the pages that read it are not drawn again four times a second while it runs (the
+   *  64a-vi walk: the Dashboard, My Workout and the calendar were, and the app fell seconds behind the presses). A page
+   *  showing its time draws `WorkoutClock`. Null for none. */
   run: WorkoutRun | null;
   finished: Finished | null;
   waiting: WaitingView<WorkoutSave, RefusedWorkout>;
@@ -276,9 +279,13 @@ export function WorkoutLayerProvider({ children, files = PHONE_FILES, onNewWorko
   }, [up]);
 
   const run = useMemo(() => (kept === null ? null : shownAt(kept, Math.max(now, kept.seenAt))), [kept, now]);
+  // The pages' copy: the same workout, kept until its place changes.
+  const place = placeKey(kept);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const placed = useMemo(() => kept, [place]);
   const value = useMemo<WorkoutLayerValue>(
     () => ({
-      run,
+      run: placed,
       finished,
       waiting,
       start: (name, exercises, startedFrom = "none") => {
@@ -296,7 +303,7 @@ export function WorkoutLayerProvider({ children, files = PHONE_FILES, onNewWorko
       },
       saved: made === null ? null : { view: savedView, store: made.saved },
     }),
-    [run, finished, waiting, store, made, savedView],
+    [placed, finished, waiting, store, made, savedView],
   );
 
   const press = useCallback(
@@ -362,6 +369,29 @@ export function WorkoutLayerProvider({ children, files = PHONE_FILES, onNewWorko
       </Modal>
     </Context.Provider>
   );
+}
+
+/** What the pages' copy of a workout changes with: everything but its clocks. */
+export function placeKey(r: WorkoutRun | null): string | null {
+  if (r === null) return null;
+  return [r.workoutId, r.name, r.phase, r.ex, r.set, r.paused, r.count, r.done.length, r.startedFrom ?? ""].join("/");
+}
+
+/** A workout's time trained, moving on by itself each second while it runs: for a page that shows it (My Workout's
+ *  "In progress"), drawn alone so the page around it is not. It moves as the workout's screen does. */
+export function WorkoutClock({ run, children }: { run: WorkoutRun; children: (ms: number) => ReactNode }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (run.paused) return undefined;
+    // As often as the workout's own screen and bar, so two places never show two times.
+    const timer = setInterval(() => {
+      setNow(Date.now());
+    }, TICK_MS);
+    return () => {
+      clearInterval(timer);
+    };
+  }, [run]);
+  return <>{children(shownAt(run, Math.max(now, run.seenAt)).activeMs)}</>;
 }
 
 /** The workout that is on, seen from every tab once its own screen is put away: what it is doing, its time, and a tap

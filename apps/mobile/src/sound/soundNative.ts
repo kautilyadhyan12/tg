@@ -36,12 +36,11 @@ function phonePlayer(): SoundNative | null {
       queue = queue
         .then(() => ready)
         .then(async (audio) => {
-          let player = players.get(name);
-          if (player === undefined) {
-            player = audio.createAudioPlayer(FILES[name]);
-            players.set(name, player);
-          }
-          await player.seekTo(0);
+          const made = players.get(name);
+          // A new player is at its start already; one played before goes back to it.
+          if (made !== undefined) await made.seekTo(0);
+          const player = made ?? audio.createAudioPlayer(FILES[name]);
+          players.set(name, player);
           player.play();
         })
         .catch(() => undefined);

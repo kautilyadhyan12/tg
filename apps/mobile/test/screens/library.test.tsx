@@ -1705,6 +1705,31 @@ describe("heart rate and sounds in a workout (64a-vi)", () => {
     expect(server.saves[0]?.heart).toEqual(heart);
   });
 
+  // Found on the 64a-vi walk: every page reading the workout layer (the Dashboard, My Workout, the calendar) was drawn again
+  // four times a second while a workout ran, and on the phone the app fell seconds behind the presses.
+  it("while a workout runs, My Workout is not drawn again on each tick, and its In progress time still moves", async () => {
+    const setupRules = jest.requireActual<typeof import("../../src/library/workoutSetup")>("../../src/library/workoutSetup");
+    // The workout's own clock moves only while the app is on screen.
+    const was = Object.getOwnPropertyDescriptor(AppState, "currentState");
+    Object.defineProperty(AppState, "currentState", { value: "active", configurable: true, writable: true });
+    try {
+      await openLibrary(saving().ask);
+      await openMine();
+      await fireEvent.press(await screen.findByRole("button", { name: "Start workout" }));
+      await fireEvent.press(await screen.findByRole("button", { name: "Put workout away" }));
+      const first = await screen.findByText(/^In progress · 00:0\d$/);
+      const shown = String(first.props.children);
+      const drawn = jest.spyOn(setupRules, "estimate");
+      await settle(2100);
+      expect(screen.getByText(/^In progress · 00:0\d$/).props.children).not.toBe(shown);
+      // Eight ticks went by; the page itself was drawn at most once or twice (a press, a write), never for each.
+      expect(drawn.mock.calls.length).toBeLessThan(4);
+      drawn.mockRestore();
+    } finally {
+      if (was !== undefined) Object.defineProperty(AppState, "currentState", was);
+    }
+  });
+
   it("My Workout's Heart rate monitor line opens the monitor box", async () => {
     await openLibrary(saving().ask);
     await openMine();
