@@ -15,6 +15,19 @@ const SHORT = 150;
 /** The look before setup in the notifications test, ms: long enough that a slow machine never reaches its end before
  *  the test has looked. */
 const LOOK_FOR_NOTIFICATIONS = 4000;
+
+/** The app behind another app until `turn("active")`: the look counts only in front, so a test that times the look starts
+ *  it once the Dashboard is drawn, never racing a slow machine's draw (GitHub, 2026-11-22 and 23). Put back after. */
+async function behindUntilTurned<T>(test: () => Promise<T>): Promise<T> {
+  const before = Object.getOwnPropertyDescriptor(AppState, "currentState");
+  Object.defineProperty(AppState, "currentState", { value: "background", configurable: true, writable: true });
+  try {
+    return await test();
+  } finally {
+    if (before === undefined) Reflect.deleteProperty(AppState, "currentState");
+    else Object.defineProperty(AppState, "currentState", before);
+  }
+}
 const notSetUp = (): Reply => ({ status: 200, body: profile(true, RAVI, false) });
 const setUp = (): Reply => ({ status: 200, body: profile(true, RAVI, true) });
 
@@ -235,16 +248,19 @@ describe("the look", () => {
 
   it("keeps what is left of it while the app is behind: back in front, only the rest is waited", async () => {
     const turn = heldAppState();
-    await signIn(notSetUp, 1200);
-    await screen.findByRole("tab", { name: "Dashboard" });
-    await looking(300);
-    await turn("background");
-    await looking(1500);
-    expect(screen.queryByRole("header", { name: "Your goal" })).toBeNull();
-    await turn("active");
-    // About 900 left of 1200: up after 1000, which a look started again from the beginning would not be.
-    await looking(1000);
-    expect(screen.queryByRole("header", { name: "Your goal" })).not.toBeNull();
+    await behindUntilTurned(async () => {
+      await signIn(notSetUp, 1200);
+      await screen.findByRole("tab", { name: "Dashboard" });
+      await turn("active");
+      await looking(300);
+      await turn("background");
+      await looking(1500);
+      expect(screen.queryByRole("header", { name: "Your goal" })).toBeNull();
+      await turn("active");
+      // About 900 left of 1200: up after 1000, which a look started again from the beginning would not be.
+      await looking(1000);
+      expect(screen.queryByRole("header", { name: "Your goal" })).not.toBeNull();
+    });
   });
 
   it("is never given to somebody set up: no setup, and Build my own goes ahead", async () => {
@@ -268,20 +284,23 @@ describe("the look", () => {
   it("the notifications box waits for setup: not over the look, nor over setup, and asked once it is finished", async () => {
     notifications.permission = ASK_NOTIFICATIONS;
     const turn = heldAppState();
-    // The look lasts 4 s: at 1.5 s a slow machine took so long to draw the Dashboard that setup was already up
-    // when the check below ran (GitHub, 2026-11-22 and 23).
-    const { route } = await signIn(notSetUp, LOOK_FOR_NOTIFICATIONS);
-    await screen.findByRole("tab", { name: "Dashboard" });
-    // Time for the phone's answer on notifications to be read, which would open the box.
-    await looking(600);
-    expect(screen.queryByRole("header", { name: "Your goal" })).toBeNull();
-    expect(screen.queryByText("Turn on notifications?")).toBeNull();
-    expect(await screen.findByRole("header", { name: "Your goal" }, { timeout: 2 * LOOK_FOR_NOTIFICATIONS })).toBeTruthy();
-    await setupIsUp();
-    expect(screen.queryByText("Turn on notifications?")).toBeNull();
-    route.me = setUp;
-    await turn("active");
-    expect(await screen.findByText("Turn on notifications?")).toBeTruthy();
+    // The look counts from when the Dashboard is drawn (behind until then): a slow machine took so long to draw it that
+    // setup was already up when the check below ran (GitHub, 2026-11-22 and 23).
+    await behindUntilTurned(async () => {
+      const { route } = await signIn(notSetUp, LOOK_FOR_NOTIFICATIONS);
+      await screen.findByRole("tab", { name: "Dashboard" });
+      await turn("active");
+      // Time for the phone's answer on notifications to be read, which would open the box.
+      await looking(600);
+      expect(screen.queryByRole("header", { name: "Your goal" })).toBeNull();
+      expect(screen.queryByText("Turn on notifications?")).toBeNull();
+      expect(await screen.findByRole("header", { name: "Your goal" }, { timeout: 2 * LOOK_FOR_NOTIFICATIONS })).toBeTruthy();
+      await setupIsUp();
+      expect(screen.queryByText("Turn on notifications?")).toBeNull();
+      route.me = setUp;
+      await turn("active");
+      expect(await screen.findByText("Turn on notifications?")).toBeTruthy();
+    });
   });
 
   it("finished elsewhere while setup is up over the tabs: they are let through, and Build my own goes ahead", async () => {
