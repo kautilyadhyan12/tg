@@ -50,6 +50,9 @@ const LOWER_HALF = 0.5;
 /** The smallest jump never counted as a squat, metres (52a-ii-a; movementHops.test.ts): under Kd's lowest real squat
  *  jump, 12 cm. */
 export const NEVER_JUMP = 0.08;
+/** Metres: a picture beside a jump's highest must show both feet at least this far up for it to be one (`liftOf`): half
+ *  the smallest jump the squat never counts. */
+const JUMP_SUPPORT = NEVER_JUMP / 2;
 /** The fewest pictures a second the engine takes (`MatchLimits.stillFor`). */
 export const SLOWEST_RATE = 8;
 
@@ -903,6 +906,8 @@ export class MovementMatcher {
       return stands === null ? lowest : Math.min(lowest, stands + FOOT_ROOM * size);
     });
     let most: number | null = null;
+    // For a jump the movement asks for, each picture's reading in order (null where nothing was read).
+    const row: (number | null)[] = [];
     for (const s of rep.samples) {
       const rise = s.feet.map((v, k) => {
         const r = rest[k] ?? null;
@@ -923,8 +928,19 @@ export class MovementMatcher {
       const both = FOOT_ENDS.every(([heel, toes]) => (rise[heel] ?? null) !== null && (rise[toes] ?? null) !== null);
       const body = (deep || carried) && !both ? null : liftOfFrame(rise, deep);
       const lifted = body === null || !carried ? body : s.dropEither === null ? null : s.dropEither <= -this.limits.still ? body : 0;
-      if (lifted !== null) most = Math.max(most ?? 0, lifted);
+      if (carried) row.push(lifted);
+      else if (lifted !== null) most = Math.max(most ?? 0, lifted);
     }
+    // A jump is the highest picture of it, held up by a picture beside it: one with both feet at least `JUMP_SUPPORT` up.
+    // Both feet thrown up the picture for a single picture as a squat stands up are no jump (a woman's squats filmed from
+    // the front: each was counted as a squat jump so). A real one is in the air for 2·√(2h/g): at 8 pictures a second the
+    // pictures beside the top of a 12 cm jump, Kd's lowest, are at least 4.3 cm up (a picture 125 ms from the top drops
+    // ½·g·0.125² = 7.7 cm), so every one is held up; a 10 cm one may not be, and is never counted rather than wrongly.
+    row.forEach((v, k) => {
+      if (v === null) return;
+      const beside = [row[k - 1] ?? null, row[k + 1] ?? null].some((w) => w !== null && w >= JUMP_SUPPORT);
+      most = Math.max(most ?? 0, beside ? v : 0);
+    });
     return most;
   }
 

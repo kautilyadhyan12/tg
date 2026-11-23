@@ -3,12 +3,13 @@
 // the wrong leg. So the first tests are every other movement Kd's folders hold, which must count 0 and be told nothing
 // under each, with its own numbers and with every set of numbers made with one person left out; and every lunge counted,
 // given the leg the pictures show in front.
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 import { movementSchema, type Movement, type MovementFrame, type SeenPerson } from "@app/shared";
 import { MovementMatcher, checkMovement, type RepResult } from "../src/index.js";
 import type { Video } from "../scripts/bodyCheck.js";
 import { LEAD_IN, MOVEMENTS, proofTable, proofVideos, readMovement, runMovement } from "../scripts/movementCheck.js";
-import { MOVEMENT_VIDEOS, isOther } from "../scripts/movementVideos.js";
+import { MOVEMENT_VIDEOS, forMovement, isOther } from "../scripts/movementVideos.js";
+import { phoneTable, type PhoneRow } from "../scripts/phoneCounts.js";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { editPeople } from "./helpers/body.js";
@@ -117,12 +118,34 @@ describe("the squat jump and the lunge count every rep a person counts by eye", 
   });
 });
 
+describe("the phone's own runs of every proof video (test/phone-points), judged under each by what a person would be told", () => {
+  const rowsOf = new Map<string, PhoneRow[]>();
+  beforeAll(() => {
+    for (const m of [SQUAT_JUMP, LUNGE]) rowsOf.set(m.name, phoneTable(m, MOVEMENT_VIDEOS.map((e) => forMovement(e, m.name))));
+  }, 600_000);
+
+  it("under the lunge the phone counts and says what the laptop does on every video", () => {
+    const rows = rowsOf.get(LUNGE.name) ?? [];
+    expect(rows).toHaveLength(MOVEMENT_VIDEOS.length);
+    expect(rows.filter((r) => r.verdict !== "same").map((r) => r.label)).toEqual([]);
+  });
+
+  it("under the squat jump, on every video but Kd's two squat jacks, the open case, which the phone counts 4 and 1 where the laptop counts 3 and 2", () => {
+    const rows = rowsOf.get(SQUAT_JUMP.name) ?? [];
+    expect(rows).toHaveLength(MOVEMENT_VIDEOS.length);
+    expect(rows.filter((r) => r.verdict !== "same").map((r) => [r.label, r.laptop.count, r.phone?.count])).toEqual([
+      ["squat_jack_1", 3, 4],
+      ["squat_jack_2", 2, 1],
+    ]);
+  });
+});
+
 describe("a jump is the whole body carried up: a foot point thrown up for a picture is never a jump", () => {
   // A squat with both feet thrown 10 cm up the picture for one frame: at the bottom of each rep (the hips far below where
   // the person stands), and in the moment after it (the hips where they stand). The pose model does this near the floor
   // (a man's floor video: his near foot 10 cm up for one picture as a squat began).
-  const thrown = (where: "bottom" | "after"): Video => {
-    const video = videoOf("squat_reference");
+  const thrown = (label: string, where: "bottom" | "after"): Video => {
+    const video = videoOf(label);
     const reps = runMovement(readMovement("squat"), video).reps.filter((x) => x.verdict === "counted");
     const at = reps.map((x) => (where === "bottom" ? (x.start + x.end) / 2 : x.end + 200) - LEAD_IN);
     const t0 = video.frames[0]?.t ?? 0;
@@ -134,12 +157,11 @@ describe("a jump is the whole body carried up: a foot point thrown up for a pict
     return { ...video, frames };
   };
 
-  it("the squat itself counts its 3 both ways, the thrown feet a single picture", () => {
-    expect(runMovement(readMovement("squat"), thrown("bottom")).count).toBe(3);
-  });
+  // Side on (her far foot hidden behind the near one) and from the front (both feet read in every picture).
+  const SQUATS = ["squat_reference", "prisoner_squat_1"];
 
-  it.each(["bottom", "after"] as const)("thrown at the %s of each squat, the squat jump counts 0 and says nothing", (where) => {
-    const run = runMovement(SQUAT_JUMP, thrown(where));
+  it.each(SQUATS.flatMap((label) => (["bottom", "after"] as const).map((where) => [label, where] as const)))("%s, thrown at the %s of each squat: the squat jump counts 0 and says nothing", (label, where) => {
+    const run = runMovement(SQUAT_JUMP, thrown(label, where));
     expect(run.count).toBe(0);
     expect(run.reps.filter((x) => x.reason !== null)).toEqual([]);
   });

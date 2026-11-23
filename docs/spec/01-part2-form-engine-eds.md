@@ -2417,8 +2417,11 @@ squat jump (between the squat's 4 cm and 8 cm, neither); it is read only in pict
 the whole body was carried up, the hips above where the person stands by more than the shake of standing (on the picture, or in
 3D where the picture gives none: in the air it often gives none for the first 0.1 s), each foot resting where it stood while the
 hips were down in the dip (the moments before and after a rep, which the squat uses, are in the air in a run of jumps: her jumps,
-the ankles 0.26 of a leg up, read 3 to 6 cm so). A foot thrown up the picture for one frame, at a squat's bottom or as it stands, is never a jump
-(`movementKinds.test.ts`), nor a man stepping out of a split squat with one foot read. **One side at a time**: a rep's side
+the ankles 0.26 of a leg up, read 3 to 6 cm so); and its height is its highest picture held up by a picture beside it with both feet
+at least 4 cm up (`JUMP_SUPPORT`, half the 8 cm): a jump is in the air 2·√(2h/g), so at 8 pictures a second the pictures beside the top
+of a 12 cm jump, Kd's lowest, are at least 4.3 cm up, while both feet thrown up the picture for one frame as a squat filmed from the
+front stands up had each squat counted as a squat jump (`movementKinds.test.ts`; taken as the least of two pictures in a row instead,
+a woman's 15 cm jump read 7 cm at 8 a second). Nor is a man stepping out of a split squat with one foot read a jump. **One side at a time**: a rep's side
 (`RepResult.side`) is the leg whose shin stands the more upright over the rep's lower half (`side` in the file: "shins, left
 against right", the working side the "less"), in the frames whose picture and 3D readings agree on which side is larger, the side
 most of them say, never guessed on a tie; it is the pose model's own left and right, so the selfie camera's mirror swaps it, and
