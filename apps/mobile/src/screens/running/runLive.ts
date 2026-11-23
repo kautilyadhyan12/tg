@@ -26,7 +26,8 @@ export function movingMsOf(run: LiveRun, now: number): number {
 export const PACE_SPAN_MS = 10_000;
 /** Under this much of it, no pace yet. */
 export const PACE_LEAST_MS = 5_000;
-/** A newest sure point older than this, against the run's last point, is no fresh signal: no pace. */
+/** A newest sure point older than this, against the run's last point or against now, is no fresh signal:
+ *  no pace. The GPS light says Finding GPS after the same 8 s. */
 export const PACE_FRESH_MS = 8_000;
 
 const NO_PACE = "--:--";
@@ -36,11 +37,11 @@ const sure = ([, , , acc]: RunPoint): boolean => acc === null || (Number.isFinit
 
 /** The pace over the last ten seconds, from where the person was then to where they are, from the
  *  points the phone was sure of. No pace while paused, without fresh sure points, or faster than
- *  anybody has ever run. */
-export function currentPace(points: readonly RunPoint[], running: boolean, units: Units): string {
+ *  anybody has ever run. `nowMs`: now, in ms into the run, so a signal lost altogether shows no pace. */
+export function currentPace(points: readonly RunPoint[], running: boolean, units: Units, nowMs: number): string {
   if (!running) return NO_PACE;
   const newest = points[points.length - 1];
-  if (newest === undefined) return NO_PACE;
+  if (newest === undefined || nowMs - newest[0] > PACE_FRESH_MS) return NO_PACE;
   let last: RunPoint | null = null;
   let from: RunPoint | null = null;
   for (let i = points.length - 1; i >= 0; i--) {

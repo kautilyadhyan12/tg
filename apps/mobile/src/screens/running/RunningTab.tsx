@@ -146,8 +146,13 @@ export function RunningTab({ units, parts }: { units: Units; parts: ReactNode })
   useEffect(() => {
     if (layer.done !== null) setDeleted(null);
   }, [layer.done]);
-  // What stood in the way: found before 3, 2, 1, or Android refusing the run after it.
+  // What stood in the way: found before 3, 2, 1, or Android refusing the run after it. A refused start
+  // is said until the page is left.
   const said: StartProblem | null = problem ?? (layer.startFailed ? "failed" : null);
+  const { clearStartFailed } = layer;
+  useEffect(() => {
+    if (!focused) clearStartFailed();
+  }, [focused, clearStartFailed]);
   const saidUnderStart = (said !== null && !pressedBox) || layer.done !== null || view.refused.length > 0;
   useEffect(() => {
     if (saidUnderStart) showEnd();

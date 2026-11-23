@@ -94,7 +94,17 @@ describe("current pace", () => {
     ["paused", run3(), false, "metric", "--:--"],
     ["no points yet", [], true, "metric", "--:--"],
     ["standing still: no pace", pointsAt(steady(60, 0)).map(([a, , , d]): RunPoint => [a, LAT, LNG, d]), true, "metric", "--:--"],
+    // GPS_WORST_ACCURACY_M is 30: a point sure to exactly 30 m is taken, one sure to 30.5 m is not.
+    ["one point 80 m off, sure to exactly 30 m, is taken: faster than anybody runs", run3(off(30)), true, "metric", "--:--"],
+    ["one point 80 m off, sure to 30.5 m, is left out", run3(off(30.5)), true, "metric", "5:33"],
   ])("%s", (_case, points, running, units, want) => {
-    expect(currentPace(points, running, units)).toBe(want);
+    // Now is the newest point's second, as when points come each second.
+    expect(currentPace(points, running, units, 60_000)).toBe(want);
+  });
+
+  it("the signal lost altogether (a tunnel): no point comes, and over 8 s after the last one there is no pace, as the GPS light says Finding GPS", () => {
+    expect(currentPace(run3(), true, "metric", 68_000)).toBe("5:33");
+    expect(currentPace(run3(), true, "metric", 68_001)).toBe("--:--");
+    expect(currentPace(run3(), true, "metric", 300_000)).toBe("--:--");
   });
 });

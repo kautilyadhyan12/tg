@@ -412,6 +412,54 @@ describe("Auto-pause", () => {
   });
 });
 
+describe("the worst thing on the screen: the run's clock shows a time that is not the run's (37h; testers: \"the timer gets stuck and keeps doing back and forth\")", () => {
+  it("running, then standing with Auto-pause off: Time is the seconds since Go at every point and after the numbers are worked out again, on the run's screen and its bar; Pause holds it", async () => {
+    await act(() => chooseAutoPause(false));
+    const s = runServer();
+    await openRunning(s);
+    await startRunning();
+    await feed(0, 60, 3);
+    expect(screen.getByText("0:59")).toBeTruthy();
+    expect(screen.getByText("5:34 /km")).toBeTruthy();
+    const run = runNow();
+    if (run === null) throw new Error("no run");
+    const stillAt = 26.1445 + (59 * 3) / 111_132;
+    for (let second = 60; second < 120; second++) {
+      await act(() => takeLocations({ locations: [{ timestamp: run.startedAt + second * 1000, coords: { latitude: stillAt, longitude: 91.7362, accuracy: 5, speed: 0 } }] }));
+      expect(screen.getByText(clock(second))).toBeTruthy();
+    }
+    // The numbers are worked out again at most every 2 s: the old clock took the standing off then.
+    await act(() => new Promise((resolve) => setTimeout(resolve, 3500)));
+    expect(screen.getByText("1:59")).toBeTruthy();
+    expect(screen.queryByText("5:34 /km")).toBeNull();
+    expect(screen.getByText("--:-- /km")).toBeTruthy();
+    await fireEvent.press(screen.getByRole("button", { name: "Back to the app" }));
+    expect(await screen.findByText(/^1:59 · \d+\.\d\d km$/)).toBeTruthy();
+    await fireEvent.press(screen.getByRole("button", { name: "Open run" }));
+    // Pause from the time shown, which the GPS's clock puts ahead of the phone's here: never back.
+    await fireEvent.press(await screen.findByRole("button", { name: "Pause" }));
+    await screen.findByRole("button", { name: "Resume" });
+    expect(screen.getByText("1:59")).toBeTruthy();
+    expect(screen.getByText("--:-- /km")).toBeTruthy();
+    await act(() => new Promise((resolve) => setTimeout(resolve, 1500)));
+    expect(screen.getByText("1:59")).toBeTruthy();
+  });
+
+  it("a refused start is said until the Running page is left, never after", async () => {
+    location.refusesStart = true;
+    const s = runServer();
+    await openRunning(s);
+    await fireEvent.press(screen.getByRole("button", { name: "Start run" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Start now" }));
+    expect(await screen.findByText("Your run couldn't start. Try again.")).toBeTruthy();
+    await fireEvent.press(screen.getByRole("tab", { name: "Dashboard" }));
+    await fireEvent.press(await screen.findByRole("tab", { name: "Workout" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Running" }));
+    expect(await screen.findByRole("button", { name: "Start run" })).toBeTruthy();
+    expect(screen.queryByText("Your run couldn't start. Try again.")).toBeNull();
+  });
+});
+
 describe("the summary's time not moving (Kd, 37h's walk, 2026-11-23)", () => {
   it("a minute standing with Auto-pause off and no pause pressed reads as Stopped, never as Paused", async () => {
     await act(() => chooseAutoPause(false));

@@ -719,7 +719,9 @@ export async function pauseRun(now: number = Date.now()): Promise<void> {
   // The guide is moved on to the pause, so the step it holds is the one the person is on.
   const step = was === "running" ? guideNow(run, now, true) : { lines: [] };
   takeHeart(run);
-  if (run.phase === "running") run.pauses.push([Math.max(now - run.startedAt, lastOpenEnd(run)), null]);
+  // From the time the screen shows, which the GPS's own clock can put a second ahead of the phone's: a
+  // pause never takes the clock back.
+  if (run.phase === "running") run.pauses.push([Math.max(elapsedMs(run, now), lastOpenEnd(run)), null]);
   run.phase = "paused";
   run.pausedByPerson = true;
   auto = { ...AUTO_START, paused: true };
@@ -735,7 +737,7 @@ export async function resumeRun(now: number = Date.now()): Promise<void> {
   if (run === null || run.phase !== "paused") return;
   // What the monitor sent while paused is not the run's.
   takeHeartReadings();
-  closePause(run, now - run.startedAt);
+  closePause(run, elapsedMs(run, now));
   run.phase = "running";
   run.pausedByPerson = false;
   auto = AUTO_START;

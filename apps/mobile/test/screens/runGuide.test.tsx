@@ -40,7 +40,7 @@ function server(answers: RunPlanAnswers) {
 
 beforeEach(async () => {
   jest.spyOn(AppState, "addEventListener").mockImplementation(() => ({ remove: () => undefined }));
-  Object.assign(location, { services: true, granted: true, canAskAgain: true, accuracy: "fine", asked: 0, started: [], running: false, acceptsTurnOn: true });
+  Object.assign(location, { services: true, granted: true, canAskAgain: true, accuracy: "fine", asked: 0, started: [], running: false, acceptsTurnOn: true, refusesStart: false });
   for (const name of ["run-now.json", "run-now-0.json", "run-now-1.json", "run-settings.json", "run-map.json"]) phoneRunFiles.remove(name);
   resetRecorder();
   Object.assign(voice, { said: [], quieted: 0, canSpeak: "ok", missing: false, ahead: [], warmed: 0, handed: [] });
@@ -138,6 +138,23 @@ describe("the worst thing: a beginner told to keep running when the plan says wa
       expect(screen.queryByTestId("problem-under-plan")).toBeNull();
     });
     expect(screen.getAllByText("Turn on your phone's location to record your run.")).toHaveLength(1);
+  });
+
+  it("Android refusing today's run after 3, 2, 1: said under the plan box, not above START, and Start again starts today's run (37h)", async () => {
+    location.refusesStart = true;
+    await openRunning(BEGINNER());
+    await fireEvent.press(within(screen.getByTestId("run-plan-box")).getByRole("button", { name: "Start today’s run, with each step said" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Start now" }));
+    const under = await screen.findByTestId("problem-under-plan");
+    expect(within(under).getByText("Your run couldn't start. Try again.")).toBeTruthy();
+    expect(screen.getAllByText("Your run couldn't start. Try again.")).toHaveLength(1);
+    expect(runNow()).toBeNull();
+    await fireEvent.press(within(under).getByRole("button", { name: "Start again" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Start now" }));
+    await waitFor(() => {
+      expect(runNow()?.phase).toBe("running");
+    });
+    expect(runNow()?.guide).not.toBeNull();
   });
 
   it("Auto-pause at a crossing: nothing is said ahead while stopped, and moving again says what is left", async () => {

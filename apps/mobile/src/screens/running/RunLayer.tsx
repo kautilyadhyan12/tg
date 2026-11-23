@@ -93,8 +93,10 @@ interface RunLayerValue {
   units: Units;
   done: RunDone;
   clearDone: () => void;
-  /** Android refused to start the run after 3, 2, 1: the Running page says so. Cleared at the next Start. */
+  /** Android refused to start the run after 3, 2, 1: the Running page says so. Cleared at the next Start,
+   *  when somebody else signs in, and when the Running page is left. */
   startFailed: boolean;
+  clearStartFailed: () => void;
 }
 
 const RunLayerContext = createContext<RunLayerValue | null>(null);
@@ -139,6 +141,10 @@ export function RunLayerProvider({ children }: { children: ReactNode }) {
   const [done, setDone] = useState<RunDone>(null);
   const [startFailed, setStartFailed] = useState(false);
   const [kg, setKg] = useState(0);
+  // A start that failed is the person's own: never said to whoever signs in next on this phone.
+  useEffect(() => {
+    setStartFailed(false);
+  }, [me]);
 
   // The person's heart rate monitor (37f-i), kept on this phone for them.
   useEffect(() => {
@@ -215,6 +221,9 @@ export function RunLayerProvider({ children }: { children: ReactNode }) {
         setDone(null);
       },
       startFailed,
+      clearStartFailed: () => {
+        setStartFailed(false);
+      },
     }),
     [start, run, units, done, startFailed],
   );
@@ -491,7 +500,7 @@ function Live({ run, units, kg, onHide }: { run: LiveRun; units: Units; kg: numb
           <View style={styles.panelFigures}>
             <Figure label="Time" value={clock(moving)} dim={isPaused} />
             <Figure label="Distance" value={distance(metres, units)} unit={unitWord(units)} dim={isPaused} />
-            <Figure label="Current pace" value={currentPace(run.points, run.phase === "running", units)} unit={paceWord(units)} dim={isPaused} />
+            <Figure label="Current pace" value={currentPace(run.points, run.phase === "running", units, now - run.startedAt)} unit={paceWord(units)} dim={isPaused} />
           </View>
           {controls}
         </View>
@@ -528,7 +537,7 @@ function Live({ run, units, kg, onHide }: { run: LiveRun; units: Units; kg: numb
           ) : null}
         </View>
         <View style={styles.pairs}>
-          <Figure label="Current pace" value={currentPace(run.points, run.phase === "running", units)} unit={paceWord(units)} dim={isPaused} />
+          <Figure label="Current pace" value={currentPace(run.points, run.phase === "running", units, now - run.startedAt)} unit={paceWord(units)} dim={isPaused} />
           {/* No average until there is ground to average: a standing start reads as no pace. */}
           <Figure label="Average pace" value={pace(moving, metres < 50 ? 0 : metres, units)} unit={paceWord(units)} dim={isPaused} />
         </View>
