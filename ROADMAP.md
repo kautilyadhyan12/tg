@@ -486,7 +486,10 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
    - V2a. **A member's page, a whole page**, in two (2026-11-22; the `Person*` pages and `PhonePerson`):
      - V2a-i. [x] **The page, its three columns and the next step under the name** · merged 2026-11-22 · PR #620
      - V2a-ii. [x] **Memberships and bills in the third look's words and sizes** · merged 2026-11-22 · PR #623
-   - V2b. [ ] **A member's page: its boxes** (web folder 1): Add member, edit, add a membership, record a payment, a quick look, freeze, cancel, money back, receipt, remove, merge (`Person*`, `AddMember`, `PhoneRecordPayment`, `PhoneForm`).
+   - V2b. **A member's page: its boxes**, in three by how each box opens (2026-11-23; spec §17.11, `Boxes`):
+     - V2b-i. [x] **From the right**: Add member, Edit, Add membership, Change membership · merged 2026-11-23 · PR #626
+     - V2b-ii. [ ] **In the middle, money**: Cancel membership, Freeze, Unfreeze, Refund, Void, Waive, the receipt.
+     - V2b-iii. [ ] **In the middle, people, and under the button**: Invite, Remove, Delete permanently, Merge; Record a payment, More, Tags, Change payer.
    - V3a. [ ] **Members: Your list** (web folder 1): the one-press picks, the list, people ticked and the bar, Send message, Tags, Remove, Filter from the right (`MembersNew*`).
    - V3b. [ ] **Members: In the app, waiting to join, and Staff** (web folder 1): a staff member's panel, Invite staff, Staff activity (`MembersNewApp`, `MembersNewStaff*`).
    - V4a. [ ] **Sell** (web folder 1): the register, a sale, products, tax (`Sell*`, `PhoneSell`).
