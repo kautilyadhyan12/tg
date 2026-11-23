@@ -195,6 +195,19 @@ describe('quick filters', () => {
     expect(quick().getByRole('button', { name: /^Everyone/ }).getAttribute('aria-pressed')).toBe('true');
   });
 
+  it('with a search typed the quick filters show no counts, and come back with them when it is cleared', async () => {
+    draw();
+    await screen.findByText('Ben Carter');
+    orgService.getMemberListEntries.mockResolvedValue(pageOf([ben], 1));
+    fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'ben' } });
+    await waitFor(() => expect(orgService.getMemberListEntries).toHaveBeenLastCalledWith(GYM, 'query=ben'));
+    await waitFor(() => expect(quick().getAllByRole('button').map((b) => b.textContent)).toEqual(['Everyone', 'Payment due', 'Not in the app', 'Not invited yet', 'No membership']));
+    fireEvent.click(quick().getByRole('button', { name: 'Payment due' }));
+    await waitFor(() => expect(orgService.getMemberListEntries).toHaveBeenLastCalledWith(GYM, 'paymentStatus=Payment+due&query=ben'));
+    fireEvent.change(screen.getByRole('searchbox'), { target: { value: '' } });
+    await waitFor(() => expect(quick().getByRole('button', { name: /^Payment due/ }).textContent).toBe('Payment due 32'));
+  });
+
   it('Filter opens from the right, keeps its choices, and Show closes it on them', async () => {
     draw();
     await screen.findByText('Ben Carter');

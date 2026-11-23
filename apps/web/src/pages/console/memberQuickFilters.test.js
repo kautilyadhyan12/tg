@@ -62,8 +62,13 @@ describe('quickFilters', () => {
   });
 
   it('the same choice made in the Filter lights it, in any spelling', () => {
-    const fromFilter = toggleWord(EMPTY_FILTERS, 'paymentStatus', 'Payment due');
-    expect(by(quickFilters(list, fromFilter))['payment-due'].on).toBe(true);
+    for (const spelling of ['Payment due', 'PAYMENT DUE', ' payment  due ']) {
+      const fromFilter = toggleWord(EMPTY_FILTERS, 'paymentStatus', spelling);
+      expect(by(quickFilters(list, fromFilter))['payment-due'].on).toBe(true);
+      expect(by(quickFilters(list, fromFilter)).everyone.on).toBe(false);
+    }
+    const none = toggleWord(EMPTY_FILTERS, 'membershipType', '');
+    expect(by(quickFilters(list, none))['no-membership'].on).toBe(true);
   });
 
   it('a kind nobody is in is not drawn, unless it is the one showing', () => {
@@ -72,6 +77,18 @@ describe('quickFilters', () => {
     const shown = by(quickFilters(none, { ...EMPTY_FILTERS, app: ['not_invited'] }));
     expect(shown['not-invited'].count).toBe(0);
     expect(shown['not-invited'].on).toBe(true);
+  });
+
+  it("with a search typed, no counts: they are the whole list's, not what a press would show", () => {
+    const out = quickFilters(list, { ...EMPTY_FILTERS, query: 'sam' });
+    expect(out.map((q) => [q.text, q.count])).toEqual([
+      ['Everyone', null],
+      ['Payment due', null],
+      ['Not in the app', null],
+      ['Not invited yet', null],
+      ['No membership', null],
+    ]);
+    expect(quickFilters(list, { ...EMPTY_FILTERS, query: '  ' })[0].count).toBe(26);
   });
 
   it('nothing for past members, or before the list has answered', () => {

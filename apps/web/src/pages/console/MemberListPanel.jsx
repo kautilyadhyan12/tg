@@ -262,11 +262,9 @@ function usePhone() {
   return phone;
 }
 
-/** One person's App word, one tag per row as Leads shows its status. When something
- *  needs checking the tag itself turns amber (red for a wrong email) with a ⚠, and says
- *  why to a screen reader and on hover; the sentence is on the person's own page. */
-/** The App word as plain words, a green dot for somebody in the app (§17.11, "A status");
- *  a tag only when something needs checking. */
+/** One person's App word: plain words, a green dot for somebody in the app (§17.11, "A status").
+ *  When something needs checking it is a tag, amber (red for a wrong email) with a ⚠, that
+ *  says why to a screen reader and on hover; the sentence is on the person's own page. */
 function AppWord({ view }) {
   if (view.note === null) {
     return (
@@ -1107,7 +1105,8 @@ export default function MemberListPanel({
                 className={q.on ? 'c-chip c-chip-on' : 'c-chip'}
               >
                 {q.warn ? <span className="c-dot c-dot-warn" aria-hidden="true" /> : null}
-                {q.text} <span className="c-n">{count(q.count)}</span>
+                {q.text}{q.count !== null ? ' ' : null}
+                {q.count !== null ? <span className="c-n">{count(q.count)}</span> : null}
               </button>
             ))}
             <span className="c-s14 c-t2">Quick filters</span>
