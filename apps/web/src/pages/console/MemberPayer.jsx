@@ -284,7 +284,7 @@ function PaidForRow({ gymId, gym, person, payerName, canBill, canChange, members
           ) : null}
         </div>
       ) : null}
-      {receiptFor !== null ? <ReceiptBox gymId={gymId} gym={gym} number={receiptFor} onClose={() => setReceiptFor(null)} /> : null}
+      {receiptFor !== null ? <ReceiptBox gymId={gymId} gym={gym} number={receiptFor} onClose={() => setReceiptFor(null)} inMiddle /> : null}
     </li>
   );
 }

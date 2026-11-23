@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useLayoutEffect, useState } from 'react';
 import { Loader2, RotateCcw } from 'lucide-react';
 import { CARD_REFUND_TERMINAL_WORDS, cardName, cardRefundEndedLine, cardRefundSentLine } from '@app/shared';
 import { errorCode, errorText, orgService } from '../../api/orgsApi';
@@ -13,7 +13,6 @@ import { blockNotes, cardRefundBlockLine, cardRefundBody, cardRefundBoxWords, ca
 
 const MAIN = 'c-btn c-btn-p';
 const PLAIN = 'c-btn c-btn-s';
-const BOX = { background: 'var(--raise)' };
 const NOT_CONNECTED = ['card_not_ready', 'card_connection_refused'];
 /** Square said no and no money went: the next press is a new one. Anything else may have reached Square, and keeps its key. */
 const NOTHING_SENT = ['card_refund_refused', 'card_refund_failed', 'card_connection_refused'];
@@ -22,7 +21,7 @@ const newKey = () => globalThis.crypto.randomUUID();
 
 /** The box under a member's payment. `paymentsTo`: the place to connect Square, for whoever may; null for everybody else.
  *  `onNote`: opens Note a refund. `fee`: the fee this payment paid (`feeRefundWords`); null for a period's. */
-export default function CardRefundBox({ gymId, entryId, m, payment, fee = null, name, live, paymentsTo, onDone, onNote, onStopped, onClose }) {
+export default function CardRefundBox({ gymId, entryId, m, payment, fee = null, name, live, paymentsTo, onDone, onNote, onStopped, onClose, onSending }) {
   return (
     <RefundToCardBox
       gymId={gymId}
@@ -37,6 +36,7 @@ export default function CardRefundBox({ gymId, entryId, m, payment, fee = null, 
       onNote={onNote}
       onStopped={onStopped}
       onClose={onClose}
+      onSending={onSending}
     />
   );
 }
@@ -46,13 +46,20 @@ export default function CardRefundBox({ gymId, entryId, m, payment, fee = null, 
  *  asks about the shelf, each `{ key, label, choices }`. `allLeft`: all that is left goes back, so no amount is asked. `onNote`: told
  *  what stopped the refund, if anything. `thing`: what staff open again to see where a refund stands. Where Square needs the card
  *  present (18d-iv-c) the box asks which Terminal, and waits there; `onStopped`: it stopped with no money sent, or staff left it waiting, so the page reads again and says so. */
-export function RefundToCardBox({ gymId, readKey, read, press, currency, words: wordsFor, reasons, shelves = [], allLeft = false, thing = 'payment', paymentsTo, onDone, onNote, onStopped, onClose }) {
+export function RefundToCardBox({ gymId, readKey, read, press, currency, words: wordsFor, reasons, shelves = [], allLeft = false, thing = 'payment', paymentsTo, onDone, onNote, onStopped, onClose, onSending }) {
   const [check, setCheck] = useState(null);
   const [draft, setDraft] = useState(null);
   const [problem, setProblem] = useState(null);
   const [connect, setConnect] = useState(false);
   const [busy, setBusy] = useState(false);
   const [waiting, setWaiting] = useState(null);
+  // `onSending`: told while a press is on its way to Square (not while the Terminal waits, which has its own Back), and
+  // told it is over when the box goes, so a box drawn around it is not closed by Escape mid-press.
+  const sending = busy && waiting === null;
+  useLayoutEffect(() => {
+    onSending?.(sending);
+  }, [sending, onSending]);
+  useEffect(() => () => onSending?.(false), [onSending]);
 
   useEffect(() => {
     let live2 = true;
@@ -77,7 +84,7 @@ export function RefundToCardBox({ gymId, readKey, read, press, currency, words: 
   }, [readKey, currency]);
 
   const back = (
-    <button type="button" className={PLAIN} disabled={busy} onClick={onClose}>
+    <button type="button" className={PLAIN} disabled={busy} onClick={onClose} data-autofocus>
       Back
     </button>
   );
@@ -89,7 +96,7 @@ export function RefundToCardBox({ gymId, readKey, read, press, currency, words: 
 
   if (check === null) {
     return (
-      <div className="rounded-[14px] p-3 flex flex-col gap-3" style={BOX} data-testid="card-refund-box">
+      <div className="c-inbox flex flex-col gap-3" data-testid="card-refund-box">
         {problem === null ? (
           <span className="c-s14 c-t2 flex items-center gap-2">
             <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" />
@@ -101,7 +108,7 @@ export function RefundToCardBox({ gymId, readKey, read, press, currency, words: 
           </span>
         )}
         {connect ? paymentsTo !== null ? <PlaceLink to={paymentsTo}>Open Square settings</PlaceLink> : <span className="c-s14 c-t2">Ask the owner to connect Square.</span> : null}
-        <div className="flex flex-wrap gap-2">{back}</div>
+        <div className="c-inbox-a">{back}</div>
       </div>
     );
   }
@@ -147,10 +154,10 @@ export function RefundToCardBox({ gymId, readKey, read, press, currency, words: 
 
   if (check.block === null && check.onTerminal === true && check.terminals.length === 0) {
     return (
-      <div className="rounded-[14px] p-3 flex flex-col gap-3" style={BOX} data-testid="card-refund-box">
+      <div className="c-inbox flex flex-col gap-3" data-testid="card-refund-box">
         <span className="c-s14 c-t1">{paymentsTo !== null ? CARD_REFUND_TERMINAL_WORDS.no_terminal : CARD_REFUND_TERMINAL_WORDS.no_terminal_staff}</span>
         {paymentsTo !== null ? <PlaceLink to={paymentsTo}>Open Square settings</PlaceLink> : null}
-        <div className="flex flex-wrap gap-2">
+        <div className="c-inbox-a">
           {note}
           {back}
         </div>
@@ -161,14 +168,14 @@ export function RefundToCardBox({ gymId, readKey, read, press, currency, words: 
   if (check.block !== null) {
     const inSquare = inSquareLine(money, check);
     return (
-      <div className="rounded-[14px] p-3 flex flex-col gap-3" style={BOX} data-testid="card-refund-box">
+      <div className="c-inbox flex flex-col gap-3" data-testid="card-refund-box">
         <span className="c-s14 c-t1">{cardRefundBlockLine(check.block)}</span>
         {inSquare !== null ? (
           <span className="c-s14 c-w5" style={{ color: 'var(--warn)' }}>
             {inSquare}
           </span>
         ) : null}
-        <div className="flex flex-wrap gap-2">
+        <div className="c-inbox-a">
           {blockNotes(check.block) || inSquare !== null ? note : null}
           {back}
         </div>
@@ -207,8 +214,7 @@ export function RefundToCardBox({ gymId, readKey, read, press, currency, words: 
   return (
     <form
       noValidate
-      className="rounded-[14px] p-3 flex flex-col gap-3"
-      style={BOX}
+      className="c-inbox flex flex-col gap-3"
       data-testid="card-refund-box"
       onSubmit={(e) => {
         e.preventDefault();
@@ -220,7 +226,7 @@ export function RefundToCardBox({ gymId, readKey, read, press, currency, words: 
         void send();
       }}
     >
-      <p className="c-s15 c-w6 c-t1 m-0">{words.title}</p>
+      <p className="c-inbox-t c-s15 c-w6 c-t1 m-0">{words.title}</p>
       <p className="c-s14 c-t2 m-0">{words.detail}</p>
       {check.onTerminal === true ? <p className="c-s14 c-t1 m-0">{CARD_REFUND_TERMINAL_WORDS.present}</p> : null}
       {words.inSquare !== null ? (
@@ -283,7 +289,7 @@ export function RefundToCardBox({ gymId, readKey, read, press, currency, words: 
           {problem}
         </span>
       ) : null}
-      <div className="flex flex-wrap gap-2">
+      <div className="c-inbox-a">
         <button type="submit" className={MAIN} style={{ whiteSpace: 'normal', maxWidth: '100%', height: 'auto' }} disabled={busy}>
           {busy ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : <RotateCcw aria-hidden="true" className="w-4 h-4" />}
           {cardRefundButton(money, check, draft)}

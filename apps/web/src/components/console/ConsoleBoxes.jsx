@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useImperativeHandle, useLayoutEffect, useRef, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useId, useImperativeHandle, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import { ConfirmInline } from './ConsoleStates';
@@ -37,14 +37,15 @@ function useLookHost() {
 
 /** Keys while a box is open: focus moves into it, Tab stays inside it, Escape asks to close
  *  it, and focus goes back to what had it when the box closes. */
-function useBoxKeys(boxRef, onEscape, ready) {
+/** `opener`: what had the keys when the box was first drawn, where that was read before the page changed under it. */
+function useBoxKeys(boxRef, onEscape, ready, opener = null) {
   const escape = useRef(onEscape);
   useLayoutEffect(() => {
     escape.current = onEscape;
   });
   useEffect(() => {
     if (!ready) return undefined;
-    const before = document.activeElement;
+    const before = opener ?? document.activeElement;
     const box = boxRef.current;
     if (box !== null) {
       const first = box.querySelector('[data-autofocus]') ?? box.querySelector(FOCUSABLE);
@@ -78,9 +79,19 @@ function useBoxKeys(boxRef, onEscape, ready) {
     document.addEventListener('keydown', onKey, true);
     return () => {
       document.removeEventListener('keydown', onKey, true);
-      if (before instanceof HTMLElement && before.isConnected) before.focus();
+      if (!(before instanceof HTMLElement)) return;
+      if (before.isConnected) {
+        before.focus();
+        return;
+      }
+      // The button that opened it was drawn again while it was open (a ⋯ on a row): the keys go to the one by its name.
+      const name = before.getAttribute('aria-label');
+      if (name === null) return;
+      requestAnimationFrame(() => {
+        [...document.querySelectorAll('button[aria-label]')].find((el) => el.getAttribute('aria-label') === name)?.focus();
+      });
     };
-  }, [boxRef, ready]);
+  }, [boxRef, ready, opener]);
 }
 
 /** The page behind a panel or a question stays where it is while the box is open. */
@@ -262,6 +273,77 @@ export function SidePanel({
         </div>
       </div>
     </>
+  );
+}
+
+const InMiddle = createContext(false);
+
+/** 3a. In the middle, around a question box a page already draws (a `c-inbox`, with its own
+ *  buttons): the same box, its fields and buttons unchanged, over the page. Escape and pressing
+ *  outside do what its own Keep it does (`onClose`), never while it is sending. `error` is said
+ *  inside it, as the page behind is covered. A box inside one already in the middle is drawn
+ *  where it is, so a question that turns into another stays one box. */
+export function MiddleBox({ label, onClose, busy = false, error = null, testId, role = 'alertdialog', children }) {
+  const inside = useContext(InMiddle);
+  if (inside) return children;
+  return (
+    <MiddleShell label={label} onClose={onClose} busy={busy} error={error} testId={testId} role={role}>
+      {children}
+    </MiddleShell>
+  );
+}
+
+function MiddleShell({ label, onClose, busy, error, testId, role, children }) {
+  const boxRef = useRef(null);
+  const cancel = () => {
+    if (!busy) onClose();
+  };
+  const { ready, draw } = useLookHost();
+  // What had the keys as the box is first drawn, before the page draws again under it: a ⋯ on a row is gone by then.
+  const [opener] = useState(() => document.activeElement);
+  useBoxKeys(boxRef, cancel, ready, opener);
+  useStillPage();
+  // The box is named by its question, the first `c-inbox-t` in it, read each time it is drawn; by `label` while it
+  // has none (still reading), as a name given by aria-labelledby comes before aria-label.
+  const titleId = useId();
+  useLayoutEffect(() => {
+    const box = boxRef.current;
+    if (box === null) return;
+    const title = box.querySelector('.c-inbox-t');
+    if (title === null) {
+      box.removeAttribute('aria-labelledby');
+      return;
+    }
+    if (title.id === '') title.id = titleId;
+    box.setAttribute('aria-labelledby', title.id);
+  });
+  // A question that turns into another (the bookings a cancel ends, the Terminal's wait) unmounts the button that had
+  // the keys: they go to its Keep it or Back, or the box, never to the page behind.
+  const shown = useRef(false);
+  useLayoutEffect(() => {
+    const box = boxRef.current;
+    if (!ready || box === null) return;
+    // Not on its first draw: useBoxKeys has not yet noted the button that opened it, to give the keys back to.
+    if (!shown.current) {
+      shown.current = true;
+      return;
+    }
+    if (box.contains(document.activeElement)) return;
+    (box.querySelector('[data-autofocus]') ?? box).focus();
+  });
+  return draw(
+    <InMiddle.Provider value>
+      <div className="c-scrim" data-testid="box-outside" onClick={cancel} />
+      <div ref={boxRef} role={role} aria-modal="true" aria-label={label} tabIndex={-1} className="c-ask" data-testid={testId}>
+        <span className="c-grab" aria-hidden="true" />
+        {error !== null ? (
+          <p role="alert" className="c-err m-0">
+            {error}
+          </p>
+        ) : null}
+        {children}
+      </div>
+    </InMiddle.Provider>,
   );
 }
 
