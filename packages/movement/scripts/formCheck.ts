@@ -106,10 +106,14 @@ export interface FormRow {
   readonly leftOut: boolean;
   readonly counted: number;
   readonly made: readonly Made[];
+  /** The reps refused for a mistake and told its words (the squat's "Keep your chest up."): on a good-form video, none. */
+  readonly told: readonly Made[];
 }
 
 const madeOf = (reps: readonly RepResult[]): Made[] =>
   reps.flatMap((r) => (r.verdict !== "counted" ? [] : r.form.filter((f) => f.status === "made").map((f) => ({ at: r.start, mistake: f.mistake, reading: f.reading }))));
+const toldOf = (reps: readonly RepResult[]): Made[] =>
+  reps.flatMap((r) => (r.verdict !== "refused" ? [] : r.form.map((f) => ({ at: r.start, mistake: f.mistake, reading: f.reading }))));
 
 /** Every good-form video of the movement (a count by eye, no open case), as filmed and under each replay given, with
  *  the exercise's own lines and, for a video that sets numbers, with its person left out of every number: the mistakes
@@ -132,11 +136,11 @@ export function formRows(movement: Movement, exercise: ExerciseCamera, replays: 
       const frames = replay === null ? v.video.frames : replay.edit(v.video.frames, seedOf(v.video.label, replay.name), countedTimes(movement, v.video));
       const video = { ...v.video, frames };
       const run = runMovement(movement, video, exercise);
-      const own: FormRow = { label: v.video.label, person: v.entry.person, replay, leftOut: false, counted: run.count, made: madeOf(run.reps) };
+      const own: FormRow = { label: v.video.label, person: v.entry.person, replay, leftOut: false, counted: run.count, made: madeOf(run.reps), told: toldOf(run.reps) };
       if (!v.video.sets) return [own];
       const fold = foldOf(v.entry.person);
       const out = runMovement(fold.movement, video, fold.exercise);
-      return [own, { label: v.video.label, person: v.entry.person, replay, leftOut: true, counted: out.count, made: madeOf(out.reps) }];
+      return [own, { label: v.video.label, person: v.entry.person, replay, leftOut: true, counted: out.count, made: madeOf(out.reps), told: toldOf(out.reps) }];
     }),
   );
 }

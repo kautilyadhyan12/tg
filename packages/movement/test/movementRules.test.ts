@@ -3,12 +3,13 @@
 // its own way ("short" with its reason for how far, silence for what kind, nothing decided for what was not seen).
 // A table over every class of case, as CLAUDE.md §4 asks of a rule that thresholds.
 import { describe, expect, it } from "vitest";
-import { movementSchema } from "@app/shared";
+import { engineSetSummarySchema, movementSchema, type ExerciseCamera } from "@app/shared";
 import { KP } from "@app/shared";
-import { MEASURE_LIST, MovementMatcher, parseMovement, type MeasureName, type MeasuredBody, type Reading, type SteadyBody, type SteadyPoint } from "../src/index.js";
-import { readMovement } from "../scripts/movementCheck.js";
+import { MATCH_LIMITS, MEASURE_LIST, MovementMatcher, SetRecord, parseMovement, type MeasureName, type MeasuredBody, type Reading, type SteadyBody, type SteadyPoint } from "../src/index.js";
+import { readExercise, readMovement } from "../scripts/movementCheck.js";
 
 const SQUAT = readMovement("squat");
+const EXERCISE = readExercise("squat", SQUAT);
 const bound = (name: string): number => {
   const r = SQUAT.rules.find((x) => x.name === name);
   const b = r?.atLeast ?? r?.atMost;
@@ -42,6 +43,10 @@ interface Body {
   rightKneeHidden: boolean;
   /** For one foot point, how far it alone is moved on the picture (picture heights), or "hidden". */
   each: Map<number, readonly [number, number] | "hidden">;
+  /** How much of the hips' line the picture shows (form.ts `turnOf`): 0.3, side on; 1, facing the phone. */
+  turn: number;
+  /** The hips' height read at all. */
+  hipsSeen: boolean;
 }
 type Change = (t: number, p: number, b: Body) => void;
 
@@ -55,13 +60,22 @@ function run(change?: Change, fast = false) {
   return repsOf(change, fast).map((r) => [r.verdict, r.rule]);
 }
 
-/** The same rep's judged reps, whole. */
-function repsOf(change?: Change, fast = false) {
-  const m = new MovementMatcher(SQUAT);
+/** The same rep's judged reps, whole; with `exercise`, its mistakes judged too. Every frame is also given to a set's
+ *  record (`SetRecord`), returned beside them. `two`: the same rep again 4 s later (`SECOND`), the set 9 s long. */
+function repsOf(change?: Change, fast = false, exercise: ExerciseCamera | null = null, two = false) {
+  return recorded(change, fast, exercise, two).reps;
+}
+
+/** When a set of two reps' second rep begins its moment of standing, ms. */
+const SECOND = 4000;
+
+function recorded(change?: Change, fast = false, exercise: ExerciseCamera | null = null, two = false) {
+  const m = new MovementMatcher(SQUAT, MATCH_LIMITS, exercise);
+  const record = new SetRecord(exercise ?? EXERCISE, SQUAT, 1);
   const reps = [];
-  for (let n = 0; n * (1000 / 30) <= 5000; n++) {
+  for (let n = 0; n * (1000 / 30) <= (two ? 9000 : 5000); n++) {
     const t = Math.round((n * 1000 * 10) / 30) / 10;
-    const p = depthAt(t, fast);
+    const p = two && t > SECOND ? depthAt(t - SECOND, fast) : depthAt(t, fast);
     const b: Body = {
       hips: 1.15 - 0.45 * p,
       knee: 175 - 85 * p,
@@ -75,10 +89,12 @@ function repsOf(change?: Change, fast = false) {
       kneesSeen: true,
       rightKneeHidden: false,
       each: new Map(),
+      turn: 0.3,
+      hipsSeen: true,
     };
     change?.(t, p, b);
     const value = new Map<string, number | null>([
-      ["hips height", b.hips],
+      ["hips height", b.hipsSeen ? b.hips : null],
       ["left knee", b.kneesSeen ? b.knee : null],
       ["right knee", b.kneesSeen && !b.rightKneeHidden ? b.knee : null],
       ["left hip", b.hipAngle],
@@ -91,6 +107,8 @@ function repsOf(change?: Change, fast = false) {
     ]);
     const readings = new Map<MeasureName, Reading>(
       MEASURE_LIST.map(({ name }) => {
+        // The hips' line across the picture, shown as much as the body is turned to the phone (form.ts `turnOf`).
+        if (name === "hips apart") return [name, { flat: 0.4 * b.turn, world: 0.4, shown: b.turn, off: 0 }];
         const v = value.get(name) ?? null;
         return [name, { flat: v, world: v, shown: v === null ? null : 1, off: v === null ? null : 0 }];
       }),
@@ -108,11 +126,13 @@ function repsOf(change?: Change, fast = false) {
     const body: SteadyBody = { t, aspect: ASPECT, down: [0, 1, 0], size: SIZE, points, refused: points.map(() => null) };
     const measured: MeasuredBody = { t, leg: 0.9, trunk: 0.5, onFloor: true, readings };
     const f = m.next(body, measured);
+    record.add(f);
     if (f.rep !== null) reps.push(f.rep);
   }
   const last = m.finish();
+  if (last !== null) record.add(last);
   if (last?.rep) reps.push(last.rep);
-  return reps;
+  return { reps, record };
 }
 
 describe("each rule of the squat refuses on its own, by its own name", () => {
@@ -200,6 +220,108 @@ describe("each rep not counted says why in the movement's own words, and what wa
       if (t > 3300) b.rightKneeHidden = true;
     };
     expect(run(oneKnee)).toEqual([]);
+  });
+});
+
+// 52b-ii-b, Kd's ruling of 2026-11-23: a squat leaning past "chest up" is still not counted, and is told "Keep your chest
+// up." when it is a squat in every other way; never another movement's dip. Every class of case, the squat's camera file
+// given: the worst thing is the word said where it does not belong, so most cases here are the silent ones.
+describe("a squat whose chest leans past chest up is told to keep it up, and nothing else ever is", () => {
+  // Each case is the second rep of a set whose first rep was a proper squat, counted: the words are said only once the set
+  // has counted a rep of the squat (round one: a kettlebell swing's first dip under the floor view).
+  const second = (change: Change): Change => (t, p, b) => {
+    if (t > SECOND) change(t - SECOND, p, b);
+  };
+  const leanTo = (degrees: number): Change => (_t, p, b) => (b.trunk = 3 + (degrees - 3) * p);
+  const past = bound("chest up") + 6;
+  const both = (...changes: Change[]): Change => (t, p, b) => {
+    for (const c of changes) c(t, p, b);
+  };
+  const saidAll = (change: Change, exercise: ExerciseCamera | null = EXERCISE) => repsOf(second(change), false, exercise, true).map((r) => [r.verdict, r.rule, r.reason]);
+  const said = (change: Change, exercise: ExerciseCamera | null = EXERCISE) => {
+    const all = saidAll(change, exercise);
+    expect(all[0]).toEqual(["counted", null, null]);
+    return all.slice(1);
+  };
+  const HIDE_FEET: Change = (t, _p, b) => {
+    if (t > 1400 && t < 3700) for (const i of FEET) b.each.set(i, "hidden");
+  };
+
+  it("the first rep of a set, leaning past chest up, is not counted and says nothing: no squat counted yet", () => {
+    expect(repsOf(leanTo(past), false, EXERCISE).map((r) => [r.verdict, r.rule, r.reason])).toEqual([["other", "chest up", null]]);
+  });
+
+  it("the file's own line: the squat's chest up is 52 degrees, its lean forward 46", () => {
+    expect([bound("chest up"), EXERCISE.mistakes.find((m) => m.id === "lean_forward")]).toMatchObject([52, { atMost: 46, refused: { rule: "chest up", words: "Keep your chest up." } }]);
+  });
+
+  const CASES: readonly (readonly [string, Change, readonly [string, string | null, string | null]])[] = [
+    ["side on, a squat in every way but the chest, leaning past chest up: not counted, told to keep the chest up", leanTo(past), ["refused", "chest up", "Keep your chest up."]],
+    ["the same, facing the phone: the picture cannot see a lean from the front, so silent", both(leanTo(past), (_t, _p, b) => (b.turn = 1)), ["other", "chest up", null]],
+    ["the same, half turned (0.6 of the hips shown): not side on, silent", both(leanTo(past), (_t, _p, b) => (b.turn = 0.6)), ["other", "chest up", null]],
+    ["the same, the hips also short of the depth: not a squat in every other way, silent", both(leanTo(past), (_t, p, b) => (b.hips = 1.15 - bound("depth") * 0.8 * p)), ["other", "chest up", null]],
+    ["the same, the hips also bending far more than the knees (a hinge): silent", both(leanTo(past), (_t, p, b) => (b.hipAngle = 168 - (85 + bound("hips and knees together") + 15) * p)), ["other", "hips and knees together", null]],
+    ["the same, the feet hidden all through: what the camera could not see leaves it silent", both(leanTo(past), HIDE_FEET), ["other", "chest up", null]],
+    ["the same, the feet stepping out at the bottom: silent", both(leanTo(past), (_t, p, b) => (b.feetX = p > 0.5 ? (bound("feet stay in place") + 0.05) * SIZE : 0)), ["other", "chest up", null]],
+    ["a lean past leaning too far forward and short of chest up: counted", leanTo(49), ["counted", null, null]],
+    ["a lean just at chest up: counted", leanTo(bound("chest up")), ["counted", null, null]],
+  ];
+
+  it.each(CASES)("%s", (_name, change, verdict) => {
+    expect(said(change)).toEqual([verdict]);
+  });
+
+  it("the told rep carries the mistake that refused it, made; the rep counted at 49 degrees is marked leaning too far forward", () => {
+    expect(repsOf(second(leanTo(past)), false, EXERCISE, true).map((r) => r.form.map((f) => [f.mistake, f.status]))[1]).toEqual([["lean_forward", "made"]]);
+    expect(repsOf(leanTo(49), false, EXERCISE).map((r) => r.form.map((f) => [f.mistake, f.status]))).toEqual([[["lean_forward", "made"], ["knees_cave_in", "unseen"]]]);
+  });
+
+  it("without the exercise's camera file the movement alone never speaks of the chest", () => {
+    expect(said(leanTo(past), null)).toEqual([["other", "chest up", null]]);
+  });
+});
+
+describe("the set's summary of the rep made by hand passes the server's own check", () => {
+  const summaryOf = (change?: Change) => engineSetSummarySchema.parse(recorded(change, false, EXERCISE).record.summary());
+
+  it("a good rep, side on: one rep scored 100, nothing made, the whole 5 s watched", () => {
+    const s = summaryOf();
+    expect(s).toMatchObject({ exercise: "squat", setIndex: 1, reps: 1, repScores: [100], avgFormScore: 100, view: "side", mode: "engine", engineVersion: "2.0.0", definitionVersion: EXERCISE.version });
+    // A partial match takes {} for any faults: compared whole.
+    expect(s.faultCounts).toEqual({});
+    expect([s.durationMs, s.watchedMs]).toEqual([5000, 5000]);
+    expect(s.romStats).toEqual({ depth: 0.45, "knees bent": 90 });
+  });
+
+  it("leaning too far forward on its one rep: scored 0, the mistake counted once", () => {
+    const s = summaryOf((_t, p, b) => (b.trunk = 3 + 46 * p));
+    expect(s).toMatchObject({ reps: 1, repScores: [0], avgFormScore: 0 });
+    expect(s.faultCounts).toEqual({ lean_forward: 1 });
+  });
+
+  it("a good rep, then one refused for its chest: one rep, one score, and the mistake counted", () => {
+    const lean: Change = (t, p, b) => (b.trunk = t > SECOND ? 3 + (bound("chest up") + 3) * p : b.trunk);
+    const s = engineSetSummarySchema.parse(recorded(lean, false, EXERCISE, true).record.summary());
+    expect(s).toMatchObject({ reps: 1, repScores: [100], avgFormScore: 100, view: "side" });
+    expect(s.faultCounts).toEqual({ lean_forward: 1 });
+  });
+
+  it("the first rep refused for its chest, so only silent: no rep, no score and no mistake counted", () => {
+    const s = summaryOf((_t, p, b) => (b.trunk = 3 + (bound("chest up") + 3) * p));
+    expect(s).toMatchObject({ reps: 0, repScores: [], avgFormScore: null, tempoMsAvg: null, romStats: null, view: "unknown" });
+    expect(s.faultCounts).toEqual({});
+  });
+
+  it("facing the phone, the camera seeing none of the mistakes: the rep counts and has no score, never a good one", () => {
+    const s = summaryOf((_t, _p, b) => (b.turn = 1));
+    expect(s).toMatchObject({ reps: 1, repScores: [], avgFormScore: null, view: "front" });
+    expect(s.faultCounts).toEqual({});
+  });
+
+  it("the person lost from view for 0.47 s after the rep: that time is not watched", () => {
+    const s = summaryOf((t, _p, b) => (b.hipsSeen = !(t > 4000 && t < 4500)));
+    expect(s.reps).toBe(1);
+    expect(s.durationMs - (s.watchedMs ?? 0)).toBe(467);
   });
 });
 

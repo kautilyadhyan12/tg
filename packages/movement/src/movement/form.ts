@@ -79,11 +79,33 @@ const isLean = (name: string): boolean => UNIT.get(name) === "degrees" && name.e
 /** A width across the body: what a mistake read facing the phone reads. */
 const isWidth = (name: string): boolean => UNIT.get(name) === "trunks" && name.endsWith(" apart");
 
+/** Why a checked mistake may not name this rule as the one that refuses it past its line (`refused`), or null: the rule
+ *  must be one of the movement's "match" rules, read where the mistake is read, as the same value of the same measures,
+ *  the mistake taken against nothing, and its line further out the same way, so that a rep past the rule is past the
+ *  mistake too. */
+function refusedWrong(m: CheckedMistake, movement: Movement): string | null {
+  const named = m.refused?.rule;
+  if (named === undefined) return null;
+  const rule = movement.rules.find((r) => r.name === named);
+  if (rule === undefined) return `"${m.id}" is refused by the rule "${named}", which ${movement.name} does not have`;
+  const same = (a: readonly string[], b: readonly string[]): boolean => a.length === b.length && a.every((x) => b.includes(x));
+  const reads = rule.read.kind === "value" && m.read.kind === "value" && same(rule.read.measures, m.read.measures);
+  const further =
+    (m.atMost !== undefined && rule.atMost !== undefined && rule.atMost >= m.atMost) || (m.atLeast !== undefined && rule.atLeast !== undefined && rule.atLeast <= m.atLeast);
+  if (rule.role !== "match" || rule.at !== m.at || !reads || m.against !== "nothing" || !further) {
+    return `"${m.id}" is refused by "${named}", which must be a match rule read as the mistake is read, its line further out`;
+  }
+  return null;
+}
+
 /** Refuses an exercise the engine cannot read rightly: on another movement, naming a measure the engine does not have,
- *  leaving a mistake to a rule the movement does not have, or reading from a side what that side does not shorten as
- *  the judge allows for (side on, leans only, as they are or against the bottom; facing the phone, widths only). */
+ *  leaving a mistake to a rule the movement does not have, reading from a side what that side does not shorten as the
+ *  judge allows for (side on, leans only, as they are or against the bottom; facing the phone, widths only), or naming
+ *  as a mistake's refusing rule one that does not read it (`refusedWrong`); two mistakes refused by one rule. */
 export function checkExercise(exercise: ExerciseCamera, movement: Movement): void {
   if (exercise.movement !== movement.name) throw new Error(`${exercise.id} uses the movement ${exercise.movement}, not ${movement.name}.`);
+  const refusing = checkedOf(exercise).flatMap((m) => (m.refused === undefined ? [] : [m.refused.rule]));
+  const twice = refusing.filter((r, k) => refusing.indexOf(r) !== k).map((r) => `two mistakes are refused by "${r}"`);
   const wrong = exercise.mistakes.flatMap((m) => {
     if (m.camera === "checked") {
       const names = namesOf(m.read);
@@ -91,11 +113,13 @@ export function checkExercise(exercise: ExerciseCamera, movement: Movement): voi
       if (unknown.length > 0) return unknown;
       if (m.view === "side" && (!names.every(isLean) || m.against === "standing")) return [`"${m.id}" is read side on, which takes leans only, never against standing`];
       if (m.view === "front" && !names.every(isWidth)) return [`"${m.id}" is read facing the phone, which takes widths only`];
-      return [];
+      const refused = refusedWrong(m, movement);
+      return refused === null ? [] : [refused];
     }
     if (m.camera === "counting" && !movement.rules.some((r) => r.name === m.rule)) return [`"${m.id}" is left to the rule "${m.rule}", which ${movement.name} does not have`];
     return [];
   });
+  wrong.push(...twice);
   if (wrong.length > 0) throw new Error(`${exercise.id}: ${wrong.join("; ")}.`);
 }
 
