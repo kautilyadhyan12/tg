@@ -9,14 +9,16 @@ import { cancelledLine, noAddressLine, receiptDay, receiptLines, receiptNotes, r
 import { printHtml } from './receiptPrint';
 import PostalAddressBox from './PostalAddressBox';
 import SentencePlace from './SentencePlace';
+import { MiddleBox } from './ConsoleBoxes';
 
 // ONE RECEIPT, OPENED UNDER THE ROW WHOSE BUTTON WAS PRESSED (spec Part 3 §14.3; ROADMAP
 // 18g-i). It is read from the server each time it opens, so it says what the gym's notebook
 // says now: a payment voided since reads Voided. Print prints the receipt alone, laid
 // out as a page of its own (`receiptPrintHtml`).
-// A gym with no postal address is asked for it here, by whoever may add it.
+// A gym with no postal address is asked for it here, by whoever may add it. `inMiddle`: it opens in the middle of the
+// screen instead (a member's page, V2b-ii); Escape and pressing outside are its Close.
 
-export default function ReceiptBox({ gymId, gym, number, onClose }) {
+export default function ReceiptBox({ gymId, gym, number, onClose, inMiddle = false }) {
   const [state, setState] = useState({ number: null, asked: 0, receipt: null, error: null });
   const [asked, setAsked] = useState(0);
   const words = orgWords(gym?.orgType);
@@ -39,7 +41,7 @@ export default function ReceiptBox({ gymId, gym, number, onClose }) {
   const loading = state.number !== number || (state.receipt === null && state.asked !== asked);
   const receipt = loading ? null : state.receipt;
 
-  return (
+  const box = (
     <div className="flex flex-col gap-3" data-testid="receipt-box">
       {loading ? (
         <p className="c-s14 c-t2 m-0 flex items-center gap-2">
@@ -90,7 +92,7 @@ export default function ReceiptBox({ gymId, gym, number, onClose }) {
           {mayAddAddress ? <PostalAddressBox gymId={gymId} onSaved={again} /> : <SentencePlace kind="postalAddress" gym={gym} />}
         </div>
       ) : null}
-      <div className="flex flex-wrap gap-2">
+      <div className="c-inbox-a">
         {receipt !== null ? (
           <button type="button" className="c-btn c-btn-p c-btn-sm" onClick={() => printHtml(receiptPrintHtml(receipt))}>
             <Printer aria-hidden="true" className="w-4 h-4" />
@@ -107,5 +109,11 @@ export default function ReceiptBox({ gymId, gym, number, onClose }) {
         </button>
       </div>
     </div>
+  );
+  if (!inMiddle) return box;
+  return (
+    <MiddleBox label={`Receipt #${String(number)}`} onClose={onClose} role="dialog">
+      {box}
+    </MiddleBox>
   );
 }

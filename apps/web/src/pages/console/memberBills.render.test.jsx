@@ -288,8 +288,9 @@ describe('a membership that is over', () => {
     const [row] = await rowsSoon();
     expect(buttonsIn(row)).toEqual(['View receipt', 'More for the payment of £5.00', 'Record payment']);
     fromMenu(row, 'More for the payment of £5.00', 'Void payment');
-    // The box opens inside the bill whose payment it is about.
-    expect(within(row).getByTestId('held-bill').contains(screen.getByTestId('held-void-payment'))).toBe(true);
+    // The box opens in the middle, over the page, and names the payment it is about (below).
+    expect(screen.getByRole('alertdialog').contains(screen.getByTestId('held-void-payment'))).toBe(true);
+    expect(row.contains(screen.getByTestId('held-void-payment'))).toBe(false);
     const voidBox = within(screen.getByTestId('held-void-payment'));
     expect(voidBox.getByText("Void the £5.00 payment recorded on 19 October 2026 for Ada Lovelace's One week?")).toBeTruthy();
     // Nothing is sent until a reason is picked.
@@ -418,7 +419,7 @@ describe('Void bill (was Cancel this bill)', () => {
     // Only the membership with a bill to pay has the button.
     expect(within(goldRow).queryByRole('button', { name: BILL_MENU })).toBeNull();
     fromMenu(packRow, BILL_MENU, 'Void bill');
-    const box = within(within(packRow).getByTestId('held-cancel-bill'));
+    const box = within(screen.getByTestId('held-cancel-bill'));
     expect(box.getByText("Void this £90.00 bill for Ada Lovelace's 10 classes?")).toBeTruthy();
     expect(
       box.getByText(
@@ -491,7 +492,7 @@ describe('Note a refund', () => {
     render(draw());
     const [row] = await rowsSoon();
     fromMenu(row, 'More for the payment of £49.99', 'Note a refund');
-    const form = within(within(row).getByTestId('held-refund-form'));
+    const form = within(screen.getByTestId('held-refund-form'));
     expect(form.getByText("Note a refund for Ada Lovelace's Gold Monthly")).toBeTruthy();
     expect(
       form.getByText(
@@ -540,7 +541,7 @@ describe('Note a refund', () => {
     expect(within(row).queryByRole('button', { name: 'More for the payment of £49.99' })).toBeNull();
     expect(menuOf(row, 'More for the refund of £49.99, receipt #9000')).toEqual(['Void refundIt was noted by mistake. It will no longer count.']);
     fireEvent.click(within(row).getByRole('menuitem', { name: /^Void refund/ }));
-    const box = within(within(row).getByTestId('held-void-refund'));
+    const box = within(screen.getByTestId('held-void-refund'));
     expect(box.getByText("Void the £49.99 refund noted on 4 October 2026 for Ada Lovelace's Gold Monthly?")).toBeTruthy();
     fireEvent.click(box.getByRole('button', { name: 'Void refund' }));
     expect(box.getByRole('alert').textContent).toBe('Pick why you are voiding it.');
@@ -554,7 +555,7 @@ describe('Note a refund', () => {
     expect(await screen.findByText('That refund was voided.')).toBeTruthy();
   });
 
-  it('with two refunds on one payment, voiding one says the other still counts, never that the payment counts in full, and opens in that bill', async () => {
+  it('with two refunds on one payment, voiding one says the other still counts, never that the payment counts in full, and asks in the middle', async () => {
     const gold = held(1, GOLD, '2026-10-04', true);
     const [first] = gold.billing.bills;
     const refund = (n) => ({ id: `77777777-7777-4777-8777-00000000005${String(n)}`, amountMinor: 1000, method: 'cash', refundedOn: '2026-10-05', reason: 'charged_too_much', by: 'Sam Owner', receiptNumber: 50 + n });
@@ -566,7 +567,7 @@ describe('Note a refund', () => {
     expect(menuOf(row, 'More for the refund of £10.00, receipt #51').map((line) => line.replace(/^Void refund/, ''))[0]).toBe('It was noted by mistake. It will no longer count.');
     fireEvent.click(within(row).getByRole('menuitem', { name: /^Void refund/ }));
     const box = screen.getByTestId('held-void-refund');
-    expect(within(row).getByTestId('held-bill').contains(box)).toBe(true);
+    expect(screen.getByRole('alertdialog').contains(box)).toBe(true);
     expect(box.textContent).toContain('It no longer counts. The other refund on this payment still counts.');
     expect(box.textContent).not.toContain('counts in full');
   });
@@ -626,7 +627,7 @@ describe('Note a refund', () => {
     render(draw());
     const [row] = await rowsSoon();
     fromMenu(row, 'More for the payment of £49.99', 'Note a refund');
-    const form = within(within(row).getByTestId('held-refund-form'));
+    const form = within(screen.getByTestId('held-refund-form'));
     fireEvent.change(form.getByLabelText('How you gave it back'), { target: { value: 'cash' } });
     fireEvent.change(form.getByLabelText('Why it was refunded'), { target: { value: 'other' } });
     fireEvent.click(form.getByRole('button', { name: 'Note refund' }));
@@ -749,7 +750,7 @@ describe('a late cancel or no-show fee, under its membership (18h-i)', () => {
     const item = within(await feesIn()).getByTestId('held-fee');
     expect(item.textContent).toContain('Due today');
     fireEvent.click(within(item).getByRole('button', { name: 'Waive fee' }));
-    const ask = within(item).getByTestId('held-fee-waive');
+    const ask = screen.getByTestId('held-fee-waive');
     expect(ask.textContent).toContain("Waive Ada Lovelace's no-show fee of £5.00?");
     expect(ask.textContent).toContain('Ada Lovelace will owe nothing for it.');
     expect(orgService.changeHeldMembership).not.toHaveBeenCalled();
@@ -768,7 +769,7 @@ describe('a late cancel or no-show fee, under its membership (18h-i)', () => {
     expect(within(item).queryByRole('button', { name: 'Waive fee' })).toBeNull();
     expect(within(item).getByTestId('held-fee-payment').textContent).toContain('Cash · 15 Oct 2026 · by Sam Owner');
     fromMenu(item, /^More for the payment/, 'Void payment');
-    const ask = within(item).getByTestId('held-fee-void');
+    const ask = screen.getByTestId('held-fee-void');
     fireEvent.change(within(ask).getByRole('combobox'), { target: { value: 'mistake' } });
     fireEvent.click(within(ask).getByRole('button', { name: 'Void payment' }));
     await waitFor(() => expect(orgService.changeHeldMembership).toHaveBeenCalledWith(GYM, ADA, gold.id, `fees/${FEE_ID}/payments/${PAY_ID}/void`, { reason: 'mistake' }));
@@ -782,7 +783,7 @@ describe('a late cancel or no-show fee, under its membership (18h-i)', () => {
     const item = within(await feesIn()).getByTestId('held-fee');
     expect(item.textContent).toContain('No longer outstanding: they were marked Came, or the class was cancelled. If you gave the money back, void the payment.');
     fromMenu(item, /^More for the payment/, 'Void payment');
-    const ask = within(item).getByTestId('held-fee-void');
+    const ask = screen.getByTestId('held-fee-void');
     expect(ask.textContent).toContain('Voiding the payment takes the fee off too, so nothing is outstanding.');
     expect(ask.textContent).not.toContain('outstanding again');
   });

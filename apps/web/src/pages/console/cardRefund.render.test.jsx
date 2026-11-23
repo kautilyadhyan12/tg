@@ -170,7 +170,7 @@ describe('Refund to card on a fee', () => {
     const membershipId = feePage().data.memberships[0].id;
     draw({ refundNow: { membershipId, paymentId: FEE_PAYMENT, voidFeeId: null } });
     const row = await feePayment();
-    await row.findByTestId('card-refund-box');
+    await screen.findByTestId('card-refund-box');
     expect(orgService.getCardRefund).toHaveBeenCalledTimes(1);
     expect(orgService.refundToCard).not.toHaveBeenCalled();
   });
@@ -218,7 +218,7 @@ describe('Refund to card on a fee', () => {
     expect(items.map((i) => i.textContent)).toEqual(['Void paymentIt was recorded by mistake. The fee is outstanding again.']);
   });
 
-  it('Note a refund opens under the fee, names it, and sends to the fee\'s payment', async () => {
+  it('Note a refund asks in the middle, names the fee, and sends to the fee\'s payment', async () => {
     orgService.getHeldMemberships.mockResolvedValue(feePage());
     orgService.changeHeldMembership.mockResolvedValue(feePage());
     draw();
@@ -226,7 +226,7 @@ describe('Refund to card on a fee', () => {
     fireEvent.click(items[1]);
     const form = within(await screen.findByTestId('held-refund-form'));
     expect(form.getByText("Note a refund for Tara Singh's no-show fee")).toBeTruthy();
-    expect(within(screen.getByTestId('held-fee-payment')).getByTestId('held-refund-form')).toBeTruthy();
+    expect(within(screen.getByRole('alertdialog')).getByTestId('held-refund-form')).toBeTruthy();
     expect(within(form.getByLabelText('Why it was refunded')).queryByRole('option', { name: 'Leaving or cancelled' })).toBeNull();
     fireEvent.change(form.getByLabelText('How you gave it back'), { target: { value: 'cash' } });
     fireEvent.change(form.getByLabelText('Why it was refunded'), { target: { value: 'other' } });

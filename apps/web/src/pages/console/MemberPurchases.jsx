@@ -115,7 +115,7 @@ export default function MemberPurchases({ gymId, gym, entryId, name, past, squar
                     {said}
                   </p>
                 ) : null}
-                {receiptFor === sale.id ? <ReceiptBox gymId={gymId} gym={gym} number={line.receiptNumber} onClose={() => setReceiptFor(null)} /> : null}
+                {receiptFor === sale.id ? <ReceiptBox gymId={gymId} gym={gym} number={line.receiptNumber} onClose={() => setReceiptFor(null)} inMiddle /> : null}
                 {saleRefundPick(refunding, sale.id) !== null ? (
                   <BasketRefundBox gymId={gymId} country={gym?.country} basket={basket} who={who} toCard={refunding.toCard} paymentsTo={paymentsTo} onDone={doneHere(sale.id)} onStopped={() => setReads((n) => n + 1)} onClose={() => setRefunding(null)} />
                 ) : null}

@@ -13,7 +13,6 @@ import { blockNotes, cardRefundBlockLine, cardRefundBody, cardRefundBoxWords, ca
 
 const MAIN = 'c-btn c-btn-p';
 const PLAIN = 'c-btn c-btn-s';
-const BOX = { background: 'var(--raise)' };
 const NOT_CONNECTED = ['card_not_ready', 'card_connection_refused'];
 /** Square said no and no money went: the next press is a new one. Anything else may have reached Square, and keeps its key. */
 const NOTHING_SENT = ['card_refund_refused', 'card_refund_failed', 'card_connection_refused'];
@@ -77,7 +76,7 @@ export function RefundToCardBox({ gymId, readKey, read, press, currency, words: 
   }, [readKey, currency]);
 
   const back = (
-    <button type="button" className={PLAIN} disabled={busy} onClick={onClose}>
+    <button type="button" className={PLAIN} disabled={busy} onClick={onClose} data-autofocus>
       Back
     </button>
   );
@@ -89,7 +88,7 @@ export function RefundToCardBox({ gymId, readKey, read, press, currency, words: 
 
   if (check === null) {
     return (
-      <div className="rounded-[14px] p-3 flex flex-col gap-3" style={BOX} data-testid="card-refund-box">
+      <div className="c-inbox flex flex-col gap-3" data-testid="card-refund-box">
         {problem === null ? (
           <span className="c-s14 c-t2 flex items-center gap-2">
             <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" />
@@ -147,10 +146,10 @@ export function RefundToCardBox({ gymId, readKey, read, press, currency, words: 
 
   if (check.block === null && check.onTerminal === true && check.terminals.length === 0) {
     return (
-      <div className="rounded-[14px] p-3 flex flex-col gap-3" style={BOX} data-testid="card-refund-box">
+      <div className="c-inbox flex flex-col gap-3" data-testid="card-refund-box">
         <span className="c-s14 c-t1">{paymentsTo !== null ? CARD_REFUND_TERMINAL_WORDS.no_terminal : CARD_REFUND_TERMINAL_WORDS.no_terminal_staff}</span>
         {paymentsTo !== null ? <PlaceLink to={paymentsTo}>Open Square settings</PlaceLink> : null}
-        <div className="flex flex-wrap gap-2">
+        <div className="c-inbox-a">
           {note}
           {back}
         </div>
@@ -161,14 +160,14 @@ export function RefundToCardBox({ gymId, readKey, read, press, currency, words: 
   if (check.block !== null) {
     const inSquare = inSquareLine(money, check);
     return (
-      <div className="rounded-[14px] p-3 flex flex-col gap-3" style={BOX} data-testid="card-refund-box">
+      <div className="c-inbox flex flex-col gap-3" data-testid="card-refund-box">
         <span className="c-s14 c-t1">{cardRefundBlockLine(check.block)}</span>
         {inSquare !== null ? (
           <span className="c-s14 c-w5" style={{ color: 'var(--warn)' }}>
             {inSquare}
           </span>
         ) : null}
-        <div className="flex flex-wrap gap-2">
+        <div className="c-inbox-a">
           {blockNotes(check.block) || inSquare !== null ? note : null}
           {back}
         </div>
@@ -207,8 +206,7 @@ export function RefundToCardBox({ gymId, readKey, read, press, currency, words: 
   return (
     <form
       noValidate
-      className="rounded-[14px] p-3 flex flex-col gap-3"
-      style={BOX}
+      className="c-inbox flex flex-col gap-3"
       data-testid="card-refund-box"
       onSubmit={(e) => {
         e.preventDefault();
@@ -220,7 +218,7 @@ export function RefundToCardBox({ gymId, readKey, read, press, currency, words: 
         void send();
       }}
     >
-      <p className="c-s15 c-w6 c-t1 m-0">{words.title}</p>
+      <p className="c-inbox-t c-s15 c-w6 c-t1 m-0">{words.title}</p>
       <p className="c-s14 c-t2 m-0">{words.detail}</p>
       {check.onTerminal === true ? <p className="c-s14 c-t1 m-0">{CARD_REFUND_TERMINAL_WORDS.present}</p> : null}
       {words.inSquare !== null ? (
@@ -283,7 +281,7 @@ export function RefundToCardBox({ gymId, readKey, read, press, currency, words: 
           {problem}
         </span>
       ) : null}
-      <div className="flex flex-wrap gap-2">
+      <div className="c-inbox-a">
         <button type="submit" className={MAIN} style={{ whiteSpace: 'normal', maxWidth: '100%', height: 'auto' }} disabled={busy}>
           {busy ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : <RotateCcw aria-hidden="true" className="w-4 h-4" />}
           {cardRefundButton(money, check, draft)}

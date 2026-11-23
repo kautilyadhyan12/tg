@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState } from 'react';
-import { SidePanel } from '../../components/console/ConsoleBoxes';
+import { MiddleBox, SidePanel } from '../../components/console/ConsoleBoxes';
 import { Link, useInRouterContext } from 'react-router-dom';
 import { Check, CreditCard, Loader2, Plus } from 'lucide-react';
 import { MEMBER_FEE_WORDS, UNDO_CANCEL_BUTTON, UNDO_CANCEL_WORDS, appCancelLine, formatMinor, memberGiftDaysLine, paidThroughSquare, undoCancelDoneLine } from '@app/shared';
@@ -165,6 +165,11 @@ const LINK = 'c-btn c-btn-link c-btn-sm';
 // stay plain. In a ⋯ list a void is red and a refund plain.
 const PAY = 'c-btn c-btn-p c-btn-sm';
 const STOP = 'c-btn c-btn-danger c-btn-sm';
+/** The questions asked in the middle, before money or a membership changes (V2b-ii; spec Part 3
+ *  §17.11, "Where a box opens"). Record a payment and Take payment stay under their button. */
+const IN_MIDDLE = new Set(['freeze', 'unfreeze', 'cancel', 'undo', 'undoCancel', 'cancelBill', 'refund', 'cardRefund', 'voidRefund', 'waiveFee', 'voidFeePayment']);
+/** Of those, the ones a bill, a payment or a fee draws, never the membership's own bar. */
+const IN_MIDDLE_FROM_A_BILL = new Set(['cancelBill', 'refund', 'cardRefund', 'voidRefund', 'waiveFee', 'voidFeePayment']);
 /** A payment or refund staff voided: crossed out, in the page's quiet colour. */
 const VOIDED = { color: 'var(--t3)', textDecoration: 'line-through' };
 // A payment or a refund: columns with its button at the end; on a phone, one under another.
@@ -703,7 +708,7 @@ export default function MemberMemberships({
     const ask = undoAsk.ask;
     const choice = ask?.choice ?? null;
     return (
-      <div className="rounded-[14px] p-3 flex flex-col gap-2" style={{ background: 'var(--raise)' }} data-testid="held-ask-undoCancel">
+      <div className="c-inbox flex flex-col gap-2" data-testid="held-ask-undoCancel">
         {ask === null ? (
           undoAsk.error === null ? (
             <p className="c-s14 c-t2 m-0 flex items-center gap-2">
@@ -717,7 +722,7 @@ export default function MemberMemberships({
           )
         ) : (
           <>
-            <p className="c-s15 c-w6 c-t1 m-0">{ask.question}</p>
+            <p className="c-inbox-t c-s15 c-w6 c-t1 m-0">{ask.question}</p>
             {(choice?.lines ?? []).map((line) => (
               <p key={line} className="c-s14 c-t2 m-0">
                 {line}
@@ -730,7 +735,7 @@ export default function MemberMemberships({
             ))}
           </>
         )}
-        <div className="flex flex-wrap gap-2">
+        <div className="c-inbox-a">
           {choice !== null ? (
             <button
               type="button"
@@ -744,7 +749,7 @@ export default function MemberMemberships({
               {choice.button}
             </button>
           ) : null}
-          <button type="button" className={PLAIN} disabled={busy} onClick={close}>
+          <button type="button" className={PLAIN} disabled={busy} onClick={close} data-autofocus>
             {choice !== null ? UNDO_CANCEL_WORDS.dismiss : 'Close'}
           </button>
         </div>
@@ -816,6 +821,14 @@ export default function MemberMemberships({
     setChangeDraft(null);
     setStartedAs(null);
   };
+
+  /** A question box drawn in the middle, its own buttons kept; Escape and pressing outside are its Keep it. */
+  const middle = (box, label = undefined) =>
+    box === null ? null : (
+      <MiddleBox onClose={close} busy={busy} error={refusal} label={label}>
+        {box}
+      </MiddleBox>
+    );
 
   /** A fee's own box, opened by its button: pay it, waive it, or void its payment. */
   const startFee = (m, what, fee) => {
@@ -937,11 +950,11 @@ export default function MemberMemberships({
     }
     if (feeForm.what === 'waiveFee') {
       const words = waiveFeeWords(fee, m.currency, name);
-      return (
-        <div className="rounded-[14px] p-3 flex flex-col gap-3" style={{ background: 'var(--raise)' }} data-testid="held-fee-waive">
-          <p className="c-s15 c-w6 c-t1 m-0">{words.question}</p>
+      return middle(
+        <div className="c-inbox flex flex-col gap-3" data-testid="held-fee-waive">
+          <p className="c-inbox-t c-s15 c-w6 c-t1 m-0">{words.question}</p>
           <p className="c-s14 c-t2 m-0">{words.detail}</p>
-          <div className="flex flex-wrap gap-2">
+          <div className="c-inbox-a">
             <button
               type="button"
               className={DANGER}
@@ -951,7 +964,7 @@ export default function MemberMemberships({
               {busy ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : null}
               {words.button}
             </button>
-            <button type="button" className={PLAIN} disabled={busy} onClick={close}>
+            <button type="button" className={PLAIN} disabled={busy} onClick={close} data-autofocus>
               Keep it
             </button>
           </div>
@@ -1009,7 +1022,17 @@ export default function MemberMemberships({
       const payment = paymentOf(m, paymentId);
       if (payment === null) return null;
       const fee = feeOfPayment(m, paymentId);
+      // Escape or pressing outside, even while a Terminal waits: the page reads again, so it says where the refund stands.
       return (
+        <MiddleBox
+          onClose={() => {
+            readQuietly.current();
+            setOpen(null);
+          }}
+          busy={busy}
+          error={refusal}
+          label="Refund to card"
+        >
         <CardRefundBox
           gymId={gymId}
           entryId={entryId}
@@ -1030,6 +1053,7 @@ export default function MemberMemberships({
             onChanged?.();
           }}
         />
+        </MiddleBox>
       );
     }
     return null;
@@ -1077,7 +1101,7 @@ export default function MemberMemberships({
             </span>
           </div>
         ))}
-        {p.refunds.some((r) => r.receiptNumber === receiptFor) ? <ReceiptBox gymId={gymId} gym={gym} number={receiptFor} onClose={() => setReceiptFor(null)} /> : null}
+        {p.refunds.some((r) => r.receiptNumber === receiptFor) ? <ReceiptBox gymId={gymId} gym={gym} number={receiptFor} onClose={() => setReceiptFor(null)} inMiddle /> : null}
         {here !== null && here.what === 'voidRefund' && voidForm !== null && here.paymentId === p.id ? renderVoidRefund(m) : null}
       </>
     );
@@ -1168,7 +1192,7 @@ export default function MemberMemberships({
                       </span>
                     ) : null}
                     <ChargebackLines lines={p.chargebacks ?? []} gymId={gymId} said={chargesStarted} onStarted={readOnly ? null : (done) => { setChargesStarted(done); setAttempt((n) => n + 1); }} />
-                    {receiptFor === p.receiptNumber ? <ReceiptBox gymId={gymId} gym={gym} number={p.receiptNumber} onClose={() => setReceiptFor(null)} /> : null}
+                    {receiptFor === p.receiptNumber ? <ReceiptBox gymId={gymId} gym={gym} number={p.receiptNumber} onClose={() => setReceiptFor(null)} inMiddle /> : null}
                     {saidUnder(m, p.id)}
                     {refundBoxUnder(m, p.id)}
                     {renderRefundLines(m, p, acts)}
@@ -1210,11 +1234,10 @@ export default function MemberMemberships({
   /** Void payment and Void refund: what is voided, what changes, and why, picked. */
   const renderVoid = (m, words, choices, testId, send) => {
     const { problem, body } = voidBody(voidForm);
-    return (
+    return middle(
       <form
         noValidate
-        className="rounded-[14px] p-3 flex flex-col gap-3"
-        style={{ background: 'var(--raise)' }}
+        className="c-inbox flex flex-col gap-3"
         data-testid={testId}
         onSubmit={(e) => {
           e.preventDefault();
@@ -1226,7 +1249,7 @@ export default function MemberMemberships({
           void send(body);
         }}
       >
-        <p className="c-s15 c-w6 c-t1 m-0">{words.question}</p>
+        <p className="c-inbox-t c-s15 c-w6 c-t1 m-0">{words.question}</p>
         <p className="c-s14 c-t2 m-0">{words.detail}</p>
         <label className="c-field">
           <span className="c-label">{words.label}</span>
@@ -1244,12 +1267,12 @@ export default function MemberMemberships({
             {problem}
           </span>
         ) : null}
-        <div className="flex flex-wrap gap-2">
+        <div className="c-inbox-a">
           <button type="submit" className={DANGER} disabled={busy}>
             {busy ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : null}
             {words.button}
           </button>
-          <button type="button" className={PLAIN} disabled={busy} onClick={close}>
+          <button type="button" className={PLAIN} disabled={busy} onClick={close} data-autofocus>
             Keep it
           </button>
         </div>
@@ -1263,11 +1286,10 @@ export default function MemberMemberships({
     if (bill === null) return null;
     const words = cancelBillWords(m, name, isLive(m));
     const { problem, body } = cancelBillBody(billForm);
-    return (
+    return middle(
       <form
         noValidate
-        className="rounded-[14px] p-3 flex flex-col gap-3"
-        style={{ background: 'var(--raise)' }}
+        className="c-inbox flex flex-col gap-3"
         data-testid="held-cancel-bill"
         onSubmit={(e) => {
           e.preventDefault();
@@ -1279,7 +1301,7 @@ export default function MemberMemberships({
           void run('cancelBill', m, () => orgService.changeHeldMembership(gymId, entryId, m.id, `bills/${encodeURIComponent(bill.id)}/cancel`, body), words.done);
         }}
       >
-        <p className="c-s15 c-w6 c-t1 m-0">{words.question}</p>
+        <p className="c-inbox-t c-s15 c-w6 c-t1 m-0">{words.question}</p>
         <p className="c-s14 c-t2 m-0">{words.detail}</p>
         <label className="c-field">
           <span className="c-label">Why are you voiding it?</span>
@@ -1297,12 +1319,12 @@ export default function MemberMemberships({
             {problem}
           </span>
         ) : null}
-        <div className="flex flex-wrap gap-2">
+        <div className="c-inbox-a">
           <button type="submit" className={DANGER} disabled={busy}>
             {busy ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : null}
             {words.button}
           </button>
-          <button type="button" className={PLAIN} disabled={busy} onClick={close}>
+          <button type="button" className={PLAIN} disabled={busy} onClick={close} data-autofocus>
             Keep it
           </button>
         </div>
@@ -1316,11 +1338,10 @@ export default function MemberMemberships({
     if (payment === null) return null;
     const words = refundWords(m, name, payment, isLive(m));
     const { problem, body } = refundBody(m, payment, refundForm);
-    return (
+    return middle(
       <form
         noValidate
-        className="rounded-[14px] p-3 flex flex-col gap-3"
-        style={{ background: 'var(--raise)' }}
+        className="c-inbox flex flex-col gap-3"
         data-testid="held-refund-form"
         onSubmit={(e) => {
           e.preventDefault();
@@ -1338,7 +1359,7 @@ export default function MemberMemberships({
           );
         }}
       >
-        <p className="c-s15 c-w6 c-t1 m-0">{words.title}</p>
+        <p className="c-inbox-t c-s15 c-w6 c-t1 m-0">{words.title}</p>
         <p className="c-s14 c-t2 m-0">{words.detail}</p>
         <label className="c-field">
           <span className="c-label">{`Amount given back (${m.currency})`}</span>
@@ -1377,12 +1398,12 @@ export default function MemberMemberships({
             {problem}
           </span>
         ) : null}
-        <div className="flex flex-wrap gap-2">
+        <div className="c-inbox-a">
           <button type="submit" className={MAIN} disabled={busy}>
             {busy ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : <Check aria-hidden="true" className="w-4 h-4" />}
             Note refund
           </button>
-          <button type="button" className={PLAIN} disabled={busy} onClick={close}>
+          <button type="button" className={PLAIN} disabled={busy} onClick={close} data-autofocus>
             Back
           </button>
         </div>
@@ -1880,7 +1901,7 @@ export default function MemberMemberships({
                       </span>
                     ) : null}
                     <ChargebackLines lines={p.chargebacks ?? []} gymId={gymId} said={chargesStarted} onStarted={readOnly ? null : (done) => { setChargesStarted(done); setAttempt((n) => n + 1); }} />
-                    {receiptFor === p.receiptNumber ? <ReceiptBox gymId={gymId} gym={gym} number={p.receiptNumber} onClose={() => setReceiptFor(null)} /> : null}
+                    {receiptFor === p.receiptNumber ? <ReceiptBox gymId={gymId} gym={gym} number={p.receiptNumber} onClose={() => setReceiptFor(null)} inMiddle /> : null}
                     {saidUnder(m, p.id)}
                     {boxUnderPayment(p.id)}
                     {renderRefundLines(m, p, acts)}
@@ -1938,8 +1959,7 @@ export default function MemberMemberships({
       <div
         role="group"
         aria-label="Bookings that will end"
-        className="rounded-[14px] p-3 flex flex-col gap-2"
-        style={{ background: 'var(--raise)' }}
+        className="c-inbox flex flex-col gap-2"
         data-testid="held-ending"
       >
         {ending.moved ? (
@@ -1949,7 +1969,7 @@ export default function MemberMemberships({
         ) : null}
         {classes ? (
           <>
-            <p className="c-s15 c-w6 c-t1 m-0">{words.title}</p>
+            <p className="c-inbox-t c-s15 c-w6 c-t1 m-0">{words.title}</p>
             <p className="c-s14 c-t2 m-0">{words.change}</p>
             <ul className="m-0 p-0 list-none flex flex-col gap-1" style={ending.all ? { maxHeight: 220, overflowY: 'auto' } : undefined}>
               {rows.map((row) => (
@@ -1977,7 +1997,7 @@ export default function MemberMemberships({
             ) : null}
           </>
         ) : (
-          <p className="c-s15 c-w6 c-t1 m-0">{words.ptTitle}</p>
+          <p className="c-inbox-t c-s15 c-w6 c-t1 m-0">{words.ptTitle}</p>
         )}
         {/* The personal training sessions booked on it end too (17e-iv-a). */}
         {sessions !== null ? (
@@ -1986,12 +2006,12 @@ export default function MemberMemberships({
             <p className="c-s14 c-t2 m-0">{words.ptKept}</p>
           </>
         ) : null}
-        <div className="flex flex-wrap gap-2">
+        <div className="c-inbox-a">
           <button type="button" className={DANGER} disabled={busy} onClick={() => void change(ending.what ?? (ending.later ? 'cancelLater' : 'cancel'), m, 'cancel', body())}>
             {busy ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : null}
             {words.button}
           </button>
-          <button type="button" className={PLAIN} disabled={busy} onClick={close}>
+          <button type="button" className={PLAIN} disabled={busy} onClick={close} data-autofocus>
             Keep it
           </button>
         </div>
@@ -2205,7 +2225,10 @@ export default function MemberMemberships({
     </SidePanel>
   );
 
-  const renderAsk = (m) => {
+  // Undo cancellation reads its question from the server first: named by its button until it has.
+  const renderAsk = (m) => middle(askBox(m), open?.what === 'undoCancel' ? UNDO_CANCEL_BUTTON : undefined);
+
+  const askBox = (m) => {
     if (ending !== null && ending.id === m.id) return renderEnding(m);
     if (open.what === 'undoCancel') return renderUndoCancel(m);
     const undo = open.what === 'undo' ? (m.billing?.undo ?? null) : null;
@@ -2239,8 +2262,8 @@ export default function MemberMemberships({
     const cancelling = open.what === 'cancel';
     if (cancelling && words.releaseButton !== undefined) return renderContractCancel(m, words);
     return (
-      <div className="rounded-[14px] p-3 flex flex-col gap-2" style={{ background: 'var(--raise)' }} data-testid={`held-ask-${open.what}`}>
-        <p className="c-s15 c-w6 c-t1 m-0">{words.question}</p>
+      <div className="c-inbox flex flex-col gap-2" data-testid={`held-ask-${open.what}`}>
+        <p className="c-inbox-t c-s15 c-w6 c-t1 m-0">{words.question}</p>
         {cancelling ? renderCoolingOff(m) : null}
         <p className="c-s14 c-t2 m-0">{words.detail}</p>
         {open.what === 'freeze' && freezeFeeAsk(m, name, today) !== null ? (
@@ -2266,7 +2289,7 @@ export default function MemberMemberships({
             )}
           </div>
         ) : null}
-        <div className="flex flex-wrap gap-2">
+        <div className="c-inbox-a">
           {cancelling && words.laterButton !== null ? (
             <button type="button" className={MAIN} disabled={busy} onClick={() => void change('cancelLater', m, 'cancel', { when: 'period_end' })}>
               {words.laterButton}
@@ -2276,7 +2299,7 @@ export default function MemberMemberships({
             {busy ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : null}
             {words.button}
           </button>
-          <button type="button" className={PLAIN} disabled={busy} onClick={close}>
+          <button type="button" className={PLAIN} disabled={busy} onClick={close} data-autofocus>
             {cancelling ? 'Keep it' : 'Back'}
           </button>
         </div>
@@ -2312,8 +2335,8 @@ export default function MemberMemberships({
     };
     const missing = release.tried && release.reason === '';
     return (
-      <div className="rounded-[14px] p-3 flex flex-col gap-2" style={{ background: 'var(--raise)' }} data-testid="held-ask-cancel">
-        <p className="c-s15 c-w6 c-t1 m-0">{words.question}</p>
+      <div className="c-inbox flex flex-col gap-2" data-testid="held-ask-cancel">
+        <p className="c-inbox-t c-s15 c-w6 c-t1 m-0">{words.question}</p>
         {renderCoolingOff(m)}
         <p className="c-s14 c-t2 m-0">{words.detail}</p>
         {words.endButton !== null ? (
@@ -2364,7 +2387,7 @@ export default function MemberMemberships({
               {words.releaseMissing}
             </p>
           ) : null}
-          <div className="flex flex-wrap gap-2">
+          <div className="c-inbox-a">
             {words.releaseLaterButton !== null ? (
               <button type="button" className={PLAIN} disabled={busy} onClick={() => releaseWith('cancelLater', 'period_end')}>
                 {words.releaseLaterButton}
@@ -2373,7 +2396,7 @@ export default function MemberMemberships({
             <button type="button" className={DANGER} disabled={busy} onClick={() => releaseWith('cancel', 'today')}>
               {words.releaseButton}
             </button>
-            <button type="button" className={PLAIN} disabled={busy} onClick={close}>
+            <button type="button" className={PLAIN} disabled={busy} onClick={close} data-autofocus>
               Keep it
             </button>
           </div>
@@ -2566,7 +2589,9 @@ export default function MemberMemberships({
             {NO_PAYMENTS_LINE}
           </p>
         ) : null}
-        {asking ? (
+        {/* A question in the middle (V2b-ii) is drawn over the page: the membership's own buttons stay behind it. */}
+        {asking && IN_MIDDLE.has(open.what) && !IN_MIDDLE_FROM_A_BILL.has(open.what) && !(open.what === 'undo' && m.billing?.undo?.kind === 'payment') ? renderAsk(m) : null}
+        {asking && !IN_MIDDLE.has(open.what) ? (
           open.what === 'terminalPay' && terminalPay !== null ? (
             // A fee's box is under that fee; one taken off meanwhile (marked Came) is no longer
             // listed, so its box is drawn here, with Cancel and how it ended.
@@ -2575,8 +2600,7 @@ export default function MemberMemberships({
             renderPay(m)
           ) : open.what === 'change' && changeDraft !== null ? (
             ending !== null && ending.id === m.id && renderEnding(m) !== null ? changePanel(m, renderEnding(m), null, true) : renderChange(m)
-          ) : open.what === 'cancelBill' || open.what === 'refund' || open.what === 'cardRefund' || open.what === 'voidRefund' || (open.what === 'undo' && m.billing?.undo?.kind === 'payment') ? null : (
-            // Drawn inside the bill, payment or refund they are about (`renderBills`).
+          ) : (
             renderAsk(m)
           )
         ) : !inUse && (payButton !== null || canUndo) ? (
@@ -2820,7 +2844,8 @@ export default function MemberMemberships({
           </button>
         </div>
       ) : null}
-      {refusal !== null && !panelOpen ? refusalLine() : null}
+      {/* A refusal is said inside a box drawn over the page. */}
+      {refusal !== null && !panelOpen && !(open !== null && IN_MIDDLE.has(open.what)) ? refusalLine() : null}
       {open !== null && open.what === 'add' && form !== null ? renderAdd() : null}
       {listed !== null ? (
         <div className="py-3 flex flex-col gap-1.5" style={{ borderTop: '1px solid var(--line)' }} data-testid="held-listed">

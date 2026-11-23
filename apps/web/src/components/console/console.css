@@ -1676,6 +1676,24 @@
   .c-ask-a .c-btn { width: auto; }
 }
 
+/* A question box a page draws (cancel, freeze, refund, void, waive): a raised box under what was
+   pressed, or, inside the middle box (V2b-ii), the sheet itself, its question the box's title and
+   its last row of buttons the box's foot. */
+.c-inbox { border-radius: 14px; padding: 12px; background: var(--raise); }
+.c-inbox-a { display: flex; flex-wrap: wrap; gap: 8px; }
+.c-ask .c-inbox { border-radius: 0; padding: 0; background: none; }
+.c-ask .c-inbox-t { font-size: 17px; line-height: 22px; font-weight: 650; letter-spacing: -0.012em; }
+.c-ask .c-inbox-a { flex-direction: column-reverse; flex-wrap: nowrap; gap: 12px; padding-top: 8px; }
+.c-ask .c-inbox-a .c-btn { width: 100%; height: auto; min-height: 44px; white-space: normal; }
+@media (min-width: 768px) {
+  .c-ask .c-inbox-a { flex-direction: row; flex-wrap: wrap; justify-content: flex-end; }
+  .c-ask .c-inbox-a .c-btn { width: auto; min-height: 40px; }
+}
+/* On a touch screen, a tablet or an opened folding phone too, every button in the middle is 44 px. */
+@media (pointer: coarse) {
+  .c-ask .c-btn { height: auto; min-height: 44px; }
+}
+
 /* 4. A page of its own: a big setup in numbered parts, and a summary that fills in beside
    them on a wide screen, under them otherwise. */
 .c-steps {

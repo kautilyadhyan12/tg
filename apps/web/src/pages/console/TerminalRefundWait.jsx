@@ -106,10 +106,10 @@ export default function TerminalRefundWait({ gymId, press, showName, onAnswer, o
   };
 
   return (
-    <div className="rounded-[14px] p-3 flex flex-col gap-3" style={{ background: 'var(--raise)' }} data-testid="terminal-refund-wait" role="status">
+    <div className="c-inbox flex flex-col gap-3" data-testid="terminal-refund-wait" role="status">
       <div className="flex flex-col gap-1">
-        <p className="c-s15 c-w6 c-t1 m-0">{`Refund ${formatMinor(press.amountMinor, press.currency)} on the Terminal`}</p>
-        {showName ? <p className="c-s13 c-t2 m-0">{payTerminalName(view.terminal)}</p> : null}
+        <p className="c-inbox-t c-s15 c-w6 c-t1 m-0">{`Refund ${formatMinor(press.amountMinor, press.currency)} on the Terminal`}</p>
+        {showName ? <p className="c-s14 c-t2 m-0">{payTerminalName(view.terminal)}</p> : null}
       </div>
       <ol className="flex flex-col gap-2 m-0 p-0 list-none">
         <Step state={view.pickedUp ? 'done' : 'now'}>{CARD_REFUND_TERMINAL_WORDS.shown}</Step>
@@ -128,7 +128,7 @@ export default function TerminalRefundWait({ gymId, press, showName, onAnswer, o
           {problem}
         </p>
       ) : null}
-      <div className="flex flex-wrap gap-2">
+      <div className="c-inbox-a">
         {view.stopping || view.tooLate ? null : (
           <button type="button" className={PLAIN} disabled={cancelling} onClick={() => void cancel()}>
             {cancelling ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : null}

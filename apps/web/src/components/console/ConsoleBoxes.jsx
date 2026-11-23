@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useImperativeHandle, useLayoutEffect, useRef, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useId, useImperativeHandle, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import { ConfirmInline } from './ConsoleStates';
@@ -262,6 +262,61 @@ export function SidePanel({
         </div>
       </div>
     </>
+  );
+}
+
+const InMiddle = createContext(false);
+
+/** 3a. In the middle, around a question box a page already draws (a `c-inbox`, with its own
+ *  buttons): the same box, its fields and buttons unchanged, over the page. Escape and pressing
+ *  outside do what its own Keep it does (`onClose`), never while it is sending. `error` is said
+ *  inside it, as the page behind is covered. A box inside one already in the middle is drawn
+ *  where it is, so a question that turns into another stays one box. */
+export function MiddleBox({ label, onClose, busy = false, error = null, testId, role = 'alertdialog', children }) {
+  const inside = useContext(InMiddle);
+  if (inside) return children;
+  return (
+    <MiddleShell label={label} onClose={onClose} busy={busy} error={error} testId={testId} role={role}>
+      {children}
+    </MiddleShell>
+  );
+}
+
+function MiddleShell({ label, onClose, busy, error, testId, role, children }) {
+  const boxRef = useRef(null);
+  const cancel = () => {
+    if (!busy) onClose();
+  };
+  const { ready, draw } = useLookHost();
+  useBoxKeys(boxRef, cancel, ready);
+  useStillPage();
+  // The box is named by its question, the first `c-inbox-t` in it, read each time it is drawn; by `label` while it
+  // has none (still reading), as a name given by aria-labelledby comes before aria-label.
+  const titleId = useId();
+  useLayoutEffect(() => {
+    const box = boxRef.current;
+    if (box === null) return;
+    const title = box.querySelector('.c-inbox-t');
+    if (title === null) {
+      box.removeAttribute('aria-labelledby');
+      return;
+    }
+    if (title.id === '') title.id = titleId;
+    box.setAttribute('aria-labelledby', title.id);
+  });
+  return draw(
+    <InMiddle.Provider value>
+      <div className="c-scrim" data-testid="box-outside" onClick={cancel} />
+      <div ref={boxRef} role={role} aria-modal="true" aria-label={label} tabIndex={-1} className="c-ask" data-testid={testId}>
+        <span className="c-grab" aria-hidden="true" />
+        {error !== null ? (
+          <p role="alert" className="c-err m-0">
+            {error}
+          </p>
+        ) : null}
+        {children}
+      </div>
+    </InMiddle.Provider>,
   );
 }
 
