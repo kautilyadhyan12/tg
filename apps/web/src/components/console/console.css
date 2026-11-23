@@ -1703,7 +1703,12 @@
 @media (max-width: 767px) {
   .c-person .c-inbox-a { flex-direction: column; flex-wrap: nowrap; }
   .c-person .c-inbox-a .c-btn { width: 100%; height: auto; min-height: 44px; white-space: normal; }
+  /* Scrolled to (by the keys or the page), a box's button and field stop above the 64 px menu at the foot. */
+  .c-person .c-inbox .c-btn,
+  .c-person .c-inbox input,
+  .c-person .c-inbox select { scroll-margin-bottom: 80px; }
 }
+
 
 
 /* 4. A page of its own: a big setup in numbered parts, and a summary that fills in beside
