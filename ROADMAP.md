@@ -487,7 +487,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
      - V2a-i. [x] **The page, its three columns and the next step under the name** · merged 2026-11-22 · PR #620
      - V2a-ii. [x] **Memberships and bills in the third look's words and sizes** · merged 2026-11-22 · PR #623
    - V2b. **A member's page: its boxes**, in three by how each box opens (2026-11-23; spec §17.11, `Boxes`):
-     - V2b-i. [ ] **From the right**: Add member, Edit, Add membership, Change membership.
+     - V2b-i. [x] **From the right**: Add member, Edit, Add membership, Change membership · merged 2026-11-23 · PR #626
      - V2b-ii. [ ] **In the middle, money**: Cancel membership, Freeze, Unfreeze, Refund, Void, Waive, the receipt.
      - V2b-iii. [ ] **In the middle, people, and under the button**: Invite, Remove, Delete permanently, Merge; Record a payment, More, Tags, Change payer.
    - V3a. [ ] **Members: Your list** (web folder 1): the one-press picks, the list, people ticked and the bar, Send message, Tags, Remove, Filter from the right (`MembersNew*`).
