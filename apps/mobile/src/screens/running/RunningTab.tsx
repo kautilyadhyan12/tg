@@ -146,10 +146,12 @@ export function RunningTab({ units, parts }: { units: Units; parts: ReactNode })
   useEffect(() => {
     if (layer.done !== null) setDeleted(null);
   }, [layer.done]);
-  const saidUnderStart = (problem !== null && !pressedBox) || layer.done !== null || view.refused.length > 0;
+  // What stood in the way: found before 3, 2, 1, or Android refusing the run after it.
+  const said: StartProblem | null = problem ?? (layer.startFailed ? "failed" : null);
+  const saidUnderStart = (said !== null && !pressedBox) || layer.done !== null || view.refused.length > 0;
   useEffect(() => {
     if (saidUnderStart) showEnd();
-  }, [saidUnderStart, problem, layer.done, showEnd]);
+  }, [saidUnderStart, said, layer.done, showEnd]);
 
   // The page moved up by what of it lies below six tenths of the screen, under START.
   const showUnderBox = useCallback(() => {
@@ -171,7 +173,7 @@ export function RunningTab({ units, parts }: { units: Units; parts: ReactNode })
     setProblem(said);
     setAsked((n) => n + 1);
   };
-  const problemBox = problem === null ? null : <StartProblemBox problem={problem} onAgain={() => void start(from, pressedBox)} />;
+  const problemBox = said === null ? null : <StartProblemBox problem={said} onAgain={() => void start(from, pressedBox)} />;
 
   return (
     <View style={styles.grow}>
@@ -225,7 +227,7 @@ export function RunningTab({ units, parts }: { units: Units; parts: ReactNode })
             }}
             onStartToday={going ? null : (guide) => void start(guide, true)}
           />
-          {problem !== null && pressedBox ? (
+          {said !== null && pressedBox ? (
             <View ref={underBox} testID="problem-under-plan" onLayout={showUnderBox}>
               {problemBox}
             </View>
@@ -355,7 +357,7 @@ export function RunningTab({ units, parts }: { units: Units; parts: ReactNode })
               />
             </View>
           </View>
-          {problem !== null && !pressedBox ? problemBox : null}
+          {said !== null && !pressedBox ? problemBox : null}
           {layer.done === null ? null : (
             <Txt kind="small" colour={layer.done.waiting ? "textSoft" : "goodText"} style={styles.said}>
               {layer.done.waiting ? `${layer.done.name} is saved on this phone. It will be sent when you're online.` : `${layer.done.name} is saved.`}

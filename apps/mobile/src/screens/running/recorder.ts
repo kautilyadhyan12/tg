@@ -22,16 +22,19 @@ import {
   type KeptRunChoices,
   type KeptRunGuide,
   type MapColours,
-  type RunPause,
   type RunPoint,
   type Units,
 } from "@app/shared";
 import { colours } from "../../look/colours";
 import { AUTO_START, nextAutoPause, type AutoPauseState } from "./autoPause";
+import { closedPauses, elapsedMs, movingMsOf } from "./runLive";
 import { beginLine, guideAdvance, guideDone, guideNextLook, guideSchedule, guideSkip, nowLine, skipLine } from "./runGuide";
 import { PAUSE_WORDS, VOICE_AFTER_LOAD, VOICE_START, heartLine, voiceCheck, type VoiceState } from "./runVoice";
 import { runVoiceNative } from "./runVoiceNative";
 import { holdHeart, loadMonitor, savedHeartNow, takeHeartReadings } from "../../heart/monitor";
+
+// The run's clock is its own pure rules (runLive.ts); the screens read it from here as before.
+export { closedPauses, elapsedMs, movingMsOf };
 
 export const RUN_TASK = "run-location";
 
@@ -269,12 +272,6 @@ function markNow(run: LiveRun, settled: boolean): string[] {
 }
 
 // ── Today's planned run (37d-ii) ──────────────────────────────────────────────────────────────
-
-/** The guide's clock: ms from Go to `now`, the pauses left out. */
-export function movingMsOf(run: LiveRun, now: number): number {
-  const elapsed = elapsedMs(run, now);
-  return Math.max(0, elapsed - closedPauses(run, elapsed).reduce((t, [a, b]) => t + (b - a), 0));
-}
 
 /** The next look at the guide, in moving ms: points come each second, and the sums are worked out
  *  only when a step by distance could have ended. */
@@ -856,16 +853,6 @@ export async function forgetRun(): Promise<void> {
   pausedTail = [];
   tell();
 }
-
-/** The run's pauses as the maths takes them: one still open ends now. */
-export function closedPauses(run: LiveRun, nowMs: number): RunPause[] {
-  return run.pauses.map(([from, to]): RunPause => [from, to ?? Math.max(from, nowMs)]);
-}
-
-/** Milliseconds from Go to now, or to Finish. A point's time is the GPS's own, which can be a second
- *  ahead of the phone's clock: the run is never shorter than its last point. */
-export const elapsedMs = (run: LiveRun, now: number): number =>
-  run.finishedMs ?? Math.min(RUN_MAX_ELAPSED_MS, Math.max(0, now - run.startedAt, run.points[run.points.length - 1]?.[0] ?? 0));
 
 /** A run left going a day or more: it ends there by itself, and waits to be saved. */
 export const runIsFull = (run: LiveRun, now: number): boolean =>

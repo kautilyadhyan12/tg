@@ -44,7 +44,10 @@ export function StartProblemBox({ problem, onAgain }: { problem: StartProblem; o
             });
           }}
         />
-      ) : null}
+      ) : (
+        // "failed": Android refused the run after 3, 2, 1.
+        <Button kind="link" label="Start again" onPress={onAgain} />
+      )}
     </View>
   );
 }

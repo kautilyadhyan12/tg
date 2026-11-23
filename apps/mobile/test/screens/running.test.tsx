@@ -25,7 +25,7 @@ const PATH = "/v1/geo/runs";
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
 // The phone's location, as the setup's stand-in holds it.
-const location = jest.requireMock<{ state: { services: boolean; granted: boolean; canAskAgain: boolean; accuracy: string; asked: number; started: { task: string; options: { foregroundService?: { notificationTitle: string } } }[]; running: boolean; acceptsTurnOn: boolean } }>("expo-location").state;
+const location = jest.requireMock<{ state: { services: boolean; granted: boolean; canAskAgain: boolean; accuracy: string; asked: number; started: { task: string; options: { foregroundService?: { notificationTitle: string } } }[]; running: boolean; acceptsTurnOn: boolean; refusesStart: boolean } }>("expo-location").state;
 
 // Each map drawn, as the setup's stand-in keeps it (37b-i).
 type DrawnMap = {
@@ -82,7 +82,7 @@ beforeEach(async () => {
     handlers.push(handler);
     return { remove: () => undefined };
   });
-  Object.assign(location, { services: true, granted: true, canAskAgain: true, accuracy: "fine", asked: 0, started: [], running: false, acceptsTurnOn: true });
+  Object.assign(location, { services: true, granted: true, canAskAgain: true, accuracy: "fine", asked: 0, started: [], running: false, acceptsTurnOn: true, refusesStart: false });
   stopping.whileStopping = null;
   for (const name of ["run-now.json", "run-now-0.json", "run-now-1.json", "run-settings.json", "run-map.json"]) phoneRunFiles.remove(name);
   resetRecorder();
@@ -333,6 +333,25 @@ describe("the location, before a run", () => {
     });
     expect(screen.queryByText("Get ready")).toBeNull();
     expect(screen.getByText("Turn on your phone's location to record your run.")).toBeTruthy();
+  });
+
+  it("Android refusing the run after 3, 2, 1 (the phone locked during the count): the page says so, keeps no run, and Start again starts one (running faults, A8)", async () => {
+    location.refusesStart = true;
+    const s = runServer();
+    await openRunning(s);
+    await fireEvent.press(screen.getByRole("button", { name: "Start run" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Start now" }));
+    expect(await screen.findByText("Your run couldn't start. Try again.")).toBeTruthy();
+    expect(runNow()).toBeNull();
+    expect(location.running).toBe(false);
+    await fireEvent.press(screen.getByRole("button", { name: "Start again" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Start now" }));
+    await waitFor(() => {
+      expect(runNow()?.phase).toBe("running");
+    });
+    expect(location.running).toBe(true);
+    await fireEvent.press(screen.getByRole("button", { name: "Back to the app" }));
+    expect(screen.queryByText("Your run couldn't start. Try again.")).toBeNull();
   });
 });
 
