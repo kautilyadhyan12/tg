@@ -100,7 +100,8 @@ describe("Members opened from Overview's Payment due row", () => {
     draw('/console/iron-house/members?show=payment-due');
     await waitFor(() => expect(orgService.getMemberListEntries).toHaveBeenLastCalledWith(GYM, 'paymentStatus=Payment+due'));
     expect(orgService.getMemberListEntries).not.toHaveBeenCalledWith(GYM, '');
-    expect(within(await screen.findByTestId('showing')).getByRole('button', { name: 'Stop showing only Payment due' })).toBeTruthy();
+    // Its quick filter is lit, and says it in place of the Showing line (V3a-i).
+    expect((await screen.findByTestId('quick-payment-due')).getAttribute('aria-pressed')).toBe('true');
     await waitFor(() => expect(address()).toBe('/console/iron-house/members'));
   });
 
@@ -127,7 +128,8 @@ describe('Members already open, then a ?show= arrives (search, the bell)', () =>
     await waitFor(() => expect(orgService.getMemberListEntries).toHaveBeenLastCalledWith(GYM, ''));
     fireEvent.click(screen.getByRole('link', { name: 'Search: Payment due' }));
     await waitFor(() => expect(orgService.getMemberListEntries).toHaveBeenLastCalledWith(GYM, 'paymentStatus=Payment+due'));
-    expect(within(await screen.findByTestId('showing')).getByRole('button', { name: 'Stop showing only Payment due' })).toBeTruthy();
+    // Its quick filter is lit, and says it in place of the Showing line (V3a-i).
+    expect((await screen.findByTestId('quick-payment-due')).getAttribute('aria-pressed')).toBe('true');
     await waitFor(() => expect(address()).toBe('/console/iron-house/members'));
     fireEvent.click(screen.getByRole('link', { name: 'Search: No card on file' }));
     await waitFor(() => expect(orgService.getMemberListEntries).toHaveBeenLastCalledWith(GYM, 'card=none'));
