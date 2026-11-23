@@ -672,17 +672,17 @@ export default function Members() {
     <div className="c-page">
       <header className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between md:gap-6">
         <div className="flex flex-col gap-1.5 min-w-0">
+          <p className="c-eyebrow">People</p>
           <h1 className="c-h1">{membersPageName(viewerPrivileges(org), org?.orgType)}</h1>
+          {/* The business's name is at the top of the menu; under the title, the plan's line. */}
           <p className="c-sub">
-            <span className={meterText === null ? '' : 'hidden md:inline'}>{org.name}</span>
             {meterText !== null ? (
-              <>
-                <span className="hidden md:inline"> · </span>
-                <span data-testid="seat-meter" style={meter.pressure ? { color: 'var(--warn)' } : undefined}>
-                  {meterText}
-                </span>
-              </>
-            ) : null}
+              <span data-testid="seat-meter" style={meter.pressure ? { color: 'var(--warn)' } : undefined}>
+                {meterText}
+              </span>
+            ) : (
+              org.name
+            )}
           </p>
           {/* Nearly full: billing staff on a paying plan can make room from here. */}
           {meter?.pressure === true && canMakeRoomNow(org) ? (

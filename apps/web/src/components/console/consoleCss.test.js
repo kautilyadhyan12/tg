@@ -293,6 +293,7 @@ describe('read without leaning in (Kd, 2026-11-19, V1-f): no words under 14 px',
     '.c-setup-tag': 12,
     '.c-rail-av': 12,
     '.c-find-av': 12,
+    '.c-avatar-sm': 12, // initials beside a name on the Members list
     '.c-tab': 11, // five tab names on a folding phone's 280 px cover
     '.c-findbar-keys': 12,
     '.c-s12': 12,
@@ -344,6 +345,8 @@ describe('read without leaning in (Kd, 2026-11-19, V1-f): no words under 14 px',
     './ConsoleBoxes.jsx',
     // V2b-ii: Refund to card's wait on the Terminal, now in the middle.
     '../../pages/console/TerminalRefundWait.jsx',
+    // V3a-i: Members, Your list, its quick filters and the Filter from the right.
+    '../../pages/console/MemberListPanel.jsx',
   ];
   it.each(REDESIGNED)('%s has no 12 or 13 px words', (file) => {
     const text = readFileSync(fileURLToPath(new URL(file, import.meta.url)), 'utf8');

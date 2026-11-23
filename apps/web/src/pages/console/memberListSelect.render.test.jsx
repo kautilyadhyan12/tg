@@ -1,6 +1,6 @@
 // Selecting people on the Members list (spec Part 3 §18.5; ROADMAP 5b-v-b-i): a tick box
 // on every row and on the heading, "Select all 312 members", and a bar — "3 selected ·
-// Invite to app · Download CSV · Clear" — that acts on the people selected and nobody
+// Invite to app · Export CSV · Clear" — that acts on the people selected and nobody
 // else. The worst thing, first: Invite from the bar reaching someone who was not ticked.
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, cleanup, fireEvent, within } from '@testing-library/react';
@@ -216,7 +216,7 @@ describe('selecting people', () => {
     expect(bar().getByTestId('sel-count').textContent).toBe('314 selected');
   });
 
-  it('a read-only gym and past members get Download CSV only in the bar', async () => {
+  it('a read-only gym and past members get Export CSV only in the bar', async () => {
     draw({ readOnly: true });
     await screen.findByText('Ada Lovelace');
     fireEvent.click(tickOf('Ada Lovelace'));
@@ -234,7 +234,7 @@ describe('selecting people', () => {
     expect(bar().getByTestId('bar-download')).toBeTruthy();
   });
 
-  it('with nobody ticked, Download CSV above the list downloads everyone the list shows; with people ticked it gives way to the bar', async () => {
+  it('with nobody ticked, Export CSV above the list downloads everyone the list shows; with people ticked it gives way to the bar', async () => {
     draw();
     await screen.findByText('Ada Lovelace');
     orgService.selectAllMembers.mockResolvedValue({ data: { selection: { count: 312, digest: DIGEST } } });
