@@ -15,8 +15,10 @@ describe("the worst thing: no other movement is counted as a squat however the w
     expect(ROWS.length).toBeGreaterThanOrEqual(30 * REPLAYS.length);
   });
 
-  it.each(ROWS.filter((r) => r.tried && !openRow(r)).map((r) => [`${r.replay.name}: ${r.label}`, r] as const))("%s counts 0, is never told to go lower, and says only what the camera could not see", (_name, r) => {
+  it.each(ROWS.filter((r) => r.tried && !openRow(r)).map((r) => [`${r.replay.name}: ${r.label}`, r] as const))("%s counts 0, is never told to go lower or to keep the chest up, and says only what the camera could not see", (_name, r) => {
     expect(r.count).toBe(0);
+    // The worst thing of 52b-ii-b: another movement's dip told "Keep your chest up." (the squat's camera file rides along).
+    expect(r.reps.filter((x) => x.verdict === "refused").map((x) => x.reason)).toEqual([]);
     // The push press's dips, a quarter squat to the camera, are told to go lower as a quarter squat is (its video says so).
     if (r.entry.told === undefined) expect(r.reps.filter((x) => x.verdict === "short").length).toBe(0);
     else expect([...new Set(r.reps.filter((x) => x.verdict === "short").map((x) => x.reason))]).toEqual(["Go lower to count."]);
@@ -29,6 +31,6 @@ describe("the worst thing: no other movement is counted as a squat however the w
   it("the rows open today are listed here, each with the job that closes it, and say nothing", () => {
     const open = ROWS.filter(openRow);
     expect(open.map((r) => `${r.replay.name}: ${r.label}`)).toEqual([]);
-    for (const r of open) expect(r.reps.filter((x) => x.verdict === "short").length).toBe(0);
+    for (const r of open) expect(r.reps.filter((x) => x.verdict === "short" || x.verdict === "refused").length).toBe(0);
   });
 });

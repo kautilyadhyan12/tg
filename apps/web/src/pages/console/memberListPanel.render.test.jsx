@@ -227,7 +227,8 @@ describe("the worst thing on a person's page: two people opened one after the ot
     expect(person().getByRole('heading', { name: 'Bea Hart' })).toBeTruthy();
 
     fireEvent.click(person().getByRole('button', { name: 'Invite to app' }));
-    const ask = within(person().getByTestId('confirm-invite'));
+    // Asked in the middle, over Bea's page (V2b-iii).
+    const ask = within(screen.getByTestId('confirm-invite'));
     expect(ask.getByText('Invite Bea Hart to the app?')).toBeTruthy();
     expect(ask.getByText('One email goes to bea@members.example with a link to the app.')).toBeTruthy();
     fireEvent.click(ask.getByRole('button', { name: 'Send invitation' }));
@@ -245,7 +246,7 @@ describe("the worst thing on a person's page: two people opened one after the ot
     draw();
     fireEvent.click(await rowOf('Ada Lovelace'));
     fireEvent.click(await person().findByRole('button', { name: 'Invite to app' }));
-    fireEvent.click(person().getByRole('button', { name: 'Send invitation' }));
+    fireEvent.click(within(screen.getByTestId('person-ask')).getByRole('button', { name: 'Send invitation' }));
     fireEvent.click(person().getByRole('button', { name: 'Close' }));
     fireEvent.click(await rowOf('Bea Hart'));
     expect(await person().findByRole('heading', { name: 'Bea Hart' })).toBeTruthy();
