@@ -18,8 +18,8 @@ import { PaceWave } from "./RunDrawings";
 import { RunMap, useMapScheme } from "./RunMap";
 import { EFFORT_ENDS, clock, distance, leftOutLine, pace, paceWord, unitWord } from "./runWords";
 
-/** The big distance, the four tiles, the heart rate where there was a monitor (37f-i), the climb, what was
- *  paused and what was left out. */
+/** The big distance, the four tiles, the heart rate where there was a monitor (37f-i), the climb, the time
+ *  not moving and what was left out. */
 export function RunFigures({ distanceM, movingS, elapsedS, leftOutM, leftOutS, kcal, climb, units, heart = null }: {
   distanceM: number;
   movingS: number;
@@ -34,7 +34,9 @@ export function RunFigures({ distanceM, movingS, elapsedS, leftOutM, leftOutS, k
 }) {
   const [credits, setCredits] = useState(false);
   const insets = useSafeAreaInsets();
-  const pausedS = Math.max(0, elapsedS - movingS - leftOutS);
+  // Pauses and standing with no pause pressed alike: a saved run keeps no difference between them, so
+  // the line says Stopped, never Paused (Kd, 37h's walk: 9:23 read as paused where 3:20 was a pause).
+  const stoppedS = Math.max(0, elapsedS - movingS - leftOutS);
   return (
     <>
       <Txt style={styles.km} fit numberOfLines={1}>
@@ -77,9 +79,9 @@ export function RunFigures({ distanceM, movingS, elapsedS, leftOutM, leftOutS, k
           </Pressable>
         ) : null}
       </View>
-      {pausedS > 0 ? (
+      {stoppedS > 0 ? (
         <Txt kind="small" colour="textFaint">
-          {`Paused for ${clock(pausedS)}`}
+          {`Stopped for ${clock(stoppedS)}`}
         </Txt>
       ) : null}
       {leftOutM > 0 ? (

@@ -7,7 +7,7 @@ import { resetMapSource } from "../../src/screens/running/mapSource";
 import { RUN_BAR_ROOM } from "../../src/screens/running/RunLayer";
 import { MAP_CREDIT_PAGE, MAP_WAIT_MS } from "../../src/screens/running/RunMap";
 import { unitMarks } from "../../src/screens/running/routeShape";
-import { closedPauses, finishRun, keepRunUnits, pauseRun, phoneRunFiles, resetRecorder, runNow, startRun, takeLocations } from "../../src/screens/running/recorder";
+import { chooseAutoPause, closedPauses, finishRun, keepRunUnits, pauseRun, phoneRunFiles, resetRecorder, runNow, startRun, takeLocations } from "../../src/screens/running/recorder";
 import { spokenTime } from "../../src/screens/running/runVoice";
 import { readRunFile } from "../../src/screens/running/runQueue";
 import { clock, distance, runName } from "../../src/screens/running/runWords";
@@ -409,6 +409,26 @@ describe("Auto-pause", () => {
     // Auto-pause leaves out the wait, never the steps either side of it: the clock starts again from the last
     // point within 3 m of where the person stood, so at most those 3 m and the phone's metre of wander go.
     expect(kept).toBeGreaterThanOrEqual(walked - 4);
+  });
+});
+
+describe("the summary's time not moving (Kd, 37h's walk, 2026-11-23)", () => {
+  it("a minute standing with Auto-pause off and no pause pressed reads as Stopped, never as Paused", async () => {
+    await act(() => chooseAutoPause(false));
+    const s = runServer();
+    await openRunning(s);
+    await startRunning();
+    await feed(0, 60, 3);
+    const run = runNow();
+    if (run === null) throw new Error("no run");
+    const stillAt = 26.1445 + (59 * 3) / 111_132;
+    await act(() =>
+      takeLocations({ locations: Array.from({ length: 60 }, (_, i) => ({ timestamp: run.startedAt + (60 + i) * 1000, coords: { latitude: stillAt, longitude: 91.7362, accuracy: 5, speed: 0 } })) }),
+    );
+    expect(runNow()?.pauses).toEqual([]);
+    await act(() => finishRun());
+    expect(await screen.findByText(/^Stopped for \d+:\d\d$/)).toBeTruthy();
+    expect(screen.queryByText(/^Paused for/)).toBeNull();
   });
 });
 
