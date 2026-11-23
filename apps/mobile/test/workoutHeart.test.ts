@@ -11,6 +11,7 @@ const T0 = Date.parse("2026-11-23T10:00:00.000Z");
 const ID = "22222222-2222-4222-8222-222222222222";
 const reps = (n: number, rest: number | null = 60): RunExercise["sets"][number] => ({ target: n, weightGrams: null, restSeconds: rest });
 const curl: RunExercise = { exercise: "barbell_curl", name: "Barbell Curl", kind: "strength", measuredIn: "reps", barbell: true, sets: [reps(10), reps(10), reps(10)] };
+const plank: RunExercise = { exercise: "plank", name: "Plank", kind: "strength", measuredIn: "time", barbell: false, sets: [reps(30, null)] };
 
 function begin(): WorkoutRun {
   const run = startRun({ workoutId: ID, name: "Arms", now: T0, timeZone: "Asia/Kolkata", exercises: [curl] });
@@ -22,7 +23,7 @@ const every = (from: number, to: number, bpm = 140): HeartIn[] => Array.from({ l
 /** The workout fed readings and pressed, as the store does: readings first, then the press, at `at` seconds. */
 function step(run: WorkoutRun, at: number, p: Press, readings: HeartIn[] = []): WorkoutRun {
   const now = T0 + at * 1000;
-  const out = press(withHeart(run, readings, now, p.kind === "back"), p, now);
+  const out = press(withHeart(run, readings, now), p, now);
   if (out.kind === "gone") throw new Error("gone");
   expect(workoutRunSchema.safeParse(out.run).success).toBe(true);
   return out.run;
@@ -54,6 +55,16 @@ describe("the worst thing: only the person's heart rate during the workout is ke
     expect(kept(run)).toHaveLength(5);
   });
 
+  // Round one, L1: the screen's clock may reach the workout before "back" does; a gap that long is still time away.
+  it("nothing from the time away when the first press after it is the clock's tick, not back", () => {
+    let run = step(begin(), 5, { kind: "tick" }, every(0, 5));
+    const away = 5 + AWAY_MOST_MS / 1000 + 60;
+    run = step(run, away, { kind: "tick" }, every(5, away, 70));
+    expect(run.paused).toBe(true);
+    expect(kept(run)).toHaveLength(5);
+    expect(run.activeMs).toBe(5000);
+  });
+
   it("the time away under 10 minutes is trained, and its readings are kept", () => {
     let run = step(begin(), 5, { kind: "tick" }, every(0, 5));
     run = step(run, 125, { kind: "back" }, every(5, 125, 130));
@@ -65,7 +76,7 @@ describe("the worst thing: only the person's heart rate during the workout is ke
     let run = begin();
     for (let s = 0; s < 3; s++) run = step(run, 100 * s + 10, { kind: "main" });
     expect(run.phase).toBe("done");
-    expect(withHeart(run, every(310, 320), T0 + 320_000, false)).toBe(run);
+    expect(withHeart(run, every(310, 320), T0 + 320_000)).toBe(run);
   });
 
   it("a heart rate no heart beats at, or a broken one, is never kept", () => {
@@ -120,6 +131,23 @@ describe("the save takes the heart rate, and is never refused for it", () => {
     expect(workoutSaveSchema.safeParse(save).success).toBe(true);
   });
 
+  // Round one, T1: the case the save's filter is for. The last set is timed and ends by itself while the app is away (under
+  // 10 minutes): readings came in after it ended, and one past the workout's length would make the server refuse it whole.
+  it("a timed last set that ended while the app was away sends no reading past the workout's end", () => {
+    const start = startRun({ workoutId: ID, name: "Core", now: T0, timeZone: "UTC", exercises: [plank] });
+    if (start === null) throw new Error("no run");
+    let run = step(start, 5, { kind: "tick" }, every(0, 5));
+    run = step(run, 300, { kind: "back" }, every(5, 300));
+    expect(run.phase).toBe("done");
+    expect((run.heart ?? []).some(([at]) => at > run.totalMs)).toBe(true);
+    const save = toSave(run, "android", "1.0.0");
+    if (save === null) throw new Error("nothing to save");
+    const length = Date.parse(save.endedAt) - Date.parse(save.startedAt);
+    expect(length).toBe(40_000);
+    expect(save.heart[save.heart.length - 1]?.[0]).toBeLessThanOrEqual(length);
+    expect(workoutSaveSchema.safeParse(save).success).toBe(true);
+  });
+
   it("a workout with no monitor sends none, as before", () => {
     let run = step(begin(), 20, { kind: "main" });
     run = step(run, 21, { kind: "end" });
@@ -162,5 +190,18 @@ describe("the store: readings from before Start are not this workout's, and the 
     const done: Finished | null = store.finished();
     expect(done?.heart).toEqual(heartSums([...Array.from({ length: 90 }, (_, i): [number, number] => [(i + 1) * 1000, i + 1 <= 45 ? 120 : 160])], [], 90_000));
     expect(done?.heart?.max).toBe(160);
+  });
+
+  // Round one, T2: a reading kept while the phone's clock ran ahead, the clock then set right before Start: its time is after
+  // the workout began, so only the drain at Start keeps it out.
+  it("drains a reading stamped by a clock that ran ahead, set right before Start", async () => {
+    const queue: HeartIn[] = [{ at: T0 + 600_000, bpm: 97 }];
+    let clock = T0;
+    const store = createRunStore({ file: files(), waiting: waiting(), platform: "android", appVersion: "1", clock: () => clock, heart: () => queue.splice(0) });
+    await store.ready;
+    expect(store.start({ workoutId: ID, name: "Arms", now: T0, timeZone: "UTC", exercises: [{ ...curl, sets: [reps(10, null)] }] })).toBe("started");
+    clock = T0 + 1000;
+    store.press({ kind: "tick" }, clock);
+    expect(store.run()?.heart ?? []).toEqual([]);
   });
 });

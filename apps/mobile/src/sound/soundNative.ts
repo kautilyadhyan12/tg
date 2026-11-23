@@ -30,11 +30,11 @@ function phonePlayer(): SoundNative | null {
     return audio;
   });
   const players = new Map<SoundName, Played>();
-  let queue: Promise<unknown> = ready;
   return {
+    // Each play on its own, never behind the one before: a seek that never settled would otherwise silence every sound
+    // after it (round one, L2).
     play: (name) => {
-      queue = queue
-        .then(() => ready)
+      void ready
         .then(async (audio) => {
           const made = players.get(name);
           // A new player is at its start already; one played before goes back to it.

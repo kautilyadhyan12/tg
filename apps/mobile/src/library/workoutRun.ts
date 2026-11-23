@@ -185,11 +185,13 @@ function expire(r: WorkoutRun): WorkoutRun {
 
 /** The workout moved on to the phone's clock `now`: every phase that ended meanwhile ends at its own time, in order.
  *  A workout done stops its clocks. */
-function advance(r: WorkoutRun, now: number, back: boolean): WorkoutRun {
+function advance(r: WorkoutRun, now: number): WorkoutRun {
   const dt = Math.max(0, now - r.seenAt);
   let run: WorkoutRun = { ...r, seenAt: now };
   if (run.phase === "done") return run;
-  if (run.paused || (back && dt > AWAY_MOST_MS)) return { ...run, paused: true, totalMs: capped(run.totalMs + dt) };
+  // Away longer than AWAY_MOST_MS whatever press comes first: the screen's clock moves every 250 ms while the app is open,
+  // so a gap that long means the app was away, even where its clock reaches the workout before "back" does (round one, L1).
+  if (run.paused || dt > AWAY_MOST_MS) return { ...run, paused: true, totalMs: capped(run.totalMs + dt) };
   const startTotal = run.totalMs;
   const startActive = run.activeMs;
   const to = capped(run.activeMs + dt);
@@ -204,7 +206,7 @@ function advance(r: WorkoutRun, now: number, back: boolean): WorkoutRun {
 
 /** One press, at the phone's clock `now`. */
 export function press(r: WorkoutRun, p: Press, now: number): Outcome {
-  const run = advance(r, now, p.kind === "back");
+  const run = advance(r, now);
   if (run.phase === "done") return { kind: "on", run };
   const on = (next: WorkoutRun): Outcome => ({ kind: "on", run: next });
   const { exercise, target, weightGrams } = setOf(run);
@@ -277,13 +279,13 @@ export const HEART_EVERY_MS = 900;
 
 /** The monitor's readings since the workout was last moved on (64a-vi), kept with it before the press at `now` is
  *  pressed. THE WORST THING HERE: a heart rate kept as this workout's that is not the person's during it. So nothing is
- *  kept while it is paused, on a "back" after more than AWAY_MOST_MS away (that time is not trained, and the workout comes
- *  back paused), or once it is done; a reading from before the workout was last moved on (before Start, during a pause, a
+ *  kept while it is paused, after more than AWAY_MOST_MS since it was last moved on, whatever the press (that time is not
+ *  trained, and the workout comes back paused: round one, L1), or once it is done; a reading from before the workout was last moved on (before Start, during a pause, a
  *  clock set back) is not kept; each is placed on the workout's whole clock by when it came, one a second at most, in
  *  order, and none past what a save allows. Which monitor sent it is the monitor's own rule (`monitor.ts`). */
-export function withHeart(r: WorkoutRun, readings: readonly HeartIn[], now: number, back: boolean): WorkoutRun {
+export function withHeart(r: WorkoutRun, readings: readonly HeartIn[], now: number): WorkoutRun {
   if (readings.length === 0 || r.paused || r.phase === "done") return r;
-  if (back && now - r.seenAt > AWAY_MOST_MS) return r;
+  if (now - r.seenAt > AWAY_MOST_MS) return r;
   const kept = r.heart ?? [];
   const heart: [number, number][] = [...kept];
   let last = heart[heart.length - 1]?.[0] ?? -HEART_EVERY_MS;
@@ -299,7 +301,7 @@ export function withHeart(r: WorkoutRun, readings: readonly HeartIn[], now: numb
 
 /** What the screen shows of the clocks at the phone's clock `now`, without pressing anything. */
 export function shownAt(r: WorkoutRun, now: number): WorkoutRun {
-  return advance(r, now, false);
+  return advance(r, now);
 }
 
 /** Milliseconds left of the phase that ends by itself, and how long it is in all; null for a set by hand. */

@@ -32,6 +32,9 @@ function play(exercises: RunExercise[], presses: [number, Press][]): WorkoutRun 
   return run;
 }
 
+/** The app in front from `from` to `to` seconds: its clock ticks, here every 5 minutes (a gap over 10 minutes is time away). */
+const inFront = (from: number, to: number): [number, Press][] => Array.from({ length: Math.floor((to - from) / 300) }, (_, i): [number, Press] => [from + (i + 1) * 300, { kind: "tick" }]);
+
 const sets = (r: WorkoutRun | "gone") => (r === "gone" ? r : r.done.map((s) => [s.exercise, s.done, s.restSeconds, s.durationMs]));
 const where = (r: WorkoutRun | "gone") => (r === "gone" ? r : [r.phase, r.ex, r.set]);
 
@@ -91,7 +94,7 @@ describe("the workout's steps", () => {
 
 describe("a set or a rest left open (round one, H2)", () => {
   it("a set by hand left open 13 hours with the app in front is kept as no longer than a save allows, and the workout is still saved", () => {
-    const out = play([curl], [[20, { kind: "main" }], [30, { kind: "main" }], [30 + 13 * 3600, { kind: "tick" }], [30 + 13 * 3600 + 1, { kind: "main" }]]);
+    const out = play([curl], [[20, { kind: "main" }], [30, { kind: "main" }], ...inFront(30, 30 + 13 * 3600), [30 + 13 * 3600 + 1, { kind: "main" }]]);
     if (out === "gone") throw new Error("gone");
     expect(where(out)).toEqual(["done", 0, 1]);
     const used = out.done.reduce((t, s) => t + s.durationMs + (s.restSeconds ?? 0) * 1000, 0);
@@ -221,7 +224,7 @@ describe("the workout as the server takes it", () => {
   });
 
   it("trained past 12 hours is sent as 12, within the length and covering its sets", () => {
-    const out = play([curl], [[20, { kind: "main" }], [13 * 3600, { kind: "tick" }], [13 * 3600 + 1, { kind: "end" }]]);
+    const out = play([curl], [[20, { kind: "main" }], ...inFront(20, 13 * 3600), [13 * 3600 + 1, { kind: "end" }]]);
     if (out === "gone") throw new Error("gone");
     const save = toSave(out, "android", "x");
     expect(workoutSaveSchema.safeParse(save).success).toBe(true);

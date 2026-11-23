@@ -1681,6 +1681,17 @@ describe("heart rate and sounds in a workout (64a-vi)", () => {
     expect(sounds.played).toEqual(["rep"]);
   });
 
+  // Round one, T4: the set's end reaches the player, not only the rule's table.
+  it("with Sound on, the set's end plays its two beeps", async () => {
+    await openLibrary(saving().ask);
+    await openMine();
+    await fireEvent.press(await screen.findByRole("button", { name: "Start workout" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "One rep more" }));
+    await fireEvent.press(screen.getByRole("button", { name: "One rep more" }));
+    expect(await screen.findByText("Workout complete")).toBeTruthy();
+    expect(sounds.played).toEqual(["rep", "setEnd"]);
+  });
+
   it("after the workout, its average and highest heart rate, worked out as the server does", async () => {
     const now = Date.now();
     const run = startRun({

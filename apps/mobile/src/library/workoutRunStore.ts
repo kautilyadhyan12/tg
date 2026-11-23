@@ -182,7 +182,7 @@ export function createRunStore(setup: RunStoreSetup): RunStore {
       if (run === null) return;
       const before = run;
       // The readings that came since the last press belong to the workout as it was until now (paused: none).
-      const out = pressRun(withHeart(before, setup.heart?.() ?? [], now, p.kind === "back"), p, now);
+      const out = pressRun(withHeart(before, setup.heart?.() ?? [], now), p, now);
       const sounds = soundsOf(before, out.kind === "gone" ? null : out.run, p, now);
       if (sounds.length > 0) setup.sound?.(sounds);
       if (out.kind === "gone") {

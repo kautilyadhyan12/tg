@@ -669,6 +669,11 @@ describe("a workout's own queue of readings (64a-vi): only the person's saved mo
     strap.send(STRANGER, polar(165), now - 300);
     expect(workout.take()).toEqual([]);
     endTry();
+    // Round one, T3: the saved monitor itself, tried again in the box, sends nothing the workout keeps while it is tried.
+    tryMonitor(MINE);
+    strap.send(MINE, polar(126), now - 200);
+    expect(workout.take()).toEqual([]);
+    endTry();
     strap.send(MINE, polar(124), now - 100);
     expect(workout.take().map((r) => r.bpm)).toEqual([124]);
     workout.close();
