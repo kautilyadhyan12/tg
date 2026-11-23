@@ -49,11 +49,15 @@ export function followOne(frames: readonly MovementFrame[]): (SeenPerson | null)
 
 // ── The plain sign that the body followed has changed (ROADMAP 51c) ─────────────────────
 /** Faster than this, metres a second across the picture, the body's middle has not moved: another body was taken.
- *  The fastest a person exercising in front of a phone moves their trunk is a jump's take-off: for a jump of 1.1 m,
- *  the highest the engine allows for (spec §12.2's floor), √(2 · 9.81 · 1.1) = 4.6 m/s. Measured on Kd's six videos,
- *  the full model asked for one person: at most 1.5 m/s. A woman put in the squatting woman's place, 0.38 m off, moves
- *  it 11.3 m/s; another body of the same size at the same place cannot be told by this sign (job 52d). */
-export const CHANGED_SPEED = 5;
+ *  The fastest a person exercising in front of a phone moves their trunk is a jump's take-off or landing, where the
+ *  trunk also rises from its lean or folds into it: measured on Kd's four squat-jump videos (52c-i), the middle of the
+ *  shoulders and hips reaches 5.1 to 7.1 m/s from one frame to the next there, each frame drawn and the one person
+ *  followed (5 m/s until then, from a take-off alone: √(2 · 9.81 · 1.1) = 4.6 for a jump of 1.1 m). On Kd's six
+ *  standing videos, at most 1.5 m/s. A woman put in the squatting woman's place, 0.38 m off, moves it 11.3 m/s; the old
+ *  six-person bench file's follower, changing bodies, 6.4 to 27.6 m/s (its two at 6.4 and 6.5 are no longer told by
+ *  speed; the file is still found changing bodies four times); another body of the same size at the same place cannot be
+ *  told by this sign (job 52d). */
+export const CHANGED_SPEED = 8;
 /** A body larger or smaller on the picture than this many times from one frame to the next is another body (a
  *  reflection further off, a passer-by nearer). Measured on the same six videos: at most 1.12 times; the stand-in
  *  follower changing bodies on the old six-person files: 2.8 to 4.5 times. */

@@ -244,7 +244,7 @@ describe("every proof video seen through the floor view, shown: the numbers the 
   it("every other movement tried counts 0 and calls nothing short: 65 of its 73 videos, the 8 filmed from the floor not tried", () => {
     // The push press is judged since 52b-i, when it came to count 0: its dips, a quarter squat to the camera, are told to go
     // lower as a quarter squat is (its video says so).
-    const rows = replayTable(SQUAT, VIDEOS.filter((v) => v.entry.movement === null), [replay]);
+    const rows = replayTable(SQUAT, VIDEOS.filter((v) => v.entry.movement !== "squat"), [replay]);
     expect([rows.length, rows.filter((r) => r.tried).length]).toEqual([73, 65]);
     expect(rows.filter((r) => r.tried && (r.count > 0 || (r.entry.told === undefined && r.reps.some((x) => x.verdict === "short")))).map((r) => r.label)).toEqual([]);
   });

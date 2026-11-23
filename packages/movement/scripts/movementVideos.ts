@@ -2,7 +2,8 @@
 // `D:\exercise video collection`); the videos never go to git, only their body points (test/movement-points), measured
 // as the phone measures (scripts/keptVideos.ts `KEPT_MODEL`).
 //
-// For each: which movement it shows (null: another movement, which must count 0 and say nothing); who is in it, so all
+// For each: which movement it shows (null: none the engine has, which must count 0 and say nothing under every one; a
+// video of one movement must count 0 and say nothing under every other); who is in it, so all
 // of one person's videos are left out together when the numbers are tried on a body they were not set from; where the
 // phone stood; the reps a person counts by eye (a rep is from standing, down, and back to standing: a video that
 // starts low or ends half way does not count that one); and whether it may set the movement's numbers. A video sets
@@ -22,8 +23,15 @@ export interface MovementVideo {
   readonly cut?: readonly [number, number];
   /** Filmed with the phone standing on the floor (52a-ii-b-ii-a): the floor's replay is not tried on it. */
   readonly floor?: boolean;
-  /** The movement it shows; null for another movement. */
+  /** The movement it shows (a file in movements/); null for one the engine does not have. Under every other movement it
+   *  must count 0 and say nothing. */
   readonly movement: string | null;
+  /** For a movement counted one side at a time, each rep's side by eye, in order (the person's own left and right, as the
+   *  pictures show them): every counted rep must be given the side the eye gave it. */
+  readonly sides?: readonly ("left" | "right")[];
+  /** The known cases under another movement than the squat, by its name: `open`, `told`, `leftOutOpen`, `replayOpen` and
+   *  `phoneOpen` below are about the squat (`forMovement`). */
+  readonly under?: Readonly<Record<string, KnownCases>>;
   /** One name for one person. */
   readonly person: string;
   readonly view: View;
@@ -43,7 +51,7 @@ export interface MovementVideo {
   /** A known wrong count with this video's person left out of the numbers (`count`), the video right with every person's
    *  numbers: kept in plain sight until the job named in `why` fixes it. `replays`: the replays under which the count with
    *  the person left out is that same one (`holds` lets it through there only). */
-  readonly leftOutOpen?: { readonly count: number; readonly why: string; readonly replays?: readonly string[] };
+  readonly leftOutOpen?: LeftOutOpen;
   /** A known wrong count under some replays only (replays.ts), the video right as filmed: kept in plain sight until the
    *  job named in `why` fixes it. */
   readonly replayOpen?: { readonly replays: readonly string[]; readonly why: string };
@@ -52,7 +60,55 @@ export interface MovementVideo {
   readonly phoneOpen?: { readonly why: string; readonly differences: readonly string[] };
 }
 
+/** A known wrong count with a video's person left out of the numbers (`count`), the video right with every person's
+ *  numbers. `replays`: the replays under which the count with the person left out is that same one. `fewer`: with the
+ *  person left out the video counts fewer than by eye, never more, as filmed and under every replay (the numbers then come
+ *  from people who do not move as this one does, and their reps read as another movement). */
+export interface LeftOutOpen {
+  readonly count: number;
+  readonly why: string;
+  readonly replays?: readonly string[];
+  readonly fewer?: boolean;
+}
+
+/** The known cases of a video under one movement (`MovementVideo.under`). */
+export interface KnownCases {
+  readonly open?: string;
+  readonly leftOutOpen?: LeftOutOpen;
+  readonly replayOpen?: { readonly replays: readonly string[]; readonly why: string };
+}
+
 const other = (file: string, person: string, view: View, seen: string): MovementVideo => ({ file, movement: null, person, view, reps: 0, sets: false, seen });
+
+/** The entry as a movement reads it: the known cases about the squat only under the squat; under another movement its own
+ *  (`under`). */
+export function forMovement(entry: MovementVideo, movement: string): MovementVideo {
+  if (movement === "squat") return entry;
+  const read: { -readonly [K in keyof MovementVideo]: MovementVideo[K] } = { ...entry };
+  delete read.open;
+  delete read.told;
+  delete read.leftOutOpen;
+  delete read.replayOpen;
+  delete read.phoneOpen;
+  delete read.under;
+  return { ...read, ...(entry.under?.[movement] ?? {}) };
+}
+
+/** The split squat in the Smith machine, a twin of the lunge (52c-i): known, until the split squat is made. */
+const SPLIT_SQUAT_STAYS_SPLIT =
+  "54, where the split squat is made on the lunge: it stays in its split stance between reps, the back knee bent, so it is seldom " +
+  "standing tall (both knees within 20 degrees of straight), and a rep is begun only from a standing; side on, the far leg is hidden " +
+  "at the bottom in most pictures, so its legs' split goes unread. The four videos count 4 of 10 by eye (fresh_split_squat_smith_0, standing tall between his, 3 of 3).";
+
+/** Kd's two squat-jack videos under the squat jump (52c-i), counted there: known, until the squat jack is made. */
+const SQUAT_JACK_AS_A_JUMP =
+  "54, where the squat jack is made: each of his wide squats ends with a jump up as his feet come in, so to the squat jump's rules it is a " +
+  "squat jump in a wide stance. The stance rule refuses it only where the picture reads the feet's width; from the 3D points the width " +
+  "moves as much on real squat jumps filmed side on (0.42 to 0.74 of a trunk) as on his jacks (0.27 to 0.92), so it cannot tell them apart. " +
+  "Kd's research file calls standing up between jacks a mistake: the squat jack done as it describes, staying low, never jumps up out of a dip.";
+
+/** Whether the video shows another movement than this one: it must count 0 and say nothing under it. */
+export const isOther = (entry: MovementVideo, movement: string): boolean => entry.movement !== movement;
 
 /** The frames of one set of a video (`cut`), or the whole video. */
 export function framesOf<F extends { readonly t: number }>(entry: MovementVideo, frames: readonly F[]): readonly F[] {
@@ -272,14 +328,214 @@ export const MOVEMENT_VIDEOS: readonly MovementVideo[] = [
   { file: "movement-points/fresh_squat_smith", movement: "squat", person: "man, Smith machine", view: "front", reps: 0, sets: false, seen: "Fresh: 3.5 s of a Smith machine squat that starts at the bottom and rises: no rep from standing." },
   { file: "movement-points/fresh_goblet_squat_plate", movement: "squat", person: "woman, plate at the chest", view: "side", reps: 4, sets: false, seen: "Fresh: a weight-plate goblet squat; it starts low and rises (not a rep), then four reps." },
   { file: "movement-points/fresh_front_squat_kettlebell", movement: "squat", person: "man, kettlebells in front", view: "front", reps: null, sets: false, seen: "Fresh: a kettlebell front squat facing the phone, three reps by eye; the camera tilts down in its first 0.6 s and moves later (the wall's foot and the bikes shift): reported, never judged." },
-  // ── Every other movement: 0 and silence ──────────────────────────────────────────────────────────────
-  other("movement-points/squat_jump_1", "woman, squat jump, dark gym", "side", "Squat jumps: the feet leave the floor at the top."),
-  other("movement-points/squat_jump_2", "woman, squat jump, mirror", "between", "Squat jumps, a mirror beside her holding her reflection."),
-  other("movement-points/squat_jump_3", "man, squat jump, white", "front", "Squat jumps, a title over the picture."),
-  other("movement-points/squat_jump_4", "woman, squat jump, white", "between", "Squat jumps, text above her."),
-  other("movement-points/squat_jack_1", "man, squat jack, turf", "front", "Squat jacks: low, the feet jumping out and in."),
+  // ── The squat jump (52c-i): Kd's four videos (squat/Squat Jump), each a different person, counted by eye from pictures
+  //    at 4 a second; a rep is a dip and the jump out of it, so a dip begun before the video, or one it ends in, does not
+  //    count. None stands still between jumps: a standing is read on the move (matcher.ts `movingStanding`), from the few
+  //    pictures a jumper is upright on the floor. Each starts low, as a clip cut from a set does, where a live set begins
+  //    with the person standing: so each is played from the first picture of them upright on the floor, held for a second
+  //    as every video's first picture is (at 15 or 8 pictures a second the first such picture of a clip is often never
+  //    taken, and the reps before it go unmeasured). ────────────────────────────────────────────────────────────────
   {
-    ...other("movement-points/squat_jack_2", "man, squat jack, bedroom", "front", "Squat jacks."),
+    file: "movement-points/squat_jump_1",
+    cut: [0.69, 6.7],
+    movement: "squat-jump",
+    person: "woman, squat jump, dark gym",
+    view: "side",
+    reps: 4,
+    under: {
+      "squat-jump": {
+        leftOutOpen: {
+          count: 0,
+          fewer: true,
+          why:
+          "54, once more squat-jump videos come: she leans 51 to 54 degrees at the bottom of each dip, further than any of the other three " +
+          "squat-jump people or the squat's nine (at most 44), so with her left out \"chest up\" is set at 49 and each of her dips reads as another " +
+          "movement. With every person's numbers she counts 4 of 4; her research file's moderate lean is 30 to 45 degrees.",
+        },
+      },
+    },
+    sets: true,
+    sha256: "1fca93c957e5de8ec1a930367d4115c7a273e15448477a0815d4253dc21316e9",
+    seen: "2026-11-23 (52c-i), 16 frames drawn with the model's points: the one woman, side on, in each. She starts low and jumps at 0.75 s; played from 0.7 s, the first picture of her upright on the floor, as she takes off. Then four dips each with its jump (2.0, 3.4, 4.75 and 6.0 s); she is in a dip again as it ends.",
+  },
+  {
+    file: "movement-points/squat_jump_2",
+    cut: [1.86, 7.2],
+    movement: "squat-jump",
+    under: {
+      "squat-jump": {
+        replayOpen: {
+          replays: ["twice as slow"],
+          why:
+            "none: a jump cannot be done twice as slowly, gravity sets its time in the air. Played so, her third jump leaves the floor " +
+            "more than the moment after the rep (0.4 s) after she is back up, and reads under the jump's line, so that rep is another " +
+            "movement, with no word; done 1.5 times as slowly every rep counts.",
+        },
+      },
+    },
+    person: "woman, squat jump, mirror",
+    view: "between",
+    reps: 4,
+    sets: true,
+    sha256: "507a46a0a187350e871f152d769da8d1ae4cfab6bfa9b72811afc8a635fbde07",
+    seen: "2026-11-23 (52c-i), 16 frames drawn with the model's points: the woman followed in each, never her reflection in the mirror beside her. She starts low and jumps at 0.5 s, lands straight into a dip and jumps out of it at 1.5 s; played from 1.87 s, the first picture of her upright on the floor, as she lands. Then four dips each with its jump (2.75, 3.75, 5.0 and 6.25 s); she is rising out of a dip as it ends.",
+  },
+  {
+    file: "movement-points/squat_jump_3",
+    cut: [0.69, 8.6],
+    movement: "squat-jump",
+    person: "man, squat jump, white",
+    view: "front",
+    reps: 5,
+    sets: true,
+    sha256: "046e1b6931d78e3dbf2ca316cffbaff7fa71f055245963efb5e5d740f0ee8eba",
+    seen: "2026-11-23 (52c-i), 16 frames drawn with the model's points: the one man, facing the phone, in each; a title from 1.75 s. He starts low; played from 0.7 s, the first picture of him upright on the floor, as he takes off. Then five dips each with its jump (2.2, 3.6, 5.1, 6.5 and 7.9 s); he is in a dip again as it ends.",
+  },
+  {
+    file: "movement-points/squat_jump_4",
+    cut: [0.42, 5.4],
+    movement: "squat-jump",
+    person: "woman, squat jump, white",
+    view: "between",
+    reps: 3,
+    sets: true,
+    sha256: "286bcc1484ce9f77293a726f15951f12b938db5b3ddc6644f5a78a6b2b6f4d30",
+    seen: "2026-11-23 (52c-i), 16 frames drawn with the model's points: the one woman in each; text above her. Played from 0.43 s, the first picture of her upright on the floor, as she takes off from her low start, to 5.4 s: at 5.5 s the video cuts to her close up, her feet off the picture. Then three dips each with its jump (1.9, 3.25 and 4.75 s), and she is in a dip as the cut comes.",
+  },
+  // ── The lunge (52c-i), counted one side at a time: Kd's forward and reverse lunges, counted by eye from pictures at 2 a
+  //    second, each rep's front leg from pictures of its bottom (which leg lies nearer the phone, and the person's own
+  //    left and right from the way they face). A lunge is from standing, a step, down, and back up. ──────────────────
+  {
+    file: "movement-points/lunge_forward_kettlebell",
+    movement: "lunge",
+    person: "man, green top, kettlebell at the chest",
+    view: "side",
+    reps: 3,
+    sides: ["left", "left", "left"],
+    sets: true,
+    sha256: "89be33a47047da134772bc83df59a430240f110f8f034767c1bef8d9d957d9a0",
+    seen: "2026-11-23 (52c-i): the one man, side on, facing right, his right side to the phone. Three forward lunges, each with his left leg in front (the far leg).",
+  },
+  {
+    file: "movement-points/fresh_lunge_forward_kettlebell_0",
+    movement: "lunge",
+    person: "man, blue top, black gym",
+    view: "side",
+    reps: 3,
+    sides: ["right", "left", "right"],
+    sets: true,
+    sha256: "d3f3758c41a7d541b6501fad8eb50974a69b87b43ae2b3737ef59876936b5565",
+    seen: "2026-11-23 (52c-i): the one man, side on, facing left, his left side to the phone, kettlebells at his sides. Three forward lunges, the legs taking turns: right (the far leg), left (the near), right.",
+  },
+  {
+    file: "movement-points/fresh_lunge_forward_plate",
+    movement: "lunge",
+    person: "man, blue top, black gym",
+    view: "side",
+    reps: 3,
+    sides: ["left", "right", "left"],
+    sets: true,
+    sha256: "2e162d1c8a62b94b9f7ad9cf53776ad38163ff0f29d1857b3e4a044808a46158",
+    seen: "2026-11-23 (52c-i): the same man as the kettlebell lunges (the same gym), a plate at his chest, facing left. He is already stepping into his first lunge in the first picture (right leg in front: not a rep), then three, the legs taking turns: left, right, left.",
+  },
+  {
+    file: "movement-points/lunge_forward_barbell",
+    movement: "lunge",
+    person: "man, barbell, white gym",
+    view: "side",
+    reps: 2,
+    under: {
+      lunge: {
+        leftOutOpen: {
+          count: 1,
+          fewer: true,
+          why:
+            "54, once more lunge videos come: side on, the bar's plate over him, his shins read 46 to 57 degrees apart at the bottom, the " +
+            "narrowest of the six lunge people (the others 60 or more), so with his own videos left out \"legs split\" is set at 49 and his " +
+            "first lunge reads as another movement. With every person's numbers (25) he counts 2 of 2, and every squat counts 0.",
+        },
+      },
+    },
+    sides: ["right", "right"],
+    sets: true,
+    sha256: "c9b9b67569294fa3bc24dc0da063da898bb85f8fe39e40f3b12284a7c5a3cfbf",
+    seen: "2026-11-23 (52c-i): the one man, facing right and a little away, the bar's plate over his back. Two forward lunges, each with his right leg in front (the near leg, its foot lower on the picture).",
+  },
+  {
+    file: "movement-points/fresh_lunge_forward_barbell_2",
+    cut: [0, 3.45],
+    movement: "lunge",
+    person: "man, barbell, rooftop",
+    view: "side",
+    reps: 1,
+    sides: ["left"],
+    sets: true,
+    sha256: "2613636862a1dcce25b42742297c0ee89cad216b4d304a83516a9fc0c1b0fd8d",
+    seen: "2026-11-23 (52c-i): the one man on a rooftop, facing left, his left side to the phone. The video fades from one take to the next at 3.5 s (the same place; the person lost for half a second, which a phone's live picture never does), so each take is a set of its own. This one: one forward lunge, his left leg in front (the near leg).",
+  },
+  {
+    file: "movement-points/fresh_lunge_forward_barbell_2",
+    cut: [4.33, 11.3],
+    movement: "lunge",
+    person: "man, barbell, rooftop",
+    view: "side",
+    reps: 3,
+    sides: ["left", "left", "left"],
+    sets: true,
+    sha256: "2613636862a1dcce25b42742297c0ee89cad216b4d304a83516a9fc0c1b0fd8d",
+    seen: "2026-11-23 (52c-i): the second take, after the fade, standing at its start: three forward lunges, each with his left leg in front (the near leg).",
+  },
+  {
+    file: "movement-points/lunge_reverse_dumbbell",
+    movement: "lunge",
+    person: "woman, dumbbells, green turf",
+    view: "side",
+    reps: 2,
+    sides: ["right", "right"],
+    sets: true,
+    sha256: "45747edf338bc8f8793a7f4ba66d872ece941f8c741a4892096a0aa388efef22",
+    seen: "2026-11-23 (52c-i): the one woman, facing left, her left side to the phone. She starts at the bottom of a reverse lunge (not a rep), then two, each with her right leg in front (the far leg: her near arm and back leg lie in front of it).",
+  },
+  {
+    file: "movement-points/fresh_lunge_reverse_dumbbell_1",
+    movement: "lunge",
+    person: "woman, dumbbells, white studio",
+    view: "between",
+    reps: 3,
+    sides: ["right", "right", "right"],
+    sets: true,
+    sha256: "20bcb06d679d7851af810b9837d6deae4abfa613b96bb2cedd19db7a53a8eb68",
+    seen: "2026-11-23 (52c-i): the one woman, turned half way to the phone, facing its left. Three reverse lunges, each with her right leg in front (on the picture's left as she faces it).",
+  },
+  {
+    file: "movement-points/fresh_lunge_forward_kettlebell_2",
+    movement: "lunge",
+    person: "woman, kettlebells, cream room",
+    view: "between",
+    reps: 3,
+    sides: ["left", "left", "left"],
+    under: {
+      lunge: {
+        replayOpen: {
+          replays: ["shaky", "slower", "twice as slow"],
+          why:
+            "53, where a live set begins with the person standing: her first lunge begins 0.2 s after the video's first picture, from a " +
+            "stance at the very edge of standing tall (her knees 156 and 169 degrees, the line 160), so shaken, or slowed, the camera has not " +
+            "taken her standing before she goes down, and that lunge is not measured. Her other two count under every replay.",
+        },
+      },
+    },
+    sets: false,
+    seen: "2026-11-23 (52c-i), judged, never setting a number: the one woman, half turned, facing left. In the first picture she has already stepped forward, upright, then goes down and back up (a lunge: first counted as begun low from pictures at 2 a second, put right from pictures drawn at 0, 0.1, 0.2, 0.3, 0.43 and 0.6 s), then two more, each with her left leg in front (the near leg, its foot lowest on the picture); she is stepping back up out of the last, her hips up, as the video ends.",
+  },
+  // ── Every other movement: 0 and silence ──────────────────────────────────────────────────────────────
+  {
+    ...other("movement-points/squat_jack_1", "man, squat jack, turf", "front", "Squat jacks: the feet jumping out into a wide squat, then in as he jumps up."),
+    under: { "squat-jump": { open: SQUAT_JACK_AS_A_JUMP } },
+  },
+  {
+    ...other("movement-points/squat_jack_2", "man, squat jack, bedroom", "front", "Squat jacks: the feet jumping out into a wide squat, then in as he jumps up."),
+    under: { "squat-jump": { open: SQUAT_JACK_AS_A_JUMP } },
     replayOpen: {
       replays: ["slower", "twice as slow"],
       why:
@@ -297,10 +553,8 @@ export const MOVEMENT_VIDEOS: readonly MovementVideo[] = [
   other("movement-points/good_morning_barbell", "barbell good morning", "side", "A barbell good morning."),
   other("movement-points/swing_kettlebell", "kettlebell swing", "side", "A two-handed kettlebell swing."),
   other("movement-points/row_barbell", "barbell row", "side", "A bent-over barbell row."),
-  other("movement-points/lunge_forward_kettlebell", "kettlebell forward lunge", "between", "Kettlebell forward lunges."),
-  other("movement-points/lunge_forward_barbell", "barbell forward lunge", "side", "Barbell forward lunges."),
-  other("movement-points/lunge_reverse_dumbbell", "dumbbell reverse lunge", "side", "Dumbbell reverse lunges."),
-  other("movement-points/split_squat_smith", "Smith machine split squat", "side", "Split squats in a Smith machine."),
+  { file: "movement-points/split_squat_smith", movement: "lunge", person: "Smith machine split squat", view: "side", reps: 2, sets: false, under: { lunge: { open: SPLIT_SQUAT_STAYS_SPLIT } },
+    seen: "2026-11-23 (52c-i), counted by eye from pictures at 2 and 4 a second, a twin of the lunge never setting a number. From behind and to the side: she starts low, then two split squats (the bottoms at 2.5 and 5.2 s), and is going down again as it ends." },
   other("movement-points/step_up_dumbbell", "dumbbell step-up", "side", "Dumbbell step-ups onto a box."),
   other("movement-points/calf_raise", "calf raise", "side", "Calf raises."),
   other("movement-points/calf_raise_dumbbell", "dumbbell calf raise", "side", "Standing dumbbell calf raises."),
@@ -314,8 +568,6 @@ export const MOVEMENT_VIDEOS: readonly MovementVideo[] = [
   other("body-points/dumbbell_bench_press_reference_head_end", "Kd's dumbbell bench press", "between", "Kd's dumbbell bench press from the head end."),
   other("movement-points/fresh_deadlift_kettlebell_1", "fresh: kettlebell deadlift, 1", "side", "Fresh: a kettlebell deadlift."),
   other("movement-points/fresh_deadlift_kettlebell_2", "fresh: kettlebell deadlift, 2", "front", "Fresh: a kettlebell deadlift."),
-  other("movement-points/fresh_lunge_forward_kettlebell_0", "fresh: Kettlebell forward lunges, 0", "side", "Fresh: Kettlebell forward lunges."),
-  other("movement-points/fresh_lunge_forward_kettlebell_2", "fresh: Kettlebell forward lunges, 2", "between", "Fresh: Kettlebell forward lunges."),
   other("movement-points/fresh_swing_kettlebell_1", "fresh: two-handed kettlebell swing, 1", "between", "Fresh: a two-handed kettlebell swing."),
   other("movement-points/fresh_swing_kettlebell_2", "fresh: two-handed kettlebell swing, 2", "between", "Fresh: a two-handed kettlebell swing."),
   other("movement-points/fresh_swing_one_hand", "fresh: one-handed kettlebell swing, one", "side", "Fresh: a one-handed kettlebell swing."),
@@ -336,17 +588,17 @@ export const MOVEMENT_VIDEOS: readonly MovementVideo[] = [
   other("movement-points/fresh_romanian_deadlift_dumbbell_0", "fresh: dumbbell Romanian deadlift, 0", "side", "Fresh: a dumbbell Romanian deadlift."),
   other("movement-points/fresh_romanian_deadlift_dumbbell_1", "fresh: dumbbell Romanian deadlift, 1", "side", "Fresh: a dumbbell Romanian deadlift."),
   other("movement-points/fresh_romanian_deadlift_dumbbell_3", "fresh: dumbbell Romanian deadlift, 3", "between", "Fresh: a dumbbell Romanian deadlift."),
-  other("movement-points/fresh_lunge_reverse_dumbbell_1", "fresh: Dumbbell reverse lunges, 1", "side", "Fresh: Dumbbell reverse lunges."),
   other("movement-points/fresh_step_up_dumbbell_0", "fresh: Dumbbell step-ups, 0", "side", "Fresh: Dumbbell step-ups."),
   other("movement-points/fresh_step_up_dumbbell_1", "fresh: Dumbbell step-ups, 1", "between", "Fresh: Dumbbell step-ups."),
   other("movement-points/fresh_calf_raise_2", "fresh: Calf raises at a wall, 2", "side", "Fresh: Calf raises at a wall."),
   other("movement-points/fresh_calf_raise_dumbbell_1", "fresh: Standing dumbbell calf raises, 1", "front", "Fresh: Standing dumbbell calf raises."),
   other("movement-points/fresh_calf_raise_dumbbell_2", "fresh: Standing dumbbell calf raises, 2", "front", "Fresh: Standing dumbbell calf raises."),
-  other("movement-points/fresh_split_squat_smith_0", "fresh: Smith machine split squats, 0", "side", "Fresh: Smith machine split squats."),
-  other("movement-points/fresh_split_squat_smith_2", "fresh: Smith machine split squats, 2", "between", "Fresh: Smith machine split squats."),
-  other("movement-points/fresh_split_squat_smith_3", "fresh: Smith machine split squats, 3", "side", "Fresh: Smith machine split squats."),
-  other("movement-points/fresh_lunge_forward_barbell_2", "fresh: Barbell forward lunges, 2", "side", "Fresh: Barbell forward lunges."),
-  other("movement-points/fresh_lunge_forward_plate", "fresh: Weight-plate forward lunges, one", "side", "Fresh: Weight-plate forward lunges."),
+  { file: "movement-points/fresh_split_squat_smith_0", movement: "lunge", person: "fresh: Smith machine split squats, 0", view: "side", reps: 3, sets: false,
+    seen: "2026-11-23 (52c-i), counted by eye from pictures at 2 and 4 a second, a twin of the lunge never setting a number. Side on: he steps into his split stance, then three split squats (the bottoms at 2.0, 4.8 and 7.3 s); a card from 8.5 s." },
+  { file: "movement-points/fresh_split_squat_smith_2", movement: "lunge", person: "fresh: Smith machine split squats, 2", view: "between", reps: 3, sets: false, under: { lunge: { open: SPLIT_SQUAT_STAYS_SPLIT } },
+    seen: "2026-11-23 (52c-i), counted by eye from pictures at 2 and 4 a second, a twin of the lunge never setting a number. Facing the phone: three split squats (the bottoms at 2.1, 4.3 and 6.6 s), never standing tall between them." },
+  { file: "movement-points/fresh_split_squat_smith_3", movement: "lunge", person: "fresh: Smith machine split squats, 3", view: "side", reps: 2, sets: false, under: { lunge: { open: SPLIT_SQUAT_STAYS_SPLIT } },
+    seen: "2026-11-23 (52c-i), counted by eye from pictures at 2 and 4 a second, a twin of the lunge never setting a number. Side on, his back half to the phone: he sets up until 3.5 s, steps back, then two split squats (the bottoms at 4.3 and 6.8 s)." },
   other("movement-points/fresh_overhead_press_plate", "fresh: weight-plate overhead press, one", "front", "Fresh: a weight-plate overhead press."),
   other("movement-points/fresh_overhead_press_barbell", "fresh: barbell overhead press, one", "front", "Fresh: a barbell overhead press."),
   other("movement-points/fresh_curl_barbell", "fresh: barbell biceps curl, one", "front", "Fresh: a barbell biceps curl."),

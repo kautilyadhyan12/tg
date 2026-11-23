@@ -208,7 +208,7 @@ export interface PositionRow {
 
 /** His eleven videos of other positions, as filmed: what the phone saw of each. */
 export function positionsTable(): PositionRow[] {
-  const videos = proofVideos(MOVEMENT_VIDEOS.filter((e) => e.person === HIS && e.movement === null));
+  const videos = proofVideos(MOVEMENT_VIDEOS.filter((e) => e.person === HIS && e.movement !== "squat"));
   return videos.map((v) => {
     const { steady, measured } = runOf(v.video);
     const frames = v.video.frames.length;

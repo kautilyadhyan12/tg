@@ -54,7 +54,7 @@ const repTimes = (video: Video) =>
     .map((r) => ({ start: r.start - LEAD_IN, end: r.end - LEAD_IN }));
 
 describe("the worst thing: no other movement is ever counted as a squat", () => {
-  const others = TABLE.rows.filter((r) => r.entry.movement === null);
+  const others = TABLE.rows.filter((r) => r.entry.movement !== "squat");
 
   it("Kd's folders give many other movements to try, from every side", () => {
     expect(others.length).toBeGreaterThanOrEqual(30);

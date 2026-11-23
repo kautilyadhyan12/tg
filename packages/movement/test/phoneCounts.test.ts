@@ -40,7 +40,7 @@ function withoutRep(frames: readonly MovementFrame[], rep: { start: number; end:
 }
 
 /** A rep at a time in the video (`start`, `end` in ms of the video), as a run holds it after its lead-in. */
-const rep = (start: number, end: number, verdict: RepResult["verdict"], rule: string | null = null): RepResult => ({ start: start + LEAD_IN, end: end + LEAD_IN, verdict, rule, reason: null, readings: {}, standing: {}, form: [], turn: null });
+const rep = (start: number, end: number, verdict: RepResult["verdict"], rule: string | null = null): RepResult => ({ start: start + LEAD_IN, end: end + LEAD_IN, verdict, rule, reason: null, readings: {}, standing: {}, form: [], turn: null, side: null });
 
 describe("the worst thing: a phone that counts or speaks differently is never the same", () => {
   const entry = entryOf("squat_reference");
@@ -164,7 +164,7 @@ describe("every proof video, as the phone's chosen set-up read it (51b-ii; kept 
   it("the open cases are three, a man's own floor squats, and on the phone no other movement is counted", () => {
     const open = rows.filter((r) => r.entry.phoneOpen !== undefined);
     expect(open.map((r) => r.label).sort()).toEqual(["floor_phone_test 0-12 s", "floor_phone_test 13.9-21.1 s", "usual_v04 9.8-17.5 s"]);
-    for (const r of rows.filter((x) => x.entry.movement === null)) expect([r.label, r.phone?.count]).toEqual([r.label, 0]);
+    for (const r of rows.filter((x) => x.entry.movement !== "squat")) expect([r.label, r.phone?.count]).toEqual([r.label, 0]);
     expect(rows.filter((r) => r.verdict === "same").length).toBe(97);
   });
 

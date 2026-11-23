@@ -56,7 +56,7 @@ describe("the worst thing: nobody squatting properly is told to change their for
 
 describe("a mistake is judged only inside a counted rep", () => {
   it("every other movement counts 0, and none of its dips carries a form check", () => {
-    const others = VIDEOS.filter((v) => v.entry.movement === null);
+    const others = VIDEOS.filter((v) => v.entry.movement !== "squat");
     expect(others.length).toBeGreaterThan(50);
     for (const v of others) {
       const run = runMovement(SQUAT, v.video, EXERCISE);

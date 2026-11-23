@@ -65,19 +65,25 @@ export const movementRuleSchema = z
       .max(60)
       .regex(/^[A-Za-z0-9][A-Za-z0-9 ]*$/),
     role: z.enum(["count", "match"]),
-    /** Read at the bottom of the rep (the middle of the frames nearest the deepest), or over the whole rep, its
-     *  worst frame (the rep includes a moment after it, so a jump from the top is seen). */
-    at: z.enum(["bottom", "rep"]),
+    /** Read at the bottom of the rep (the middle of the frames nearest the deepest), over its lower half (the middle of
+     *  the frames at least half as deep as the deepest: a lunge's legs are split all through it, and at the very bottom
+     *  the back knee is often hidden), or over the whole rep, its worst frame (the rep includes a moment after it, so a
+     *  jump from the top is seen). */
+    at: z.enum(["bottom", "lower half", "rep"]),
     read: movementReadSchema,
     atLeast: z.number().optional(),
     atMost: z.number().optional(),
     /** "always": the camera must see it, or the rep decides nothing. "when-seen": checked where the camera can see it
-     *  from where the phone stands, and marked "the camera cannot see this from here" where it cannot. */
-    seen: z.enum(["always", "when-seen"]),
+     *  from where the phone stands, and marked "the camera cannot see this from here" where it cannot. "or another
+     *  movement", a "match" rule only: the camera must see it, and where it cannot, the rep is another movement, with no
+     *  word: what hides it is a body moving another way (side on, a lunge's far leg is hidden behind the near one only
+     *  when the legs are together, as in a squat; a jump's feet go unread only where the body was not carried up). */
+    seen: z.enum(["always", "when-seen", "or another movement"]),
     /** A count rule set from the exercise's form standard, never from how shallow its people went: `at` is the
      *  standard's own line; `room` "camera": the tool that sets the numbers moves it the forgiving way by the camera's
      *  room on that reading, measured on the videos; "none": the line is already the least the body allows, and is used
-     *  as it is. `source` says where the line comes from. */
+     *  as it is. `source` says where the line comes from. A match rule may be set so too, with no room (a squat jump's
+     *  jump: the smallest the squat never counts). */
     standard: z.object({ at: z.number(), room: z.enum(["camera", "none"]), source: from }).strict().optional(),
     /** For a count rule: what the screen says when a rep that tried falls short of it. */
     short: words.optional(),
@@ -90,7 +96,10 @@ export const movementRuleSchema = z
   .refine((r) => r.read.kind !== "time" || r.at === "rep", { message: "a rep's time is read over the rep" })
   .refine((r) => (r.role === "count") === (r.short !== undefined), { message: "a count rule, and only a count rule, says what to do when a rep falls short of it" })
   .refine((r) => (r.seen === "always") === (r.unseen !== undefined), { message: "a rule the camera must see, and only such a rule, says what to do when it could not" })
-  .refine((r) => r.standard === undefined || r.role === "count", { message: "only a count rule is set from a form standard" });
+  .refine((r) => r.seen !== "or another movement" || r.role === "match", { message: "only a match rule makes a rep it cannot see another movement" })
+  .refine((r) => r.standard === undefined || r.role === "count" || r.standard.room === "none", {
+    message: "only a count rule is set from a form standard moved by the camera's room",
+  });
 
 /** One condition of standing ready, before a rep may begin. */
 export const movementReadySchema = z
@@ -104,11 +113,27 @@ export const movementReadySchema = z
   .refine((r) => r.read.kind === "value" || r.read.kind === "gap" || r.read.kind === "apart", { message: "standing ready reads a body measure" })
   .refine((r) => (r.atLeast === undefined) !== (r.atMost === undefined), { message: "a condition has exactly one bound" });
 
+/** The kinds of counting (spec §12.3; ROADMAP 52c-i):
+ *   - "rep": from standing still, down, and back up (the squat);
+ *   - "fast rhythm": reps that follow each other with no still moment between them, so where the person stands is also
+ *     read on the move, at the top between two reps (every condition of standing ready held, the feet on the floor);
+ *   - "jump": a fast rhythm whose rep ends with the feet leaving the floor: the movement has a rule on the feet's lift
+ *     with "at least" (a squat jump), and only a jump movement has one;
+ *   - "one side at a time": each rep is one side's, told by `side` (a lunge's front leg). */
+export const MOVEMENT_COUNTINGS = ["rep", "fast rhythm", "jump", "one side at a time"] as const;
+
 export const movementSchema = z
   .object({
     format: z.literal(MOVEMENT_FORMAT),
     name: z.string().min(1).max(60),
-    counting: z.literal("rep"),
+    counting: z.enum(MOVEMENT_COUNTINGS),
+    /** For "one side at a time": the left-against-right measure that tells which side a rep is (left less right), read
+     *  over the rep's lower half: the side whose own reading is the `working` one ("more": the larger) is the rep's. */
+    side: z.object({ measure: measureName, working: z.enum(["more", "less"]), from }).strict().optional(),
+    /** Another movement whose people also set this movement's "match" rules that it has too, by name and reading, with
+     *  why: a squat jump's dip is a squat, so what a squat holds there (the chest, the stance) is set from the squat's
+     *  people as well as from the squat jump's (movement-check). It changes nothing the engine does. */
+    alsoFrom: z.object({ movement: z.string().min(1).max(60), why: from }).strict().optional(),
     /** Where the phone stands, in a line for the person. */
     phone: z.string().min(1).max(400),
     /** The measure whose fall from standing is the rep, read on the picture. */
@@ -117,6 +142,13 @@ export const movementSchema = z
     rules: z.array(movementRuleSchema).min(1).max(24),
   })
   .strict()
+  .refine((m) => (m.counting === "one side at a time") === (m.side !== undefined), { message: "a movement counted one side at a time, and only it, says how a rep's side is told" })
+  .refine((m) => (m.counting === "jump") === m.rules.some((r) => r.read.kind === "lift" && r.atLeast !== undefined), {
+    message: "a jump movement, and only it, asks that the feet leave the floor",
+  })
+  .refine((m) => m.counting !== "jump" || !m.rules.some((r) => r.read.kind === "lift" && r.atMost !== undefined), {
+    message: "a jump movement does not also ask that the feet stay down",
+  })
   .refine((m) => new Set(m.rules.map((r) => r.name)).size === m.rules.length, { message: "every rule has its own name" })
   .refine((m) => m.rules.filter((r) => r.read.kind === "drop" && r.role === "count").length === 1, {
     message: "a rep movement has exactly one count rule on how far the drive goes",

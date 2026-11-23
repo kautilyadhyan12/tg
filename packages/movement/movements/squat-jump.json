@@ -1,0 +1,137 @@
+{
+  "format": 1,
+  "name": "squat-jump",
+  "counting": "jump",
+  "alsoFrom": {
+    "movement": "squat",
+    "why": "A squat jump's dip is a squat with a jump out of it (Kd's research file: a bodyweight squat followed by an explosive vertical jump), so what a squat holds there, the chest and the stance, is set from the squat's people too: four squat-jump people alone, one left out, set the chest from 45 to 62 degrees and the stance from 0.13 to 0.17."
+  },
+  "phone": "On the floor or a low stand, 2 to 3 metres away, the whole body in the picture with room above the head for the jump: side-on, from the front, or in between.",
+  "drive": {
+    "measure": "hips height",
+    "toward": "lower"
+  },
+  "ready": [
+    {
+      "read": {
+        "kind": "value",
+        "measures": [
+          "left knee",
+          "right knee"
+        ]
+      },
+      "atLeast": 160,
+      "from": "Standing tall: the knees within 20 degrees of straight (the usual definition; not fitted)."
+    },
+    {
+      "read": {
+        "kind": "value",
+        "measures": [
+          "trunk lean"
+        ]
+      },
+      "atMost": 20,
+      "from": "Standing tall: the trunk within 20 degrees of upright (the usual definition; not fitted)."
+    }
+  ],
+  "rules": [
+    {
+      "name": "depth",
+      "role": "count",
+      "at": "bottom",
+      "read": {
+        "kind": "drop"
+      },
+      "atLeast": 0.11,
+      "seen": "always",
+      "standard": {
+        "at": 0.113,
+        "room": "none",
+        "source": "The hips sink at least this far, in legs, when both knees bend to 125 degrees, the knees' line (120 and the camera's room): a hip stands no higher above its ankle than a leg bent so allows, thigh and shin of equal length (Drillis and Contini, as Winter gives them): 1 - sin(62.5 degrees) = 0.113."
+      },
+      "short": "Go lower to count.",
+      "unseen": "Keep your whole body in view.",
+      "from": "Set by movement-check from the form standard, 0.113 (its source beside it), the least the body allows, so with no room of its own; rounded the forgiving way. The people's shallowest rep reads 0.35."
+    },
+    {
+      "name": "knees bent",
+      "role": "count",
+      "at": "bottom",
+      "read": {
+        "kind": "value",
+        "measures": [
+          "left knee",
+          "right knee"
+        ]
+      },
+      "atMost": 128,
+      "seen": "always",
+      "standard": {
+        "at": 120,
+        "room": "camera",
+        "source": "Kd's research file, \"Squat Jump Guide\": lower to a quarter or half squat, the knees at about 90 to 120 degrees at the bottom (a full-depth squat slows the jump). The line is its shallow end, 120, plus the camera's own room (the forgiving way)."
+      },
+      "short": "Go lower to count.",
+      "unseen": "Keep your whole body in view.",
+      "from": "Set by movement-check from the form standard, 120 (its source beside it), plus the camera's own room on this reading: the same rep's change from as filmed to each replay that sets numbers, in 99 reps of 100 (144 reps, 4 people): 7.59; rounded the forgiving way. Their shallowest rep reads 105.44."
+    },
+    {
+      "name": "chest up",
+      "role": "match",
+      "at": "bottom",
+      "read": {
+        "kind": "value",
+        "measures": [
+          "trunk lean"
+        ]
+      },
+      "atMost": 65,
+      "seen": "always",
+      "unseen": "Keep your whole body in view.",
+      "from": "Set by movement-check from 4 people's videos (scripts/movementVideos.ts), as filmed and as each replay that sets numbers (scripts/replays.ts), 539 reps: beyond the furthest rep by half its distance from the middle rep (54.06; standing 3.19)."
+    },
+    {
+      "name": "feet leave the floor",
+      "role": "match",
+      "at": "rep",
+      "read": {
+        "kind": "lift",
+        "points": "feet"
+      },
+      "atLeast": 0.08,
+      "seen": "or another movement",
+      "standard": {
+        "at": 0.08,
+        "room": "none",
+        "source": "The smallest jump the squat never counts (NEVER_JUMP, 52a-ii-a: under Kd's lowest real squat jump, 12 cm), so no rep is both a squat and a squat jump; between the squat's own \"feet stay down\" (4 cm) and this, neither counts. The pose model's own foot points wander up to 7 cm on a split squat's step, under it."
+      },
+      "from": "Set by movement-check from its standard, 0.08 (its source beside it), used as it is. The people's furthest rep reads 0.12."
+    },
+    {
+      "name": "stance holds",
+      "role": "match",
+      "at": "rep",
+      "read": {
+        "kind": "change",
+        "measures": [
+          "feet apart"
+        ]
+      },
+      "atMost": 0.23,
+      "seen": "when-seen",
+      "from": "Set by movement-check from 4 people's videos (scripts/movementVideos.ts), as filmed and as each replay that sets numbers (scripts/replays.ts), 317 reps: beyond the furthest rep by half its distance from the middle rep (0.18; standing 0)."
+    },
+    {
+      "name": "hips alike",
+      "role": "match",
+      "at": "bottom",
+      "read": {
+        "kind": "apart",
+        "measure": "hips, left against right"
+      },
+      "atMost": 43,
+      "seen": "when-seen",
+      "from": "Set by movement-check from 4 people's videos (scripts/movementVideos.ts), as filmed and as each replay that sets numbers (scripts/replays.ts), 524 reps: beyond the furthest rep by half its distance from the middle rep (31; standing 3.78)."
+    }
+  ]
+}

@@ -130,7 +130,7 @@ describe("the chest drawn past chest up onto real squats: told to keep it up, or
   it("round one's worst case: every other movement under the replays shown and not held (a phone on the floor among them) is never told it either", () => {
     const shown = REPLAYS.filter((r) => !r.hold);
     expect(shown.map((r) => r.name)).toContain("on the floor");
-    const rows = replayTable(SQUAT, VIDEOS.filter((v) => v.entry.movement === null), shown, EXERCISE);
+    const rows = replayTable(SQUAT, VIDEOS.filter((v) => v.entry.movement !== "squat"), shown, EXERCISE);
     expect(rows.length).toBeGreaterThan(250);
     // The kettlebell swing's first dip, under the floor view, broke "chest up" alone and was told it before the set counted.
     expect(rows.flatMap((r) => r.reps.filter((x) => x.verdict === "refused").map((x) => `${r.replay.name}: ${r.label} ${((x.start - LEAD_IN) / 1000).toFixed(2)} s`))).toEqual([]);

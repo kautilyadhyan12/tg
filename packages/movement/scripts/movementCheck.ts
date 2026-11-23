@@ -35,7 +35,7 @@ import type { ExerciseCamera, Movement, MovementFrame, MovementRule } from "@app
 import { FOOT_ROOM, MATCH_LIMITS, MovementMatcher, NEVER_JUMP, SLOWEST_RATE, breakOf, parseExercise, parseMovement, type MatchLimits, type RepResult } from "../src/index.js";
 import { readKept, videoOf, type Video } from "./bodyCheck.js";
 import { runOf } from "./measureCheck.js";
-import { MOVEMENT_VIDEOS, framesOf, labelOf, type MovementVideo } from "./movementVideos.js";
+import { MOVEMENT_VIDEOS, forMovement, framesOf, isOther, labelOf, type MovementVideo } from "./movementVideos.js";
 import { REPLAYS, type Replay } from "./replays.js";
 
 const TEST = join(import.meta.dirname, "../test");
@@ -85,6 +85,11 @@ export function proofVideos(entries: readonly MovementVideo[] = MOVEMENT_VIDEOS)
     const seen = entry.sets && entry.sha256 !== undefined ? { [label]: { sets: true, sha256: entry.sha256, seen: entry.seen } } : {};
     return { entry, video: { ...videoOf(file, seen), label: labelOf(entry, label) } };
   });
+}
+
+/** The videos as a movement reads them: each entry's known cases kept only for the movement they are about. */
+export function asRead(videos: readonly ProofVideo[], movement: Movement): ProofVideo[] {
+  return videos.map((v) => ({ ...v, entry: forMovement(v.entry, movement.name) }));
 }
 
 export interface Run {
@@ -201,8 +206,11 @@ export function repsOf(movement: Movement, videos: readonly ProofVideo[], exerci
   return videos.flatMap((v) => {
     // The deepest dips first, as many as were counted, and only then those the camera could not judge left out: a rep
     // that could not be judged is never replaced by a smaller dip.
-    // A dip longer than any rep of its kind (`judgeLong`: another movement, with no rule) is no rep either (round one).
-    const dips = dipsOf(measuring, v.video, exercise === null ? null : measuringExercise(exercise), limits).filter((r) => !(r.verdict === "other" && r.rule === null));
+    // A dip longer than any rep of its kind (`judgeLong`: another movement, with no rule) is no rep either (round one), nor
+    // one that never went three quarters of the measuring depth (the only "other" a measuring run gives besides): where a
+    // replay lost a real rep, such a dip was taken in its place (52c-i: a lunge's first step, 0.09 of a leg, its knees at
+    // 174 degrees, set the lunge's depth at 0.06).
+    const dips = dipsOf(measuring, v.video, exercise === null ? null : measuringExercise(exercise), limits).filter((r) => r.verdict !== "other");
     const deepest = [...dips].sort((a, b) => depthOf(b) - depthOf(a)).slice(0, v.entry.reps ?? 0);
     return dips.filter((r) => deepest.includes(r) && r.verdict !== "unseen");
   });
@@ -287,18 +295,44 @@ export function roomOfReading(
   return { size: Math.max(0, at), pairs: sorted.length };
 }
 
+/** The other movement whose people also set this one's shared "match" rules (`Movement.alsoFrom`), with its videos that
+ *  set numbers; null for a movement that names none. */
+export interface Also {
+  readonly movement: Movement;
+  readonly videos: readonly ProofVideo[];
+}
+
+export function alsoOf(movement: Movement, all: readonly ProofVideo[] = proofVideos()): Also | null {
+  const name = movement.alsoFrom?.movement;
+  if (name === undefined) return null;
+  const other = readMovement(name);
+  return { movement: other, videos: all.filter((v) => v.entry.movement === name && v.video.sets) };
+}
+
+/** Whether a rule is one the other movement has too, a "match" rule of the same name and reading. */
+const sharedWith = (also: Also | null, rule: MovementRule): boolean =>
+  rule.role === "match" && also !== null && also.movement.rules.some((r) => r.name === rule.name && r.role === "match" && JSON.stringify(r.read) === JSON.stringify(rule.read));
+
 /** Sets every rule's number from the reps of the videos given, as filmed and as each replay that sets numbers, by the
- *  rules above. */
-export function fit(movement: Movement, videos: readonly ProofVideo[]): Fitted[] {
-  const reps = repsOf(movement, videos.flatMap((v) => [v, ...asReplayed(v)]));
+ *  rules above; a "match" rule the movement shares with `also` (`Movement.alsoFrom`) from that movement's people as well,
+ *  their dips read by this movement. */
+export function fit(movement: Movement, videos: readonly ProofVideo[], also: Also | null = null): Fitted[] {
+  const ownReps = repsOf(movement, videos.flatMap((v) => [v, ...asReplayed(v)]));
+  const alsoReps = also === null ? [] : repsOf(movement, also.videos.flatMap((v) => [v, ...asReplayed(v)]));
   // Each person's own reps, for the middle rep: each person counts once there, as each is left out once (52a-ii-b-i).
-  const people = [...new Set(videos.map((v) => v.entry.person))].map((person) =>
-    repsOf(
-      movement,
-      videos.filter((v) => v.entry.person === person).flatMap((v) => [v, ...asReplayed(v)]),
-    ),
-  );
+  const peopleOf = (list: readonly ProofVideo[]): RepResult[][] =>
+    [...new Set(list.map((v) => v.entry.person))].map((person) =>
+      repsOf(
+        movement,
+        list.filter((v) => v.entry.person === person).flatMap((v) => [v, ...asReplayed(v)]),
+      ),
+    );
+  const ownPeople = peopleOf(videos);
+  const alsoPeople = also === null ? [] : peopleOf(also.videos);
   return movement.rules.map((rule) => {
+    const shared = sharedWith(also, rule);
+    const reps = shared ? [...ownReps, ...alsoReps] : ownReps;
+    const people = shared ? [...ownPeople, ...alsoPeople] : ownPeople;
     const values = reps.flatMap((r) => {
       const v = r.readings[rule.name] ?? null;
       return v === null ? [] : [v];
@@ -331,7 +365,7 @@ export function fit(movement: Movement, videos: readonly ProofVideo[]): Fitted[]
     const bound = rounded(raw, step(rule), rule.role === "count" ? !atLeast : atLeast);
     return {
       rule: rule.name,
-      bound: rule.read.kind === "lift" ? Math.min(bound, rounded(LIFT_CEILING, step(rule), false)) : bound,
+      bound: rule.read.kind === "lift" && !atLeast ? Math.min(bound, rounded(LIFT_CEILING, step(rule), false)) : bound,
       from: extreme,
       standing,
       reps: values.length,
@@ -365,20 +399,22 @@ export interface ProofRow {
 /** The proof table of one movement: every listed video, with the movement's own numbers, and each video that sets
  *  numbers also with its person left out. Other movements are run with every fold's numbers too: `worstOther` is the
  *  most any of those numbers counted on any other movement's video. */
-export function proofTable(movement: Movement, videos: readonly ProofVideo[] = proofVideos()): {
+export function proofTable(movement: Movement, all: readonly ProofVideo[] = proofVideos()): {
   readonly rows: readonly ProofRow[];
   readonly fitted: readonly Fitted[];
   readonly folds: readonly { readonly person: string; readonly fitted: readonly Fitted[] }[];
   readonly worstOther: number;
 } {
+  const videos = asRead(all, movement);
   const own = videos.filter((v) => v.entry.movement === movement.name);
   const setting = own.filter((v) => v.video.sets);
-  const fitted = fit(movement, setting);
+  const also = alsoOf(movement, videos);
+  const fitted = fit(movement, setting, also);
   const full = withNumbers(movement, fitted);
   const people = [...new Set(setting.map((v) => v.entry.person))];
-  const folds = people.map((person) => ({ person, fitted: fit(movement, setting.filter((v) => v.entry.person !== person)) }));
+  const folds = people.map((person) => ({ person, fitted: fit(movement, setting.filter((v) => v.entry.person !== person), also) }));
   // A known open case is left out of the worst count, and kept in the table, in plain sight.
-  const others = videos.filter((v) => v.entry.movement === null && v.entry.open === undefined);
+  const others = videos.filter((v) => isOther(v.entry, movement.name) && v.entry.open === undefined);
   let worstOther = 0;
   for (const fold of folds) {
     const m = withNumbers(movement, fold.fitted);
@@ -448,13 +484,14 @@ export function replayed(movement: Movement, v: ProofVideo, replay: Replay, left
 /** Every judged video (a count by eye, no open case) under every replay given; each video that sets numbers also with
  *  its person left out of the numbers, so a replay is never judged only by numbers set from the replay itself. */
 export function replayTable(movement: Movement, videos: readonly ProofVideo[] = proofVideos(), replays: readonly Replay[] = REPLAYS, exercise: ExerciseCamera | null = null): ReplayRow[] {
-  const judged = videos.filter((v) => v.entry.reps !== null && v.entry.open === undefined && (v.entry.movement === movement.name || v.entry.movement === null));
+  const judged = asRead(videos, movement).filter((v) => v.entry.reps !== null && v.entry.open === undefined);
   const setting = proofVideos().filter((v) => v.entry.movement === movement.name && v.video.sets);
+  const also = alsoOf(movement);
   const folds = new Map<string, Movement>();
   const foldOf = (person: string): Movement => {
     const known = folds.get(person);
     if (known !== undefined) return known;
-    const m = withNumbers(movement, fit(movement, setting.filter((v) => v.entry.person !== person)));
+    const m = withNumbers(movement, fit(movement, setting.filter((v) => v.entry.person !== person), also));
     folds.set(person, m);
     return m;
   };
@@ -466,6 +503,7 @@ export const holds = (r: ReplayRow): boolean =>
   r.count <= r.most &&
   (r.leftOut === null ||
     (r.leftOut >= r.least && r.leftOut <= r.most) ||
-    (r.leftOut === r.entry.leftOutOpen?.count && r.entry.leftOutOpen.replays?.includes(r.replay.name) === true));
+    (r.leftOut === r.entry.leftOutOpen?.count && r.entry.leftOutOpen.replays?.includes(r.replay.name) === true) ||
+    (r.entry.leftOutOpen?.fewer === true && r.leftOut <= r.most));
 /** A row the video's own entry names as a known wrong count under this replay (`replayOpen`). */
 export const openRow = (r: ReplayRow): boolean => r.entry.replayOpen?.replays.includes(r.replay.name) === true;

@@ -128,11 +128,13 @@ describe("the plain sign that the body followed changed, on real cases from outs
 
   it("finds the stand-in follower changing bodies on the old six-person barbell file (its reflection, the man found twice)", () => {
     // A cut of 1.4 to 2.8 s of the file kept before 51c (heavy model, asked for six): the follower goes from the man to
-    // another body found where he lies. Measured: among them a size jump of 1.83 times at 2.17 s, 27.6 m/s at 2.40 s. On
-    // the whole old file the sign finds 80 changes, on the old head-end bench file 80, on the old one-person files none.
+    // another body found where he lies. Measured: among them a size jump of 1.83 times at 2.17 s, 27.6 m/s at 2.40 s;
+    // at 1.60 and 1.63 s it moved 6.4 and 6.5 m/s and grew 1.14 times, as fast as a real squat jump's trunk, so since
+    // 52c-i those two are no longer told. On the whole old file the sign found 80 changes at 5 m/s, on the old head-end
+    // bench file 80, on the old one-person files none.
     expect(cut.header.model.people).toBe(6);
     const changes = bodyChanges(cut.frames);
-    expect(changes.map((c) => (c.t / 1000).toFixed(2))).toEqual(["1.60", "1.63", "1.80", "2.17", "2.33", "2.40"]);
+    expect(changes.map((c) => (c.t / 1000).toFixed(2))).toEqual(["1.80", "2.17", "2.33", "2.40"]);
     expect(changes.some((c) => c.speed > CHANGED_SPEED)).toBe(true);
     expect(changes.some((c) => c.size > CHANGED_SIZE)).toBe(true);
   });
