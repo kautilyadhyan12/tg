@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { heartSums, workoutRunSchema, workoutSaveSchema, type RunExercise, type WorkoutRun } from "@app/shared";
-import { AWAY_MOST_MS, HEART_EVERY_MS, press, startRun, toSave, withHeart, type HeartIn, type Press } from "../src/library/workoutRun";
+import { AWAY_MOST_MS, HEART_EVERY_MS, press, shownAt, startRun, toSave, withHeart, type HeartIn, type Press } from "../src/library/workoutRun";
 import { createRunStore, type Finished } from "../src/library/workoutRunStore";
 import { workoutWaiting } from "../src/library/workoutSaving";
 
@@ -63,6 +63,21 @@ describe("the worst thing: only the person's heart rate during the workout is ke
     expect(run.paused).toBe(true);
     expect(kept(run)).toHaveLength(5);
     expect(run.activeMs).toBe(5000);
+  });
+
+  // The re-check's H1: a page drawing the time from the copy it had at the last press (My Workout's In progress) shows the
+  // same time as the workout's own screen, however long since that press, while the app ticks.
+  it("a page drawing the time from an older copy shows what the ticking workout shows, past 10 minutes with no press", () => {
+    const start = begin();
+    let run = start;
+    for (let ms = 250; ms <= 11 * 60_000; ms += 250) {
+      const out = press(run, { kind: "tick" }, T0 + ms);
+      if (out.kind === "gone") throw new Error("gone");
+      run = out.run;
+    }
+    expect(run.paused).toBe(false);
+    expect(run.activeMs).toBe(11 * 60_000);
+    expect(shownAt(start, T0 + 11 * 60_000).activeMs).toBe(run.activeMs);
   });
 
   it("the time away under 10 minutes is trained, and its readings are kept", () => {

@@ -185,13 +185,14 @@ function expire(r: WorkoutRun): WorkoutRun {
 
 /** The workout moved on to the phone's clock `now`: every phase that ended meanwhile ends at its own time, in order.
  *  A workout done stops its clocks. */
-function advance(r: WorkoutRun, now: number): WorkoutRun {
+function advance(r: WorkoutRun, now: number, pressed: boolean): WorkoutRun {
   const dt = Math.max(0, now - r.seenAt);
   let run: WorkoutRun = { ...r, seenAt: now };
   if (run.phase === "done") return run;
-  // Away longer than AWAY_MOST_MS whatever press comes first: the screen's clock moves every 250 ms while the app is open,
+  // A press (the screen's clock included) after longer than AWAY_MOST_MS: the clock moves every 250 ms while the app is open,
   // so a gap that long means the app was away, even where its clock reaches the workout before "back" does (round one, L1).
-  if (run.paused || dt > AWAY_MOST_MS) return { ...run, paused: true, totalMs: capped(run.totalMs + dt) };
+  // Only for a press: a page drawing the time from an older copy has been open all along (the re-check's H1).
+  if (run.paused || (pressed && dt > AWAY_MOST_MS)) return { ...run, paused: true, totalMs: capped(run.totalMs + dt) };
   const startTotal = run.totalMs;
   const startActive = run.activeMs;
   const to = capped(run.activeMs + dt);
@@ -206,7 +207,7 @@ function advance(r: WorkoutRun, now: number): WorkoutRun {
 
 /** One press, at the phone's clock `now`. */
 export function press(r: WorkoutRun, p: Press, now: number): Outcome {
-  const run = advance(r, now);
+  const run = advance(r, now, true);
   if (run.phase === "done") return { kind: "on", run };
   const on = (next: WorkoutRun): Outcome => ({ kind: "on", run: next });
   const { exercise, target, weightGrams } = setOf(run);
@@ -301,7 +302,7 @@ export function withHeart(r: WorkoutRun, readings: readonly HeartIn[], now: numb
 
 /** What the screen shows of the clocks at the phone's clock `now`, without pressing anything. */
 export function shownAt(r: WorkoutRun, now: number): WorkoutRun {
-  return advance(r, now);
+  return advance(r, now, false);
 }
 
 /** Milliseconds left of the phase that ends by itself, and how long it is in all; null for a set by hand. */
