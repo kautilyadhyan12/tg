@@ -165,7 +165,8 @@ describe("every proof video, as the phone's chosen set-up read it (51b-ii; kept 
     const open = rows.filter((r) => r.entry.phoneOpen !== undefined);
     expect(open.map((r) => r.label).sort()).toEqual(["floor_phone_test 0-12 s", "floor_phone_test 13.9-21.1 s", "usual_v04 9.8-17.5 s"]);
     for (const r of rows.filter((x) => x.entry.movement !== "squat")) expect([r.label, r.phone?.count]).toEqual([r.label, 0]);
-    expect(rows.filter((r) => r.verdict === "same").length).toBe(97);
+    // 98 of 101 since 52c-i: a man's rooftop lunges are two takes joined by a fade, each a set of its own (97 of 100 before).
+    expect(rows.filter((r) => r.verdict === "same").length).toBe(98);
   });
 
   it("the sumo squat nobody could count by eye now counts the same on both", () => {
@@ -187,8 +188,11 @@ describe("every proof video, as the phone's chosen set-up read it (51b-ii; kept 
     // 52a-iii and 52a-ii-b-i: a Romanian deadlift's and a kettlebell deadlift's hips and knees 54 to 79 degrees apart, a
     // step-up's knees straight, a lunge's feet far from where they stood, a man turning round; the feet's rule read
     // nothing on one side, and it said "the camera could not see".
-    const five = rows.filter((r) => ["romanian_deadlift_barbell", "fresh_lunge_forward_barbell_2", "usual_v03", "usual_v12", "usual_v14"].includes(r.label));
-    expect(five).toHaveLength(5);
+    // The rooftop lunges are two sets since 52c-i, a take each side of the video's fade: six sets of the five videos.
+    const five = rows.filter((r) =>
+      ["romanian_deadlift_barbell", "fresh_lunge_forward_barbell_2 0-3.45 s", "fresh_lunge_forward_barbell_2 4.33-11.3 s", "usual_v03", "usual_v12", "usual_v14"].includes(r.label),
+    );
+    expect(five).toHaveLength(6);
     for (const r of five) {
       expect([r.label, r.verdict, r.laptop.count, r.phone?.count]).toEqual([r.label, "same", 0, 0]);
       expect([r.label, [...r.laptop.reps, ...(r.phone?.reps ?? [])].filter((x) => x.verdict !== "other").map((x) => x.verdict)]).toEqual([r.label, []]);

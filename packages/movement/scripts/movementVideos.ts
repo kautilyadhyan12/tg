@@ -345,12 +345,12 @@ export const MOVEMENT_VIDEOS: readonly MovementVideo[] = [
     under: {
       "squat-jump": {
         leftOutOpen: {
-          count: 0,
+          count: 1,
           fewer: true,
           why:
-          "54, once more squat-jump videos come: she leans 51 to 54 degrees at the bottom of each dip, further than any of the other three " +
-          "squat-jump people or the squat's nine (at most 44), so with her left out \"chest up\" is set at 49 and each of her dips reads as another " +
-          "movement. With every person's numbers she counts 4 of 4; her research file's moderate lean is 30 to 45 degrees.",
+            "54, once more squat-jump videos come: she leans 51 to 54 degrees at the bottom of each dip, further than any of the other three " +
+            "squat-jump people or the squat's nine (at most 44), so with her left out \"chest up\" is set at 51 and three of her four dips read as " +
+            "another movement. With every person's numbers she counts 4 of 4; her research file's moderate lean is 30 to 45 degrees.",
         },
       },
     },
@@ -539,7 +539,8 @@ export const MOVEMENT_VIDEOS: readonly MovementVideo[] = [
     replayOpen: {
       replays: ["slower", "twice as slow"],
       why:
-        "52c, where jumps are counted as a kind of their own: as filmed he never stands still between jacks long enough to be read standing, " +
+        "54, where the squat jack is made (52c-i made the squat jump, which counts his jacks too: SQUAT_JACK_AS_A_JUMP): as filmed he never " +
+        "stands still between jacks long enough to be read standing, " +
         "so no dip begins a rep; done 1.5 or 2 times as slowly he does, and two of his jacks read their feet 2 to 6 cm moved and 1 cm up, " +
         "under the rules, while \"stance holds\" reads nothing on this video. Two are counted done 1.5 times as slowly, one twice as slowly. " +
         "Measured in 52b-i: the standing before each is taken as his feet jump out, both moving 3.9 to 4.1 cm in that 0.2 s, where a real " +

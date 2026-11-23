@@ -8,7 +8,7 @@ import { movementSchema, type Movement, type MovementFrame, type SeenPerson } fr
 import { MovementMatcher, checkMovement, type RepResult } from "../src/index.js";
 import type { Video } from "../scripts/bodyCheck.js";
 import { LEAD_IN, MOVEMENTS, proofTable, proofVideos, readMovement, runMovement } from "../scripts/movementCheck.js";
-import { isOther } from "../scripts/movementVideos.js";
+import { MOVEMENT_VIDEOS, isOther } from "../scripts/movementVideos.js";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { editPeople } from "./helpers/body.js";
@@ -111,7 +111,7 @@ describe("the squat jump and the lunge count every rep a person counts by eye", 
   it("two known cases with the person left out, each counting fewer, never more: the woman who leans furthest, the narrowest side-on lunge", () => {
     const fewer = [...TABLES.values()].flatMap((t) => t.rows.filter((r) => r.entry.leftOutOpen?.fewer === true).map((r) => [r.label, r.count, r.leftOut]));
     expect(fewer).toEqual([
-      ["squat_jump_1 0.69-6.7 s", 4, 0],
+      ["squat_jump_1 0.69-6.7 s", 4, 1],
       ["lunge_forward_barbell", 2, 1],
     ]);
   });
@@ -146,16 +146,23 @@ describe("a jump is the whole body carried up: a foot point thrown up for a pict
 });
 
 describe("a standing read on the move: squat jumpers never stand still", () => {
-  it("counted as a plain rep, from standing still, a squat jump video counts nothing: nobody stands still between jumps", () => {
+  // The whole videos, from their low first pictures: nobody in them stands still between jumps.
+  const whole = (name: string): Video => {
+    const e = MOVEMENT_VIDEOS.find((x) => x.file === `movement-points/${name}`);
+    if (e === undefined) throw new Error(`no video ${name}`);
+    const v = proofVideos([{ file: e.file, movement: e.movement, person: e.person, view: e.view, reps: e.reps, sets: false, seen: e.seen }])[0];
+    if (v === undefined) throw new Error(`no video ${name}`);
+    return v.video;
+  };
+
+  it("counted as a plain rep, from standing still, a whole squat jump video counts nothing", () => {
     const still: Movement = { ...SQUAT_JUMP, counting: "rep", rules: SQUAT_JUMP.rules.filter((r) => r.name !== "feet leave the floor") };
-    for (const label of ["squat_jump_1 0.69-6.7 s", "squat_jump_3 0.69-8.6 s"]) {
-      expect([label, runMovement(still, videoOf(label)).count]).toEqual([label, 0]);
-    }
+    for (const name of ["squat_jump_1", "squat_jump_3"]) expect([name, runMovement(still, whole(name)).count]).toEqual([name, 0]);
   });
 
-  it("read on the move, the same videos count every jump", () => {
-    expect(runMovement(SQUAT_JUMP, videoOf("squat_jump_1 0.69-6.7 s")).count).toBe(4);
-    expect(runMovement(SQUAT_JUMP, videoOf("squat_jump_3 0.69-8.6 s")).count).toBe(5);
+  it("read on the move, the same whole videos count every jump after the first picture of the person upright on the floor", () => {
+    expect(runMovement(SQUAT_JUMP, whole("squat_jump_1")).count).toBe(4);
+    expect(runMovement(SQUAT_JUMP, whole("squat_jump_3")).count).toBe(5);
   });
 });
 

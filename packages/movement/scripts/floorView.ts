@@ -22,7 +22,7 @@
 //     all four sets, from each alone and from each three, so the replay itself never adds it;
 //   - what a floor phone sees of sitting, lying, all fours and a chair: his eleven other videos as filmed, how often the
 //     body is found, how often each part is used, and how often the main measures are given (`positionsTable`), for the
-//     other kinds of counting (52c) and "can a phone on the floor count it" (54).
+//     other kinds of counting (52c-ii, floor work) and "can a phone on the floor count it" (54).
 import type { MovementFrame } from "@app/shared";
 import { LIMITS, bodySize, type MeasureName } from "../src/index.js";
 import { runOf } from "./measureCheck.js";
