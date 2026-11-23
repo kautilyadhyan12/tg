@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { MoreHorizontal } from 'lucide-react';
 
 const PLAIN = 'c-btn c-btn-s';
@@ -12,6 +12,7 @@ const SMALL = 'c-btn c-btn-s c-btn-sm';
 export default function MoreMenu({ items, disabled = false, label = 'More', ariaLabel, alignRight = false, compact = false }) {
   const [open, setOpen] = useState(false);
   const wrap = useRef(null);
+  const button = useRef(null);
   useEffect(() => {
     if (!open) return undefined;
     const away = (e) => {
@@ -20,10 +21,24 @@ export default function MoreMenu({ items, disabled = false, label = 'More', aria
     document.addEventListener('mousedown', away);
     return () => document.removeEventListener('mousedown', away);
   }, [open]);
+  // The list stays inside the screen, 16 px from its edges: a ⋯ near the left of a narrow phone
+  // (a folded phone's 280 px cover) would otherwise open it past the left edge, out of reach.
+  const list = useRef(null);
+  const [shift, setShift] = useState(0);
+  useLayoutEffect(() => {
+    if (!open || list.current === null) {
+      setShift(0);
+      return;
+    }
+    const r = list.current.getBoundingClientRect();
+    const vw = document.documentElement.clientWidth;
+    setShift(r.left < 16 ? 16 - r.left : r.right > vw - 16 ? Math.max(16 - r.left, vw - 16 - r.right) : 0);
+  }, [open]);
   const side = alignRight ? 'right-0' : 'right-0 sm:right-auto sm:left-0';
   return (
     <div ref={wrap} className="relative">
       <button
+        ref={button}
         type="button"
         aria-haspopup="menu"
         aria-expanded={open}
@@ -37,9 +52,10 @@ export default function MoreMenu({ items, disabled = false, label = 'More', aria
       </button>
       {open ? (
         <div
+          ref={list}
           role="menu"
           className={`absolute ${side} top-full mt-2 w-72 max-w-[calc(100vw-32px)] rounded-[14px] p-1.5 z-10 flex flex-col`}
-          style={{ background: 'var(--sheet)', border: '1px solid var(--card-line)', boxShadow: 'var(--pop)' }}
+          style={{ background: 'var(--sheet)', border: '1px solid var(--card-line)', boxShadow: 'var(--pop)', transform: shift === 0 ? undefined : `translateX(${String(Math.round(shift))}px)` }}
         >
           {items.map((item) => (
             <button
@@ -48,6 +64,8 @@ export default function MoreMenu({ items, disabled = false, label = 'More', aria
               role="menuitem"
               onClick={() => {
                 setOpen(false);
+                // The keys go back to the ⋯, so a box this opens hands them back there when it closes.
+                button.current?.focus();
                 item.onPick();
               }}
               className="w-full text-left rounded-[10px] px-3 py-2.5 min-h-[44px] flex items-start gap-3"
