@@ -78,24 +78,24 @@ afterEach(() => {
 });
 
 describe('a receipt', () => {
-  it('opens under the row pressed, says what was bought and paid, and closes', async () => {
+  it('opens in the middle as Receipt #7, says what was bought and paid, and closes', async () => {
     svc.purchases.mockResolvedValue({ sales: [sale()], notShown: 0 });
     svc.receipt.mockResolvedValue(receipt());
     open();
     const row = await pressReceipt();
-    const paper = await within(row).findByTestId('receipt');
+    const paper = await screen.findByTestId('receipt');
     expect(svc.receipt).toHaveBeenCalledWith('g1', 7);
     expect(within(row).getByRole('button', { name: 'View receipt #7 for 2 × Water' }).getAttribute('aria-expanded')).toBe('true');
     expect(paper.textContent).toContain('Iron House');
     expect(paper.textContent).toContain('Receipt #7');
     expect(paper.textContent).toContain('15 Oct 2026');
     expect(paper.textContent).toContain('For: Maya Patel');
-    expect(within(paper).getByTestId('receipt-lines').textContent).toBe(
+    expect(screen.getByTestId('receipt-lines').textContent).toBe(
       '2 × Water at $2.50 each$5.00Discount: Staff 20−$1.00Sales tax 8.25%$0.33Total$4.33Paid by cash$4.33',
     );
     expect(paper.textContent).toContain('Taken by Sam Desk.');
     expect(screen.queryByTestId('receipt-no-address')).toBeNull();
-    fireEvent.click(within(row).getByRole('button', { name: 'Close' }));
+    fireEvent.click(within(screen.getByRole('dialog', { name: 'Receipt #7' })).getByRole('button', { name: 'Close' }));
     expect(screen.queryByTestId('receipt-box')).toBeNull();
   });
 
@@ -103,9 +103,9 @@ describe('a receipt', () => {
     svc.purchases.mockResolvedValue({ sales: [sale()], notShown: 0 });
     svc.receipt.mockResolvedValue(receipt());
     open();
-    const row = await pressReceipt();
-    await within(row).findByTestId('receipt');
-    fireEvent.click(within(row).getByRole('button', { name: 'Print' }));
+    await pressReceipt();
+    await screen.findByTestId('receipt');
+    fireEvent.click(screen.getByRole('button', { name: 'Print' }));
     expect(printHtml).toHaveBeenCalledTimes(1);
     const html = printHtml.mock.calls[0][0];
     for (const words of ['Iron House', '12 High Street', 'Receipt no.', '>7<', '15 Oct 2026', 'Maya Patel', '2 × Water at $2.50 each', '$4.33', 'Paid by cash', 'Thank you.']) expect(html).toContain(words);
@@ -116,8 +116,8 @@ describe('a receipt', () => {
     svc.purchases.mockResolvedValue({ sales: [sale({ undone: true, voided: { reason: 'returned', on: '2026-10-12', by: 'Sam Owner' }, canUndo: false })], notShown: 0 });
     svc.receipt.mockResolvedValue(receipt({ cancelled: true }));
     open();
-    const row = await pressReceipt();
-    expect((await within(row).findByTestId('receipt-cancelled')).textContent).toBe('Voided. This sale no longer counts.');
+    await pressReceipt();
+    expect((await screen.findByTestId('receipt-cancelled')).textContent).toBe('Voided. This sale no longer counts.');
   });
 
   it('a gym with no address: the owner types it in the box, and the receipt is read again with it', async () => {
@@ -125,23 +125,23 @@ describe('a receipt', () => {
     svc.receipt.mockResolvedValueOnce(receipt({ gym: { name: 'Iron House', address: null } })).mockResolvedValueOnce(receipt({ gym: { name: 'Iron House', address: '9 Mill Lane' } }));
     updateOrg.mockResolvedValue({});
     open(OWNER);
-    const row = await pressReceipt();
-    const ask = await within(row).findByTestId('receipt-no-address');
+    await pressReceipt();
+    const ask = await screen.findByTestId('receipt-no-address');
     expect(ask.textContent).toContain("Your gym's address is not on its receipts yet.");
     fireEvent.change(within(ask).getByLabelText('Postal address'), { target: { value: '9 Mill Lane' } });
     fireEvent.click(within(ask).getByRole('button', { name: /Save/ }));
-    expect(await within(row).findByText('9 Mill Lane', { selector: 'p' })).toBeTruthy();
+    expect(await screen.findByText('9 Mill Lane', { selector: 'p' })).toBeTruthy();
     expect(updateOrg).toHaveBeenCalledWith('g1', { postalAddress: '9 Mill Lane' });
     expect(svc.receipt).toHaveBeenCalledTimes(2);
-    expect(within(row).queryByTestId('receipt-no-address')).toBeNull();
+    expect(screen.queryByTestId('receipt-no-address')).toBeNull();
   });
 
   it('a gym with no address: staff who cannot add it are told who can, with nothing to type', async () => {
     svc.purchases.mockResolvedValue({ sales: [sale()], notShown: 0 });
     svc.receipt.mockResolvedValue(receipt({ gym: { name: 'Iron House', address: null } }));
     open(DESK);
-    const row = await pressReceipt();
-    const ask = await within(row).findByTestId('receipt-no-address');
+    await pressReceipt();
+    const ask = await screen.findByTestId('receipt-no-address');
     expect(ask.textContent).toBe("Your gym's address is not on its receipts yet.The owner can add it in Gym details.");
     expect(within(ask).queryByRole('textbox')).toBeNull();
   });
@@ -151,12 +151,12 @@ describe('a receipt', () => {
     let answer;
     svc.receipt.mockRejectedValueOnce(Object.assign(new Error('down'), { response: { status: 500, data: {} } })).mockReturnValueOnce(new Promise((resolve) => (answer = resolve)));
     open();
-    const row = await pressReceipt();
-    expect((await within(row).findByRole('alert')).textContent).toBe("We couldn't open this receipt. Try again.");
-    fireEvent.click(within(row).getByRole('button', { name: 'Try again' }));
-    expect(within(row).getByText('Opening the receipt…')).toBeTruthy();
-    expect(within(row).queryByRole('alert')).toBeNull();
+    await pressReceipt();
+    expect((await screen.findByRole('alert')).textContent).toBe("We couldn't open this receipt. Try again.");
+    fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+    expect(screen.getByText('Opening the receipt…')).toBeTruthy();
+    expect(screen.queryByRole('alert')).toBeNull();
     answer(receipt());
-    expect(await within(row).findByTestId('receipt')).toBeTruthy();
+    expect(await screen.findByTestId('receipt')).toBeTruthy();
   });
 });

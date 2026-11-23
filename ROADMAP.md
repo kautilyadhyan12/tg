@@ -488,11 +488,11 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
      - V2a-ii. [x] **Memberships and bills in the third look's words and sizes** · merged 2026-11-22 · PR #623
    - V2b. **A member's page: its boxes**, in three by how each box opens (2026-11-23; spec §17.11, `Boxes`):
      - V2b-i. [x] **From the right**: Add member, Edit, Add membership, Change membership · merged 2026-11-23 · PR #626
-     - V2b-ii. [ ] **In the middle, money**: Cancel membership, Freeze, Unfreeze, Refund, Void, Waive, the receipt.
+     - V2b-ii. [x] **In the middle, money** · merged 2026-11-23 · PR #631
      - V2b-iii. [ ] **In the middle, people, and under the button**: Invite, Remove, Delete permanently, Merge; Record a payment, More, Tags, Change payer.
    - V3a. [ ] **Members: Your list** (web folder 1): the one-press picks, the list, people ticked and the bar, Send message, Tags, Remove, Filter from the right (`MembersNew*`).
    - V3b. [ ] **Members: In the app, waiting to join, and Staff** (web folder 1): a staff member's panel, Invite staff, Staff activity (`MembersNewApp`, `MembersNewStaff*`).
-   - V4a. [ ] **Sell** (web folder 1): the register, a sale, products, tax (`Sell*`, `PhoneSell`).
+   - V4a. [ ] **Sell** (web folder 1): the register, a sale, products, tax (`Sell*`, `PhoneSell`); a sale's refund boxes and its receipt in the middle, on a member's Purchases too (V2b-ii).
    - V4b. [ ] **Memberships** (web folder 1): the price list, adding a type, discounts (`Memberships*`, `MembershipAdd`).
    - V5. [ ] **Overview and getting in** (web folder 1): Overview, its banners and plan prompts, your organisations, creating a gym, signing in, joining as staff (`Overview*`, `Banners`, `GymReady`, `Orgs`, `CreateGym`, `SignIn`, `StaffInvite`, `PhoneOverview`).
    - V6. [ ] **Leads and At risk** (web folder 1): a lead, adding and importing leads, your gym page, At risk (`Lead*`, `GymPage`, `AtRisk*`).
@@ -874,7 +874,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
       - 64a-ii-b. [x] **Time trained, never time paused** — merged 2026-11-22 (PR #619).
       - 64a-iv. [x] **Saved workouts** — merged 2026-11-22 (PR #621).
       - 64a-v. [x] **History** — merged 2026-11-23 · PR #625
-      - 64a-vi. [ ] **Heart rate and sounds**: the monitor of 37f-i during a workout and kept with it (Kd, 2026-11-12); the sounds at a rep, a set's end and the last 3 seconds.
+      - 64a-vi. [x] **Heart rate and sounds** — merged 2026-11-23 · PR #629
     - 64b. [ ] **With the camera** (after 64a and item 53's screen): Camera or Count myself, picked every time.
 65. [ ] **Each exercise's Library page**, towards about 200 (§13.2; alongside, from 60): written and checked, never copied across from the old text; Kd's list of names. All camera rules are exercise folder 1's job 54.
 

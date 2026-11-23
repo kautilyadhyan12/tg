@@ -259,8 +259,8 @@ describe('cancelling a membership that classes are booked with', () => {
     render(draw(ADA, 'Ada Lovelace', { clockFormat: '12h' }));
     const b = await boxSoon();
     fireEvent.click(b.getByRole('button', { name: 'Cancel membership' }));
-    fireEvent.click(within(b.getByTestId('held-ask-cancel')).getByRole('button', { name: 'Cancel today' }));
-    const ending = within(await b.findByTestId('held-ending'));
+    fireEvent.click(within(screen.getByTestId('held-ask-cancel')).getByRole('button', { name: 'Cancel today' }));
+    const ending = within(await screen.findByTestId('held-ending'));
     expect(orgService.changeHeldMembership).toHaveBeenLastCalledWith(GYM, ADA, gold.id, 'cancel', { when: 'today' });
     expect(ending.getByText('Ada Lovelace has 4 classes booked with Gold Monthly')).toBeTruthy();
     // It never says somebody waiting HAS the place: close to a class nobody is moved in.
@@ -292,13 +292,13 @@ describe('cancelling a membership that classes are booked with', () => {
     render(draw(ADA, 'Ada Lovelace'));
     const b = await boxSoon();
     fireEvent.click(b.getByRole('button', { name: 'Cancel membership' }));
-    fireEvent.click(within(b.getByTestId('held-ask-cancel')).getByRole('button', { name: 'Cancel today' }));
-    let ending = within(await b.findByTestId('held-ending'));
+    fireEvent.click(within(screen.getByTestId('held-ask-cancel')).getByRole('button', { name: 'Cancel today' }));
+    let ending = within(await screen.findByTestId('held-ending'));
     // She cancelled one herself in the meantime: the server asks again with one.
     orgService.changeHeldMembership.mockRejectedValueOnce(asks(FOUR.slice(0, 1)));
     fireEvent.click(ending.getByRole('button', { name: 'Cancel today and end 2 bookings' }));
-    expect(await b.findByText('Ada Lovelace has 1 class booked with Gold Monthly')).toBeTruthy();
-    ending = within(b.getByTestId('held-ending'));
+    expect(await screen.findByText('Ada Lovelace has 1 class booked with Gold Monthly')).toBeTruthy();
+    ending = within(screen.getByTestId('held-ending'));
     expect(ending.getByText("That booking ends and Ada Lovelace's place is free again. If people are waiting, it goes to the next person on the waitlist; close to the class's start, to the first of them to claim it.")).toBeTruthy();
     // The press ended nothing, and the box says why.
     expect(ending.getByRole('status').textContent).toBe('The classes changed while this was open. Check them and press again.');
@@ -316,8 +316,8 @@ describe('cancelling a membership that classes are booked with', () => {
     render(draw(ADA, 'Ada Lovelace'));
     const b = await boxSoon();
     fireEvent.click(b.getByRole('button', { name: 'Cancel membership' }));
-    fireEvent.click(within(b.getByTestId('held-ask-cancel')).getByRole('button', { name: 'Cancel on 3 November 2026' }));
-    const ending = within(await b.findByTestId('held-ending'));
+    fireEvent.click(within(screen.getByTestId('held-ask-cancel')).getByRole('button', { name: 'Cancel on 3 November 2026' }));
+    const ending = within(await screen.findByTestId('held-ending'));
     expect(ending.getByText('Ada Lovelace has 1 class booked with Gold Monthly after 3 November 2026')).toBeTruthy();
     expect(ending.getByText('Classes up to 3 November 2026 stay booked. So do classes booked with another membership or a pack.')).toBeTruthy();
     orgService.changeHeldMembership.mockResolvedValueOnce(answer([gold]));
@@ -340,8 +340,8 @@ describe('cancelling a pack that classes are booked with', () => {
     render(draw(ADA, 'Ada Lovelace'));
     const b = await boxSoon();
     fireEvent.click(b.getByRole('button', { name: 'Cancel membership' }));
-    fireEvent.click(within(b.getByTestId('held-ask-cancel')).getByRole('button', { name: 'Cancel today' }));
-    const ending = within(await b.findByTestId('held-ending'));
+    fireEvent.click(within(screen.getByTestId('held-ask-cancel')).getByRole('button', { name: 'Cancel today' }));
+    const ending = within(await screen.findByTestId('held-ending'));
     expect(ending.getByText('Classes booked with another pack or a membership stay booked. So does a class that has already started.')).toBeTruthy();
   });
 });
@@ -1641,8 +1641,7 @@ describe("on the person's page", () => {
     await box().findByText('£49.99 recorded. That bill is paid.');
     orgService.changeHeldMembership.mockResolvedValueOnce(answer([held(1, GOLD, '2026-10-04', false)]));
     fireEvent.click(box().getByRole('button', { name: 'Freeze' }));
-    const asks = box().getAllByRole('button', { name: /^Freeze/ });
-    fireEvent.click(asks[asks.length - 1]);
+    fireEvent.click(within(screen.getByTestId('held-ask-freeze')).getByRole('button', { name: 'Freeze' }));
     await waitFor(() => expect(orgService.getMemberListEntry).toHaveBeenCalledTimes(3));
     expect(await screen.findByText('Expired')).toBeTruthy();
     // The first change's read answers now, with the older page: it is not drawn.
@@ -1709,8 +1708,8 @@ describe('cancelling a membership that personal training is booked with', () => 
     render(draw(ADA, 'Ada Lovelace', { clockFormat: '12h' }));
     const b = await boxSoon();
     fireEvent.click(b.getByRole('button', { name: 'Cancel membership' }));
-    fireEvent.click(within(b.getByTestId('held-ask-cancel')).getByRole('button', { name: 'Cancel today' }));
-    const ending = within(await b.findByTestId('held-ending'));
+    fireEvent.click(within(screen.getByTestId('held-ask-cancel')).getByRole('button', { name: 'Cancel today' }));
+    const ending = within(await screen.findByTestId('held-ending'));
     expect(ending.getByText('Ada Lovelace has personal training booked with Gold Monthly')).toBeTruthy();
     expect(ending.getByRole('heading', { name: '2 personal training sessions will be cancelled' })).toBeTruthy();
     expect(ending.getAllByRole('listitem').map((li) => li.textContent)).toEqual([
@@ -1740,8 +1739,8 @@ describe('cancelling a membership that personal training is booked with', () => 
     render(draw(ADA, 'Ada Lovelace', { clockFormat: '12h' }));
     const b = await boxSoon();
     fireEvent.click(b.getByRole('button', { name: 'Cancel membership' }));
-    fireEvent.click(within(b.getByTestId('held-ask-cancel')).getByRole('button', { name: 'Cancel today' }));
-    const ending = within(await b.findByTestId('held-ending'));
+    fireEvent.click(within(screen.getByTestId('held-ask-cancel')).getByRole('button', { name: 'Cancel today' }));
+    const ending = within(await screen.findByTestId('held-ending'));
     expect(ending.getByText('Ada Lovelace has 1 class booked with Gold Monthly')).toBeTruthy();
     expect(ending.getByRole('heading', { name: '1 personal training session will be cancelled' })).toBeTruthy();
     expect(ending.getByText("The time is free again. 1 session goes back to its pack. A session that has already started stays as it is.")).toBeTruthy();
@@ -1752,7 +1751,7 @@ describe('cancelling a membership that personal training is booked with', () => 
     await waitFor(() => expect(orgService.changeHeldMembership).toHaveBeenCalledTimes(2));
     expect(orgService.changeHeldMembership).toHaveBeenLastCalledWith(GYM, ADA, gold.id, 'cancel', { when: 'today', confirmBookings: 'd'.repeat(64), confirmPtSessions: MARK });
     // Asked again (the mock refuses every time): the box says what is booked changed.
-    const again = within(await b.findByTestId('held-ending'));
+    const again = within(await screen.findByTestId('held-ending'));
     expect(await again.findByText('What is booked changed while this was open. Check it and press again.')).toBeTruthy();
     fireEvent.click(again.getByRole('button', { name: 'Keep it' }));
     expect(screen.queryByTestId('held-ending')).toBeNull();
@@ -2167,7 +2166,7 @@ describe('cancelling a membership still in its contract', () => {
     const b = await boxSoon();
     expect(b.getByTestId('held-contract-line').textContent).toBe('Minimum term: 12 months, until 3 October 2027');
     fireEvent.click(b.getByRole('button', { name: 'Cancel membership' }));
-    const box = within(b.getByTestId('held-ask-cancel'));
+    const box = within(screen.getByTestId('held-ask-cancel'));
     expect(box.getByText('Ada Lovelace is in their minimum term until 3 October 2027. End it then, and they keep paying until then; or release them early.')).toBeTruthy();
     expect(box.queryByRole('button', { name: 'Cancel today' })).toBeNull();
     const ended = inContract([[{ type: 'cancel', when: 'contract_end' }, TODAY]]);
@@ -2184,7 +2183,7 @@ describe('cancelling a membership still in its contract', () => {
     render(draw(ADA, 'Ada Lovelace'));
     const b = await boxSoon();
     fireEvent.click(b.getByRole('button', { name: 'Cancel membership' }));
-    const box = within(b.getByTestId('held-ask-cancel'));
+    const box = within(screen.getByTestId('held-ask-cancel'));
     fireEvent.click(box.getByRole('button', { name: 'Release today' }));
     expect(box.getByRole('alert').textContent).toBe('Pick why you are releasing them first.');
     expect(orgService.changeHeldMembership).not.toHaveBeenCalled();
@@ -2217,7 +2216,7 @@ it('paid past the minimum term: End stops it at the end of what is paid, sending
     render(draw(ADA, 'Ada Lovelace'));
     const b = await boxSoon();
     fireEvent.click(b.getByRole('button', { name: 'Cancel membership' }));
-    const box = within(b.getByTestId('held-ask-cancel'));
+    const box = within(screen.getByTestId('held-ask-cancel'));
     expect(box.getByText(/has paid until 3 November 2027, past their minimum term/)).toBeTruthy();
     orgService.changeHeldMembership.mockResolvedValueOnce(answer([paidAhead]));
     fireEvent.click(box.getByRole('button', { name: 'End on 3 November 2027' }));
@@ -2234,10 +2233,10 @@ it('paid past the minimum term: End stops it at the end of what is paid, sending
     render(draw(ADA, 'Ada Lovelace'));
     const b = await boxSoon();
     fireEvent.click(b.getByRole('button', { name: 'Cancel membership' }));
-    const box = within(b.getByTestId('held-ask-cancel'));
+    const box = within(screen.getByTestId('held-ask-cancel'));
     fireEvent.change(box.getByLabelText('Why are you releasing them?'), { target: { value: 'death' } });
     fireEvent.click(box.getByRole('button', { name: 'Release today' }));
-    const ending = within(await b.findByTestId('held-ending'));
+    const ending = within(await screen.findByTestId('held-ending'));
     orgService.changeHeldMembership.mockResolvedValueOnce(answer([inContract([[{ type: 'cancel', when: 'today', release: 'death' }, TODAY]])]));
     fireEvent.click(ending.getByRole('button', { name: 'Cancel today and end 1 booking' }));
     await waitFor(() => expect(orgService.changeHeldMembership).toHaveBeenCalledTimes(2));
@@ -2258,7 +2257,7 @@ describe('cancelling a membership with a notice to cancel', () => {
     const b = await boxSoon();
     expect(b.getByTestId('held-notice-line').textContent).toBe('Notice to cancel: 30 days');
     fireEvent.click(b.getByRole('button', { name: 'Cancel membership' }));
-    const box = within(b.getByTestId('held-ask-cancel'));
+    const box = within(screen.getByTestId('held-ask-cancel'));
     expect(box.getByText("Ada Lovelace gives 30 days' notice. End it on 3 December 2026, and they keep paying until then; or end it sooner without notice.")).toBeTruthy();
     expect(box.queryByRole('button', { name: 'Cancel today' })).toBeNull();
     orgService.changeHeldMembership.mockResolvedValueOnce(answer([withNotice([[{ type: 'cancel', when: 'notice' }, TODAY]])]));
@@ -2275,7 +2274,7 @@ describe('cancelling a membership with a notice to cancel', () => {
     render(draw(ADA, 'Ada Lovelace'));
     const b = await boxSoon();
     fireEvent.click(b.getByRole('button', { name: 'Cancel membership' }));
-    const box = within(b.getByTestId('held-ask-cancel'));
+    const box = within(screen.getByTestId('held-ask-cancel'));
     fireEvent.click(box.getByRole('button', { name: 'End today without notice' }));
     expect(box.getByRole('alert').textContent).toBe('Pick why you are ending it without notice first.');
     expect(orgService.changeHeldMembership).not.toHaveBeenCalled();
@@ -2307,7 +2306,7 @@ describe('cancelling early with the early cancellation fee', () => {
     const b = await boxSoon();
     expect(b.getByTestId('held-leave-fee-line').textContent).toBe('Early cancellation fee: £99.00');
     fireEvent.click(b.getByRole('button', { name: 'Cancel membership' }));
-    const box = within(b.getByTestId('held-ask-cancel'));
+    const box = within(screen.getByTestId('held-ask-cancel'));
     expect(box.getByText('Or cancel early: Ada Lovelace pays the early cancellation fee of £99.00, and it ends on 3 November 2026. A release has no fee.')).toBeTruthy();
     // What the server sends back: paid to its last day, so nothing but the fee is owed.
     const left = inTerm([[{ type: 'cancel', when: 'leave_early' }, TODAY]]);
@@ -2351,8 +2350,8 @@ describe('cancelling early with the early cancellation fee', () => {
     const b = await boxSoon();
     expect(b.queryByTestId('held-leave-fee-line')).toBeNull();
     fireEvent.click(b.getByRole('button', { name: 'Cancel membership' }));
-    const box = within(b.getByTestId('held-ask-cancel'));
-    expect(box.queryByTestId('held-leave-early')).toBeNull();
+    const box = within(screen.getByTestId('held-ask-cancel'));
+    expect(screen.queryByTestId('held-leave-early')).toBeNull();
     expect(box.getByRole('button', { name: 'Release today' })).toBeTruthy();
   });
 });
@@ -2382,8 +2381,8 @@ describe('cancelling with a full refund in the cooling-off period', () => {
     const b = await boxSoon();
     expect(b.getByTestId('held-cooling-off-line').textContent).toBe('Cooling-off period: until 21 October 2026');
     fireEvent.click(b.getByRole('button', { name: 'Cancel membership' }));
-    const ask = within(b.getByTestId('held-ask-cancel'));
-    expect(within(ask.getByTestId('held-cooling-off')).getByText('Ada Lovelace is in their cooling-off period until 21 October 2026. Cancel today and refund the £49.99 they paid.')).toBeTruthy();
+    const ask = within(screen.getByTestId('held-ask-cancel'));
+    expect(within(screen.getByTestId('held-cooling-off')).getByText('Ada Lovelace is in their cooling-off period until 21 October 2026. Cancel today and refund the £49.99 they paid.')).toBeTruthy();
     // Cancel today is still there, under it, for staff who mean that instead.
     expect(ask.getByRole('button', { name: 'Cancel today' })).toBeTruthy();
     orgService.changeHeldMembership.mockResolvedValueOnce(answer([cooling('2026-10-18', [[COOL, TODAY]])]));
@@ -2398,7 +2397,7 @@ describe('cancelling with a full refund in the cooling-off period', () => {
     expect(b.queryByTestId('held-cooling-off-line')).toBeNull();
     // Refund opens Note a refund under the payment, the whole amount and its reason filled in.
     fireEvent.click(line.getByRole('button', { name: 'Refund' }));
-    const form = within(b.getByTestId('held-refund-form'));
+    const form = within(screen.getByTestId('held-refund-form'));
     expect(form.getByDisplayValue('49.99')).toBeTruthy();
     expect(form.getAllByRole('combobox')[1].value).toBe('leaving');
   });
@@ -2410,7 +2409,7 @@ describe('cancelling with a full refund in the cooling-off period', () => {
     const b = await boxSoon();
     expect(b.queryByTestId('held-cooling-off-line')).toBeNull();
     fireEvent.click(b.getByRole('button', { name: 'Cancel membership' }));
-    expect(within(b.getByTestId('held-ask-cancel')).queryByTestId('held-cooling-off')).toBeNull();
+    expect(within(screen.getByTestId('held-ask-cancel')).queryByTestId('held-cooling-off')).toBeNull();
   });
 
   it('refunded in full, it says so and folds away as any cancelled membership does', async () => {
@@ -2529,5 +2528,117 @@ describe('V2b-i: Add membership opens from the right', () => {
     fireEvent.click(form.getByRole('button', { name: 'Close without saving' }));
     expect(screen.queryByTestId('held-add')).toBeNull();
     expect(orgService.giveHeldMembership).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('V2b-ii: the money questions ask in the middle', () => {
+  const SILVER = typeOf(3, { name: 'Silver Monthly', priceMinor: 2999 });
+  const GOLD_ID = '44444444-4444-4444-8444-000000000001';
+  const SILVER_ID = '44444444-4444-4444-8444-000000000002';
+  const two = () => answer([held(1, GOLD, '2026-10-04', true), held(2, SILVER, '2026-10-04', true)], false, { types: [GOLD, PACK, SILVER] });
+  const rowOf = (id) => screen.getAllByTestId('held-membership').find((li) => li.getAttribute('data-held-id') === id);
+  const ask = () => screen.getByRole('alertdialog');
+
+  it('the worst thing: with two memberships, Freeze on the second names it alone and freezes only that one, for that person', async () => {
+    orgService.getHeldMemberships.mockResolvedValue(two());
+    orgService.changeHeldMembership.mockResolvedValue(two());
+    render(draw(ADA, 'Ada Lovelace'));
+    await screen.findByText('Silver Monthly');
+    fireEvent.click(within(rowOf(SILVER_ID)).getByRole('button', { name: 'Freeze' }));
+    // One box, in the middle, over the page, named by its question.
+    expect(screen.getAllByRole('alertdialog')).toHaveLength(1);
+    expect(rowOf(SILVER_ID).contains(ask())).toBe(false);
+    const title = within(ask()).getByText("Freeze Ada Lovelace's Silver Monthly?");
+    expect(ask().getAttribute('aria-labelledby')).toBe(title.id);
+    expect(ask().textContent).not.toContain('Gold Monthly');
+    // The membership's own buttons stay behind it.
+    expect(within(rowOf(SILVER_ID)).getByRole('button', { name: 'Freeze' })).toBeTruthy();
+    fireEvent.click(within(screen.getByTestId('held-ask-freeze')).getByRole('button', { name: 'Freeze' }));
+    await waitFor(() => expect(orgService.changeHeldMembership).toHaveBeenCalledTimes(1));
+    const [gym, entry, membership, path] = orgService.changeHeldMembership.mock.calls[0];
+    expect([gym, entry, membership, path]).toEqual([GYM, ADA, SILVER_ID, 'freeze']);
+    expect(screen.queryByRole('alertdialog')).toBeNull();
+  });
+
+  it('Cancel membership on the first names the first; Keep it, Escape and pressing outside each send nothing and leave its buttons', async () => {
+    orgService.getHeldMemberships.mockResolvedValue(two());
+    render(draw(ADA, 'Ada Lovelace'));
+    await screen.findByText('Silver Monthly');
+    const open = () => {
+      fireEvent.click(within(rowOf(GOLD_ID)).getByRole('button', { name: 'Cancel membership' }));
+      expect(within(ask()).getByText("Cancel Ada Lovelace's Gold Monthly?")).toBeTruthy();
+      expect(ask().textContent).not.toContain('Silver Monthly');
+    };
+    open();
+    // Keep it has the keys first, never the red answer.
+    expect(document.activeElement.textContent).toBe('Keep it');
+    fireEvent.click(within(ask()).getByRole('button', { name: 'Keep it' }));
+    expect(screen.queryByRole('alertdialog')).toBeNull();
+    open();
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.queryByRole('alertdialog')).toBeNull();
+    open();
+    fireEvent.click(screen.getByTestId('box-outside'));
+    expect(screen.queryByRole('alertdialog')).toBeNull();
+    expect(orgService.changeHeldMembership).not.toHaveBeenCalled();
+    expect(within(rowOf(GOLD_ID)).getByRole('button', { name: 'Cancel membership' })).toBeTruthy();
+  });
+
+  it('while Freeze is sending, Escape and pressing outside leave the box open; the refusal is then said in it', async () => {
+    const slow = later();
+    orgService.getHeldMemberships.mockResolvedValue(two());
+    orgService.changeHeldMembership.mockReturnValueOnce(slow.promise);
+    render(draw(ADA, 'Ada Lovelace'));
+    await screen.findByText('Silver Monthly');
+    fireEvent.click(within(rowOf(SILVER_ID)).getByRole('button', { name: 'Freeze' }));
+    fireEvent.click(within(screen.getByTestId('held-ask-freeze')).getByRole('button', { name: 'Freeze' }));
+    fireEvent.keyDown(document, { key: 'Escape' });
+    fireEvent.click(screen.getByTestId('box-outside'));
+    expect(screen.getByTestId('held-ask-freeze')).toBeTruthy();
+    await act(async () => {
+      slow.resolve(Promise.reject(refusal(500, { error: 'internal', message: 'Something went wrong.' })));
+      await slow.promise.catch(() => undefined);
+    });
+    expect(await within(ask()).findByRole('alert')).toBeTruthy();
+    expect(screen.getByTestId('held-ask-freeze')).toBeTruthy();
+  });
+
+  it('Back gives the keys back to the Freeze that opened the box', async () => {
+    orgService.getHeldMemberships.mockResolvedValue(two());
+    render(draw(ADA, 'Ada Lovelace'));
+    await screen.findByText('Silver Monthly');
+    const freeze = within(rowOf(SILVER_ID)).getByRole('button', { name: 'Freeze' });
+    freeze.focus();
+    fireEvent.click(freeze);
+    expect(document.activeElement.textContent).toBe('Back');
+    fireEvent.click(within(ask()).getByRole('button', { name: 'Back' }));
+    expect(document.activeElement).toBe(within(rowOf(SILVER_ID)).getByRole('button', { name: 'Freeze' }));
+  });
+
+  it('a refusal is said inside the box, which stays open on the same membership; nothing is said behind it', async () => {
+    orgService.getHeldMemberships.mockResolvedValue(two());
+    orgService.changeHeldMembership.mockRejectedValueOnce(refusal(500, { error: 'internal', message: 'Something went wrong.' }));
+    render(draw(ADA, 'Ada Lovelace'));
+    await screen.findByText('Silver Monthly');
+    fireEvent.click(within(rowOf(SILVER_ID)).getByRole('button', { name: 'Freeze' }));
+    fireEvent.click(within(screen.getByTestId('held-ask-freeze')).getByRole('button', { name: 'Freeze' }));
+    expect(await within(ask()).findByRole('alert')).toBeTruthy();
+    expect(within(ask()).getByText("Freeze Ada Lovelace's Silver Monthly?")).toBeTruthy();
+    expect(within(screen.getByTestId('held-memberships')).queryByRole('alert')).toBeNull();
+  });
+
+  it('a box never draws on a membership the page does not hold: rendered for a second person, nothing is asked or sent about the first', async () => {
+    orgService.getHeldMemberships.mockImplementation((_gym, id) =>
+      Promise.resolve(id === ADA ? two() : answer([held(5, GOLD, '2026-10-04', true)], false, { types: [GOLD, PACK, SILVER] })),
+    );
+    const view = render(draw(ADA, 'Ada Lovelace'));
+    await screen.findByText('Silver Monthly');
+    fireEvent.click(within(rowOf(SILVER_ID)).getByRole('button', { name: 'Freeze' }));
+    expect(ask()).toBeTruthy();
+    view.rerender(draw(BEA, 'Bea Hart'));
+    await waitFor(() => expect(screen.queryByText('Silver Monthly')).toBeNull());
+    expect(screen.queryByText(/Ada Lovelace/)).toBeNull();
+    for (const d of screen.queryAllByRole('alertdialog')) expect(d.textContent).not.toContain('Ada');
+    expect(orgService.changeHeldMembership).not.toHaveBeenCalled();
   });
 });

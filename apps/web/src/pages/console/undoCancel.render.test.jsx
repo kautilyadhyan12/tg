@@ -147,7 +147,7 @@ describe('Undo cancellation', () => {
     const rows = await screen.findAllByTestId('held-membership');
     expect(rows.map((r) => within(r).queryByRole('button', { name: 'Undo cancellation' }) !== null)).toEqual([true, false]);
     fireEvent.click(within(rows[0]).getByRole('button', { name: 'Undo cancellation' }));
-    const ask = within(await within(rows[0]).findByTestId('held-ask-undoCancel'));
+    const ask = within(await screen.findByTestId('held-ask-undoCancel'));
     expect(orgService.getUndoCancel).toHaveBeenCalledWith(GYM, ADA, gold.id);
     expect(await ask.findByText("Undo the cancellation of Ada Lovelace's Gold Monthly?")).toBeTruthy();
     expect(ask.getByText('Their next payment is £49.99 on 4 Nov 2026.')).toBeTruthy();
@@ -166,11 +166,11 @@ describe('Undo cancellation', () => {
     render(draw());
     const row = await screen.findByTestId('held-membership');
     fireEvent.click(within(row).getByRole('button', { name: 'Undo cancellation' }));
-    const ask = within(await within(row).findByTestId('held-ask-undoCancel'));
+    const ask = within(await screen.findByTestId('held-ask-undoCancel'));
     expect(await ask.findByText("It's frozen. Unfreeze it first, then undo the cancellation.")).toBeTruthy();
     expect(ask.queryByRole('button', { name: 'Undo cancellation' })).toBeNull();
     fireEvent.click(ask.getByRole('button', { name: 'Close' }));
-    expect(within(row).queryByTestId('held-ask-undoCancel')).toBeNull();
+    expect(screen.queryByTestId('held-ask-undoCancel')).toBeNull();
     expect(orgService.changeHeldMembership).not.toHaveBeenCalled();
   });
 
@@ -182,7 +182,7 @@ describe('Undo cancellation', () => {
     render(draw());
     const row = await screen.findByTestId('held-membership');
     fireEvent.click(within(row).getByRole('button', { name: 'Undo cancellation' }));
-    const ask = within(await within(row).findByTestId('held-ask-undoCancel'));
+    const ask = within(await screen.findByTestId('held-ask-undoCancel'));
     fireEvent.click(await ask.findByRole('button', { name: 'Undo cancellation' }));
     await waitFor(() => expect(orgService.changeHeldMembership).toHaveBeenCalledTimes(1));
     fireEvent.click(await ask.findByRole('button', { name: 'Undo cancellation' }));

@@ -13,7 +13,7 @@ import { pastWhen, workoutName } from "../progress/calendarRules";
 import { dayKeyOf } from "../progress/progressRules";
 import { blocksOf, kcalLine, recordRowOf, type ShownSet } from "./afterWords";
 import { serverFirst } from "./pastWords";
-import { RecordsBox, SetBlocks, Tile, Wall } from "./WorkoutParts";
+import { HeartLine, RecordsBox, SetBlocks, Tile, Wall } from "./WorkoutParts";
 import { clock } from "./words";
 
 // One of the person's workouts, looked back on (ROADMAP Stage 5 64a-v, Kd's drawing of 2026-11-22): opened from a day
@@ -106,14 +106,7 @@ export function PastWorkout({ workoutId, units, onClose }: { workoutId: string |
               </Txt>
             </View>
           )}
-          {w.heartAvg === null ? null : (
-            <View style={styles.row}>
-              <Icon name="heart" size={18} colour="badText" />
-              <Txt kind="body" style={styles.grow}>
-                {w.heartMax === null ? `Heart rate ${String(w.heartAvg)} average` : `Heart rate ${String(w.heartAvg)} average · ${String(w.heartMax)} highest`}
-              </Txt>
-            </View>
-          )}
+          {w.heartAvg === null ? null : <HeartLine avg={w.heartAvg} max={w.heartMax} />}
           {shown.records.length === 0 ? null : <RecordsBox rows={shown.records} />}
           {shown.blocks.length === 0 ? <Txt kind="body">No sets were done in this workout.</Txt> : <SetBlocks blocks={shown.blocks} />}
         </>
