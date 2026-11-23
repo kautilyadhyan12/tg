@@ -4,7 +4,9 @@
 // depth had let through: a kettlebell push press, whose dip is a quarter squat to the camera, counts 0 (it counted 3);
 // then every proper squat in every video counts what was counted by eye, and none is told to go lower.
 import { describe, expect, it } from "vitest";
-import { fit, proofVideos, readMovement, runMovement } from "../scripts/movementCheck.js";
+import { MATCH_LIMITS, breakOf } from "../src/index.js";
+import { asReplayed, fit, measuringMovement, proofVideos, readMovement, repsOf, runMovement } from "../scripts/movementCheck.js";
+import { REPLAYS } from "../scripts/replays.js";
 
 const SQUAT = readMovement("squat");
 const VIDEOS = proofVideos();
@@ -50,11 +52,29 @@ describe("how deep comes from the form standard, never from how shallow anybody 
     const knees = rule("knees bent");
     expect([knees.standard?.at, knees.standard?.room, knees.standard?.source.includes("PMC11618833")]).toEqual([110, "camera", true]);
     // The room as measured: the same rep's bottom knee, as filmed and under each replay that sets numbers, paired by when
-    // it happened, 3.88 degrees in 99 reps of 100 (round one: pinned, so a wrong room cannot move the line unseen).
+    // it happened, 5.13 degrees in 99 reps of 100 (round one: pinned, so a wrong room cannot move the line unseen). Since
+    // 52b-ii-b the measuring run reads with the squat's own break, so uneven pictures and 8 a second give their reps too
+    // (313 pairs and 3.88 degrees before, the line 114).
     const room = fit(SQUAT, VIDEOS.filter((v) => v.entry.movement === "squat" && v.video.sets)).find((f) => f.rule === "knees bent")?.room;
-    expect(room?.pairs).toBe(313);
-    expect(room?.size).toBeCloseTo(3.88, 2);
+    expect(room?.pairs).toBe(387);
+    expect(room?.size).toBeCloseTo(5.13, 2);
     expect(knees.atMost).toBe(Math.ceil(110 + (room?.size ?? 0)));
+  });
+
+  it("the run that sets the numbers reads with the squat's own break, which hides no 10 cm jump, never the plain 0.1 s", () => {
+    expect(Math.round(breakOf(SQUAT))).toBe(202);
+    // With no number on the feet the measuring movement alone would take the plain break: hence the limits it is given.
+    expect(breakOf(measuringMovement(SQUAT))).toBe(MATCH_LIMITS.gap);
+  });
+
+  it("so every squat set that sets numbers gives reps to set them from under uneven pictures and at 8 a second (most gave none, 52b-i)", () => {
+    const setting = VIDEOS.filter((v) => v.entry.movement === "squat" && v.video.sets);
+    expect(setting.length).toBeGreaterThan(10);
+    for (const name of ["uneven", "8 a second"]) {
+      expect(REPLAYS.find((r) => r.name === name)?.fits).toBe(true);
+      const empty = setting.filter((v) => repsOf(SQUAT, asReplayed(v).filter((x) => x.video.label.endsWith(`, ${name}`))).length === 0).map((v) => v.video.label);
+      expect([name, empty]).toEqual([name, []]);
+    }
   });
 
   it("the hips: the least a leg bent to the knees' number lets them sink, 1 - sin(knees / 2), with no room of its own", () => {

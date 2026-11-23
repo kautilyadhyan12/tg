@@ -28,7 +28,7 @@
         "rule": "chest up",
         "words": "Keep your chest up."
       },
-      "from": "Set by form-check: the further out of the form standard, 45 (its source beside it), and the furthest proper rep that reads it, as filmed and as each replay that sets numbers (40.06; 14 reps as filmed, 3 people), plus the camera's own room: the same rep's change from as filmed to each such replay, in 99 reps of 100 (104 reps): 0.41; rounded outward."
+      "from": "Set by form-check: the further out of the form standard, 45 (its source beside it), and the furthest proper rep that reads it, as filmed and as each replay that sets numbers (40.06; 14 reps as filmed, 3 people), plus the camera's own room: the same rep's change from as filmed to each such replay, in 99 reps of 100 (126 reps): 0.41; rounded outward."
     },
     {
       "id": "hips_rise_first",
@@ -61,12 +61,12 @@
       "at": "rep",
       "view": "front",
       "against": "standing",
-      "atLeast": -0.06,
+      "atLeast": -0.12,
       "standard": {
         "at": 0,
         "source": "ACE: keep your knees in line with your second toes; the research file: let your knees track outward over your toes. So the knees never come closer together, against the feet, than they stood."
       },
-      "from": "Set by form-check: the further out of the form standard, 0 (its source beside it), and the furthest proper rep that reads it, as filmed and as each replay that sets numbers (0; 17 reps as filmed, 6 people), minus the camera's own room: the same rep's change from as filmed to each such replay, in 99 reps of 100 (120 reps): 0.05; rounded outward."
+      "from": "Set by form-check: the further out of the form standard, 0 (its source beside it), and the furthest proper rep that reads it, as filmed and as each replay that sets numbers (-0.02; 17 reps as filmed, 6 people), minus the camera's own room: the same rep's change from as filmed to each such replay, in 99 reps of 100 (148 reps): 0.1; rounded outward."
     },
     {
       "id": "quarter_reps",

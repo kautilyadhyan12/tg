@@ -45,7 +45,7 @@ describe("the camera file's lines are what form-check sets", () => {
     expect(fitted.map((f) => [f.mistake, f.bound])).toEqual(checkedOf(EXERCISE).map((m) => [m.id, m.atMost ?? m.atLeast]));
     expect(fitted.map((f) => [f.mistake, f.bound])).toEqual([
       ["lean_forward", 46],
-      ["knees_cave_in", -0.06],
+      ["knees_cave_in", -0.12],
     ]);
   });
 });
@@ -104,9 +104,22 @@ describe("the chest drawn past chest up onto real squats: told to keep it up, or
 });
 
 describe("each mistake drawn onto real squats is marked, and no other", () => {
+  // `edge`: reps at the edge of what the camera sees of them, which the search cannot draw to the target, just past or just
+  // short of the line (`past`, `short`): on the sumo squats, half turned, the knees drawn 0.02 to 0.08 m in at the bottom
+  // leave the picture's knees' width in sight too briefly, so the camera says nothing there, and from 0.12 m it sees and
+  // marks them again (`further`, metres). Each stays counted and unmarked where it could not be drawn, and is marked further.
   const cases = [
-    { id: "lean_forward", draw: leanForward, step: 2, most: 60, near: 0.5, reps: 26 },
-    { id: "knees_cave_in", draw: kneesIn, step: 0.03, most: 0.25, near: 0.01, reps: 16 },
+    { id: "lean_forward", draw: leanForward, step: 2, most: 60, near: 0.5, reps: 26, edge: { past: [], short: [] }, further: 0 },
+    {
+      id: "knees_cave_in",
+      draw: kneesIn,
+      step: 0.03,
+      most: 0.25,
+      near: 0.01,
+      reps: 17,
+      edge: { past: ["sumo_squat_2a 9.1 s", "sumo_squat_2b 7.7 s"], short: ["sumo_squat_2a 9.1 s"] },
+      further: 0.12,
+    },
   ] as const;
   /** For the knees, frame by frame in each set: how far the measures read the knees' width less the feet's moved, against
    *  how far the drawing carried the knees together in that very frame (both knees' metres, as far through its bend as the
@@ -140,20 +153,38 @@ describe("each mistake drawn onto real squats is marked, and no other", () => {
     expect(cases.map((c) => c.id)).toEqual(checkedOf(EXERCISE).map((m) => m.id));
   });
 
-  describe.each(cases)("$id", ({ id, draw, step, most, near, reps }) => {
+  describe.each(cases)("$id", ({ id, draw, step, most, near, reps, edge, further }) => {
     const m = checkedOf(EXERCISE).find((x) => x.id === id);
     const line = m?.atMost ?? m?.atLeast ?? Number.NaN;
     const up = m?.atMost !== undefined;
-    for (const [word, off] of [
-      ["just past its line", 1],
-      ["just short of its line", -1],
+    const at = (r: { label: string; start: number }): string => `${r.label} ${(r.start / 1000).toFixed(1)} s`;
+    for (const [word, off, edges] of [
+      ["just past its line", 1, edge.past],
+      ["just short of its line", -1, edge.short],
     ] as const) {
       const target = line + (up ? off : -off) * step;
-      const drawn = GOOD.flatMap((v) => drawnTo(SQUAT, EXERCISE, v.video, id, draw, target, most, near).map((r) => ({ label: v.video.label, ...r })));
+      const all = GOOD.flatMap((v) => drawnTo(SQUAT, EXERCISE, v.video, id, draw, target, most, near).map((r) => ({ label: v.video.label, ...r })));
+      const missed = all.filter((r) => r.reading === null || Math.abs(r.reading - target) > near);
+      const drawn = all.filter((r) => !missed.includes(r));
 
-      it(`${word}: every rep that reads it is drawn there, from the people's and the twins' videos`, () => {
-        expect(drawn.length).toBe(reps);
-        expect(drawn.filter((r) => r.reading === null || Math.abs(r.reading - target) > near)).toEqual([]);
+      it(`${word}: every rep that reads it is drawn there, from the people's and the twins' videos, but the reps at the edge of sight, named`, () => {
+        expect(all.length).toBe(reps);
+        expect(missed.map(at)).toEqual([...edges]);
+      });
+
+      it.runIf(edges.length > 0)(`${word}: each rep at the edge of sight, where it could not be drawn, is counted and unmarked, and drawn further is marked`, () => {
+        expect(missed.filter((r) => r.verdict !== "counted" || r.made.length > 0).map(at)).toEqual([]);
+        for (const label of [...new Set(missed.map((r) => r.label))]) {
+          const v = GOOD.find((x) => x.video.label === label);
+          if (v === undefined) throw new Error(`no ${label}`);
+          const mine = missed.filter((r) => r.label === label);
+          const frames = draw(perRep(mine.map((r) => ({ ...r, size: further }))))(v.video.frames);
+          const out = runMovement(SQUAT, { ...v.video, frames }, EXERCISE).reps.map((r) => ({ ...r, start: r.start - LEAD_IN, end: r.end - LEAD_IN }));
+          for (const r of mine) {
+            const own = out.find((x) => x.start < r.end && r.start < x.end);
+            expect([at(r), own?.verdict, own?.form.find((f) => f.mistake === id)?.status]).toEqual([at(r), "counted", "made"]);
+          }
+        }
       });
 
       it(`${word}: the reading follows what was drawn`, () => {
