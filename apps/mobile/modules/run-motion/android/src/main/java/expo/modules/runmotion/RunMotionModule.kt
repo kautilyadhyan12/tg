@@ -75,7 +75,11 @@ object Motion : SensorEventListener {
     var started: HandlerThread? = null
     return try {
       val sensors = ctx.getSystemService(Context.SENSOR_SERVICE) as? SensorManager ?: return false
-      val accelerometer = sensors.getDefaultSensor(Sensor.TYPE_ACCELEROMETER) ?: return false
+      // The one that wakes the phone to hand its readings over: Android drops the other's readings while the phone
+      // sleeps once its small store is full (100 readings, 4 s, on Kd's moto g35; this one keeps 200 and wakes it).
+      val accelerometer = sensors.getDefaultSensor(Sensor.TYPE_ACCELEROMETER, true)
+        ?: sensors.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
+        ?: return false
       started = HandlerThread("run-motion").also { it.start() }
       if (!sensors.registerListener(this, accelerometer, SAMPLE_US, LATENCY_US, Handler(started.looper))) {
         started.quitSafely()
