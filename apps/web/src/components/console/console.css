@@ -1694,6 +1694,22 @@
   .c-ask .c-btn,
   .c-ask .c-inbox-a .c-btn { height: auto; min-height: 44px; }
 }
+/* Two records side by side (Merge duplicate, V2b-iii): wider in the middle of a computer; on a phone the same sheet. */
+@media (min-width: 768px) {
+  .c-ask-wide { width: min(760px, calc(100vw - 32px)); }
+}
+/* A box under its button on a member's page (Record payment, Add tag, Change payer; V2b-iii, the board `Boxes`):
+   on a phone in the same place, its buttons full width and 44 px tall. */
+@media (max-width: 767px) {
+  .c-person .c-inbox-a { flex-direction: column; flex-wrap: nowrap; }
+  .c-person .c-inbox-a .c-btn { width: 100%; height: auto; min-height: 44px; white-space: normal; }
+  /* Scrolled to (by the keys or the page), a box's button and field stop above the 64 px menu at the foot. */
+  .c-person .c-inbox .c-btn,
+  .c-person .c-inbox input,
+  .c-person .c-inbox select { scroll-margin-bottom: 80px; }
+}
+/* A search field with its magnifier inside, at its left (Merge duplicate's search). */
+.c-input.c-input-icon { padding-left: 36px; }
 
 /* 4. A page of its own: a big setup in numbered parts, and a summary that fills in beside
    them on a wide screen, under them otherwise. */

@@ -233,12 +233,27 @@ describe('Who pays', () => {
     expect(within(ask).getByText("Aarav Sharma pays their own bills from now on, including any still unpaid. Payments already recorded keep Priya Sharma's name.")).toBeTruthy();
     orgService.removePayer.mockRejectedValueOnce({ response: { status: 409, data: { error: 'gym_not_on_plan', message: 'Your gym needs a plan to change this.' } } });
     fireEvent.click(within(ask).getByRole('button', { name: 'Remove' }));
-    expect(await within(screen.getByTestId('payer-ask')).findByRole('alert')).toBeTruthy();
+    // Said at the top of the box in the middle (V2b-iii).
+    expect(await within(screen.getByRole('alertdialog')).findByRole('alert')).toBeTruthy();
     orgService.removePayer.mockResolvedValueOnce(payers());
     fireEvent.click(within(screen.getByTestId('payer-ask')).getByRole('button', { name: 'Remove' }));
     await screen.findByText('Aarav Sharma now pays their own bills.');
     expect(orgService.removePayer).toHaveBeenLastCalledWith(GYM, AARAV);
     expect(screen.getByRole('button', { name: 'Change payer' })).toBeTruthy();
+  });
+
+  it.each([
+    ['Escape', () => fireEvent.keyDown(document, { key: 'Escape' })],
+    ['pressing outside', () => fireEvent.click(screen.getByTestId('box-outside'))],
+  ])("Remove payer in the middle: %s changes nobody's payer", async (_way, leave) => {
+    orgService.getPayers.mockResolvedValue(payers({ paidBy: person(PRIYA, 'Priya Sharma') }));
+    render(draw(AARAV, 'Aarav Sharma'));
+    fireEvent.click(await screen.findByRole('button', { name: 'Remove' }));
+    expect(screen.getByRole('alertdialog', { name: 'Stop Priya Sharma paying for Aarav Sharma?' })).toBeTruthy();
+    leave();
+    expect(screen.queryByTestId('payer-ask')).toBeNull();
+    expect(orgService.removePayer).not.toHaveBeenCalled();
+    expect(orgService.setPayer).not.toHaveBeenCalled();
   });
 
   it('staff who may not record payments read who pays, are told who can change it, and see no bills', async () => {
