@@ -489,7 +489,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
    - V2b. **A member's page: its boxes**, in three by how each box opens (2026-11-23; spec §17.11, `Boxes`):
      - V2b-i. [x] **From the right**: Add member, Edit, Add membership, Change membership · merged 2026-11-23 · PR #626
      - V2b-ii. [x] **In the middle, money** · merged 2026-11-23 · PR #631
-     - V2b-iii. [ ] **In the middle, people, and under the button**: Invite, Remove, Delete permanently, Merge; Record a payment, More, Tags, Change payer.
+     - V2b-iii. [x] **In the middle, people, and under the button** · merged 2026-11-23 · PR #634
    - V3a. [ ] **Members: Your list** (web folder 1): the one-press picks, the list, people ticked and the bar, Send message, Tags, Remove, Filter from the right (`MembersNew*`).
    - V3b. [ ] **Members: In the app, waiting to join, and Staff** (web folder 1): a staff member's panel, Invite staff, Staff activity (`MembersNewApp`, `MembersNewStaff*`).
    - V4a. [ ] **Sell** (web folder 1): the register, a sale, products, tax (`Sell*`, `PhoneSell`); a sale's refund boxes and its receipt in the middle, on a member's Purchases too (V2b-ii).
