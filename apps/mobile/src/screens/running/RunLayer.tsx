@@ -7,7 +7,6 @@ import * as Location from "expo-location";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   RUN_MAX_POINTS,
-  geodesicMetres,
   heartLineOf,
   heartSums,
   heartZoneSeconds,
@@ -67,6 +66,7 @@ import { FeelCard, NoteCard, PaceCard, RouteCard, RunFigures, SplitsCard } from 
 import { newRecords, RECORDS_PATH } from "./runRecords";
 import { RunMap, useMapScheme } from "./RunMap";
 import { useRunOutbox } from "./RunOutbox";
+import { currentPace } from "./runLive";
 import { clock, distance, pace, paceWord, runName, runWhen, unitWord, METRES_PER_MILE } from "./runWords";
 
 /** What stood in the way of Start, said under it with its button. */
@@ -93,6 +93,10 @@ interface RunLayerValue {
   units: Units;
   done: RunDone;
   clearDone: () => void;
+  /** Android refused to start the run after 3, 2, 1: the Running page says so. Cleared at the next Start,
+   *  when somebody else signs in, and when the Running page is left. */
+  startFailed: boolean;
+  clearStartFailed: () => void;
 }
 
 const RunLayerContext = createContext<RunLayerValue | null>(null);
@@ -135,7 +139,12 @@ export function RunLayerProvider({ children }: { children: ReactNode }) {
   const [shown, setShown] = useState(true);
   const [counting, setCounting] = useState<{ autoPause: boolean; guide: KeptRunGuide | null } | null>(null);
   const [done, setDone] = useState<RunDone>(null);
+  const [startFailed, setStartFailed] = useState(false);
   const [kg, setKg] = useState(0);
+  // A start that failed is the person's own: never said to whoever signs in next on this phone.
+  useEffect(() => {
+    setStartFailed(false);
+  }, [me]);
 
   // The person's heart rate monitor (37f-i), kept on this phone for them.
   useEffect(() => {
@@ -175,6 +184,7 @@ export function RunLayerProvider({ children }: { children: ReactNode }) {
   }, [me, session, hasRun, finished]);
 
   const start = useCallback(async (autoPause: boolean, guide: KeptRunGuide | null = null): Promise<StartProblem | null> => {
+    setStartFailed(false);
     const problem = await askLocation();
     if (problem !== null) return problem;
     setDone(null);
@@ -191,8 +201,10 @@ export function RunLayerProvider({ children }: { children: ReactNode }) {
     try {
       await startRun(me, newGoalId(), count.autoPause, Date.now(), count.guide);
     } catch {
+      // The phone locked, or the app left, during the count: Android refuses the location service.
       await forgetRun();
       setDone(null);
+      setStartFailed(true);
     }
   }, [counting, me]);
 
@@ -208,8 +220,12 @@ export function RunLayerProvider({ children }: { children: ReactNode }) {
       clearDone: () => {
         setDone(null);
       },
+      startFailed,
+      clearStartFailed: () => {
+        setStartFailed(false);
+      },
     }),
-    [start, run, units, done],
+    [start, run, units, done, startFailed],
   );
 
   const barUp = run !== null && counting === null && !shown;
@@ -324,23 +340,6 @@ function useLiveNumbers(run: LiveRun, kg: number): { now: number; sums: RunSums 
   return { now, sums };
 }
 
-/** The pace over the last ten seconds, from where the person was then to where they are. */
-function paceNow(run: LiveRun, units: Units): string {
-  if (run.phase !== "running") return "--:--";
-  const last = run.points[run.points.length - 1];
-  if (last === undefined) return "--:--";
-  let from = last;
-  for (let i = run.points.length - 1; i >= 0; i--) {
-    const p = run.points[i];
-    if (p === undefined) break;
-    from = p;
-    if (last[0] - p[0] >= 10_000) break;
-  }
-  const seconds = (last[0] - from[0]) / 1000;
-  if (seconds < 5) return "--:--";
-  return pace(seconds, geodesicMetres(from[1], from[2], last[1], last[2]), units);
-}
-
 type Gps = { word: string; tone: "good" | "weak" | "none" };
 export function gpsLight(lastFix: LiveRun["lastFix"], now: number): Gps {
   if (lastFix === null || now - lastFix.at > 8000) return { word: "Finding GPS", tone: "none" };
@@ -359,14 +358,6 @@ function GpsPill({ gps }: { gps: Gps }) {
   );
 }
 
-/** The run's moving time in seconds, as the summary gives it: pauses, stretches left out and standing
- *  with no pause pressed are all left out. */
-function movingSeconds(run: LiveRun, now: number, sums: RunSums | null): number {
-  const elapsed = elapsedMs(run, now);
-  const paused = closedPauses(run, elapsed).reduce((t, [a, b]) => t + (b - a), 0);
-  return Math.max(0, elapsed - paused - ((sums?.leftOutS ?? 0) + (sums?.stillS ?? 0)) * 1000) / 1000;
-}
-
 /** Room the run's own bar keeps over a page's foot, above the tab bar (37b-i). */
 export const RUN_BAR_ROOM = 92;
 
@@ -377,7 +368,7 @@ function RunBar({ run, units, kg, onOpen }: { run: LiveRun; units: Units; kg: nu
   const insets = useSafeAreaInsets();
   const { now, sums } = useLiveNumbers(run, kg);
   const word = run.phase === "finished" ? "Run finished" : run.phase === "paused" ? "Run paused" : "Run in progress";
-  const line = run.phase === "finished" ? "Not saved yet · Open to save" : `${clock(movingSeconds(run, now, sums))} · ${distance(sums?.distanceM ?? 0, units)} ${unitWord(units)}`;
+  const line = run.phase === "finished" ? "Not saved yet · Open to save" : `${clock(movingMsOf(run, now) / 1000)} · ${distance(sums?.distanceM ?? 0, units)} ${unitWord(units)}`;
   return (
     <View pointerEvents="box-none" style={[styles.barWrap, { bottom: sizes.tabBar + insets.bottom + 10 }]}>
       <Pressable accessibilityRole="button" accessibilityLabel="Open run" onPress={onOpen} style={({ pressed }) => [styles.bar, pressed ? styles.pressed : null]}>
@@ -402,8 +393,9 @@ function Live({ run, units, kg, onHide }: { run: LiveRun; units: Units; kg: numb
   const insets = useSafeAreaInsets();
   const { session } = useSession();
   const { now, sums } = useLiveNumbers(run, kg);
-  // The same moving time the summary gives: standing with no pause pressed is left out too.
-  const moving = movingSeconds(run, now, sums);
+  // The time since Go less the pauses, which never goes back; the summary's Moving time leaves out
+  // standing with no pause too.
+  const moving = movingMsOf(run, now) / 1000;
   const metres = sums?.distanceM ?? 0;
   const per = units === "imperial" ? METRES_PER_MILE : 1000;
   const isPaused = run.phase === "paused";
@@ -508,7 +500,7 @@ function Live({ run, units, kg, onHide }: { run: LiveRun; units: Units; kg: numb
           <View style={styles.panelFigures}>
             <Figure label="Time" value={clock(moving)} dim={isPaused} />
             <Figure label="Distance" value={distance(metres, units)} unit={unitWord(units)} dim={isPaused} />
-            <Figure label="Current pace" value={paceNow(run, units)} unit={paceWord(units)} dim={isPaused} />
+            <Figure label="Current pace" value={currentPace(run.points, run.phase === "running", units, now - run.startedAt)} unit={paceWord(units)} dim={isPaused} />
           </View>
           {controls}
         </View>
@@ -545,7 +537,7 @@ function Live({ run, units, kg, onHide }: { run: LiveRun; units: Units; kg: numb
           ) : null}
         </View>
         <View style={styles.pairs}>
-          <Figure label="Current pace" value={paceNow(run, units)} unit={paceWord(units)} dim={isPaused} />
+          <Figure label="Current pace" value={currentPace(run.points, run.phase === "running", units, now - run.startedAt)} unit={paceWord(units)} dim={isPaused} />
           {/* No average until there is ground to average: a standing start reads as no pace. */}
           <Figure label="Average pace" value={pace(moving, metres < 50 ? 0 : metres, units)} unit={paceWord(units)} dim={isPaused} />
         </View>

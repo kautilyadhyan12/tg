@@ -7,7 +7,7 @@ import { resetMapSource } from "../../src/screens/running/mapSource";
 import { RUN_BAR_ROOM } from "../../src/screens/running/RunLayer";
 import { MAP_CREDIT_PAGE, MAP_WAIT_MS } from "../../src/screens/running/RunMap";
 import { unitMarks } from "../../src/screens/running/routeShape";
-import { closedPauses, finishRun, keepRunUnits, pauseRun, phoneRunFiles, resetRecorder, runNow, startRun, takeLocations } from "../../src/screens/running/recorder";
+import { chooseAutoPause, closedPauses, finishRun, keepRunUnits, pauseRun, phoneRunFiles, resetRecorder, runNow, startRun, takeLocations } from "../../src/screens/running/recorder";
 import { spokenTime } from "../../src/screens/running/runVoice";
 import { readRunFile } from "../../src/screens/running/runQueue";
 import { clock, distance, runName } from "../../src/screens/running/runWords";
@@ -25,7 +25,7 @@ const PATH = "/v1/geo/runs";
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
 // The phone's location, as the setup's stand-in holds it.
-const location = jest.requireMock<{ state: { services: boolean; granted: boolean; canAskAgain: boolean; accuracy: string; asked: number; started: { task: string; options: { foregroundService?: { notificationTitle: string } } }[]; running: boolean; acceptsTurnOn: boolean } }>("expo-location").state;
+const location = jest.requireMock<{ state: { services: boolean; granted: boolean; canAskAgain: boolean; accuracy: string; asked: number; started: { task: string; options: { foregroundService?: { notificationTitle: string } } }[]; running: boolean; acceptsTurnOn: boolean; refusesStart: boolean } }>("expo-location").state;
 
 // Each map drawn, as the setup's stand-in keeps it (37b-i).
 type DrawnMap = {
@@ -82,7 +82,7 @@ beforeEach(async () => {
     handlers.push(handler);
     return { remove: () => undefined };
   });
-  Object.assign(location, { services: true, granted: true, canAskAgain: true, accuracy: "fine", asked: 0, started: [], running: false, acceptsTurnOn: true });
+  Object.assign(location, { services: true, granted: true, canAskAgain: true, accuracy: "fine", asked: 0, started: [], running: false, acceptsTurnOn: true, refusesStart: false });
   stopping.whileStopping = null;
   for (const name of ["run-now.json", "run-now-0.json", "run-now-1.json", "run-settings.json", "run-map.json"]) phoneRunFiles.remove(name);
   resetRecorder();
@@ -334,6 +334,25 @@ describe("the location, before a run", () => {
     expect(screen.queryByText("Get ready")).toBeNull();
     expect(screen.getByText("Turn on your phone's location to record your run.")).toBeTruthy();
   });
+
+  it("Android refusing the run after 3, 2, 1 (the phone locked during the count): the page says so, keeps no run, and Start again starts one (running faults, A8)", async () => {
+    location.refusesStart = true;
+    const s = runServer();
+    await openRunning(s);
+    await fireEvent.press(screen.getByRole("button", { name: "Start run" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Start now" }));
+    expect(await screen.findByText("Your run couldn't start. Try again.")).toBeTruthy();
+    expect(runNow()).toBeNull();
+    expect(location.running).toBe(false);
+    await fireEvent.press(screen.getByRole("button", { name: "Start again" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Start now" }));
+    await waitFor(() => {
+      expect(runNow()?.phase).toBe("running");
+    });
+    expect(location.running).toBe(true);
+    await fireEvent.press(screen.getByRole("button", { name: "Back to the app" }));
+    expect(screen.queryByText("Your run couldn't start. Try again.")).toBeNull();
+  });
 });
 
 describe("Auto-pause", () => {
@@ -390,6 +409,74 @@ describe("Auto-pause", () => {
     // Auto-pause leaves out the wait, never the steps either side of it: the clock starts again from the last
     // point within 3 m of where the person stood, so at most those 3 m and the phone's metre of wander go.
     expect(kept).toBeGreaterThanOrEqual(walked - 4);
+  });
+});
+
+describe("the worst thing on the screen: the run's clock shows a time that is not the run's (37h; testers: \"the timer gets stuck and keeps doing back and forth\")", () => {
+  it("running, then standing with Auto-pause off: Time is the seconds since Go at every point and after the numbers are worked out again, on the run's screen and its bar; Pause holds it", async () => {
+    await act(() => chooseAutoPause(false));
+    const s = runServer();
+    await openRunning(s);
+    await startRunning();
+    await feed(0, 60, 3);
+    expect(screen.getByText("0:59")).toBeTruthy();
+    expect(screen.getByText("5:34 /km")).toBeTruthy();
+    const run = runNow();
+    if (run === null) throw new Error("no run");
+    const stillAt = 26.1445 + (59 * 3) / 111_132;
+    for (let second = 60; second < 120; second++) {
+      await act(() => takeLocations({ locations: [{ timestamp: run.startedAt + second * 1000, coords: { latitude: stillAt, longitude: 91.7362, accuracy: 5, speed: 0 } }] }));
+      expect(screen.getByText(clock(second))).toBeTruthy();
+    }
+    // The numbers are worked out again at most every 2 s: the old clock took the standing off then.
+    await act(() => new Promise((resolve) => setTimeout(resolve, 3500)));
+    expect(screen.getByText("1:59")).toBeTruthy();
+    expect(screen.queryByText("5:34 /km")).toBeNull();
+    expect(screen.getByText("--:-- /km")).toBeTruthy();
+    await fireEvent.press(screen.getByRole("button", { name: "Back to the app" }));
+    expect(await screen.findByText(/^1:59 · \d+\.\d\d km$/)).toBeTruthy();
+    await fireEvent.press(screen.getByRole("button", { name: "Open run" }));
+    // Pause from the time shown, which the GPS's clock puts ahead of the phone's here: never back.
+    await fireEvent.press(await screen.findByRole("button", { name: "Pause" }));
+    await screen.findByRole("button", { name: "Resume" });
+    expect(screen.getByText("1:59")).toBeTruthy();
+    expect(screen.getByText("--:-- /km")).toBeTruthy();
+    await act(() => new Promise((resolve) => setTimeout(resolve, 1500)));
+    expect(screen.getByText("1:59")).toBeTruthy();
+  });
+
+  it("a refused start is said until the Running page is left, never after", async () => {
+    location.refusesStart = true;
+    const s = runServer();
+    await openRunning(s);
+    await fireEvent.press(screen.getByRole("button", { name: "Start run" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Start now" }));
+    expect(await screen.findByText("Your run couldn't start. Try again.")).toBeTruthy();
+    await fireEvent.press(screen.getByRole("tab", { name: "Dashboard" }));
+    await fireEvent.press(await screen.findByRole("tab", { name: "Workout" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Running" }));
+    expect(await screen.findByRole("button", { name: "Start run" })).toBeTruthy();
+    expect(screen.queryByText("Your run couldn't start. Try again.")).toBeNull();
+  });
+});
+
+describe("the summary's time not moving (Kd, 37h's walk, 2026-11-23)", () => {
+  it("a minute standing with Auto-pause off and no pause pressed reads as Stopped, never as Paused", async () => {
+    await act(() => chooseAutoPause(false));
+    const s = runServer();
+    await openRunning(s);
+    await startRunning();
+    await feed(0, 60, 3);
+    const run = runNow();
+    if (run === null) throw new Error("no run");
+    const stillAt = 26.1445 + (59 * 3) / 111_132;
+    await act(() =>
+      takeLocations({ locations: Array.from({ length: 60 }, (_, i) => ({ timestamp: run.startedAt + (60 + i) * 1000, coords: { latitude: stillAt, longitude: 91.7362, accuracy: 5, speed: 0 } })) }),
+    );
+    expect(runNow()?.pauses).toEqual([]);
+    await act(() => finishRun());
+    expect(await screen.findByText(/^Stopped for \d+:\d\d$/)).toBeTruthy();
+    expect(screen.queryByText(/^Paused for/)).toBeNull();
   });
 });
 
