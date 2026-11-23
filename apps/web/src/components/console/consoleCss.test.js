@@ -332,6 +332,8 @@ describe('read without leaning in (Kd, 2026-11-19, V1-f): no words under 14 px',
     './PtSessionsEnding.jsx',
     './ReceiptBox.jsx',
     './MoreMenu.jsx',
+    // V2b-i: the panel from the right that Add member, Edit, Add and Change membership open in.
+    './ConsoleBoxes.jsx',
   ];
   it.each(REDESIGNED)('%s has no 12 or 13 px words', (file) => {
     const text = readFileSync(fileURLToPath(new URL(file, import.meta.url)), 'utf8');

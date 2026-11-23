@@ -1623,6 +1623,12 @@
   .c-panel-b { padding: 24px 28px 32px; }
   .c-panel-f { padding: 16px 28px; }
 }
+/* On a touch screen, a tablet or an opened folding phone too, every button in the panel is 44 px to
+   touch, its X too, as on the member's page it opens over (V2b-i). */
+@media (pointer: coarse) {
+  .c-panel .c-btn { height: auto; min-height: 44px; }
+  .c-panel .c-icon-btn { width: 44px; height: 44px; }
+}
 
 /* 3. In the middle: a question before a change to people or money, naming who changes.
    From the bottom on a phone, its buttons one under another, the answer last. */

@@ -86,6 +86,7 @@ import {
 } from './memberListPeople';
 import { personNextStep } from './personNextStepView';
 import { usePageOver } from '../../components/console/pageOver';
+import { SidePanel } from '../../components/console/ConsoleBoxes';
 
 // One person on the gym's own list (ROADMAP 5b-i, 5b-v-c; spec Part 3 §18.7): everything
 // kept about them, the one button their state calls for, and under More, Remove (One
@@ -436,7 +437,12 @@ function WaiverLine({ member, desk, timeZone }) {
 
 export default function MemberListPerson({ gymId, gym, entryId, list, words, readOnly, canRemove = false, pair = null, addMembership = false, payNow = null, refundNow = null, checkNow = null, onClose, onChanged }) {
   const titleId = useId();
+  const formId = useId();
   const dialogRef = useRef(null);
+  /** Edit's details as the panel opened with them: Close asks first once one has changed. */
+  const [startedEdit, setStartedEdit] = useState(null);
+  /** The panel's own close, which asks first while a change is not saved. */
+  const panelClose = useRef(null);
   const fields = list?.fields ?? [];
 
   /** The record the panel has open; null while adding somebody new. */
@@ -610,9 +616,12 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
   useEffect(() => {
     closeNow.current = onClose;
   });
+  // Add member is a panel from the right over the page it was pressed on; a person's page takes
+  // the page's place. Where the page under it was scrolled to, for when it shows again.
+  const overNow = inShell && id !== null;
+  const scrolledAt = useRef(0);
   useEffect(() => {
     if (inShell) {
-      const shut = openOver.current?.();
       // What opened it (a name on a list, a button) has the focus again once it closes; drawn twice by
       // React's checks, the second drawing finds the page itself focused, and keeps the first one's.
       const active = document.activeElement;
@@ -629,18 +638,24 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
       const next = { ...state, personPage: mark, personScroll: leftAt };
       if (typeof state.personPage === 'string') window.history.replaceState(next, '');
       else window.history.pushState(next, '');
-      window.scrollTo?.(0, 0);
-      dialogRef.current?.focus({ preventScroll: true });
+      scrolledAt.current = leftAt;
       let backed = false;
       const onBack = () => {
         if (window.history.state?.personPage === mark) return;
+        // Something typed in Add member or Edit is not lost to Back: the step is put back and
+        // the panel asks, as its X does.
+        const panel = panelClose.current;
+        if (panel !== null && panel.unsaved) {
+          window.history.pushState({ ...(window.history.state ?? {}), personPage: mark, personScroll: leftAt }, '');
+          panel.close();
+          return;
+        }
         backed = true;
         closeNow.current();
       };
       window.addEventListener('popstate', onBack);
       return () => {
         window.removeEventListener('popstate', onBack);
-        shut?.();
         window.setTimeout(() => {
           const ours = window.history.state?.personPage === mark;
           if (ours) window.history.back();
@@ -658,6 +673,19 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
       document.body.style.overflow = before;
     };
   }, [inShell]);
+  // After the step above, which reads what had the focus before the page took it.
+  useEffect(() => {
+    if (!overNow) return undefined;
+    const shut = openOver.current?.();
+    window.scrollTo?.(0, 0);
+    dialogRef.current?.focus({ preventScroll: true });
+    return () => {
+      shut?.();
+      // Back to adding: the page under it shows again where it was left. Closed, the history
+      // step's own clean-up puts it back.
+      if (wanted.current === null) window.setTimeout(() => window.scrollTo?.(0, scrolledAt.current), 0);
+    };
+  }, [overNow]);
 
   const keepFocusInside = (e) => {
     if (e.key !== 'Tab') return;
@@ -861,7 +889,7 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
       // At a gym that sells, the membership is given on their page, its form open already (Kd, 2026-11-04).
       if (res.data.outcome === 'added' && sells) {
         setAddNowFor(res.data.entry.entryId);
-        setNotice((said) => `${said} Add their membership below.`);
+        setNotice((said) => `${said} Add their membership now.`);
       }
       // The number shown was given to somebody else a moment before (5e-i): said where the
       // person added is, so a desk that wrote it down knows.
@@ -1102,6 +1130,7 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
   };
 
   const startEdit = () => {
+    setStartedEdit(JSON.stringify(formFrom(shown, fields)));
     setForm(formFrom(shown, fields));
     setNotice(null);
     setRefusal(null);
@@ -1270,7 +1299,8 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
           <p className="c-s14 c-t2 m-0">
             {`${shown?.fullName || 'This person'}'s status, payment and dates come from their memberships. Change them under Memberships.`}
           </p>
-          <button type="button" onClick={() => backTo('view')} className="c-btn c-btn-s c-btn-sm">
+          {/* It leaves the panel as Cancel does: asking first while a change is not saved. */}
+          <button type="button" onClick={() => (panelClose.current === null ? backTo('view') : panelClose.current.close())} className="c-btn c-btn-s c-btn-sm">
             Go to Memberships
           </button>
         </div>
@@ -1325,6 +1355,7 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
 
   const renderForm = () => (
     <form
+      id={formId}
       noValidate
       className="flex flex-col gap-4"
       onSubmit={(e) => {
@@ -1344,25 +1375,44 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
           <input type="text" value={form.extra[f.key] ?? ''} onChange={(e) => setExtra(f.key, e.target.value)} className="c-input" />
         </label>
       ))}
-      <div className="flex flex-wrap gap-2">
-        <button type="submit" disabled={busy || readOnly} className={MAIN}>
-          {busy ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : <Check aria-hidden="true" className="w-4 h-4" />}
-          {id === null ? `Add ${words.person}` : 'Save'}
-        </button>
-        {id === null ? (
-          <button type="button" onClick={() => void save(true)} disabled={busy || readOnly} className={SECOND}>
-            <Mail aria-hidden="true" className="w-4 h-4" />
-            Add and invite
-          </button>
-        ) : null}
-        {id !== null ? (
-          <button type="button" onClick={() => backTo('view')} className={PLAIN}>
-            Back
-          </button>
-        ) : null}
-      </div>
     </form>
   );
+
+  /** Add member and Edit: a panel from the right, its buttons at its foot (§17.11). The page
+   *  it was opened from stays behind it. */
+  const renderPanel = () => {
+    const adding = id === null;
+    const unsaved = adding
+      ? JSON.stringify(form) !== JSON.stringify({ ...formFrom(null, fields), memberNumber: offered ?? '' })
+      : startedEdit !== null && JSON.stringify(form) !== startedEdit;
+    const nameNow = shown?.fullName || 'No name';
+    return (
+      <SidePanel
+        title={adding ? `Add ${words.person}` : `Edit ${nameNow}`}
+        sub={adding ? `Nobody is added until you press Add ${words.person}.` : 'Nothing changes until you press Save.'}
+        onClose={adding ? onClose : () => backTo('view')}
+        unsaved={unsaved}
+        formId={formId}
+        saveLabel={adding ? `Add ${words.person}` : 'Save'}
+        saveDisabled={readOnly}
+        busy={busy}
+        cancelLabel="Cancel"
+        testId="person-form-panel"
+        closeRef={panelClose}
+        foot={
+          adding ? (
+            <button type="button" onClick={() => void save(true)} disabled={busy || readOnly} className="c-btn c-btn-s c-btn-lg">
+              <Mail aria-hidden="true" className="w-4 h-4" />
+              Add and invite
+            </button>
+          ) : null
+        }
+      >
+        {renderAlerts()}
+        {renderForm()}
+      </SidePanel>
+    );
+  };
 
   /** The buttons a person's state calls for (§18.7) beside the name: its main one first, then Edit, then
    *  More. The strip under the name holds the page's one orange button (§17.11), so these are plain; a past
@@ -1916,6 +1966,69 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
     );
   };
 
+  /** A refusal, or Add member's warning: at the top of the panel or the page. */
+  const renderAlerts = () =>
+      refusal !== null || (maybe !== null && id === null) ? (
+        <div ref={alertRef} tabIndex={-1} className="flex flex-col gap-4 outline-none scroll-mt-4" data-testid="panel-alert">
+          {refusal !== null ? (
+            <div className="rounded-[14px] p-3 flex flex-col gap-2" style={{ background: 'var(--bad-bg)' }} role="alert">
+              <p className="c-s14 c-t1 m-0">{refusal.message}</p>
+              <div className="flex flex-wrap gap-2">
+                {refusal.openId !== null ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const next = refusal.openId;
+                      // A typed change is asked about first, as at every other way out of the panel.
+                      if (panelClose.current === null) openRecord(next);
+                      else panelClose.current.leave(() => openRecord(next));
+                    }}
+                    className={PLAIN}
+                  >
+                    Open that record
+                  </button>
+                ) : null}
+                {refusal.ack !== null ? (
+                  <button type="button" onClick={() => void refusal.ack()} disabled={busy} className={PLAIN}>
+                    Go ahead anyway
+                  </button>
+                ) : null}
+              </div>
+              <SentencePlace kind={refusal.place} gym={gym} />
+              {/* Typed here, so the person stays open to invite straight afterwards. */}
+              {refusal.canSetAddress ? (
+                <PostalAddressBox
+                  gymId={gymId}
+                  onSaved={() => {
+                    setRefusal(null);
+                    setNotice('Postal address saved. You can invite them now.');
+                  }}
+                />
+              ) : null}
+            </div>
+          ) : null}
+          {maybe !== null && id === null ? (
+            <MaybeBox
+              maybe={maybe}
+              words={words}
+              busy={busy}
+              readOnly={readOnly}
+              onOpen={openMatch}
+              onAnyway={() => {
+                // The details warned about, less any box the form no longer shows: a
+                // price list set up since the warning means the membership is picked.
+                const warned = sells ? Object.fromEntries(Object.entries(maybe.input).filter(([k]) => !HELD_ANSWERS.includes(k) && k !== 'endsOnKind')) : maybe.input;
+                return addPerson({ ...warned, acknowledgedDuplicates: maybe.people.map((m) => m.entryId) });
+              }}
+              onBack={() => setMaybe(null)}
+            />
+          ) : null}
+        </div>
+      ) : null;
+
+  /** Add member, or Edit: the panel from the right is open. */
+  const formOpen = deleted === null && (id === null || (mode === 'edit' && shown !== null));
+
   let body;
   if (deleted !== null) {
     body = (
@@ -1924,8 +2037,8 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
         {deletedOneSquareLine(deletedSquare)}
       </p>
     );
-  } else if (id === null || (mode === 'edit' && shown !== null)) {
-    body = renderForm();
+  } else if (id === null) {
+    body = null;
   } else if (loadError !== null) {
     body = (
       <div className="flex flex-col gap-3">
@@ -1961,7 +2074,8 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
   // Under the name: past member, the App word and its line (§18.4), whatever step is open.
   const inv = shown !== null && deleted === null ? invitationView(shown, gymToday(gym?.timezone)) : null;
   // Their details on screen: the head holds the page's buttons, and the strip its next step.
-  const viewing = mode === 'view' && shown !== null && deleted === null && loadError === null && id !== null;
+  // Edit's panel opens over their page, which stays as it is behind it.
+  const viewing = (mode === 'view' || mode === 'edit') && shown !== null && deleted === null && loadError === null && id !== null;
   const inviteNow = viewing ? personInviteAction(shown, gymToday(gym?.timezone)) : null;
   const step = viewing
     ? personNextStep({
@@ -2049,58 +2163,19 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
               {notice}
             </p>
           ) : null}
-          {refusal !== null || (maybe !== null && id === null) ? (
-            <div ref={alertRef} tabIndex={-1} className="flex flex-col gap-4 outline-none scroll-mt-4" data-testid="panel-alert">
-              {refusal !== null ? (
-                <div className="rounded-[14px] p-3 flex flex-col gap-2" style={{ background: 'var(--bad-bg)' }} role="alert">
-                  <p className="c-s14 c-t1 m-0">{refusal.message}</p>
-                  <div className="flex flex-wrap gap-2">
-                    {refusal.openId !== null ? (
-                      <button type="button" onClick={() => openRecord(refusal.openId)} className={PLAIN}>
-                        Open that record
-                      </button>
-                    ) : null}
-                    {refusal.ack !== null ? (
-                      <button type="button" onClick={() => void refusal.ack()} disabled={busy} className={PLAIN}>
-                        Go ahead anyway
-                      </button>
-                    ) : null}
-                  </div>
-                  <SentencePlace kind={refusal.place} gym={gym} />
-                  {/* Typed here, so the person stays open to invite straight afterwards. */}
-                  {refusal.canSetAddress ? (
-                    <PostalAddressBox
-                      gymId={gymId}
-                      onSaved={() => {
-                        setRefusal(null);
-                        setNotice('Postal address saved. You can invite them now.');
-                      }}
-                    />
-                  ) : null}
-                </div>
-              ) : null}
-              {maybe !== null && id === null ? (
-                <MaybeBox
-                  maybe={maybe}
-                  words={words}
-                  busy={busy}
-                  readOnly={readOnly}
-                  onOpen={openMatch}
-                  onAnyway={() => {
-                    // The details warned about, less any box the form no longer shows: a
-                    // price list set up since the warning means the membership is picked.
-                    const warned = sells ? Object.fromEntries(Object.entries(maybe.input).filter(([k]) => !HELD_ANSWERS.includes(k) && k !== 'endsOnKind')) : maybe.input;
-                    return addPerson({ ...warned, acknowledgedDuplicates: maybe.people.map((m) => m.entryId) });
-                  }}
-                  onBack={() => setMaybe(null)}
-                />
-              ) : null}
-            </div>
-          ) : null}
+          {formOpen ? null : renderAlerts()}
           {body}
         </div>
       </div>
     </div>
   );
-  return inShell ? createPortal(page, slot) : page;
+  // Add member draws only its panel, over the page Add member was pressed on.
+  if (id === null && deleted === null) return renderPanel();
+  const panel = formOpen ? renderPanel() : null;
+  return (
+    <>
+      {inShell ? createPortal(page, slot) : page}
+      {panel}
+    </>
+  );
 }
