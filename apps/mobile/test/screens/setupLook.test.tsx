@@ -12,6 +12,9 @@ import { RAVI, fakeServer, kept, lost, memoryStore, never, profile, tokens, vers
 const extra = { copyName: "Feature 1", apiUrl: "http://localhost:3000" };
 const noWait = () => Promise.resolve();
 const SHORT = 150;
+/** The look before setup in the notifications test, ms: long enough that a slow machine never reaches its end before
+ *  the test has looked. */
+const LOOK_FOR_NOTIFICATIONS = 4000;
 const notSetUp = (): Reply => ({ status: 200, body: profile(true, RAVI, false) });
 const setUp = (): Reply => ({ status: 200, body: profile(true, RAVI, true) });
 
@@ -265,12 +268,15 @@ describe("the look", () => {
   it("the notifications box waits for setup: not over the look, nor over setup, and asked once it is finished", async () => {
     notifications.permission = ASK_NOTIFICATIONS;
     const turn = heldAppState();
-    const { route } = await signIn(notSetUp, 1500);
+    // The look lasts 4 s: at 1.5 s a slow machine took so long to draw the Dashboard that setup was already up
+    // when the check below ran (GitHub, 2026-11-22 and 23).
+    const { route } = await signIn(notSetUp, LOOK_FOR_NOTIFICATIONS);
     await screen.findByRole("tab", { name: "Dashboard" });
     // Time for the phone's answer on notifications to be read, which would open the box.
     await looking(600);
     expect(screen.queryByRole("header", { name: "Your goal" })).toBeNull();
     expect(screen.queryByText("Turn on notifications?")).toBeNull();
+    expect(await screen.findByRole("header", { name: "Your goal" }, { timeout: 2 * LOOK_FOR_NOTIFICATIONS })).toBeTruthy();
     await setupIsUp();
     expect(screen.queryByText("Turn on notifications?")).toBeNull();
     route.me = setUp;
