@@ -7,7 +7,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { checkedMistakeSchema, exerciseCameraSchema, exerciseFileSchema, type CheckedMistake } from "@app/shared";
+import { checkedMistakeSchema, exerciseCameraSchema, exerciseFileSchema, mistakeMark, type CheckedMistake } from "@app/shared";
 import { FORM_SEEN_FOR, MATCH_LIMITS, checkedOf, formOf, parseExercise, type FormFrame } from "../src/index.js";
 import { formRows } from "../scripts/formCheck.js";
 import { proofVideos, readExercise, readMovement, runMovement } from "../scripts/movementCheck.js";
@@ -26,8 +26,15 @@ describe("the worst thing: nobody squatting properly is told to change their for
     expect(rows.filter((r) => r.leftOut).length).toBe(17);
   });
 
-  it.each(rows.map((r) => [`${r.label}${r.leftOut ? ", its person left out" : ""}`, r] as const))("%s: no mistake is marked", (_label, r) => {
+  it.each(rows.map((r) => [`${r.label}${r.leftOut ? ", its person left out" : ""}`, r] as const))("%s: no mistake is marked, and nobody is told to keep the chest up", (_label, r) => {
     expect(r.made).toEqual([]);
+    expect(r.told).toEqual([]);
+  });
+
+  it("52b-ii-b's worst thing: on no video Kd's folders hold, as filmed, is any rep told \"Keep your chest up.\"", () => {
+    expect(VIDEOS.length).toBe(100);
+    const told = VIDEOS.flatMap((v) => runMovement(SQUAT, v.video, EXERCISE).reps.filter((r) => r.verdict === "refused").map((r) => `${v.video.label} ${((r.start - 1000) / 1000).toFixed(1)} s`));
+    expect(told).toEqual([]);
   });
 
   it("the phone's own runs of the same pictures mark no mistake either, and mark what the laptop marks", () => {
@@ -116,6 +123,9 @@ describe("the squat's camera file lists every common mistake of its research fil
       breath_held: "cannot see",
       stance_width: "not checked",
     });
+    // The two marks a member sees beside them (Kd, 2026-11-23): checked by the camera, or not.
+    expect(EXERCISE.mistakes.filter((m) => mistakeMark(m) === "Checked by the camera").map((m) => m.id)).toEqual(["lean_forward", "knees_cave_in", "quarter_reps", "feet_move"]);
+    expect(EXERCISE.mistakes.filter((m) => mistakeMark(m) === "Not checked by the camera").length).toBe(8);
     // Every mistake the Library's squat file names is in the camera file under the same id (spec §13.3).
     const library = exerciseFileSchema.parse(JSON.parse(readFileSync(join(import.meta.dirname, "../../shared/library/exercises/squat.json"), "utf8")));
     const ids = library.text.en.mistakes.map((m) => m.id);
@@ -205,6 +215,10 @@ describe("a camera file the engine cannot read rightly is refused", () => {
     ["a mistake read from no view", lean({ view: undefined })],
     ["a mistake read from any view", lean({ view: "any" })],
     ["a name that is a sentence", lean({ name: "Leaning too far forward." })],
+    ["refused words that are not a sentence", lean({ refused: { rule: "chest up", words: "keep your chest up" } })],
+    ["refused with no words", lean({ refused: { rule: "chest up" } })],
+    ["a file with no version", { ...json, version: undefined }],
+    ["a file at version 0", { ...json, version: 0 }],
     ["two mistakes with one id", { ...json, mistakes: [...json.mistakes, json.mistakes[0]] }],
     ["a status nobody knows", lean({ camera: "maybe" })],
   ])("%s", (_name, bad) => {
@@ -218,6 +232,11 @@ describe("a camera file the engine cannot read rightly is refused", () => {
     ["a width read side on", lean({ read: { kind: "value", measures: ["knees apart"] } }), /side on/],
     ["a lean read side on against standing", lean({ against: "standing" }), /side on/],
     ["a lean read facing the phone", lean({ view: "front" }), /facing the phone/],
+    ["refused by a rule the movement does not have", lean({ refused: { rule: "chest down", words: "Keep your chest up." } }), /chest down/],
+    ["refused by a count rule", lean({ refused: { rule: "knees bent", words: "Keep your chest up." } }), /must be a match rule/],
+    ["refused by a rule that reads another measure", lean({ refused: { rule: "hips and knees together", words: "Keep your chest up." } }), /must be a match rule/],
+    ["refused by a rule nearer than the mistake's own line", lean({ atMost: 55 }), /must be a match rule/],
+    ["two mistakes refused by one rule", { ...json, mistakes: [...json.mistakes, { ...json.mistakes[0], id: "lean_again" }] }, /two mistakes are refused by "chest up"/],
   ])("%s", (_name, bad, message) => {
     expect(() => parseExercise(bad, SQUAT)).toThrow(message);
   });

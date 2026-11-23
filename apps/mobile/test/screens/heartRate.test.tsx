@@ -5,7 +5,7 @@ import { App } from "../../src/App";
 import { HeartMonitorSheet } from "../../src/heart/HeartMonitor";
 import { heartNative } from "../../src/heart/heartNative";
 import { forgetHeartMax } from "../../src/heart/heartMax";
-import { HEART_FRESH_MS, endTry, heartNow, holdHeart, loadMonitor, pairMonitor, pullHeart, resetHeart, saveMonitor, savedHeartNow, takeHeartReadings, tryMonitor } from "../../src/heart/monitor";
+import { HEART_FRESH_MS, endTry, forgetMonitor, heartNow, heartQueue, holdHeart, loadMonitor, pairMonitor, pullHeart, resetHeart, saveMonitor, savedHeartNow, takeHeartReadings, tryMonitor } from "../../src/heart/monitor";
 import { closedPauses, pauseRun, phoneRunFiles, resetRecorder, runNow, takeLocations } from "../../src/screens/running/recorder";
 import type { Ask, AskInit } from "../../src/session/calls";
 import { RAVI, fakeServer, kept, memoryStore, profile, tokens, type Reply } from "../kit";
@@ -342,7 +342,7 @@ describe("I connect my chest strap once, and my runs show my heart rate", () => 
     expect(await screen.findByText("72 bpm", {}, { timeout: 3000 })).toBeTruthy();
     expect(screen.getByText("Is this your heart rate?")).toBeTruthy();
     await fireEvent.press(screen.getByRole("button", { name: "Save" }));
-    expect(await screen.findByText("Saved. It connects when you start a run.")).toBeTruthy();
+    expect(await screen.findByText("Saved. It connects when you start a run or a workout.")).toBeTruthy();
     expect(await phoneRunFiles.read(`heart-monitor-${RAVI.id}.json`)).toBe(JSON.stringify({ id: MINE, name: "Polar H10 9EF6E824" }));
     // The Running page's row says it, as Settings does: one monitor.
     expect(await screen.findByText(/^Polar H10 9EF6E824 · /)).toBeTruthy();
@@ -455,13 +455,13 @@ describe("I connect my chest strap once, and my runs show my heart rate", () => 
     await fireEvent.press(screen.getByRole("button", { name: "Change heart rate monitor" }));
     await fireEvent.press(await screen.findByRole("button", { name: "Remove" }));
     // Asked first, with who it is about; Keep it leaves it.
-    expect(await screen.findByText("Polar H10 9EF6E824 won't connect to your runs.")).toBeTruthy();
+    expect(await screen.findByText("Polar H10 9EF6E824 won't connect to your runs or workouts.")).toBeTruthy();
     expect(await phoneRunFiles.read(`heart-monitor-${RAVI.id}.json`)).not.toBeNull();
     await fireEvent.press(screen.getByRole("button", { name: "Remove" }));
     await waitFor(async () => {
       expect(await phoneRunFiles.read(`heart-monitor-${RAVI.id}.json`)).toBeNull();
     });
-    expect(screen.getByText("Removed. Polar H10 9EF6E824 won't connect to your runs.")).toBeTruthy();
+    expect(screen.getByText("Removed. Polar H10 9EF6E824 won't connect to your runs or workouts.")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Open Bluetooth settings to unpair it" })).toBeNull();
   });
 });
@@ -562,7 +562,7 @@ describe("I connect my watch once, and it stays connected when its address chang
       strap.bonded = [EARBUDS, LASTING];
       strap.bond(WATCH, "bonded");
     });
-    expect(await screen.findByText("Paired and saved. It connects when you start a run.")).toBeTruthy();
+    expect(await screen.findByText("Paired and saved. It connects when you start a run or a workout.")).toBeTruthy();
     expect(await keptMonitor()).toEqual({ id: LASTING, name: "Forerunner 265" });
     await waitFor(() => {
       expect(strap.watched).toBe(LASTING);
@@ -578,7 +578,7 @@ describe("I connect my watch once, and it stays connected when its address chang
     await saveTheWatch();
     expect(await screen.findByText("Pairing…")).toBeTruthy();
     strap.bonded = [EARBUDS, WATCH];
-    expect(await screen.findByText("Paired and saved. It connects when you start a run.", {}, { timeout: 3000 })).toBeTruthy();
+    expect(await screen.findByText("Paired and saved. It connects when you start a run or a workout.", {}, { timeout: 3000 })).toBeTruthy();
     expect((await keptMonitor())?.id).toBe(WATCH);
   });
 
@@ -595,7 +595,7 @@ describe("I connect my watch once, and it stays connected when its address chang
 
   it("a strap whose address never changes is not asked to pair", async () => {
     await saveTheWatch("public");
-    expect(await screen.findByText("Saved. It connects when you start a run.")).toBeTruthy();
+    expect(await screen.findByText("Saved. It connects when you start a run or a workout.")).toBeTruthy();
     expect(strap.pairs).toEqual([]);
     expect((await keptMonitor())?.id).toBe(WATCH);
   });
@@ -614,14 +614,14 @@ describe("I connect my watch once, and it stays connected when its address chang
     );
     expect(screen.getByText("Pairing…")).toBeTruthy();
     strap.bonded = [EARBUDS, WATCH];
-    expect(await screen.findByText("Paired and saved. It connects when you start a run.", {}, { timeout: 3000 })).toBeTruthy();
+    expect(await screen.findByText("Paired and saved. It connects when you start a run or a workout.", {}, { timeout: 3000 })).toBeTruthy();
     expect((await keptMonitor())?.id).toBe(WATCH);
   });
 
   it("Android saying it is paired already: paired, at the address picked (round one, L1)", async () => {
     strap.pairAnswer = "already";
     await saveTheWatch();
-    expect(await screen.findByText("Paired and saved. It connects when you start a run.")).toBeTruthy();
+    expect(await screen.findByText("Paired and saved. It connects when you start a run or a workout.")).toBeTruthy();
     expect((await keptMonitor())?.id).toBe(WATCH);
   });
 
@@ -647,5 +647,63 @@ describe("I connect my watch once, and it stays connected when its address chang
     expect(sendIntent).toHaveBeenCalledWith("android.settings.BLUETOOTH_SETTINGS");
     await fireEvent.press(screen.getByRole("button", { name: "Connect another" }));
     expect(await screen.findByText("Wear your strap, or turn on your watch's heart rate broadcast.")).toBeTruthy();
+  });
+});
+
+describe("a workout's own queue of readings (64a-vi): only the person's saved monitor, and never the run's leftovers", () => {
+  beforeEach(async () => {
+    await loadMonitor(RAVI.id);
+    await saveMonitor({ id: MINE, name: "Polar H10 9EF6E824" });
+  });
+
+  it("the worst thing: a stranger's strap, a monitor being tried, and a reading with no heart behind it never reach it", () => {
+    const release = holdHeart();
+    const workout = heartQueue();
+    const now = Date.now();
+    strap.send(STRANGER, polar(171), now - 900);
+    strap.send(MINE, [16, 0], now - 800);
+    strap.send(MINE, polar(120), now - 700);
+    expect(workout.take().map((r) => r.bpm)).toEqual([120]);
+    // A monitor tried in the box is watched in place of the saved one: nothing it sends is the workout's.
+    tryMonitor(STRANGER);
+    strap.send(STRANGER, polar(165), now - 300);
+    expect(workout.take()).toEqual([]);
+    endTry();
+    // Round one, T3: the saved monitor itself, tried again in the box, sends nothing the workout keeps while it is tried.
+    tryMonitor(MINE);
+    strap.send(MINE, polar(126), now - 200);
+    expect(workout.take()).toEqual([]);
+    endTry();
+    strap.send(MINE, polar(124), now - 100);
+    expect(workout.take().map((r) => r.bpm)).toEqual([124]);
+    workout.close();
+    release();
+  });
+
+  it("a run and a workout on at once each get every reading", () => {
+    const release = holdHeart();
+    const workout = heartQueue();
+    const now = Date.now();
+    strap.send(MINE, polar(130), now - 500);
+    strap.send(MINE, polar(131), now - 400);
+    expect(takeHeartReadings().map((r) => r.bpm)).toEqual([130, 131]);
+    expect(workout.take().map((r) => r.bpm)).toEqual([130, 131]);
+    workout.close();
+    release();
+  });
+
+  it("a closed queue gets nothing more, and Remove empties an open one", () => {
+    const release = holdHeart();
+    const closed = heartQueue();
+    const open = heartQueue();
+    closed.close();
+    const now = Date.now();
+    strap.send(MINE, polar(140), now - 200);
+    pullHeart();
+    expect(closed.take()).toEqual([]);
+    forgetMonitor();
+    expect(open.take()).toEqual([]);
+    open.close();
+    release();
   });
 });

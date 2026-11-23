@@ -3,6 +3,7 @@
 // at every step, so a closed app or a dead battery loses nothing, and a finished one waits on the phone until
 // the server has it (`workoutSaveSchema`, sent under its own id, so sent twice it is one workout).
 import { z } from "zod";
+import { HEART_BPM_LEAST, HEART_BPM_MOST } from "../heartRate.js";
 import { instantSchema } from "../time.js";
 import { exerciseIdSchema } from "./exerciseFile.js";
 import { plannedSetSchema } from "./plannedWorkout.js";
@@ -59,6 +60,13 @@ export const workoutRunSchema = z
     done: z.array(savedSetSchema).max(W.setsMost),
     /** "saved": started from one of the person's saved workouts (64a-iv); absent for nothing, as a file kept before it. */
     startedFrom: z.literal("saved").optional(),
+    /** The heart rate from the person's own monitor (64a-vi): [ms on the workout's whole clock, beats a minute], in order,
+     *  one a second at most, kept only while its clocks ran, never past what a save allows. Absent: none, as a file kept
+     *  before it. */
+    heart: z
+      .array(z.tuple([z.number().int().min(0).max(W.lengthMostMs), z.number().int().min(HEART_BPM_LEAST).max(HEART_BPM_MOST)]))
+      .max(W.heartMost)
+      .optional(),
   })
   .strict()
   .refine((r) => r.ex < r.exercises.length && r.set < (r.exercises[r.ex]?.sets.length ?? 0), { message: "where the workout is", path: ["set"] })

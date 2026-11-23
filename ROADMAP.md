@@ -840,8 +840,8 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
         - 52b-i. [x] **Why a rep did not count, and the squat's depth** — merged 2026-11-22 (PR #622).
         - 52b-ii. **The form check and each rep's score** (split 2026-11-22 in two, the check first; `handoff/2026-11-22-52b-ii-a.md` keeps its line as first written):
             - 52b-ii-a. [x] **The squat's form check** — merged 2026-11-22 (PR #624).
-            - 52b-ii-b. [ ] **"Keep your chest up.", then each rep's score.** First Kd's ruling of 2026-11-23: a dip that is a squat in every way but the chest, past "chest up", is not counted and is told "Keep your chest up."; first test, no other movement's dip is told it (none fails on the chest alone today), and real squats with the lean drawn past 52 degrees are. Its plan asks Kd in one line how a mistake marked "not checked" or left to the counting is shown to a member (CLAUDE.md §4 names two marks, checked and "the camera cannot see this from here"). Then each rep's score from its form checks (§2.4's `repScores`, `avgFormScore`, `faultCounts`), a mistake not seen from where the phone stands never counted as good form; with it the measuring run's 0.1 s break for the feet (52b-i), which leaves most squat sets no rep under uneven pictures to set numbers from.
-        - 52b-iii. [ ] **The set's summary** (§2.4), which the workout reads as it does today.
+            - 52b-ii-b. [x] **"Keep your chest up.", each rep's score and the set's summary** (with 52b-iii) — merged 2026-11-23 (PR #630).
+        - 52b-iii. Built with 52b-ii-b on 2026-11-23 (`handoff/2026-11-23-52b-ii-b.md`).
     - 52c. [ ] **The other kinds of counting**: one side at a time, holds, fast rhythm, timed only, jumps, floor work. Since 52b-i: a
       squat jack done 1.5 or 2 times as slowly counts 2 and 1 as squats, its standing taken as the feet jump out (`squat_jack_2`).
     - 52d. [ ] **One person locked on**: a busy gym, a passer-by, a mirror (§11.8). Since 51c the phone asks the model for one
@@ -874,7 +874,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
       - 64a-ii-b. [x] **Time trained, never time paused** — merged 2026-11-22 (PR #619).
       - 64a-iv. [x] **Saved workouts** — merged 2026-11-22 (PR #621).
       - 64a-v. [x] **History** — merged 2026-11-23 · PR #625
-      - 64a-vi. [ ] **Heart rate and sounds**: the monitor of 37f-i during a workout and kept with it (Kd, 2026-11-12); the sounds at a rep, a set's end and the last 3 seconds.
+      - 64a-vi. [x] **Heart rate and sounds** — merged 2026-11-23 · PR #629
     - 64b. [ ] **With the camera** (after 64a and item 53's screen): Camera or Count myself, picked every time.
 65. [ ] **Each exercise's Library page**, towards about 200 (§13.2; alongside, from 60): written and checked, never copied across from the old text; Kd's list of names. All camera rules are exercise folder 1's job 54.
 
