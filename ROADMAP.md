@@ -492,7 +492,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
      - V2b-iii. [ ] **In the middle, people, and under the button**: Invite, Remove, Delete permanently, Merge; Record a payment, More, Tags, Change payer.
    - V3a. [ ] **Members: Your list** (web folder 1): the one-press picks, the list, people ticked and the bar, Send message, Tags, Remove, Filter from the right (`MembersNew*`).
    - V3b. [ ] **Members: In the app, waiting to join, and Staff** (web folder 1): a staff member's panel, Invite staff, Staff activity (`MembersNewApp`, `MembersNewStaff*`).
-   - V4a. [ ] **Sell** (web folder 1): the register, a sale, products, tax (`Sell*`, `PhoneSell`).
+   - V4a. [ ] **Sell** (web folder 1): the register, a sale, products, tax (`Sell*`, `PhoneSell`); a sale's refund boxes and its receipt in the middle, on a member's Purchases too (V2b-ii).
    - V4b. [ ] **Memberships** (web folder 1): the price list, adding a type, discounts (`Memberships*`, `MembershipAdd`).
    - V5. [ ] **Overview and getting in** (web folder 1): Overview, its banners and plan prompts, your organisations, creating a gym, signing in, joining as staff (`Overview*`, `Banners`, `GymReady`, `Orgs`, `CreateGym`, `SignIn`, `StaffInvite`, `PhoneOverview`).
    - V6. [ ] **Leads and At risk** (web folder 1): a lead, adding and importing leads, your gym page, At risk (`Lead*`, `GymPage`, `AtRisk*`).

@@ -1691,7 +1691,8 @@
 }
 /* On a touch screen, a tablet or an opened folding phone too, every button in the middle is 44 px. */
 @media (pointer: coarse) {
-  .c-ask .c-btn { height: auto; min-height: 44px; }
+  .c-ask .c-btn,
+  .c-ask .c-inbox-a .c-btn { height: auto; min-height: 44px; }
 }
 
 /* 4. A page of its own: a big setup in numbered parts, and a summary that fills in beside
