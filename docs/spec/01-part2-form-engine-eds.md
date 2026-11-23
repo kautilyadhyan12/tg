@@ -2362,23 +2362,29 @@ it is backed by a primary source or Kd's ruling, or set from more side-on bodies
 has gone that far past (`refused` in the camera file: leaning too far forward, "chest up", "Keep your chest up."); `checkExercise`
 refuses a rule that is not a match rule read where the mistake is read, as the same value of the same measures, its line further out
 the same way, and two mistakes on one rule. A rep that breaks that rule alone, every other rule seen and held and every count rule
-reached, is **refused**: not counted, told the words, its form check that mistake made; but only when the form judge, reading the
-picture as the mistake is read (a lean side on), finds it past the rule's own line too. Facing the phone, half turned, with any
-other rule broken or anything unseen, it says nothing, as another movement does. *Measured:* as filmed, no rep of the 100 videos
-is told it; under the 14 held replays no other movement's dip and no good-form squat set, with every person's numbers and with
-their own left out. The lean drawn onto the 26 side-on squat reps that read it (`scripts/mistakes.ts`), 2 degrees past chest up:
-22 are told it; the other 4 (`squat_normal_2` at 1.2 and 3.0 s, the chair squat at 4.5 s, the plate goblet squat at 1.5 s) are
-silent, since a trunk turned that far forward about the hips folds their hips far past their knees and "hips and knees together"
-reads a hinge (each drawn 12 degrees further: another movement by that rule). 2 degrees short of it, 25 count with the lean marked,
-and the plate goblet squat's first is already a hinge, silent. Facing the phone, the chest drawn 40 degrees forward, nobody is told
-(the picture cannot see a lean from the front). **Each rep's score** (`repScore`): of the checked mistakes the camera could see in a
+reached, in a set that has already counted a rep of the movement, is **refused**: not counted, told the words, its form check that
+mistake made; but only when the form judge, reading the picture as the mistake is read (a lean side on), finds it past the rule's
+own line too. Before the set has counted a rep, facing the phone, half turned, with any other rule broken or anything unseen, it
+says nothing, as another movement does (round one: under the floor view, shown and not held, a kettlebell swing's first dip, half
+turned at 0.56, broke "chest up" alone and was told it; every other movement counts 0, so it can never be told now). *Measured:* as
+filmed, no rep of the 100 videos is told it; nor under any of the 18 replays, held or shown, any other movement's dip (73 videos),
+nor under the 14 held replays any good-form squat set, with every person's numbers and with their own left out. The lean drawn onto
+the side-on squat reps that read it (`scripts/mistakes.ts`), 2 degrees past chest up on every rep but each set's first (15 reps of
+11 sets): 13 are told it; the other 2 (`squat_normal_2` at 3.0 s, the chair squat at 4.5 s) are silent, since a trunk turned that far
+forward about the hips folds their hips far past their knees and "hips and knees together" reads a hinge (each drawn 12 degrees
+further: another movement by that rule); each set's first rep drawn 8 degrees past it is not counted and says nothing. 2 degrees
+short of it, on all 26 reps, 25 count with the lean marked, and the plate goblet squat's first is already a hinge, silent. Facing
+the phone, the chest drawn 40 degrees forward on every rep but the first, nobody is told (the picture cannot see a lean from the
+front). **Each rep's score** (`repScore`): of the checked mistakes the camera could see in a
 counted rep, the share that were fine, out of 100; one it could not see counts neither way, and a rep in which it saw none has no
 score (side on the squat is scored on the lean, facing the phone on the knees). **The set's summary** (`SetRecord`, given every frame
 the matcher returns): §2.4's fields in the server's own shape (`engineSetSummarySchema`): the reps counted; each scored rep's score
 and their mean, null with none; each mistake made in a counted rep or in a rep refused for it; the time from the first picture to
 the last, and the time watched (each gap between pictures counted up to 0.5 s, the matcher's `lost`, after a picture that read the
-person); a counted rep's own time, from half way down to back up, the mean; the count rules' readings, the mean; side on or from the
-front by the middle of the reps' turns at the bottom; the movement engine's version, 2.0.0, and the camera file's own `version`. A
+person); a counted rep's own time, from half way down to back up, the mean; the count rules' readings, the mean; "side" when side on
+by the middle of the reps' turns at the bottom, else "front", half turned included (§2.4 has no third way); the movement engine's
+version, 2.0.0, and the camera file's own `version`, raised whenever it or its movement's file changes (a test pins both files' hash
+beside it). A
 clock that went back is a new set, as it is to the matcher. **The two marks** a member reads beside a mistake (Kd, 2026-11-23;
 `mistakeMark`): "Checked by the camera" (checked, or left to the counting) and "Not checked by the camera" (cannot see, or not checked
 yet). **The measuring run now reads with the movement's own break** (`breakOf`: the squat's 202 ms, which hides no 10 cm jump, where

@@ -87,7 +87,9 @@ export class SetRecord {
    *   - `tempoMsAvg`: a counted rep's own time, from passing half its depth on the way down to back up (the movement's
    *     "time"), the mean; `romStats`: each of the movement's count rules' readings, the mean over the counted reps;
    *   - `view`: where the body stood at the bottom of the counted reps, the middle of their turns: "side" when side on
-   *     (form.ts `SIDE_ON`), "front" otherwise, "unknown" when not seen;
+   *     (form.ts `SIDE_ON`), "front" when not side on, half turned included (§2.4's view has no third way, and a turn
+   *     cannot be told from facing the phone: from the front 0.61 to 1.00 of the hips show, half turned 0.19 to 0.93),
+   *     "unknown" when not seen;
    *   - `engineVersion` this engine's, `definitionVersion` the exercise file's own.
    */
   summary(): EngineSetSummary {

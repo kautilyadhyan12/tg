@@ -61,18 +61,21 @@ function run(change?: Change, fast = false) {
 }
 
 /** The same rep's judged reps, whole; with `exercise`, its mistakes judged too. Every frame is also given to a set's
- *  record (`SetRecord`), returned beside them. */
-function repsOf(change?: Change, fast = false, exercise: ExerciseCamera | null = null) {
-  return recorded(change, fast, exercise).reps;
+ *  record (`SetRecord`), returned beside them. `two`: the same rep again 4 s later (`SECOND`), the set 9 s long. */
+function repsOf(change?: Change, fast = false, exercise: ExerciseCamera | null = null, two = false) {
+  return recorded(change, fast, exercise, two).reps;
 }
 
-function recorded(change?: Change, fast = false, exercise: ExerciseCamera | null = null) {
+/** When a set of two reps' second rep begins its moment of standing, ms. */
+const SECOND = 4000;
+
+function recorded(change?: Change, fast = false, exercise: ExerciseCamera | null = null, two = false) {
   const m = new MovementMatcher(SQUAT, MATCH_LIMITS, exercise);
   const record = new SetRecord(exercise ?? EXERCISE, SQUAT, 1);
   const reps = [];
-  for (let n = 0; n * (1000 / 30) <= 5000; n++) {
+  for (let n = 0; n * (1000 / 30) <= (two ? 9000 : 5000); n++) {
     const t = Math.round((n * 1000 * 10) / 30) / 10;
-    const p = depthAt(t, fast);
+    const p = two && t > SECOND ? depthAt(t - SECOND, fast) : depthAt(t, fast);
     const b: Body = {
       hips: 1.15 - 0.45 * p,
       knee: 175 - 85 * p,
@@ -224,15 +227,29 @@ describe("each rep not counted says why in the movement's own words, and what wa
 // up." when it is a squat in every other way; never another movement's dip. Every class of case, the squat's camera file
 // given: the worst thing is the word said where it does not belong, so most cases here are the silent ones.
 describe("a squat whose chest leans past chest up is told to keep it up, and nothing else ever is", () => {
+  // Each case is the second rep of a set whose first rep was a proper squat, counted: the words are said only once the set
+  // has counted a rep of the squat (round one: a kettlebell swing's first dip under the floor view).
+  const second = (change: Change): Change => (t, p, b) => {
+    if (t > SECOND) change(t - SECOND, p, b);
+  };
   const leanTo = (degrees: number): Change => (_t, p, b) => (b.trunk = 3 + (degrees - 3) * p);
   const past = bound("chest up") + 6;
   const both = (...changes: Change[]): Change => (t, p, b) => {
     for (const c of changes) c(t, p, b);
   };
-  const said = (change: Change, exercise: ExerciseCamera | null = EXERCISE) => repsOf(change, false, exercise).map((r) => [r.verdict, r.rule, r.reason]);
+  const saidAll = (change: Change, exercise: ExerciseCamera | null = EXERCISE) => repsOf(second(change), false, exercise, true).map((r) => [r.verdict, r.rule, r.reason]);
+  const said = (change: Change, exercise: ExerciseCamera | null = EXERCISE) => {
+    const all = saidAll(change, exercise);
+    expect(all[0]).toEqual(["counted", null, null]);
+    return all.slice(1);
+  };
   const HIDE_FEET: Change = (t, _p, b) => {
     if (t > 1400 && t < 3700) for (const i of FEET) b.each.set(i, "hidden");
   };
+
+  it("the first rep of a set, leaning past chest up, is not counted and says nothing: no squat counted yet", () => {
+    expect(repsOf(leanTo(past), false, EXERCISE).map((r) => [r.verdict, r.rule, r.reason])).toEqual([["other", "chest up", null]]);
+  });
 
   it("the file's own line: the squat's chest up is 52 degrees, its lean forward 46", () => {
     expect([bound("chest up"), EXERCISE.mistakes.find((m) => m.id === "lean_forward")]).toMatchObject([52, { atMost: 46, refused: { rule: "chest up", words: "Keep your chest up." } }]);
@@ -255,7 +272,7 @@ describe("a squat whose chest leans past chest up is told to keep it up, and not
   });
 
   it("the told rep carries the mistake that refused it, made; the rep counted at 49 degrees is marked leaning too far forward", () => {
-    expect(repsOf(leanTo(past), false, EXERCISE).map((r) => r.form.map((f) => [f.mistake, f.status]))).toEqual([[["lean_forward", "made"]]]);
+    expect(repsOf(second(leanTo(past)), false, EXERCISE, true).map((r) => r.form.map((f) => [f.mistake, f.status]))[1]).toEqual([["lean_forward", "made"]]);
     expect(repsOf(leanTo(49), false, EXERCISE).map((r) => r.form.map((f) => [f.mistake, f.status]))).toEqual([[["lean_forward", "made"], ["knees_cave_in", "unseen"]]]);
   });
 
@@ -269,22 +286,36 @@ describe("the set's summary of the rep made by hand passes the server's own chec
 
   it("a good rep, side on: one rep scored 100, nothing made, the whole 5 s watched", () => {
     const s = summaryOf();
-    expect(s).toMatchObject({ exercise: "squat", setIndex: 1, reps: 1, repScores: [100], avgFormScore: 100, faultCounts: {}, view: "side", mode: "engine", engineVersion: "2.0.0", definitionVersion: 1 });
+    expect(s).toMatchObject({ exercise: "squat", setIndex: 1, reps: 1, repScores: [100], avgFormScore: 100, view: "side", mode: "engine", engineVersion: "2.0.0", definitionVersion: EXERCISE.version });
+    // A partial match takes {} for any faults: compared whole.
+    expect(s.faultCounts).toEqual({});
     expect([s.durationMs, s.watchedMs]).toEqual([5000, 5000]);
     expect(s.romStats).toEqual({ depth: 0.45, "knees bent": 90 });
   });
 
   it("leaning too far forward on its one rep: scored 0, the mistake counted once", () => {
-    expect(summaryOf((_t, p, b) => (b.trunk = 3 + 46 * p))).toMatchObject({ reps: 1, repScores: [0], avgFormScore: 0, faultCounts: { lean_forward: 1 } });
+    const s = summaryOf((_t, p, b) => (b.trunk = 3 + 46 * p));
+    expect(s).toMatchObject({ reps: 1, repScores: [0], avgFormScore: 0 });
+    expect(s.faultCounts).toEqual({ lean_forward: 1 });
   });
 
-  it("refused for its chest: no rep and no score, yet the mistake counted", () => {
+  it("a good rep, then one refused for its chest: one rep, one score, and the mistake counted", () => {
+    const lean: Change = (t, p, b) => (b.trunk = t > SECOND ? 3 + (bound("chest up") + 3) * p : b.trunk);
+    const s = engineSetSummarySchema.parse(recorded(lean, false, EXERCISE, true).record.summary());
+    expect(s).toMatchObject({ reps: 1, repScores: [100], avgFormScore: 100, view: "side" });
+    expect(s.faultCounts).toEqual({ lean_forward: 1 });
+  });
+
+  it("the first rep refused for its chest, so only silent: no rep, no score and no mistake counted", () => {
     const s = summaryOf((_t, p, b) => (b.trunk = 3 + (bound("chest up") + 3) * p));
-    expect(s).toMatchObject({ reps: 0, repScores: [], avgFormScore: null, faultCounts: { lean_forward: 1 }, tempoMsAvg: null, romStats: null, view: "unknown" });
+    expect(s).toMatchObject({ reps: 0, repScores: [], avgFormScore: null, tempoMsAvg: null, romStats: null, view: "unknown" });
+    expect(s.faultCounts).toEqual({});
   });
 
   it("facing the phone, the camera seeing none of the mistakes: the rep counts and has no score, never a good one", () => {
-    expect(summaryOf((_t, _p, b) => (b.turn = 1))).toMatchObject({ reps: 1, repScores: [], avgFormScore: null, faultCounts: {}, view: "front" });
+    const s = summaryOf((_t, _p, b) => (b.turn = 1));
+    expect(s).toMatchObject({ reps: 1, repScores: [], avgFormScore: null, view: "front" });
+    expect(s.faultCounts).toEqual({});
   });
 
   it("the person lost from view for 0.47 s after the rep: that time is not watched", () => {

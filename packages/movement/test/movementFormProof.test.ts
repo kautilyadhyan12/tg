@@ -13,7 +13,7 @@ import { checkedOf } from "../src/index.js";
 import { fitForm, formRows } from "../scripts/formCheck.js";
 import { bendOf, drawnTo, kneesIn, leanForward, perRep, trunkOf, type DrawnRep } from "../scripts/mistakes.js";
 import { runOf } from "../scripts/measureCheck.js";
-import { LEAD_IN, proofVideos, readExercise, readMovement, runMovement } from "../scripts/movementCheck.js";
+import { LEAD_IN, proofVideos, readExercise, readMovement, replayTable, runMovement } from "../scripts/movementCheck.js";
 import { REPLAYS } from "../scripts/replays.js";
 
 const SQUAT = readMovement("squat");
@@ -51,28 +51,47 @@ describe("the camera file's lines are what form-check sets", () => {
 });
 
 // 52b-ii-b, Kd's ruling of 2026-11-23: past the movement's "chest up" a squat is not counted, and is told "Keep your chest
-// up." when it is a squat in every other way. Kd's folder holds no squat done so, so the lean is drawn onto the real
-// side-on squats, as the lean's own line was.
+// up." when it is a squat in every other way, in a set that has already counted a squat (round one). Kd's folder holds no
+// squat done so, so the lean is drawn onto the real side-on squats, as the lean's own line was: past the line, on every rep
+// but each set's first, which stays as filmed and counts.
 describe("the chest drawn past chest up onto real squats: told to keep it up, or, where it reads as a hinge, silent", () => {
   const chest = SQUAT.rules.find((r) => r.name === "chest up")?.atMost ?? Number.NaN;
   const at = (r: { label: string; start: number }): string => `${r.label} ${(r.start / 1000).toFixed(1)} s`;
-  const past = GOOD.flatMap((v) => drawnTo(SQUAT, EXERCISE, v.video, "lean_forward", leanForward, chest + 2, 70, 0.5, "refused").map((r) => ({ label: v.video.label, ...r })));
+  const past = GOOD.flatMap((v) => drawnTo(SQUAT, EXERCISE, v.video, "lean_forward", leanForward, chest + 2, 70, 0.5, "refused", 1).map((r) => ({ label: v.video.label, ...r })));
   const short = GOOD.flatMap((v) => drawnTo(SQUAT, EXERCISE, v.video, "lean_forward", leanForward, chest - 2, 70, 0.5).map((r) => ({ label: v.video.label, ...r })));
+  const counted = (v: (typeof GOOD)[number]) =>
+    runMovement(SQUAT, v.video, EXERCISE)
+      .reps.filter((r) => r.verdict === "counted")
+      .map((r) => ({ start: r.start - LEAD_IN, end: r.end - LEAD_IN, lean: r.form.find((f) => f.mistake === "lean_forward")?.reading ?? null }));
 
-  it("every side-on rep that reads the lean is drawn, both ways", () => {
+  it("every side-on rep that reads the lean is drawn: past the line, each set's first left as filmed; short of it, all", () => {
     expect(chest).toBe(52);
-    expect([past.length, short.length]).toEqual([26, 26]);
+    expect([past.length, short.length]).toEqual([15, 26]);
   });
 
-  it("2 degrees past chest up: 22 reps not counted, each told \"Keep your chest up.\", the lean marked made", () => {
+  it("2 degrees past chest up: 13 reps not counted, each told \"Keep your chest up.\", the lean marked made", () => {
     const told = past.filter((r) => r.verdict === "refused");
-    expect(told.length).toBe(22);
+    expect(told.length).toBe(13);
     expect(told.filter((r) => r.rule !== "chest up" || r.reason !== "Keep your chest up." || r.made.join() !== "lean_forward" || r.reading === null || r.reading <= chest).map(at)).toEqual([]);
   });
 
-  it("the other four: drawn that far, their hips fold far past their knees and read as a hinge, so they are silent; never counted without the lean marked", () => {
+  it("each set's first rep drawn past chest up is not counted and says nothing: no squat counted yet in that set", () => {
+    const sets = GOOD.filter((v) => past.some((r) => r.label === v.video.label) || short.some((r) => r.label === v.video.label));
+    expect(sets.length).toBe(11);
+    const wrong = sets.flatMap((v) => {
+      const first = counted(v)[0];
+      if (first === undefined) return [`${v.video.label}: no rep`];
+      // Drawn 8 degrees past chest up on the picture, from where it was filmed.
+      const frames = leanForward(perRep([{ ...first, size: chest + 8 - (first.lean ?? 0) }]))(v.video.frames);
+      const own = runMovement(SQUAT, { ...v.video, frames }, EXERCISE).reps.find((r) => r.start - LEAD_IN < first.end && first.start < r.end - LEAD_IN);
+      return own?.verdict === "other" && own.reason === null && (own.readings["chest up"] ?? 0) > chest ? [] : [`${v.video.label}: ${own?.verdict ?? "no rep"} ${own?.reason ?? ""}`];
+    });
+    expect(wrong).toEqual([]);
+  });
+
+  it("the other two: drawn that far, their hips fold far past their knees and read as a hinge, so they are silent; never counted without the lean marked", () => {
     const rest = past.filter((r) => r.verdict !== "refused");
-    expect(rest.map(at)).toEqual(["squat_normal_2 1.2 s", "squat_normal_2 3.0 s", "chair_squat_reference 4.5 s", "fresh_goblet_squat_plate 1.5 s"]);
+    expect(rest.map(at)).toEqual(["squat_normal_2 3.0 s", "chair_squat_reference 4.5 s"]);
     expect(rest.filter((r) => r.reason !== null || (r.verdict === "counted" && !r.made.includes("lean_forward")) || (r.verdict !== "counted" && r.verdict !== "other")).map(at)).toEqual([]);
     // Each drawn 12 degrees further: another movement by "hips and knees together", which says nothing.
     for (const label of [...new Set(rest.map((r) => r.label))]) {
@@ -95,11 +114,26 @@ describe("the chest drawn past chest up onto real squats: told to keep it up, or
     expect(short.filter((r) => r.verdict === "counted" && r.made.join() !== "lean_forward").map(at)).toEqual([]);
   });
 
-  it("facing the phone, the chest drawn 40 degrees forward: the picture cannot see a lean from the front, and nobody is told", () => {
-    const front = GOOD.filter((v) => v.entry.view === "front");
+  it("facing the phone, the chest drawn 40 degrees forward on every rep but the first: the picture cannot see a lean from the front, and nobody is told", () => {
+    const front = GOOD.filter((v) => v.entry.view === "front" && (v.entry.reps ?? 0) >= 2);
     expect(front.length).toBeGreaterThanOrEqual(4);
-    const told = front.flatMap((v) => runMovement(SQUAT, { ...v.video, frames: leanForward(() => 40)(v.video.frames) }, EXERCISE).reps.filter((r) => r.verdict === "refused").map((r) => `${v.video.label} ${String(r.start)}`));
+    const told = front.flatMap((v) => {
+      const later = counted(v).slice(1);
+      expect([v.video.label, later.length > 0]).toEqual([v.video.label, true]);
+      const reps = runMovement(SQUAT, { ...v.video, frames: leanForward(perRep(later.map((r) => ({ ...r, size: 40 }))))(v.video.frames) }, EXERCISE).reps;
+      expect([v.video.label, reps.filter((r) => r.verdict === "counted").length > 0]).toEqual([v.video.label, true]);
+      return reps.filter((r) => r.verdict === "refused").map((r) => `${v.video.label} ${String(r.start)}`);
+    });
     expect(told).toEqual([]);
+  });
+
+  it("round one's worst case: every other movement under the replays shown and not held (a phone on the floor among them) is never told it either", () => {
+    const shown = REPLAYS.filter((r) => !r.hold);
+    expect(shown.map((r) => r.name)).toContain("on the floor");
+    const rows = replayTable(SQUAT, VIDEOS.filter((v) => v.entry.movement === null), shown, EXERCISE);
+    expect(rows.length).toBeGreaterThan(250);
+    // The kettlebell swing's first dip, under the floor view, broke "chest up" alone and was told it before the set counted.
+    expect(rows.flatMap((r) => r.reps.filter((x) => x.verdict === "refused").map((x) => `${r.replay.name}: ${r.label} ${((x.start - LEAD_IN) / 1000).toFixed(2)} s`))).toEqual([]);
   });
 });
 

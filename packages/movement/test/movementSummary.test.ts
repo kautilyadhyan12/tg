@@ -2,10 +2,14 @@
 // ships with a table over every class of case (CLAUDE.md §4): a mistake the camera could not see is never good form, and
 // a rep in which it saw nothing has no score. Then the record's own clock, and real videos' summaries through the server's
 // own check, the one the workout save uses.
+import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { engineSetSummarySchema, setSummarySchema } from "@app/shared";
-import { MATCH_LIMITS, SetRecord, WATCHED_GAP, repScore, type FormStatus, type MatchFrame, type RepResult } from "../src/index.js";
-import { proofVideos, readExercise, readMovement, runMovement } from "../scripts/movementCheck.js";
+import { MATCH_LIMITS, MovementMatcher, SetRecord, WATCHED_GAP, repScore, type FormStatus, type MatchFrame, type RepResult } from "../src/index.js";
+import { runOf } from "../scripts/measureCheck.js";
+import { proofVideos, readExercise, readMovement, withLeadIn } from "../scripts/movementCheck.js";
 
 const SQUAT = readMovement("squat");
 const EXERCISE = readExercise("squat", SQUAT);
@@ -75,7 +79,8 @@ describe("the set's record", () => {
     r.add(frame(2000));
     r.add(frame(500));
     r.add(frame(600));
-    expect(r.summary()).toMatchObject({ durationMs: 100, reps: 0, repScores: [], faultCounts: {} });
+    expect(r.summary()).toMatchObject({ durationMs: 100, reps: 0, repScores: [] });
+    expect(r.summary().faultCounts).toEqual({});
   });
 
   it("the reps' scores, faults and pace: a mistake counted in a counted rep and in a refused one, never in a rep only short", () => {
@@ -86,7 +91,8 @@ describe("the set's record", () => {
     r.add(frame(3, true, rep("refused", ["made"])));
     r.add(frame(4, true, rep("counted", ["unseen", "unseen"], 5000, 5800)));
     const s = engineSetSummarySchema.parse(r.summary());
-    expect(s).toMatchObject({ setIndex: 2, reps: 3, repScores: [100, 50], avgFormScore: 75, faultCounts: { m0: 2 }, tempoMsAvg: 1000 });
+    expect(s).toMatchObject({ setIndex: 2, reps: 3, repScores: [100, 50], avgFormScore: 75, tempoMsAvg: 1000 });
+    expect(s.faultCounts).toEqual({ m0: 2 });
   });
 
   it("is refused a set number under 1, or an exercise of another movement", () => {
@@ -95,29 +101,60 @@ describe("the set's record", () => {
   });
 });
 
-describe("real videos' summaries pass the server's own check", () => {
+describe("the camera file's version, which a saved set names, is raised whenever its numbers change", () => {
+  it("both squat files, the camera file and its movement, are what version 1 was made from: change either and raise it here", () => {
+    // Round one: the movement's numbers moved in this very job and nothing would have asked for the version to change.
+    const text = (path: string): string => readFileSync(join(import.meta.dirname, "..", path), "utf8").replace(/\r\n/g, "\n");
+    const made = createHash("sha256").update(text("exercises/squat.json")).update(text("movements/squat.json")).digest("hex");
+    expect([EXERCISE.version, made]).toEqual([1, "09275ad83d9334076d8c4289381e66669123d49142cd850bc0df3801d7705e9d"]);
+  });
+});
+
+describe("real videos' summaries, every frame the matcher returns, pass the server's own check", () => {
   const videos = proofVideos().filter((v) => ["squat_reference", "prisoner_squat_1", "fresh_deadlift_barbell_0"].includes(v.video.label));
+  /** A video run as the phone will run it: every frame the matcher returns, and its finish, given to the set's record. */
+  const recordOf = (v: (typeof videos)[number]) => {
+    const { steady, measured } = runOf(withLeadIn(v.video));
+    const matcher = new MovementMatcher(SQUAT, MATCH_LIMITS, EXERCISE);
+    const record = new SetRecord(EXERCISE, SQUAT, 1);
+    let count = 0;
+    const times: number[] = [];
+    steady.forEach((body, i) => {
+      const m = measured[i];
+      if (m === undefined) return;
+      const f = matcher.next(body, m);
+      count = f.count;
+      times.push(f.t);
+      record.add(f);
+    });
+    const last = matcher.finish();
+    if (last !== null) {
+      count = last.count;
+      record.add(last);
+    }
+    return { record, count, first: times[0] ?? 0, end: times[times.length - 1] ?? 0 };
+  };
 
   it.each(videos.map((v) => [v.video.label, v] as const))("%s", (_label, v) => {
-    const run = runMovement(SQUAT, v.video, EXERCISE);
-    const r = new SetRecord(EXERCISE, SQUAT, 1);
-    for (const x of run.reps) r.add(frame(x.end, true, x));
-    const s = setSummarySchema.parse(r.summary());
+    const { record, count, first, end } = recordOf(v);
+    const s = setSummarySchema.parse(record.summary());
     if (s.mode === "log_only") throw new Error("an engine set");
-    expect(s.reps).toBe(run.count);
+    expect(s.reps).toBe(count);
     expect(s.reps).toBe(v.entry.movement === "squat" ? v.entry.reps : 0);
     // Good-form videos: every scored rep 100, and nothing made.
     expect(s.repScores.every((x) => x === 100)).toBe(true);
     expect(s.faultCounts).toEqual({});
+    // The set's time is the stream's own, and the camera read the person nearly all of it.
+    expect(s.durationMs).toBe(Math.round(end - first));
+    expect(s.watchedMs ?? 0).toBeLessThanOrEqual(s.durationMs);
+    expect(s.watchedMs ?? 0).toBeGreaterThan(0.9 * s.durationMs);
   });
 
   it("side on, every counted rep scored on the lean; facing the phone, on the knees", () => {
     const by = (label: string) => {
       const v = videos.find((x) => x.video.label === label);
       if (v === undefined) throw new Error(`no ${label}`);
-      const r = new SetRecord(EXERCISE, SQUAT, 1);
-      for (const x of runMovement(SQUAT, v.video, EXERCISE).reps) r.add(frame(x.end, true, x));
-      return r.summary();
+      return recordOf(v).record.summary();
     };
     expect(by("squat_reference")).toMatchObject({ reps: 3, repScores: [100, 100, 100], view: "side" });
     expect(by("prisoner_squat_1")).toMatchObject({ view: "front" });

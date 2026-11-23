@@ -144,7 +144,8 @@ export type Verdict =
   /** the camera could not see what a rule needs: nothing decided */
   | "unseen"
   /** the movement in every way but one rule, which an exercise's mistake names as refusing it once the mistake has gone
-   *  that far (the squat's chest leaning past "chest up"): not counted, with the mistake's words (Kd, 2026-11-23) */
+   *  that far (the squat's chest leaning past "chest up"), in a set that has counted a rep already: not counted, with the
+   *  mistake's words (Kd, 2026-11-23) */
   | "refused";
 
 export interface RepResult {
@@ -1017,7 +1018,8 @@ export class MovementMatcher {
   /**
    * A rep read as another movement by one rule alone, that a checked mistake names as refusing it once the mistake has
    * gone that far (`refused`: the squat's chest leaning past "chest up"): told the mistake's words, not counted, but only
-   * when the rep is in every other way the movement (every other rule seen and held, every count rule reached) and the
+   * in a set that has already counted a rep of the movement, when the rep is in every other way the movement (every other
+   * rule seen and held, every count rule reached) and the
    * form judge, reading the picture the way the mistake is read (a lean side on only), finds it past that rule's own
    * line too. Advice is strict (§12.1): from the front, or with any other rule broken or unseen, it says nothing, as
    * another movement does. Null when it is not such a rep.
@@ -1027,6 +1029,9 @@ export class MovementMatcher {
       const v = readings[r.name] ?? null;
       return v !== null && ((r.atLeast !== undefined && v < r.atLeast) || (r.atMost !== undefined && v > r.atMost));
     });
+    // Only once the set has counted a rep of this movement: a dip before that may be another movement's (round one: under the
+    // floor view a kettlebell swing's first dip, half turned, broke "chest up" alone), and every other movement counts 0.
+    if (this.count === 0) return null;
     const rule = broken[0];
     if (rule === undefined || broken.length !== 1 || rule.role !== "match" || this.movement.rules.some(unseen)) return null;
     const k = this.mistakes.findIndex((m) => m.refused?.rule === rule.name);

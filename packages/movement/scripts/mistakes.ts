@@ -186,7 +186,9 @@ const overlap = (a: { start: number; end: number }, b: { start: number; end: num
  * size the last two tries point to, kept inside what is known to fall short and what is known to pass (halved when it
  * would leave it), until the reading lies within `near` of the target. A rep the judge no longer sees, or no longer
  * counts, is taken as drawn too far; with `want` "refused", a rep refused for the mistake (the chest past "chest up") is
- * read as a counted one is, and the search aims at it. The drawn reps are paired with the filmed ones by when they were.
+ * read as a counted one is, and the search aims at it. `drawFrom`: the counted reps before this one are left as filmed
+ * (a refused rep is told its words only once the set has counted one). The drawn reps are paired with the filmed ones by
+ * when they were.
  */
 export function drawnTo(
   movement: Movement,
@@ -198,14 +200,18 @@ export function drawnTo(
   most: number,
   near: number,
   want: "counted" | "refused" = "counted",
+  drawFrom = 0,
 ): DrawnRep[] {
   const readOf = (r: { form: readonly { mistake: string; reading: number | null }[] }): number | null => r.form.find((f) => f.mistake === id)?.reading ?? null;
   const mistake = exercise.mistakes.find((m) => m.id === id);
   const up = mistake?.camera === "checked" && mistake.atMost !== undefined;
-  const filmed = runMovement(movement, video, exercise).reps.flatMap((r) => {
-    const v = readOf(r);
-    return r.verdict !== "counted" || v === null ? [] : [{ start: r.start - LEAD_IN, end: r.end - LEAD_IN, filmed: v }];
-  });
+  const filmed = runMovement(movement, video, exercise)
+    .reps.filter((r) => r.verdict === "counted")
+    .slice(drawFrom)
+    .flatMap((r) => {
+      const v = readOf(r);
+      return v === null ? [] : [{ start: r.start - LEAD_IN, end: r.end - LEAD_IN, filmed: v }];
+    });
   // How far past the target a reading is, the way the mistake's line points: below 0 short of it.
   const past = (v: number): number => (up ? v - target : target - v);
   const low = filmed.map((r) => ({ size: 0, f: past(r.filmed) }));

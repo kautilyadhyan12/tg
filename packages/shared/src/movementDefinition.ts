@@ -196,9 +196,10 @@ export const checkedMistakeSchema = z
      *  camera's own room, nor nearer than any proper rep of the videos (movement-check sets it). */
     standard: z.object({ at: z.number(), source: from }).strict().optional(),
     /** The movement's own "match" rule that refuses a rep this mistake has gone far past (the squat's "chest up": a lean
-     *  past it is read as another movement). A rep that breaks that rule alone, in every other way the movement, is not
-     *  counted and is told `words`, but only when the picture, read the way this mistake is read, shows it past that
-     *  rule's own line too; otherwise it says nothing, as another movement does (Kd, 2026-11-23). */
+     *  past it is read as another movement). A rep that breaks that rule alone, in every other way the movement, in a set
+     *  that has already counted a rep of it, is not counted and is told `words`, but only when the picture, read the way
+     *  this mistake is read, shows it past that rule's own line too; otherwise it says nothing, as another movement does
+     *  (Kd, 2026-11-23). */
     refused: z.object({ rule: z.string().min(1).max(60), words }).strict().optional(),
     from,
   })
@@ -218,7 +219,8 @@ export const exerciseCameraSchema = z
     format: z.literal(EXERCISE_CAMERA_FORMAT),
     /** The exercise's id word, its Library file's own. */
     id: idWord,
-    /** This file's own version, raised whenever it changes: a set's summary names it (`definitionVersion`, spec §2.4). */
+    /** This file's own version, raised whenever it or its movement's file changes (a test pins both files' hash beside
+     *  it): a set's summary names it (`definitionVersion`, spec §2.4), so sets counted by other numbers are told apart. */
     version: z.number().int().positive().max(2_147_483_647),
     /** The movement it uses (`packages/movement/movements/<movement>.json`). */
     movement: z.string().min(1).max(60),
