@@ -1,6 +1,7 @@
 {
   "format": 1,
   "id": "squat",
+  "version": 1,
   "movement": "squat",
   "research": "Kd's research file, \"Normal Squat (Bodyweight Squat) Guide\" (his folder, squat normal), its eleven common mistakes; and the Library's source for the squat, ACE's Exercise Library: Bodyweight Squat.",
   "mistakes": [
@@ -22,6 +23,10 @@
       "standard": {
         "at": 45,
         "source": "Research file, key angles: torso lean moderate, about 30 to 45 degrees forward from vertical."
+      },
+      "refused": {
+        "rule": "chest up",
+        "words": "Keep your chest up."
       },
       "from": "Set by form-check: the further out of the form standard, 45 (its source beside it), and the furthest proper rep that reads it, as filmed and as each replay that sets numbers (40.06; 14 reps as filmed, 3 people), plus the camera's own room: the same rep's change from as filmed to each such replay, in 99 reps of 100 (104 reps): 0.41; rounded outward."
     },

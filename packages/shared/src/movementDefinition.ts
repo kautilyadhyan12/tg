@@ -195,6 +195,11 @@ export const checkedMistakeSchema = z
     /** The form standard's own line, where a proper source gives one: the line is never nearer than it, moved by the
      *  camera's own room, nor nearer than any proper rep of the videos (movement-check sets it). */
     standard: z.object({ at: z.number(), source: from }).strict().optional(),
+    /** The movement's own "match" rule that refuses a rep this mistake has gone far past (the squat's "chest up": a lean
+     *  past it is read as another movement). A rep that breaks that rule alone, in every other way the movement, is not
+     *  counted and is told `words`, but only when the picture, read the way this mistake is read, shows it past that
+     *  rule's own line too; otherwise it says nothing, as another movement does (Kd, 2026-11-23). */
+    refused: z.object({ rule: z.string().min(1).max(60), words }).strict().optional(),
     from,
   })
   .strict()
@@ -213,6 +218,8 @@ export const exerciseCameraSchema = z
     format: z.literal(EXERCISE_CAMERA_FORMAT),
     /** The exercise's id word, its Library file's own. */
     id: idWord,
+    /** This file's own version, raised whenever it changes: a set's summary names it (`definitionVersion`, spec §2.4). */
+    version: z.number().int().positive().max(2_147_483_647),
     /** The movement it uses (`packages/movement/movements/<movement>.json`). */
     movement: z.string().min(1).max(60),
     /** Where its form comes from: the research file, named. */
@@ -226,3 +233,20 @@ export type MistakeRead = z.infer<typeof mistakeReadSchema>;
 export type CheckedMistake = z.infer<typeof checkedMistakeSchema>;
 export type ExerciseMistake = z.infer<typeof exerciseMistakeSchema>;
 export type ExerciseCamera = z.infer<typeof exerciseCameraSchema>;
+
+/** The two marks an exercise's page shows beside each common mistake (Kd, 2026-11-23): one the camera checks, or one the
+ *  camera's counting refuses (a quarter rep is not counted), is checked by the camera; one it cannot see, or does not
+ *  check yet, is not. */
+export const MISTAKE_MARKS = ["Checked by the camera", "Not checked by the camera"] as const;
+export type MistakeMark = (typeof MISTAKE_MARKS)[number];
+
+export function mistakeMark(mistake: ExerciseMistake): MistakeMark {
+  switch (mistake.camera) {
+    case "checked":
+    case "counting":
+      return "Checked by the camera";
+    case "cannot see":
+    case "not checked":
+      return "Not checked by the camera";
+  }
+}

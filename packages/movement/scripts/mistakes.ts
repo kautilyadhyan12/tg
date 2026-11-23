@@ -170,8 +170,11 @@ export interface DrawnRep {
   readonly target: number;
   readonly size: number;
   readonly reading: number | null;
-  /** The drawn rep's verdict and the mistakes marked made in it; null verdict when no drawn rep overlaps it. */
+  /** The drawn rep's verdict, the rule that decided it, its words for the screen, and the mistakes marked made in it;
+   *  null verdict when no drawn rep overlaps it. */
   readonly verdict: string | null;
+  readonly rule: string | null;
+  readonly reason: string | null;
   readonly made: readonly string[];
 }
 
@@ -182,7 +185,8 @@ const overlap = (a: { start: number; end: number }, b: { start: number; end: num
  * frames for a size per rep (`perRep`). Each rep's size is searched between 0 and `most`, in up to eight tries, each the
  * size the last two tries point to, kept inside what is known to fall short and what is known to pass (halved when it
  * would leave it), until the reading lies within `near` of the target. A rep the judge no longer sees, or no longer
- * counts, is taken as drawn too far. The drawn reps are paired with the filmed ones by when they were.
+ * counts, is taken as drawn too far; with `want` "refused", a rep refused for the mistake (the chest past "chest up") is
+ * read as a counted one is, and the search aims at it. The drawn reps are paired with the filmed ones by when they were.
  */
 export function drawnTo(
   movement: Movement,
@@ -193,6 +197,7 @@ export function drawnTo(
   target: number,
   most: number,
   near: number,
+  want: "counted" | "refused" = "counted",
 ): DrawnRep[] {
   const readOf = (r: { form: readonly { mistake: string; reading: number | null }[] }): number | null => r.form.find((f) => f.mistake === id)?.reading ?? null;
   const mistake = exercise.mistakes.find((m) => m.id === id);
@@ -218,17 +223,21 @@ export function drawnTo(
         size: sizes[k] ?? 0,
         reading: own === undefined ? null : readOf(own),
         verdict: own?.verdict ?? null,
+        rule: own?.rule ?? null,
+        reason: own?.reason ?? null,
         made: own === undefined ? [] : own.form.filter((f) => f.status === "made").map((f) => f.mistake),
       };
     });
-    if (out.every((r) => r.verdict === "counted" && r.reading !== null && Math.abs(r.reading - target) <= near)) break;
+    const judged = (r: DrawnRep): boolean => (r.verdict === "counted" || r.verdict === want) && r.reading !== null;
+    const landed = (r: DrawnRep): boolean => r.verdict === want && r.reading !== null && Math.abs(r.reading - target) <= near;
+    if (out.every(landed)) break;
     sizes = out.map((r, k) => {
       const size = sizes[k] ?? 0;
       const lo = low[k];
       const hi = high[k];
       if (lo === undefined || hi === undefined) return size;
-      if (r.verdict === "counted" && r.reading !== null && Math.abs(r.reading - target) <= near) return size;
-      const f = r.verdict === "counted" && r.reading !== null ? past(r.reading) : Number.POSITIVE_INFINITY;
+      if (landed(r)) return size;
+      const f = judged(r) && r.reading !== null ? past(r.reading) : Number.POSITIVE_INFINITY;
       if (f < 0) low[k] = { size, f };
       else high[k] = { size, f };
       const a = low[k] ?? lo;
