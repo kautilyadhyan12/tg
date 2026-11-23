@@ -274,6 +274,20 @@ describe('what the bills show', () => {
 });
 
 describe('a membership that is over', () => {
+  it("a box opened from a payment's ⋯ gives the keys back to that ⋯ when it closes (V2b-ii)", async () => {
+    const TERM = { ...GOLD, id: '22222222-2222-4222-8222-000000000003', name: 'One week', kind: 'one_time', termCount: 1, termUnit: 'week', priceMinor: 2000 };
+    const owing = held(3, TERM, '2026-10-01', false);
+    const bill = { ...owing.billing.bills[0], paidMinor: 500, payments: [{ id: '66666666-6666-4666-8666-000000000031', amountMinor: 500, method: 'cash', paidOn: '2026-10-19', by: 'Sam Owner', refunds: [], voidedRefunds: [], refundableMinor: 0, receiptNumber: 31 }] };
+    const part = { ...owing, billing: { ...owing.billing, bills: [bill], pay: { ...owing.billing.pay, leftMinor: 1500 }, cancel: null, undo: { kind: 'payment', paymentId: bill.payments[0].id } } };
+    orgService.getHeldMemberships.mockResolvedValue(answer([part], { types: [GOLD, PACK, TERM] }));
+    render(draw());
+    const [row] = await rowsSoon();
+    fromMenu(row, 'More for the payment of £5.00', 'Void payment');
+    fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Keep it' }));
+    expect(screen.queryByRole('alertdialog')).toBeNull();
+    await waitFor(() => expect(document.activeElement?.getAttribute('aria-label')).toBe('More for the payment of £5.00'));
+  });
+
   it('a payment recorded on it by mistake can be voided from its own ⋯, beside Record payment, and once nothing is owed', async () => {
     // A fixed term that ended unpaid: its one bill is still owed.
     const TERM = { ...GOLD, id: '22222222-2222-4222-8222-000000000003', name: 'One week', kind: 'one_time', termCount: 1, termUnit: 'week', priceMinor: 2000 };

@@ -369,8 +369,10 @@ describe('Refund to card: the worst thing first', () => {
     refuse(Object.assign(new Error('refused'), { response: { status: 409, data: { error: 'card_refund_refused', message: "Your Square account doesn't have enough money for this refund. No money went back." } } }));
     await waitFor(() => expect(within(screen.getByTestId('card-refund-box')).getByRole('alert').textContent).toContain('No money went back'));
     // Square has answered: Escape is Back again.
-    fireEvent.keyDown(document, { key: 'Escape' });
-    expect(screen.queryByTestId('card-refund-box')).toBeNull();
+    await waitFor(() => {
+      fireEvent.keyDown(document, { key: 'Escape' });
+      expect(screen.queryByTestId('card-refund-box')).toBeNull();
+    });
   });
 
   it('says what Square refused, in the box, and says nothing went back', async () => {

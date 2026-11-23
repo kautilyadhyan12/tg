@@ -37,14 +37,15 @@ function useLookHost() {
 
 /** Keys while a box is open: focus moves into it, Tab stays inside it, Escape asks to close
  *  it, and focus goes back to what had it when the box closes. */
-function useBoxKeys(boxRef, onEscape, ready) {
+/** `opener`: what had the keys when the box was first drawn, where that was read before the page changed under it. */
+function useBoxKeys(boxRef, onEscape, ready, opener = null) {
   const escape = useRef(onEscape);
   useLayoutEffect(() => {
     escape.current = onEscape;
   });
   useEffect(() => {
     if (!ready) return undefined;
-    const before = document.activeElement;
+    const before = opener ?? document.activeElement;
     const box = boxRef.current;
     if (box !== null) {
       const first = box.querySelector('[data-autofocus]') ?? box.querySelector(FOCUSABLE);
@@ -78,9 +79,19 @@ function useBoxKeys(boxRef, onEscape, ready) {
     document.addEventListener('keydown', onKey, true);
     return () => {
       document.removeEventListener('keydown', onKey, true);
-      if (before instanceof HTMLElement && before.isConnected) before.focus();
+      if (!(before instanceof HTMLElement)) return;
+      if (before.isConnected) {
+        before.focus();
+        return;
+      }
+      // The button that opened it was drawn again while it was open (a ⋯ on a row): the keys go to the one by its name.
+      const name = before.getAttribute('aria-label');
+      if (name === null) return;
+      requestAnimationFrame(() => {
+        [...document.querySelectorAll('button[aria-label]')].find((el) => el.getAttribute('aria-label') === name)?.focus();
+      });
     };
-  }, [boxRef, ready]);
+  }, [boxRef, ready, opener]);
 }
 
 /** The page behind a panel or a question stays where it is while the box is open. */
@@ -288,7 +299,9 @@ function MiddleShell({ label, onClose, busy, error, testId, role, children }) {
     if (!busy) onClose();
   };
   const { ready, draw } = useLookHost();
-  useBoxKeys(boxRef, cancel, ready);
+  // What had the keys as the box is first drawn, before the page draws again under it: a ⋯ on a row is gone by then.
+  const [opener] = useState(() => document.activeElement);
+  useBoxKeys(boxRef, cancel, ready, opener);
   useStillPage();
   // The box is named by its question, the first `c-inbox-t` in it, read each time it is drawn; by `label` while it
   // has none (still reading), as a name given by aria-labelledby comes before aria-label.
@@ -306,9 +319,16 @@ function MiddleShell({ label, onClose, busy, error, testId, role, children }) {
   });
   // A question that turns into another (the bookings a cancel ends, the Terminal's wait) unmounts the button that had
   // the keys: they go to its Keep it or Back, or the box, never to the page behind.
+  const shown = useRef(false);
   useLayoutEffect(() => {
     const box = boxRef.current;
-    if (!ready || box === null || box.contains(document.activeElement)) return;
+    if (!ready || box === null) return;
+    // Not on its first draw: useBoxKeys has not yet noted the button that opened it, to give the keys back to.
+    if (!shown.current) {
+      shown.current = true;
+      return;
+    }
+    if (box.contains(document.activeElement)) return;
     (box.querySelector('[data-autofocus]') ?? box).focus();
   });
   return draw(

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useLayoutEffect, useState } from 'react';
 import { Loader2, RotateCcw } from 'lucide-react';
 import { CARD_REFUND_TERMINAL_WORDS, cardName, cardRefundEndedLine, cardRefundSentLine } from '@app/shared';
 import { errorCode, errorText, orgService } from '../../api/orgsApi';
@@ -56,7 +56,7 @@ export function RefundToCardBox({ gymId, readKey, read, press, currency, words: 
   // `onSending`: told while a press is on its way to Square (not while the Terminal waits, which has its own Back), and
   // told it is over when the box goes, so a box drawn around it is not closed by Escape mid-press.
   const sending = busy && waiting === null;
-  useEffect(() => {
+  useLayoutEffect(() => {
     onSending?.(sending);
   }, [sending, onSending]);
   useEffect(() => () => onSending?.(false), [onSending]);

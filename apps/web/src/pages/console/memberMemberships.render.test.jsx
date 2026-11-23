@@ -2603,6 +2603,18 @@ describe('V2b-ii: the money questions ask in the middle', () => {
     expect(screen.getByTestId('held-ask-freeze')).toBeTruthy();
   });
 
+  it('Back gives the keys back to the Freeze that opened the box', async () => {
+    orgService.getHeldMemberships.mockResolvedValue(two());
+    render(draw(ADA, 'Ada Lovelace'));
+    await screen.findByText('Silver Monthly');
+    const freeze = within(rowOf(SILVER_ID)).getByRole('button', { name: 'Freeze' });
+    freeze.focus();
+    fireEvent.click(freeze);
+    expect(document.activeElement.textContent).toBe('Back');
+    fireEvent.click(within(ask()).getByRole('button', { name: 'Back' }));
+    expect(document.activeElement).toBe(within(rowOf(SILVER_ID)).getByRole('button', { name: 'Freeze' }));
+  });
+
   it('a refusal is said inside the box, which stays open on the same membership; nothing is said behind it', async () => {
     orgService.getHeldMemberships.mockResolvedValue(two());
     orgService.changeHeldMembership.mockRejectedValueOnce(refusal(500, { error: 'internal', message: 'Something went wrong.' }));
