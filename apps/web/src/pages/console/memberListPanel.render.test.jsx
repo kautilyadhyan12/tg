@@ -671,7 +671,7 @@ describe('a row says what the person holds in the app (23a-i)', () => {
   const rowOf = async (name) => (await screen.findAllByTestId('list-row')).find((r) => r.textContent.includes(name));
 
   // 17i-ii: the same unpaid bill read Payment due on the list and Overdue on the person's page.
-  it('says Overdue in red where the server says the bill reads Overdue, Payment due in yellow before that', async () => {
+  it('says Overdue in a red tag where the server says the bill reads Overdue, Payment due in a gold one before that', async () => {
     const owing = { status: 'active', memberships: ['Gold Monthly'], day: { what: 'renews', on: '2099-11-06' }, payment: { state: 'due', since: '2026-10-01' } };
     const ben = entry('Ben Okafor', { held: owing, overdue: true });
     const dev = entry('Dev Patel', { held: owing, overdue: false });
@@ -679,10 +679,10 @@ describe('a row says what the person holds in the app (23a-i)', () => {
     draw();
     const late = within(await rowOf('Ben Okafor')).getByTestId('row-pay');
     expect(late.textContent).toBe('Overdue');
-    expect(late.style.color).toBe('var(--bad)');
+    expect(late.className).toContain('c-tag-bad');
     const due = within(await rowOf('Dev Patel')).getByTestId('row-pay');
     expect(due.textContent).toBe('Payment due');
-    expect(due.style.color).toBe('var(--warn)');
+    expect(due.className).toContain('c-tag-warn');
   });
 
   it("a past member's tag says Overdue in red by the same answer", async () => {
@@ -724,22 +724,24 @@ describe('a row says what the person holds in the app (23a-i)', () => {
     expect(mayaRow.textContent).not.toContain('Expired');
     const owed = within(mayaRow).getByTestId('row-pay');
     expect(owed.textContent).toBe('Payment due');
-    expect(owed.style.color).toBe('var(--warn)');
+    expect(owed.className).toContain('c-tag-warn');
 
     const paid = within(await rowOf('Leo Grant')).getByTestId('row-pay');
     expect(paid.textContent).toBe('Paid');
-    expect(paid.style.color).toBe('');
+    // Paid is the normal state: plain words beside the status, never a tag.
+    expect(paid.className).not.toContain('c-tag');
+    expect(paid.parentElement.textContent).toMatch(/ · Paid$/);
 
     const umaRow = await rowOf('Uma Costa');
     expect(umaRow.textContent).toContain('Not started');
     expect(umaRow.textContent).toContain('Starts 17 Oct 2099');
     const notYet = within(umaRow).getByTestId('row-pay');
     expect(notYet.textContent).toBe('Not due yet');
-    expect(notYet.style.color).toBe('');
+    expect(notYet.className).not.toContain('c-tag');
 
     const devRow = await rowOf('Dev Shah');
     expect(devRow.textContent).toContain('Cancelled');
-    expect(within(devRow).getByTestId('row-pay').textContent).toBe('—');
+    expect(within(devRow).queryByTestId('row-pay')).toBeNull();
 
     // Nothing held here: the gym's own words, as before.
     const ashaRow = await rowOf('Asha Patel');
@@ -750,12 +752,13 @@ describe('a row says what the person holds in the app (23a-i)', () => {
 
 // 20d-ii: Overview's "See who" beside Payment due opens the list already showing them.
 describe('opened from Overview on who has a payment due', () => {
-  it('asks only for them, says so on the Showing line, and tells the page once', async () => {
+  it('asks only for them, lights Payment due in the quick filters, and tells the page once', async () => {
     const onStartTaken = vi.fn();
     draw({ startShow: 'payment-due', onStartTaken });
     await waitFor(() => expect(orgService.getMemberListEntries).toHaveBeenLastCalledWith(GYM, 'paymentStatus=Payment+due'));
     expect(orgService.getMemberListEntries).not.toHaveBeenCalledWith(GYM, '');
-    expect(within(await screen.findByTestId('showing')).getByRole('button', { name: 'Stop showing only Payment due' })).toBeTruthy();
+    expect((await screen.findByTestId('quick-payment-due')).getAttribute('aria-pressed')).toBe('true');
+    expect(screen.queryByTestId('showing')).toBeNull();
     expect(onStartTaken).toHaveBeenCalledTimes(1);
   });
 

@@ -6,6 +6,7 @@ import { HELD_PAYMENT_WORDS, MEMBER_APP_FILTER_WORDS, MEMBER_LIST_QUERY_MAX_CHAR
 import { orgService, errorText, blobError, selectionChanged } from '../../api/orgsApi';
 import { ConsoleFailed, ConsoleLoading } from '../../components/console/ConsoleStates';
 import ScrollJump from '../../components/console/ScrollJump';
+import { SidePanel } from '../../components/console/ConsoleBoxes';
 import MemberListInvite from './MemberListInvite';
 import MemberListPerson from './MemberListPerson';
 import MemberListRemove from './MemberListRemove';
@@ -34,6 +35,7 @@ import {
   filtersAreEmpty,
   filtersWithTags,
   goneForGoodLine,
+  initialsOf,
   gymToday,
   inviteQueryString,
   isTicked,
@@ -55,6 +57,7 @@ import {
   toggleWord,
   untickFromAll,
 } from './memberListPeople';
+import { quickFilters } from './memberQuickFilters';
 
 // The gym's own list on the Members screen (spec Part 3 §18.2–18.4; ROADMAP 5b-v-a-i),
 // drawn from `console.css` as `MembersList`, `MembersPhone` and `MembersFilter` show it:
@@ -64,7 +67,7 @@ import {
 //
 // Selecting people (§18.5; ROADMAP 5b-v-b-i): a tick box on every row and on the heading,
 // "Select all 312 members" once a page is ticked, and a bar over the people selected —
-// "3 selected · Invite to app · Remove · Download CSV · Clear" — which acts on them and nobody
+// "3 selected · Invite to app · Remove · Export CSV · Clear" — which acts on them and nobody
 // else (CLAUDE.md §4). The toolbar's Invite stays for everyone the Filter's words choose (Kd,
 // 2026-09-28). A new filter or search clears the selection. Remove (5b-v-b-ii) opens a box
 // naming who moves to past members, who loses the app and who doesn't change.
@@ -90,9 +93,9 @@ function Chip({ pressed, onClick, children, role }) {
   );
 }
 
-/** The Filter box (`MembersFilter`): in the middle on a computer, from the bottom on a
- *  phone. Show, then the App words, then the gym's own three kinds of word, each with
- *  the server's counts. A tap applies at once; "Show N members" closes the box on it. */
+/** The Filter box: from the right (`Boxes`, V3a-i), the whole screen on a phone. Show, then
+ *  the App words, then the gym's own three kinds of word, each with the server's counts. A
+ *  tap applies at once; "Show N members" closes the box on it. */
 function FilterBox({ list, gymTags, filters, words, total, onChange, onClear, onClose, onManageTags }) {
   const past = filters.records === 'former';
   const tags = tagChips(gymTags, filters);
@@ -106,23 +109,19 @@ function FilterBox({ list, gymTags, filters, words, total, onChange, onClear, on
     </div>
   );
   return (
-    <div className="fixed inset-0 z-50" style={{ background: 'var(--scrim)' }}>
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-label="Filter"
-        className="c-sheet absolute inset-x-0 bottom-0 top-16 md:top-16 md:bottom-auto md:left-1/2 md:right-auto md:-translate-x-1/2 md:w-[660px] md:max-h-[calc(100%-96px)] flex flex-col rounded-t-[20px] md:rounded-[20px] border"
-        style={{ borderColor: 'var(--card-line)' }}
-      >
-        <div className="flex items-center gap-3 pl-4 pr-2 pt-3 md:px-7 md:pt-6 md:pb-2">
-          <h2 className="c-h2 flex-grow" style={{ fontSize: 22, lineHeight: '28px', fontWeight: 700 }}>
-            Filter
-          </h2>
-          <button type="button" aria-label="Close" onClick={onClose} className="c-icon-btn">
-            <X aria-hidden="true" className="w-5 h-5" />
-          </button>
-        </div>
-        <div className="flex flex-col gap-5 px-4 pt-2 pb-4 md:px-7 md:pt-3 md:pb-6 overflow-y-auto overscroll-contain flex-grow min-h-0">
+    <SidePanel
+      title="Filter"
+      onClose={onClose}
+      onSave={onClose}
+      saveLabel={total === null ? `Show ${words.people}` : `Show ${count(total)} ${past ? 'past ' : ''}${total === 1 ? words.person : words.people}`}
+      foot={
+        <button type="button" onClick={onClear} className="c-btn c-btn-s c-btn-lg">
+          Clear
+        </button>
+      }
+      testId="filter-box"
+    >
+        <div className="flex flex-col gap-6">
           {list !== null && (former > 0 || past)
             ? group(
                 'Show',
@@ -222,19 +221,7 @@ function FilterBox({ list, gymTags, filters, words, total, onChange, onClear, on
           ) : null}
           {past ? <p className="c-s14 c-t2">Past {words.people} are shown on their own.</p> : null}
         </div>
-        <div
-          className="grid grid-cols-[1fr_auto] md:flex md:justify-end gap-2 md:gap-3 px-4 pt-3 pb-5 md:px-7 md:py-4 border-t"
-          style={{ borderColor: 'var(--line)', background: 'var(--card)' }}
-        >
-          <button type="button" onClick={onClose} className="c-btn c-btn-p c-btn-lg md:order-2">
-            {total === null ? `Show ${words.people}` : `Show ${count(total)} ${past ? 'past ' : ''}${total === 1 ? words.person : words.people}`}
-          </button>
-          <button type="button" onClick={onClear} className="c-btn c-btn-s c-btn-lg md:order-1">
-            Clear
-          </button>
-        </div>
-      </div>
-    </div>
+    </SidePanel>
   );
 }
 
@@ -278,8 +265,17 @@ function usePhone() {
 /** One person's App word, one tag per row as Leads shows its status. When something
  *  needs checking the tag itself turns amber (red for a wrong email) with a ⚠, and says
  *  why to a screen reader and on hover; the sentence is on the person's own page. */
+/** The App word as plain words, a green dot for somebody in the app (§17.11, "A status");
+ *  a tag only when something needs checking. */
 function AppWord({ view }) {
-  if (view.note === null) return <span className={`c-tag ${view.tag}`}>{view.text}</span>;
+  if (view.note === null) {
+    return (
+      <span className="inline-flex items-center gap-2 c-s14 c-t1 max-w-full" data-tone={view.tag}>
+        {view.tag === 'c-tag-good' ? <span className="c-dot c-dot-good" aria-hidden="true" /> : null}
+        <span className="c-ell">{view.text}</span>
+      </span>
+    );
+  }
   return (
     <span
       className={`c-tag ${view.noteTone === 'red' ? 'c-tag-bad' : 'c-tag-warn'}`}
@@ -669,6 +665,9 @@ export default function MemberListPanel({
   const empty = filtersAreEmpty(filters);
   // What is ticked, as the "Showing:" line; the search has its own box.
   const shown = activeFilters(filters, words);
+  // One press for one kind of person (V3a-i); with one on, its chip says what is shown.
+  const quick = quickFilters(list, filters);
+  const quickOn = quick.some((q) => q.on && q.key !== 'everyone');
   const clearAll = () => {
     setTyped('');
     change({ ...EMPTY_FILTERS });
@@ -731,7 +730,7 @@ export default function MemberListPanel({
   const selectionMoved = useCallback((fresh) => {
     setSel((s) => (s.all === null ? s : { ...s, all: { ...s.all, count: fresh.count, digest: fresh.digest } }));
   }, []);
-  /** Download CSV of `chosen`: the people selected, or, from the toolbar with nobody
+  /** Export CSV of `chosen`: the people selected, or, from the toolbar with nobody
    *  selected, everyone the list shows now (Kd, 2026-09-28: there by default). */
   const download = async (chosen = selection) => {
     if (downloading) return;
@@ -923,7 +922,7 @@ export default function MemberListPanel({
   const peopleWords = (k) => `${count(k)} ${current ? '' : 'past '}${k === 1 ? words.person : words.people}`;
   // The bar's buttons (§18.5): Invite and Send message only for current members and a gym
   // that can send (a past member gets no message);
-  // Remove for a gym that can change its list (past members: Remove from app); Download CSV
+  // Remove for a gym that can change its list (past members: Remove from app); Export CSV
   // always, a read-only gym included (it changes nobody).
   const barButtons = (
     <>
@@ -977,7 +976,7 @@ export default function MemberListPanel({
       ) : null}
       <button type="button" onClick={() => void download(selection)} disabled={downloading} data-testid="bar-download" className="c-btn c-btn-s c-btn-sm">
         {downloading ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : <Download aria-hidden="true" className="w-4 h-4" />}
-        Download CSV
+        Export CSV
       </button>
       <button type="button" onClick={clearSelection} className="c-btn c-btn-sm c-btn-link">
         Clear
@@ -1028,7 +1027,7 @@ export default function MemberListPanel({
           with people selected the bar over them sits in it (Kd, 2026-09-28: at the bottom of
           the list he had to scroll back up to act), as Gmail and HubSpot keep theirs. */}
       <div className="flex flex-col gap-3 c-sticky-tools">
-        <div className="flex flex-col gap-3 md:flex-row md:items-center md:gap-3">
+        <div className="flex flex-col gap-3 md:flex-row md:flex-wrap md:items-center md:gap-3">
           <label className="c-search w-full md:max-w-[460px] md:flex-grow">
             <Search aria-hidden="true" className="w-[18px] h-[18px]" />
             <input
@@ -1048,7 +1047,7 @@ export default function MemberListPanel({
               <SlidersHorizontal aria-hidden="true" className="w-4 h-4" />
               {shown.length > 0 ? `Filter · ${String(shown.length)}` : 'Filter'}
             </button>
-            {/* With people selected, the bar's Invite and Download are the ones: two buttons
+            {/* With people selected, the bar's Invite and Export are the ones: two buttons
                 with one name acting on two different sets would be a guess for staff, and
                 nothing may happen to anyone who was not ticked (CLAUDE.md §4). */}
             {current && picked === 0 ? (
@@ -1058,15 +1057,15 @@ export default function MemberListPanel({
               </button>
             ) : null}
             {page.total > 0 && picked === 0 ? (
-              <button type="button" onClick={() => void download(null)} disabled={downloading} data-testid="download-shown" className="c-btn c-btn-s c-btn-lg">
+              <button type="button" onClick={() => void download(null)} disabled={downloading} data-testid="download-shown" className="c-btn c-btn-quiet c-btn-lg">
                 {downloading ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : <Download aria-hidden="true" className="w-4 h-4" />}
-                Download CSV
+                Export CSV
               </button>
             ) : null}
             {/* What the gym has sent (20f-ii), for staff who may send: `sentMessagesTo` is its
                 page, given only to them. It stays with people ticked: it acts on nobody. */}
             {current && sentMessagesTo !== null ? (
-              <Link to={sentMessagesTo} data-testid="sent-messages" className="c-btn c-btn-s c-btn-lg">
+              <Link to={sentMessagesTo} data-testid="sent-messages" className="c-btn c-btn-quiet c-btn-lg">
                 <MessageSquare aria-hidden="true" className="w-4 h-4" />
                 Sent messages
               </Link>
@@ -1094,7 +1093,28 @@ export default function MemberListPanel({
           </div>
         </div>
 
-        {shown.length > 0 ? (
+        {quick.length > 1 ? (
+          <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Quick filters" data-testid="quick-filters">
+            {quick.map((q) => (
+              <button
+                key={q.key}
+                type="button"
+                aria-pressed={q.on}
+                onClick={() => {
+                  if (q.key !== 'everyone' || !q.on) change(q.next);
+                }}
+                data-testid={`quick-${q.key}`}
+                className={q.on ? 'c-chip c-chip-on' : 'c-chip'}
+              >
+                {q.warn ? <span className="c-dot c-dot-warn" aria-hidden="true" /> : null}
+                {q.text} <span className="c-n">{count(q.count)}</span>
+              </button>
+            ))}
+            <span className="c-s14 c-t2">Quick filters</span>
+          </div>
+        ) : null}
+
+        {shown.length > 0 && !quickOn ? (
           <div className="flex flex-wrap items-center gap-2" data-testid="showing">
             <span className="c-s14 c-t3">Showing:</span>
             {shown.map((f) => (
@@ -1335,21 +1355,14 @@ export default function MemberListPanel({
       {page.error !== null ? <ConsoleFailed message={page.error} onRetry={() => setTick((n) => n + 1)} newLook /> : null}
 
       {!page.loading && page.entries.length > 0 ? (
-        <section className="c-card overflow-hidden">
+        <section className="c-card overflow-hidden md:overflow-x-auto c-member-table">
           <div className="hidden md:flex items-center pl-1" data-testid="list-head">
             <Tick state={headState} label={pageTicked ? 'Clear the selection' : `Select every ${words.person} on this page`} onClick={tickPage} />
             <div className={`c-member-grid ${current ? '' : 'c-member-grid-past'} c-th grid flex-grow pr-5 py-2.5`}>
               <span style={{ gridArea: 'who' }}>Name</span>
-              <span style={{ gridArea: 'status' }}>Status</span>
               <span style={{ gridArea: 'type' }}>Membership</span>
-              {current ? (
-                <>
-                  <span style={{ gridArea: 'ends' }}>Renews or ends</span>
-                  <span style={{ gridArea: 'pay' }}>Payment</span>
-                </>
-              ) : (
-                <span style={{ gridArea: 'ends' }}>Past {words.person} since</span>
-              )}
+              <span style={{ gridArea: 'status' }}>Status</span>
+              {current ? null : <span style={{ gridArea: 'ends' }}>Past {words.person} since</span>}
               <span style={{ gridArea: 'app' }}>App</span>
             </div>
           </div>
@@ -1364,6 +1377,10 @@ export default function MemberListPanel({
               const past = e.formerAt !== null;
               // What the membership they hold says, or the gym's own words (23a-i).
               const cells = rowCells(e, today);
+              // Status in plain words when all is well ("Active · Paid"); a payment due or
+              // overdue is the exception, and a tag.
+              const payPlain = !past && cells.payment !== null && !cells.owes;
+              const payTag = !past && cells.owes;
               return (
                 <li
                   key={e.entryId}
@@ -1380,9 +1397,13 @@ export default function MemberListPanel({
                     onClick={() => setOpenId(e.entryId)}
                     className={`c-member-grid ${past ? 'c-member-grid-past' : ''} grid flex-grow min-w-0 text-left min-h-11 pr-4 py-3.5 md:pr-5 md:py-3`}
                   >
-                    <span className="flex flex-col gap-0.5 min-w-0" style={{ gridArea: 'who' }}>
+                    <span className="flex items-center gap-3 min-w-0" style={{ gridArea: 'who' }}>
+                    <span className="hidden md:inline-flex c-avatar c-avatar-sm" aria-hidden="true">
+                      {initialsOf(e.fullName || '')}
+                    </span>
+                    <span className="flex flex-col gap-0.5 min-w-0">
                       <span className="c-s15 c-w6 c-t1 c-ell">{e.fullName || 'No name'}</span>
-                      <span className="c-s13 c-t2 c-ell">{contactWords(e)}</span>
+                      <span className="c-s14 c-t2 c-ell">{contactWords(e)}</span>
                       {/* Under the name and never beside it, so the tag never cuts a name short. */}
                       {e.needsReview ? (
                         <span className="c-tag c-tag-warn self-start mt-1" data-testid="review-tag">
@@ -1403,27 +1424,34 @@ export default function MemberListPanel({
                         </span>
                       ) : null}
                     </span>
-                    <span className="md:hidden c-s13 c-t2" style={{ gridArea: 'words' }}>
+                    </span>
+                    <span className="md:hidden c-s14 c-t2" style={{ gridArea: 'words' }}>
                       {rowWords(e, today, words.person).join(' · ')}
                     </span>
-                    <span className="hidden md:block c-s14 c-t1 c-ell" style={{ gridArea: 'status' }}>
-                      {cells.status ?? <span className="c-t3">—</span>}
+                    <span className="hidden md:flex flex-col gap-0.5 min-w-0" style={{ gridArea: 'type' }}>
+                      <span className="c-s14 c-t1 c-ell">{cells.membership ?? <span className="c-t3">—</span>}</span>
+                      {!past && cells.ends !== null ? <span className="c-s14 c-t2 c-ell" data-testid="row-ends">{cells.ends}</span> : null}
                     </span>
-                    <span className="hidden md:block c-s14 c-t1 c-ell" style={{ gridArea: 'type' }}>
-                      {cells.membership ?? <span className="c-t3">—</span>}
+                    <span className="hidden md:flex flex-col items-start gap-1 min-w-0" style={{ gridArea: 'status' }}>
+                      {cells.status !== null || payPlain ? (
+                        <span className="c-s14 c-t1 c-ell max-w-full">
+                          {cells.status}
+                          {cells.status !== null && payPlain ? ' · ' : null}
+                          {payPlain ? <span data-testid="row-pay">{cells.payment}</span> : null}
+                        </span>
+                      ) : null}
+                      {payTag ? (
+                        <span className={`c-tag ${cells.overdue ? 'c-tag-bad' : 'c-tag-warn'}`} data-testid="row-pay">
+                          {cells.payment}
+                        </span>
+                      ) : null}
+                      {cells.status === null && !payPlain && !payTag ? <span className="c-s14 c-t3">—</span> : null}
                     </span>
-                    <span className="hidden md:block c-s14 c-t2 c-ell" style={{ gridArea: 'ends' }}>
-                      {past ? pastSince(e) : (cells.ends ?? <span className="c-t3">—</span>)}
-                    </span>
-                    {past ? null : (
-                      <span
-                        className="hidden md:block c-s14 c-t1 c-ell"
-                        style={cells.owes ? { gridArea: 'pay', color: cells.overdue ? 'var(--bad)' : 'var(--warn)' } : { gridArea: 'pay' }}
-                        data-testid="row-pay"
-                      >
-                        {cells.payment ?? <span className="c-t3">—</span>}
+                    {past ? (
+                      <span className="hidden md:block c-s14 c-t2 c-ell" style={{ gridArea: 'ends' }}>
+                        {pastSince(e)}
                       </span>
-                    )}
+                    ) : null}
                     <span className="pt-1 md:pt-0 min-w-0" style={{ gridArea: 'app' }}>
                       <AppWord view={app} />
                     </span>

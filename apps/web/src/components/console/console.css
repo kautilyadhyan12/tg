@@ -1120,17 +1120,22 @@
 }
 @media (min-width: 768px) {
   .c-member-grid {
-    /* Wide enough for "Gold Monthly +1", "Frozen since 6 Oct" and "Payment due" (23a-i);
-       the App column holds one tag. */
-    grid-template-columns: minmax(0, 2.3fr) minmax(0, 0.95fr) minmax(0, 1.35fr) minmax(0, 1.35fr) minmax(0, 1.1fr) minmax(0, 1.55fr) 20px;
-    grid-template-areas: "who status type ends pay app go";
+    /* The third look's four columns (board `Members`, V3a-i): Name, Membership with when it
+       renews or ends under it, Status with the payment, App. */
+    grid-template-columns: minmax(0, 1.6fr) minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1fr) 20px;
+    grid-template-areas: "who type status app go";
     column-gap: 16px;
     row-gap: 4px;
     align-items: center;
   }
   .c-member-grid-past {
-    grid-template-columns: minmax(0, 2.4fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.4fr) minmax(0, 2.1fr) 20px;
-    grid-template-areas: "who status type ends app go";
+    grid-template-columns: minmax(0, 1.6fr) minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) 20px;
+    grid-template-areas: "who type status ends app go";
+  }
+  /* Where the table is narrower than its columns need (a tablet beside the menu), it scrolls
+     sideways inside its card, as the board draws it, rather than cutting every name short. */
+  .c-member-table > * {
+    min-width: 700px;
   }
 }
 
@@ -1176,7 +1181,8 @@
 /* A long list's toolbar (search, Filter, the actions and, with people selected, the bar)
    stays at the top of the screen on a computer while the list scrolls under it, as Gmail
    and HubSpot keep theirs (Kd, 2026-09-28). The phone keeps its bar above the tab bar. */
-@media (min-width: 768px) {
+/* Only on a window tall enough: on a phone turned sideways it would cover the rows. */
+@media (min-width: 768px) and (min-height: 600px) {
   .c-sticky-tools {
     position: sticky;
     top: 0;
@@ -1187,8 +1193,23 @@
   }
 }
 .c-selbar-top {
+  flex-wrap: wrap;
+  row-gap: 6px;
   padding-left: 16px;
   border-bottom: 0;
+}
+/* On a touch screen wider than a phone (a tablet, an opened folding phone), the list's tools, its
+   quick filters, the bar and the Filter's choices are 44 px to touch too (V3a-i). */
+@media (pointer: coarse) {
+  .c-sticky-tools .c-btn,
+  .c-selbar .c-btn {
+    height: auto;
+    min-height: 44px;
+  }
+  .c-sticky-tools .c-chip,
+  .c-panel .c-chip {
+    min-height: 44px;
+  }
 }
 /* A long form's Save, once something in it has changed: it stays at the bottom of the
    screen while the form scrolls, above the phone's tab bar, so nobody has to travel to the
@@ -2283,6 +2304,23 @@
 @media (min-width: 768px) {
   .c-person-head { padding: 24px; }
 }
+/* Initials beside a name in a list (Members, V3a-i). */
+.c-avatar-sm {
+  width: 34px;
+  height: 34px;
+  font-size: 12px;
+}
+/* A small round dot before a word: green for in the app, gold for what needs attention. */
+.c-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  flex-shrink: 0;
+  border-radius: 999px;
+  background: var(--t3);
+}
+.c-dot-good { background: var(--good); }
+.c-dot-warn { background: var(--warn); }
 .c-avatar-lg {
   width: 64px;
   height: 64px;
