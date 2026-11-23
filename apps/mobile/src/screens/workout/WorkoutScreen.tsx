@@ -16,8 +16,11 @@ import type { Finished } from "../../library/workoutRunStore";
 import type { WaitingView } from "../../session/waitingList";
 import { Led } from "../library/Records";
 import { PlateFace } from "../library/WeightPlate";
+import { HeartPill } from "../../heart/HeartPill";
+import { useHeartMax } from "../../heart/heartMax";
+import { useHeartNow, type Monitor } from "../../heart/monitor";
 import { Summary } from "./Summary";
-import type { EffortHand } from "./WorkoutLayer";
+import type { EffortHand, SoundSwitch } from "./WorkoutLayer";
 import { clock, countdown, eyebrowWords, mainWords, nextWords, ringShare, setLine } from "./words";
 
 // The workout's own screen (ROADMAP Stage 5 64a-ii, Kd's drawing of 2026-11-21): one screen for the whole workout. The
@@ -33,6 +36,8 @@ interface Props {
   keeping: boolean;
   waiting: WaitingView<WorkoutSave, RefusedWorkout>;
   units: Units;
+  /** Sound on or off (64a-vi). */
+  sound: SoundSwitch;
   press: (p: Press) => void;
   onPutAway: () => void;
   onDiscard: () => void;
@@ -41,19 +46,46 @@ interface Props {
   onNewWorkout: () => void;
 }
 
-export function WorkoutScreen({ run, finished, keeping, waiting, units, press, onPutAway, onDiscard, onFinished, effort, onNewWorkout }: Props) {
+export function WorkoutScreen({ run, finished, keeping, waiting, units, sound, press, onPutAway, onDiscard, onFinished, effort, onNewWorkout }: Props) {
   if (run === null) {
     return finished === null ? null : <Summary finished={finished} keeping={keeping} waiting={waiting} effort={effort} units={units} onDone={onFinished} onNewWorkout={onNewWorkout} />;
   }
-  return <Doing run={run} units={units} press={press} onPutAway={onPutAway} onDiscard={onDiscard} />;
+  return <Doing run={run} units={units} sound={sound} press={press} onPutAway={onPutAway} onDiscard={onDiscard} />;
 }
 
 const LED_RED: ColourName = "ledRed";
 const LED_AMBER: ColourName = "ledAmber";
 const LED_GREEN: ColourName = "ledGreen";
 
-function Doing({ run, units, press, onPutAway, onDiscard }: { run: WorkoutRun; units: Units; press: (p: Press) => void; onPutAway: () => void; onDiscard: () => void }) {
+/** The heart rate now from the person's own monitor, in the zone of their maximum (64a-vi); read only once a monitor
+ *  is saved, so a person with none costs the server nothing. */
+function WorkoutHeart({ bpm }: { bpm: number | null }) {
+  const read = useHeartMax().read;
+  return <HeartPill bpm={bpm} max={read.kind === "ok" ? read.data.max : null} big />;
+}
+
+/** Sound on or off, said as it is now; a press turns it the other way, and the phone keeps it for the next workouts. */
+function SoundPill({ sound }: { sound: SoundSwitch }) {
+  return (
+    <Pressable
+      accessibilityRole="switch"
+      accessibilityLabel="Sound"
+      accessibilityState={{ checked: sound.on }}
+      onPress={sound.flip}
+      hitSlop={4}
+      style={({ pressed }) => [styles.soundPill, pressed ? styles.pressed : null]}
+    >
+      <Icon name={sound.on ? "volume" : "volumeOff"} size={18} colour={sound.on ? "text" : "textSoft"} />
+      <Txt kind="strong" colour={sound.on ? "text" : "textSoft"} numberOfLines={1}>
+        {sound.on ? "Sound on" : "Sound off"}
+      </Txt>
+    </Pressable>
+  );
+}
+
+function Doing({ run, units, sound, press, onPutAway, onDiscard }: { run: WorkoutRun; units: Units; sound: SoundSwitch; press: (p: Press) => void; onPutAway: () => void; onDiscard: () => void }) {
   const insets = useSafeAreaInsets();
+  const heart: { monitor: Monitor | null; bpm: number | null } = useHeartNow(true);
   const [asking, setAsking] = useState(false);
   const { exercise, target, weightGrams } = setOf(run);
   const timed = exercise.measuredIn === "time";
@@ -63,6 +95,7 @@ function Doing({ run, units, press, onPutAway, onDiscard }: { run: WorkoutRun; u
   const last = run.done[run.done.length - 1];
   const done = run.done.length;
   const top = (
+    <View style={styles.tops}>
     <View style={styles.topBar}>
       <Pressable accessibilityRole="button" accessibilityLabel="Put workout away" onPress={onPutAway} style={styles.topRound} hitSlop={4}>
         <Icon name="down" size={26} colour="text" />
@@ -100,6 +133,11 @@ function Doing({ run, units, press, onPutAway, onDiscard }: { run: WorkoutRun; u
           End
         </Txt>
       </Pressable>
+    </View>
+      <View style={styles.pills}>
+        {heart.monitor === null ? <View /> : <WorkoutHeart bpm={heart.bpm} />}
+        <SoundPill sound={sound} />
+      </View>
     </View>
   );
   return (
@@ -378,7 +416,11 @@ const styles = StyleSheet.create({
   self: { alignSelf: "center" },
   pressed: { opacity: 0.85 },
   faint: { opacity: 0.35 },
+  tops: { gap: 8 },
   topBar: { flexDirection: "row", alignItems: "center", gap: 4, marginHorizontal: -10 },
+  // The heart rate and the sound switch under the top's buttons, over the picture (64a-vi).
+  pills: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap", marginHorizontal: -6 },
+  soundPill: { flexDirection: "row", alignItems: "center", gap: 7, minHeight: 40, paddingHorizontal: 13, borderRadius: sizes.round, backgroundColor: colours.veil, borderWidth: 1, borderColor: colours.lineStrong },
   // Pause and End are pressed mid-set, from a step back: big enough to hit at a glance (Kd: "pause, end is too small").
   topRound: { width: TOP, height: TOP, borderRadius: TOP / 2, alignItems: "center", justifyContent: "center", backgroundColor: colours.overWords, borderWidth: 1, borderColor: colours.lineStrong },
   topPill: { flexDirection: "row", gap: 8, minHeight: TOP, paddingHorizontal: 16, borderRadius: TOP / 2, alignItems: "center", justifyContent: "center", backgroundColor: colours.overWords, borderWidth: 1, borderColor: colours.lineStrong },

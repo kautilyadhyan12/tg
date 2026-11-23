@@ -2,7 +2,7 @@
 // a person is open an exercise without its caution, so that is tested first, on every tab of the page. The
 // exercises are the real files, sent as the server publishes them.
 import { readdirSync, readFileSync } from "node:fs";
-import type { OnboardingAnswers } from "@app/shared";
+import { heartSums, type OnboardingAnswers } from "@app/shared";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react-native";
 import { AppState, TextInput, type AppStateStatus } from "react-native";
 import { File, Paths } from "expo-file-system";
@@ -12,6 +12,9 @@ import { fireGestureHandler, getByGestureTestId } from "react-native-gesture-han
 import { FIGURES, type FigureName } from "../../src/library/figures";
 import { DOUBLE_TAP_ZOOM, toStage, WHOLE, zoomAbout, type View as Zoom } from "../../src/library/stage";
 import { forgetStores } from "../../src/library/myWorkout";
+import { heartNative } from "../../src/heart/heartNative";
+import { loadMonitor, resetHeart, saveMonitor } from "../../src/heart/monitor";
+import { startRun } from "../../src/library/workoutRun";
 import { LIBRARY_PATH } from "../../src/library/store";
 import type { Ask } from "../../src/session/calls";
 import { dayKey, fakeServer, kept, lost, memoryStore, RAVI, refusal, tokens, type Reply } from "../kit";
@@ -1574,5 +1577,143 @@ describe("History on My Workout (64a-v)", () => {
       expect(screen.queryByRole("tab", { name: "Calendar" })).toBeNull();
     });
     expect(screen.getByRole("button", { name: "History, your past workouts, day by day" })).toBeTruthy();
+  });
+});
+
+describe("heart rate and sounds in a workout (64a-vi)", () => {
+  const MINE = "F8:A6:6F:94:AA:27";
+  const STRANGER = "C0:FF:EE:12:34:56";
+  const polar = (bpm: number): number[] => [16, bpm, 25, 3, 15, 3, 0];
+  const strap = jest.requireMock<{ strap: { send: (id: string, bytes: number[], at?: number) => void; reset: () => void } }>("../../src/heart/heartNative").strap;
+  const sounds = jest.requireMock<{ sounds: { played: string[] } }>("../../src/sound/soundNative").sounds;
+  const SQUAT = { id: "squat", plan: { measuredIn: "reps", sets: [{ target: 2, weightGrams: null, restSeconds: null }] } };
+  const write = (name: string, text: string) => {
+    const file = new File(Paths.document, name);
+    if (file.exists) file.delete();
+    file.create();
+    file.write(text);
+  };
+  const remove = (name: string) => {
+    const file = new File(Paths.document, name);
+    if (file.exists) file.delete();
+  };
+  type Save = { heart: [number, number][] };
+  function saving() {
+    const saves: Save[] = [];
+    const library = libraryServer();
+    const ask: Ask = async (url, init) => {
+      if (new URL(url).pathname !== "/v1/workouts" || init.method !== "POST") return library.ask(url, init);
+      const body = JSON.parse(init.body ?? "{}") as Save & { workoutId: string };
+      saves.push(body);
+      return { ok: true, status: 201, json: () => Promise.resolve({ workoutId: body.workoutId, status: "created" }) };
+    };
+    return { ask, saves };
+  }
+  const openMine = async () => {
+    await fireEvent.press(await screen.findByRole("button", { name: /^My Workout/ }));
+  };
+
+  beforeEach(async () => {
+    strap.reset();
+    resetHeart(heartNative);
+    sounds.played.length = 0;
+    for (const name of [`heart-monitor-${RAVI.id}.json`, `workout-sounds-${RAVI.id}.json`, `workout-now-${RAVI.id}.json`, `workouts-${RAVI.id}.json`]) remove(name);
+    write(`my-workout-${RAVI.id}.json`, JSON.stringify({ v: 2, name: "Legs", items: [SQUAT] }));
+    await Promise.resolve();
+  });
+
+  it("the worst thing: the heart rate shown and saved is the person's own monitor's, from the workout's own time", async () => {
+    await loadMonitor(RAVI.id);
+    await saveMonitor({ id: MINE, name: "Polar H10 9EF6E824" });
+    const server = saving();
+    await openLibrary(server.ask);
+    await openMine();
+    // Before Start: not the workout's.
+    strap.send(MINE, polar(99), Date.now() - 50);
+    await settle(1100);
+    await fireEvent.press(await screen.findByRole("button", { name: "Start workout" }));
+    strap.send(STRANGER, polar(175));
+    strap.send(MINE, polar(132));
+    expect(await screen.findByText("132 bpm", {}, { timeout: 3000 })).toBeTruthy();
+    expect(screen.queryByText(/175/)).toBeNull();
+    await settle(300);
+    await fireEvent.press(screen.getByRole("button", { name: "One rep more" }));
+    await fireEvent.press(screen.getByRole("button", { name: "One rep more" }));
+    expect(await screen.findByText("Saved to your account")).toBeTruthy();
+    expect(server.saves).toHaveLength(1);
+    const bpms = server.saves[0]?.heart.map(([, bpm]) => bpm) ?? [];
+    expect(bpms.length).toBeGreaterThan(0);
+    expect(bpms.every((b) => b === 132)).toBe(true);
+    // Under a minute of heart rate: no line on the summary, as the server keeps none.
+    expect(screen.queryByText(/^Heart rate \d+ average/)).toBeNull();
+  });
+
+  it("with no monitor there is no heart rate on the workout, and the sound switch is there", async () => {
+    await openLibrary(saving().ask);
+    await openMine();
+    await fireEvent.press(await screen.findByRole("button", { name: "Start workout" }));
+    expect(await screen.findByRole("switch", { name: "Sound" })).toBeTruthy();
+    expect(screen.queryByTestId("heart-pill")).toBeNull();
+  });
+
+  it("+ ticks, the set's end beeps twice, and Sound off silences them, kept for the next workout", async () => {
+    await openLibrary(saving().ask);
+    await openMine();
+    await fireEvent.press(await screen.findByRole("button", { name: "Start workout" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "One rep more" }));
+    expect(sounds.played).toEqual(["rep"]);
+    const sound = screen.getByRole("switch", { name: "Sound" });
+    expect(sound.props.accessibilityState).toEqual({ checked: true });
+    await fireEvent.press(sound);
+    expect(screen.getByText("Sound off")).toBeTruthy();
+    await fireEvent.press(screen.getByRole("button", { name: "One rep more" }));
+    expect(await screen.findByText("Workout complete")).toBeTruthy();
+    expect(sounds.played).toEqual(["rep"]);
+    await settle(50);
+    expect(JSON.parse(await new File(Paths.document, `workout-sounds-${RAVI.id}.json`).text())).toEqual({ on: false });
+    await screen.unmount();
+    forgetStores();
+    await openLibrary(saving().ask);
+    await openMine();
+    await fireEvent.press(await screen.findByRole("button", { name: "Start workout" }));
+    expect((await screen.findByRole("switch", { name: "Sound" })).props.accessibilityState).toEqual({ checked: false });
+    await fireEvent.press(screen.getByRole("button", { name: "One rep more" }));
+    expect(sounds.played).toEqual(["rep"]);
+  });
+
+  it("after the workout, its average and highest heart rate, worked out as the server does", async () => {
+    const now = Date.now();
+    const run = startRun({
+      workoutId: "44444444-4444-4444-8444-444444444444",
+      name: "Legs",
+      now: now - 95_000,
+      timeZone: "UTC",
+      exercises: [{ exercise: "squat", name: "Squat", kind: "strength", measuredIn: "reps", barbell: false, sets: [{ target: 2, weightGrams: null, restSeconds: null }] }],
+    });
+    if (run === null) throw new Error("no run");
+    const heart = Array.from({ length: 90 }, (_, i): [number, number] => [(i + 1) * 1000, i === 60 ? 166 : 140]);
+    write(`workout-now-${RAVI.id}.json`, JSON.stringify({ ...run, totalMs: 95_000, activeMs: 95_000, seenAt: now, heart }));
+    const server = saving();
+    await openLibrary(server.ask);
+    // Kept from before the app opened: it waits behind its bar until opened.
+    await fireEvent.press(await screen.findByRole("button", { name: "Open workout" }, { timeout: 3000 }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Set done · 2 reps" }));
+    expect(await screen.findByText("Workout complete")).toBeTruthy();
+    const sums = heartSums(heart, [], 95_000);
+    expect(sums).not.toBeNull();
+    expect(screen.getByText(`Heart rate ${String(sums?.avg)} average · 166 highest`)).toBeTruthy();
+    expect(server.saves[0]?.heart).toEqual(heart);
+  });
+
+  it("My Workout's Heart rate monitor line opens the monitor box", async () => {
+    await openLibrary(saving().ask);
+    await openMine();
+    const line = await screen.findByRole("button", { name: "Heart rate monitor. Connect a chest strap or watch" });
+    expect(screen.getAllByText("Heart rate monitor")).toHaveLength(1);
+    await fireEvent.press(line);
+    // The box's own title over the line's.
+    await waitFor(() => {
+      expect(screen.getAllByText("Heart rate monitor")).toHaveLength(2);
+    });
   });
 });

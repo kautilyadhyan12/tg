@@ -8,7 +8,8 @@ import { BottomRoom, useBottomRoom } from "../../look/BottomRoom";
 import { colours, shadows, sizes } from "../../look/colours";
 import { Modal } from "../../look/Modal";
 import { fonts, Txt } from "../../look/Txt";
-import { effortWaitingFile, savedCopyFile, savedWaitingFile, workoutRunFile, workoutsWaitingFile } from "../../library/files";
+import { heartQueue, holdHeart, loadMonitor } from "../../heart/monitor";
+import { effortWaitingFile, savedCopyFile, savedWaitingFile, workoutRunFile, workoutSoundsFile, workoutsWaitingFile } from "../../library/files";
 import { createSavedStore, type SavedStore, type SavedView } from "../../library/savedWorkouts";
 import { effortSender, effortWaiting, type EffortWaiting } from "../../library/effortSaving";
 import type { Units } from "../../library/records";
@@ -18,6 +19,8 @@ import { createRunStore, type Finished, type RunStore, type StartResult } from "
 import { workoutSender, workoutWaiting, type WorkoutWaiting } from "../../library/workoutSaving";
 import type { WaitingView } from "../../session/waitingList";
 import { useSession } from "../../session/SessionProvider";
+import { soundOnIn, soundText } from "../../sound/soundChoice";
+import { soundNative } from "../../sound/soundNative";
 import type { TextStore } from "../food/outbox";
 import { accountUnits } from "../setup/Setup";
 import { clock } from "./words";
@@ -75,9 +78,24 @@ export interface WorkoutFiles {
   effort: (userId: string) => TextStore;
   savedCopy: (userId: string) => TextStore;
   savedWaiting: (userId: string) => TextStore;
+  /** Sound on or off (64a-vi); absent in a test that never asks. */
+  sounds?: (userId: string) => TextStore;
 }
 
-const PHONE_FILES: WorkoutFiles = { run: workoutRunFile, waiting: workoutsWaitingFile, effort: effortWaitingFile, savedCopy: savedCopyFile, savedWaiting: savedWaitingFile };
+const PHONE_FILES: WorkoutFiles = {
+  run: workoutRunFile,
+  waiting: workoutsWaitingFile,
+  effort: effortWaitingFile,
+  savedCopy: savedCopyFile,
+  savedWaiting: savedWaitingFile,
+  sounds: workoutSoundsFile,
+};
+
+/** The workout's sounds on or off, and the press that changes it (64a-vi). */
+export interface SoundSwitch {
+  on: boolean;
+  flip: () => void;
+}
 const NONE_SAVED: SavedView = { list: [], most: 0, known: false, refused: [], held: false };
 const NONE_EFFORT: WaitingView<WaitingEffort, WaitingEffort> = { waiting: [], refused: [], sent: [], held: false, unsaved: false };
 
@@ -96,12 +114,41 @@ export function WorkoutLayerProvider({ children, files = PHONE_FILES, onNewWorko
   const [made, setMade] = useState<{ store: RunStore; waiting: WorkoutWaiting; effort: EffortWaiting; saved: SavedStore } | null>(null);
   const [shown, setShown] = useState(false);
   const [now, setNow] = useState(() => Date.now());
+  // Sound on until the person's own file says off; read once they sign in.
+  const [soundOn, setSoundOn] = useState(true);
+  const soundRef = useRef(true);
+  soundRef.current = soundOn;
+  const soundFiles = useRef<TextStore | null>(null);
 
   // One store and one list for each person, made again when somebody else signs in, stopped when they leave.
   useEffect(() => {
     if (me === null) return undefined;
+    // The person's own monitor, and a queue of its readings for the workout alone (64a-vi).
+    void loadMonitor(me);
+    const heart = heartQueue();
+    const soundFile = files.sounds?.(me) ?? null;
+    let left = false;
+    setSoundOn(true);
+    void soundFile?.read().then(
+      (text) => {
+        if (!left) setSoundOn(soundOnIn(text));
+      },
+      () => undefined,
+    );
     const waiting = workoutWaiting(files.waiting(me), workoutSender((request, shape) => session.signedIn(request, shape)));
-    const store = createRunStore({ file: files.run(me), waiting, platform: Platform.OS === "ios" ? "ios" : "android", appVersion: appVersion(), clock: Date.now });
+    const store = createRunStore({
+      file: files.run(me),
+      waiting,
+      platform: Platform.OS === "ios" ? "ios" : "android",
+      appVersion: appVersion(),
+      clock: Date.now,
+      heart: heart.take,
+      sound: (sounds) => {
+        if (!soundRef.current) return;
+        for (const one of sounds) soundNative?.play(one);
+      },
+    });
+    soundFiles.current = soundFile;
     // The stars wait while their workout is still on the phone, and go as soon as it is on the server.
     const effort = effortWaiting(
       files.effort(me),
@@ -134,6 +181,9 @@ export function WorkoutLayerProvider({ children, files = PHONE_FILES, onNewWorko
       void saved.send(true);
     });
     return () => {
+      left = true;
+      heart.close();
+      soundFiles.current = null;
       waiting.stop();
       effort.stop();
       saved.stop();
@@ -194,6 +244,26 @@ export function WorkoutLayerProvider({ children, files = PHONE_FILES, onNewWorko
       clearInterval(timer);
     };
   }, [store, running]);
+
+  // The person's monitor stays connected while a workout is on, its screen up or put away (64a-vi).
+  const going = kept !== null;
+  useEffect(() => {
+    if (!going) return undefined;
+    return holdHeart();
+  }, [going]);
+
+  const sound = useMemo<SoundSwitch>(
+    () => ({
+      on: soundOn,
+      flip: () => {
+        const next = !soundRef.current;
+        soundRef.current = next;
+        setSoundOn(next);
+        void soundFiles.current?.write(soundText(next)).catch(() => undefined);
+      },
+    }),
+    [soundOn],
+  );
 
   // The screen stays awake while the workout's own screen is up.
   const up = shown && (kept !== null || finished !== null);
@@ -269,6 +339,7 @@ export function WorkoutLayerProvider({ children, files = PHONE_FILES, onNewWorko
             waiting={waiting}
             effort={effortHand}
             units={units}
+            sound={sound}
             press={press}
             onPutAway={() => {
               setShown(false);

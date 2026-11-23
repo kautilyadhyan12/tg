@@ -1,4 +1,4 @@
-import { setsAndRestsMs, WORKOUT_SAVE_LIMITS, type RunExercise, type SavedSet, type WorkoutRun, type WorkoutSave } from "@app/shared";
+import { HEART_BPM_LEAST, HEART_BPM_MOST, setsAndRestsMs, WORKOUT_SAVE_LIMITS, type RunExercise, type SavedSet, type WorkoutRun, type WorkoutSave } from "@app/shared";
 import type { Units } from "./records";
 import { stepTime, stepWeight } from "./workoutSetup";
 
@@ -267,6 +267,36 @@ export function press(r: WorkoutRun, p: Press, now: number): Outcome {
   }
 }
 
+/** One reading from the person's own monitor: the phone's clock when it came, beats a minute. */
+export interface HeartIn {
+  at: number;
+  bpm: number;
+}
+/** At most one reading kept a second, as a run keeps them. */
+export const HEART_EVERY_MS = 900;
+
+/** The monitor's readings since the workout was last moved on (64a-vi), kept with it before the press at `now` is
+ *  pressed. THE WORST THING HERE: a heart rate kept as this workout's that is not the person's during it. So nothing is
+ *  kept while it is paused, on a "back" after more than AWAY_MOST_MS away (that time is not trained, and the workout comes
+ *  back paused), or once it is done; a reading from before the workout was last moved on (before Start, during a pause, a
+ *  clock set back) is not kept; each is placed on the workout's whole clock by when it came, one a second at most, in
+ *  order, and none past what a save allows. Which monitor sent it is the monitor's own rule (`monitor.ts`). */
+export function withHeart(r: WorkoutRun, readings: readonly HeartIn[], now: number, back: boolean): WorkoutRun {
+  if (readings.length === 0 || r.paused || r.phase === "done") return r;
+  if (back && now - r.seenAt > AWAY_MOST_MS) return r;
+  const kept = r.heart ?? [];
+  const heart: [number, number][] = [...kept];
+  let last = heart[heart.length - 1]?.[0] ?? -HEART_EVERY_MS;
+  for (const { at, bpm } of readings) {
+    if (!Number.isFinite(at) || at < r.seenAt || !Number.isInteger(bpm) || bpm < HEART_BPM_LEAST || bpm > HEART_BPM_MOST) continue;
+    const ms = Math.round(r.totalMs + (Math.min(at, now) - r.seenAt));
+    if (ms - last < HEART_EVERY_MS || ms > L.lengthMostMs || heart.length >= L.heartMost) continue;
+    heart.push([ms, bpm]);
+    last = ms;
+  }
+  return heart.length === kept.length ? r : { ...r, heart };
+}
+
 /** What the screen shows of the clocks at the phone's clock `now`, without pressing anything. */
 export function shownAt(r: WorkoutRun, now: number): WorkoutRun {
   return advance(r, now, false);
@@ -300,7 +330,8 @@ export function toSave(r: WorkoutRun, platform: WorkoutSave["platform"], appVers
     timeZone: r.timeZone,
     startedFrom: r.startedFrom ?? "none",
     effort: null,
-    heart: [],
+    // Only readings within the length the save sends: one past it would make the server refuse the whole workout.
+    heart: (r.heart ?? []).filter(([at]) => at <= lengthMs),
     platform,
     appVersion: appVersion.slice(0, 40),
     sets: r.done.map((s, position) => ({ ...s, position })),

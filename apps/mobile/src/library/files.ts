@@ -114,3 +114,7 @@ export const savedCopyFile = (userId: string): TextStore => personFile(userId, `
 
 /** A person's saves and deletes of saved workouts not yet on the server (64a-iv). */
 export const savedWaitingFile = (userId: string): TextStore => personFile(userId, `saved-changes-${userId}.json`);
+
+/** Whether a person's workouts play their sounds (64a-vi), `{"on":false}` once they turn them off; removed with the
+ *  account (`forgetPersonFiles`), as its name names them. */
+export const workoutSoundsFile = (userId: string): TextStore => personFile(userId, `workout-sounds-${userId}.json`);
