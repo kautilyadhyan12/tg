@@ -805,7 +805,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
         - 37f-ii-b. [x] **The voice saying your heart rate, and a watch kept connected by pairing it** · merged 2026-11-13 · PR #542
     - 37g. [x] **A run stands still when the runner does** · merged 2026-11-17 · PR #568
     - The running faults found 2026-11-20 (38, the testers' two among them; Kd: *"i will follow your recommendation , write the briefs"*): four jobs, in this order, each one's design in `handoff/2026-11-23-37h.md` (`rulings/2026-11-23-37h.md`).
-      - 37h. [ ] **The run's clock never goes back, and a current pace somebody can run**; a start Android refuses is said on the Running page.
+      - 37h. [x] **The run's clock never goes back, and a current pace somebody can run** · merged 2026-11-23 · PR #633
       - 37i. [ ] **The phone feels whether it is moving**: its motion sensor kept beside a run, nothing shown or sent; the two limits measured on real people and on Kd's phone.
       - 37j. [ ] **Auto-pause and Start use the phone's motion**: a stop pauses within about 5 s on any phone; a phone that feels still but travels (a pram) is "on wheels" and the GPS decides.
       - 37k. [ ] **The line holds still with Auto-pause off**: the still stretches go with the run to the server; the server goes live before the store build that sends them.
