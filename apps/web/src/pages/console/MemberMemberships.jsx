@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
+import { SidePanel } from '../../components/console/ConsoleBoxes';
 import { Link, useInRouterContext } from 'react-router-dom';
 import { Check, CreditCard, Loader2, Plus } from 'lucide-react';
 import { MEMBER_FEE_WORDS, UNDO_CANCEL_BUTTON, UNDO_CANCEL_WORDS, appCancelLine, formatMinor, memberGiftDaysLine, paidThroughSquare, undoCancelDoneLine } from '@app/shared';
@@ -229,6 +230,10 @@ export default function MemberMemberships({
   /** What is open: null, { what: 'add' } or { what, id } for a question on one membership. */
   const [open, setOpen] = useState(null);
   const [form, setForm] = useState(null);
+  /** Add or Change membership's answers as its panel opened with them: Close asks first once one has changed. */
+  const [startedAs, setStartedAs] = useState(null);
+  const addFormId = useId();
+  const changeFormId = useId();
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState(null);
   /** Undo cancellation's box (18l-ii-b): { id, ask, error, requestKey }, read when it opens. */
@@ -436,7 +441,10 @@ export default function MemberMemberships({
       .slice(0, 1)
       .find((m) => shown.types.some((t) => t.id === m.typeId));
     const form = addForm(shown.types, shown.today, giftId(shown));
-    setForm(had === undefined || form.typeId !== '' ? form : { ...form, typeId: had.typeId });
+    const picked = had === undefined || form.typeId !== '' ? form : { ...form, typeId: had.typeId };
+    // What it opened with, so a change to it is asked about before the panel closes.
+    setStartedAs(JSON.stringify(picked));
+    setForm(picked);
     setOpen({ what: 'add' });
   }, [addsNow, shown]);
   // Opened by Take payment on Failed payments: that bill's Record payment, as its own button
@@ -650,7 +658,9 @@ export default function MemberMemberships({
   const startAdd = () => {
     setNotice(null);
     setRefusal(null);
-    setForm(addForm(types, today, giftId(shown)));
+    const fresh = addForm(types, today, giftId(shown));
+    setStartedAs(JSON.stringify(fresh));
+    setForm(fresh);
     setOpen({ what: 'add' });
   };
 
@@ -668,7 +678,9 @@ export default function MemberMemberships({
     setNotice(null);
     setRefusal(null);
     setEnding(null);
-    setChangeDraft(changeForm(types, m));
+    const fresh = changeForm(types, m);
+    setStartedAs(JSON.stringify(fresh));
+    setChangeDraft(fresh);
     setOpen({ what: 'change', id: m.id });
   };
 
@@ -802,6 +814,7 @@ export default function MemberMemberships({
     setVoidForm(null);
     setFeeForm(null);
     setChangeDraft(null);
+    setStartedAs(null);
   };
 
   /** A fee's own box, opened by its button: pay it, waive it, or void its payment. */
@@ -2074,19 +2087,19 @@ export default function MemberMemberships({
         </div>
       );
     }
-    return (
+    // A form of four fields or more: from the right (§17.11), its button at the panel's foot.
+    return changePanel(
+      m,
       <form
+        id={changeFormId}
         noValidate
-        className="rounded-[14px] p-3 flex flex-col gap-3"
-        style={{ background: 'var(--raise)' }}
-        data-testid="held-change"
+        className="flex flex-col gap-3"
         onSubmit={(e) => {
           e.preventDefault();
           if (!choice.ready || busy) return;
           void run('change', m, () => orgService.changeHeldMembership(gymId, entryId, m.id, 'change', changeBody(changeDraft, choice)), changeDoneWords(m, choice));
         }}
       >
-        <p className="c-s15 c-w6 c-t1 m-0">{`Change ${name}'s ${m.typeName} to another membership`}</p>
         {choice.targets.length === 0 ? (
           <>
             <p className="c-s14 c-t2 m-0">
@@ -2158,20 +2171,39 @@ export default function MemberMemberships({
             <MembershipTotal summary={choice.summary} />
           </>
         )}
-        <div className="flex flex-wrap gap-2">
-          {choice.targets.length > 0 ? (
-            <button type="submit" disabled={busy || !choice.ready} className={choice.ready ? MAIN : 'c-btn'} style={choice.ready ? undefined : { background: 'var(--card)', color: 'var(--t3)', opacity: 1 }}>
-              {busy ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : <Check aria-hidden="true" className="w-4 h-4" />}
-              Change membership
-            </button>
-          ) : null}
-          <button type="button" className={PLAIN} disabled={busy} onClick={close}>
-            Back
-          </button>
-        </div>
-      </form>
+      </form>,
+      choice.targets.length > 0 ? { ready: choice.ready } : null,
+      false,
     );
   };
+
+  const refusalLine = () => (
+    <p className="c-s14 c-t1 m-0 rounded-[14px] p-3" style={{ background: 'var(--bad-bg)' }} role="alert">
+      {refusal}
+    </p>
+  );
+  /** In a panel, a refusal is said at its top, where the form is: the page behind it is covered. */
+  const panelRefusal = () => (refusal !== null ? refusalLine() : null);
+
+  /** Change membership's panel: its form, or the bookings the change would end, asked in the
+   *  same panel with that question's own buttons. `save` null draws no Change membership. */
+  const changePanel = (m, content, save, ownButtons) => (
+    <SidePanel
+      title={`Change ${name}'s ${m.typeName} to another membership`}
+      sub="Nothing changes until you press Change membership."
+      onClose={close}
+      unsaved={startedAs !== null && JSON.stringify(changeDraft) !== startedAs}
+      formId={save !== null ? changeFormId : undefined}
+      saveLabel={save !== null ? 'Change membership' : null}
+      saveDisabled={save === null || !save.ready}
+      busy={busy}
+      cancelLabel={ownButtons ? null : 'Cancel'}
+      testId="held-change"
+    >
+      {panelRefusal()}
+      {content}
+    </SidePanel>
+  );
 
   const renderAsk = (m) => {
     if (ending !== null && ending.id === m.id) return renderEnding(m);
@@ -2542,7 +2574,7 @@ export default function MemberMemberships({
           ) : open.what === 'pay' && payForm !== null ? (
             renderPay(m)
           ) : open.what === 'change' && changeDraft !== null ? (
-            ending !== null && ending.id === m.id ? renderEnding(m) : renderChange(m)
+            ending !== null && ending.id === m.id && renderEnding(m) !== null ? changePanel(m, renderEnding(m), null, true) : renderChange(m)
           ) : open.what === 'cancelBill' || open.what === 'refund' || open.what === 'cardRefund' || open.what === 'voidRefund' || (open.what === 'undo' && m.billing?.undo?.kind === 'payment') ? null : (
             // Drawn inside the bill, payment or refund they are about (`renderBills`).
             renderAsk(m)
@@ -2611,29 +2643,49 @@ export default function MemberMemberships({
     const fee = joiningFeeFor(choice.type, form.joiningFee, shown.canBill, shown.memberships.some(isLive));
     const summary = choice.type === null ? null : membershipSummary(choice.type, discount, shown.taxIncluded, giftUsed, fee.feeMinor, part);
     const ready = choice.type !== null && choice.problem === null && summary !== null;
+    // Nothing to choose from: a short answer under the button, not a form.
+    if (types.length === 0) {
+      return (
+        <div className="rounded-[14px] p-3 flex flex-col gap-3" style={{ background: 'var(--raise)' }} data-testid="held-add">
+          <p className="c-s15 c-w6 c-t1 m-0">Add a membership for {name}</p>
+          <p className="c-s14 c-t2 m-0">
+            {managesTypes ? 'You have no membership types yet. Add them in Memberships.' : 'There are no membership types yet. Ask the owner to add them.'}
+          </p>
+          <PlaceLink to={membershipsTo}>Open Memberships</PlaceLink>
+          <div>
+            <button type="button" className={PLAIN} disabled={busy} onClick={close}>
+              Back
+            </button>
+          </div>
+        </div>
+      );
+    }
+    // A form of four fields or more: from the right (§17.11), its button at the panel's foot.
     return (
-      <form
-        noValidate
-        className="rounded-[14px] p-3 flex flex-col gap-3"
-        style={{ background: 'var(--raise)' }}
-        data-testid="held-add"
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (!ready || busy) return;
-          // Given owed: the line it leaves says where its payment is recorded (Kd, 2026-11-04).
-          void run('give', null, () => orgService.giveHeldMembership(gymId, entryId, giveBody(form.requestKey, choice.type, form, discount, summary, giftUsed, fee.feeMinor)), free ? null : doneWords('giveOwed'));
-        }}
+      <SidePanel
+        title={`Add a membership for ${name}`}
+        sub="Nothing is added until you press Add membership."
+        onClose={close}
+        unsaved={startedAs !== null && JSON.stringify(form) !== startedAs}
+        formId={addFormId}
+        saveLabel="Add membership"
+        saveDisabled={!ready}
+        busy={busy}
+        cancelLabel="Cancel"
+        testId="held-add"
       >
-        <p className="c-s15 c-w6 c-t1 m-0">Add a membership for {name}</p>
-        {types.length === 0 ? (
-          <>
-            <p className="c-s14 c-t2 m-0">
-              {managesTypes ? 'You have no membership types yet. Add them in Memberships.' : 'There are no membership types yet. Ask the owner to add them.'}
-            </p>
-            <PlaceLink to={membershipsTo}>Open Memberships</PlaceLink>
-          </>
-        ) : (
-          <>
+        {panelRefusal()}
+        <form
+          id={addFormId}
+          noValidate
+          className="flex flex-col gap-3"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (!ready || busy) return;
+            // Given owed: the line it leaves says where its payment is recorded (Kd, 2026-11-04).
+            void run('give', null, () => orgService.giveHeldMembership(gymId, entryId, giveBody(form.requestKey, choice.type, form, discount, summary, giftUsed, fee.feeMinor)), free ? null : doneWords('giveOwed'));
+          }}
+        >
             <MembershipChoice
               types={types}
               today={today}
@@ -2696,27 +2748,16 @@ export default function MemberMemberships({
               />
             ) : null}
             <MembershipTotal summary={summary !== null && summary.shows ? summary : null} />
-          </>
-        )}
-        <div className="flex flex-wrap gap-2">
-          {types.length > 0 ? (
-            <button
-              type="submit"
-              disabled={busy || !ready}
-              className={ready ? MAIN : 'c-btn'}
-              style={ready ? undefined : { background: 'var(--card)', color: 'var(--t3)', opacity: 1 }}
-            >
-              {busy ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : <Check aria-hidden="true" className="w-4 h-4" />}
-              Add membership
-            </button>
-          ) : null}
-          <button type="button" className={PLAIN} disabled={busy} onClick={close}>
-            Back
-          </button>
-        </div>
-      </form>
+        </form>
+      </SidePanel>
     );
   };
+
+  // Add membership's or Change membership's panel is open over the page.
+  const changing = open !== null && open.what === 'change' && changeDraft !== null ? (shown.memberships.find((x) => x.id === open.id) ?? null) : null;
+  const panelOpen =
+    (open !== null && open.what === 'add' && form !== null && types.length > 0) ||
+    (changing !== null && changeChoice(changing, types, changeDraft, shown.taxIncluded, today, name).blocked === null);
 
   return (
     <section className="c-card px-4 py-3 md:px-5 md:py-4 flex flex-col gap-2" data-testid="held-memberships">
@@ -2779,11 +2820,7 @@ export default function MemberMemberships({
           </button>
         </div>
       ) : null}
-      {refusal !== null ? (
-        <p className="c-s14 c-t1 m-0 rounded-[14px] p-3" style={{ background: 'var(--bad-bg)' }} role="alert">
-          {refusal}
-        </p>
-      ) : null}
+      {refusal !== null && !panelOpen ? refusalLine() : null}
       {open !== null && open.what === 'add' && form !== null ? renderAdd() : null}
       {listed !== null ? (
         <div className="py-3 flex flex-col gap-1.5" style={{ borderTop: '1px solid var(--line)' }} data-testid="held-listed">

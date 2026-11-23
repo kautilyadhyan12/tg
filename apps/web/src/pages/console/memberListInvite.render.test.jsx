@@ -504,6 +504,8 @@ describe("a person's page", () => {
 });
 
 describe('Add and invite', () => {
+  // The panel closes once they are added; what happened is said on their page.
+  const personPage = async () => within(await screen.findByTestId('member-person'));
   const addBox = () => {
     // The page reads the new record once it is added.
     orgService.getMemberListEntry.mockResolvedValue({ data: { entry: person({ fullName: 'Cy Walker', email: 'cy@members.example' }) } });
@@ -526,7 +528,7 @@ describe('Add and invite', () => {
       added({ outcome: 'queued', invitation: invitation({ state: 'queued', reason: null, at: '2026-09-25T10:00:00.000Z', result: null }) }),
     );
     fireEvent.click(page().getByRole('button', { name: 'Add and invite' }));
-    expect(await page().findByText('Member added. Invitation sent. It will arrive within a few minutes.')).toBeTruthy();
+    expect(await (await personPage()).findByText('Member added. Invitation sent. It will arrive within a few minutes.')).toBeTruthy();
     expect(orgService.addMemberListEntry).toHaveBeenCalledWith(GYM, { fullName: 'Cy Walker', email: 'cy@members.example', invite: true });
   });
 
@@ -550,7 +552,7 @@ describe('Add and invite', () => {
     fill();
     orgService.addMemberListEntry.mockResolvedValue(added(null));
     fireEvent.click(page().getByRole('button', { name: 'Add member' }));
-    expect(await page().findByText('Member added.')).toBeTruthy();
+    expect(await (await personPage()).findByText('Member added.')).toBeTruthy();
     expect(orgService.addMemberListEntry).toHaveBeenCalledWith(GYM, { fullName: 'Cy Walker', email: 'cy@members.example' });
   });
 });

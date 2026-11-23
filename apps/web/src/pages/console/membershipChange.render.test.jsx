@@ -324,3 +324,46 @@ describe('Connect Square on the payment forms', () => {
     expect(form.queryByTestId('held-connect-square')).toBeNull();
   });
 });
+
+describe('V2b-i: Change membership opens from the right', () => {
+  it("is a panel naming the person and the membership; Cancel asks once a choice is made, and sends nothing", async () => {
+    const m = basic(true);
+    orgService.getHeldMemberships.mockResolvedValue(answer([m]));
+    render(draw());
+    fireEvent.click(await screen.findByRole('button', { name: 'Change membership' }));
+    const panel = screen.getByRole('dialog', { name: "Change Ada Lovelace's Basic Monthly to another membership" });
+    expect(panel.classList.contains('c-panel')).toBe(true);
+    const form = within(panel);
+    expect(form.getByText('Nothing changes until you press Change membership.')).toBeTruthy();
+    // Their Memberships stay behind it.
+    expect(screen.getByTestId('held-memberships')).toBeTruthy();
+
+    // Nothing chosen: Cancel closes at once.
+    fireEvent.click(form.getByRole('button', { name: 'Cancel' }));
+    expect(screen.queryByTestId('held-change')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Change membership' }));
+    const again = within(screen.getByTestId('held-change'));
+    fireEvent.change(again.getByLabelText('New membership'), { target: { value: GOLD.id } });
+    expect(again.getByText("You have changes that aren't saved.")).toBeTruthy();
+    fireEvent.click(again.getByRole('button', { name: 'Cancel' }));
+    fireEvent.click(again.getByRole('button', { name: 'Keep editing' }));
+    expect(again.getByLabelText('New membership').value).toBe(GOLD.id);
+    fireEvent.click(again.getByRole('button', { name: 'Close' }));
+    fireEvent.click(again.getByRole('button', { name: 'Close without saving' }));
+    expect(screen.queryByTestId('held-change')).toBeNull();
+    expect(orgService.changeHeldMembership).not.toHaveBeenCalled();
+  });
+
+  it('a refused change is said inside the panel, where the form is', async () => {
+    const m = basic(true);
+    orgService.getHeldMemberships.mockResolvedValue(answer([m]));
+    orgService.changeHeldMembership.mockRejectedValueOnce(Object.assign(new Error('refused'), { response: { status: 500, data: { error: 'internal', message: 'Something went wrong.' } } }));
+    render(draw());
+    const form = await openBox();
+    fireEvent.change(form.getByLabelText('New membership'), { target: { value: GOLD.id } });
+    fireEvent.click(form.getByRole('button', { name: 'Change membership' }));
+    expect(await form.findByRole('alert')).toBeTruthy();
+    expect(within(screen.getByTestId('held-memberships')).queryByRole('alert')).toBeNull();
+  });
+});

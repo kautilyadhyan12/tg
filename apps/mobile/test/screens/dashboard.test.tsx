@@ -101,9 +101,12 @@ const mealRow = (id: string, takenAt: string, mealName: string | null) => ({
 });
 const hoursAgo = (hours: number) => new Date(Date.now() - hours * 3_600_000).toISOString();
 
+/** Total Sessions: a number no day of the week's calendar can show. At 24, a week holding the 24th drew it twice. */
+const SESSIONS = 48;
+
 /** A person with a few weeks of training. */
 const trained: Record<string, Route> = {
-  "/v1/progress/overview": ok(overview(24)),
+  "/v1/progress/overview": ok(overview(SESSIONS)),
   "/v1/gamification/me": ok(gamification()),
   "/v1/progress/trend": ok({ points: [{ date: today, kcal: 348, workouts: 2, durationMs: 3_600_000 }], runDays: [], limitedToDays: 90 }),
   "/v1/gamification/challenges": ok(challenges),
@@ -133,7 +136,7 @@ describe("the worst thing: a 30-day streak never reads 0 while it loads (31h)", 
         };
       });
     await openApp({ ...trained, "/v1/gamification/me": slow });
-    expect(await screen.findByText("24")).toBeTruthy();
+    expect(await screen.findByText(String(SESSIONS))).toBeTruthy();
     const streak = screen.getByLabelText("day streak, loading");
     expect(within(streak).getByTestId("soft-bar")).toBeTruthy();
     expect(within(streak).queryByText("0")).toBeNull();
@@ -277,7 +280,7 @@ describe("the Dashboard, with the person's own numbers", () => {
   it("shows each box from its own read, as drawn", async () => {
     const server = await openApp(trained);
     // The four numbers.
-    expect(await screen.findByText("24")).toBeTruthy();
+    expect(await screen.findByText(String(SESSIONS))).toBeTruthy();
     expect(screen.getByText("Total Sessions")).toBeTruthy();
     // The window the four cover, said once over them.
     expect(screen.getAllByText("all time")).toHaveLength(1);
@@ -442,7 +445,7 @@ describe("the person's own time zone", () => {
       ...trained,
       "/v1/users/me": () => ({ status: 200, body: { user: { ...profile(true).user, timezone: "Asia/Kolkata" } } }),
     });
-    expect(await screen.findByText("24")).toBeTruthy();
+    expect(await screen.findByText(String(SESSIONS))).toBeTruthy();
     await waitFor(() => {
       expect(server.paths().filter((path) => path === "/v1/users/me").length).toBeGreaterThanOrEqual(1);
     });
@@ -471,14 +474,14 @@ describe("a read that fails or is slow never shows a number it does not know", (
 
     up = true;
     await fireEvent.press(screen.getByRole("button", { name: "Try again" }));
-    expect(await screen.findByText("24")).toBeTruthy();
+    expect(await screen.findByText(String(SESSIONS))).toBeTruthy();
     expect(await screen.findByText("1 of 7 days active")).toBeTruthy();
     expect(screen.queryByText("Some of your numbers couldn’t load.")).toBeNull();
   });
 
   it("one read that never answers leaves its own box unknown and the others drawn, with no failure line", async () => {
     await openApp({ ...trained, "/v1/gamification/me": never });
-    expect(await screen.findByText("24")).toBeTruthy();
+    expect(await screen.findByText(String(SESSIONS))).toBeTruthy();
     expect(screen.getByText("1 of 7 days active")).toBeTruthy();
     expect(screen.queryByText(/^Level \d/)).toBeNull();
     // The streak box shows no 12; a calendar date of the 12th, in a week that has one, is not the streak.
@@ -494,7 +497,7 @@ describe("a read that fails or is slow never shows a number it does not know", (
   it("one of Recent Activity's three lists failing shows no list at all, never one missing the newest", async () => {
     await openApp({ ...trained, "/v1/nutrition/meals": () => refusal(503, "unavailable", "Down") });
     expect(await screen.findByText("Some of your numbers couldn’t load.")).toBeTruthy();
-    expect(screen.getByText("24")).toBeTruthy();
+    expect(screen.getByText(String(SESSIONS))).toBeTruthy();
     expect(screen.queryByText("Workout · 42 min · 91 form")).toBeNull();
     expect(screen.queryByText("Evening run · 31 min")).toBeNull();
     expect(screen.queryByText(/^No activity/)).toBeNull();
@@ -517,7 +520,7 @@ describe("its buttons open where each thing lives", () => {
     ["View Progress", 0, "Me"],
   ] as const)("%s (%i) opens %s", async (button, which, tab) => {
     await openApp(trained);
-    await screen.findByText("24");
+    await screen.findByText(String(SESSIONS));
     const pressed = screen.getAllByRole("button", { name: button })[which];
     if (pressed === undefined) throw new Error(`${button} ${String(which)} was expected`);
     expect(screen.getAllByRole("button", { name: button })).toHaveLength(button === "Start Training" ? 2 : 1);
@@ -529,7 +532,7 @@ describe("its buttons open where each thing lives", () => {
 
   it("coming back to the Dashboard reads it again", async () => {
     const server = await openApp(trained);
-    await screen.findByText("24");
+    await screen.findByText(String(SESSIONS));
     const overviews = () => server.paths().filter((path) => path === "/v1/progress/overview").length;
     expect(overviews()).toBe(1);
     await fireEvent.press(screen.getByRole("tab", { name: "Me" }));
