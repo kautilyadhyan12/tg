@@ -3056,8 +3056,9 @@ workouts are kept day by day (Part 6 §2: Progress holds history), with doors to
 - **Not in 64a-v:** stars given from History; a workout deleted or repeated from History (neither the web nor the phone has them).
 
 **As built in 64a-vi (2026-11-23, Kd's drawing of that day).** Heart rate and sounds in a workout:
-- **Heart rate** from the person's own saved monitor (37f-i), on the workout's screen under its top buttons (`heart/HeartPill.tsx`,
-  shared with the run's pill, larger): "142 bpm · Zone 3" in the zone's colour where a maximum heart rate is known, "No signal"
+- **Heart rate** from the person's own saved monitor (37f-i), on the workout's screen in a row under the exercise's name, beside
+  Sound (Kd's click-through: the top's buttons are one row in one panel over the picture) (`heart/HeartPill.tsx`, shared with
+  the run's pill, larger): "142 bpm · Zone 3" in the zone's colour where a maximum heart rate is known, "No signal"
   where there is no reading in the last 5 s, never 0 or an old number; none at all with no monitor. Kept with the workout
   (`workoutRunSchema.heart`, `withHeart` in `library/workoutRun.ts`, table-tested): only while its clocks run, never while paused,
   after more than 10 minutes away, before the workout was last moved on, or once it is done; each reading on the workout's whole
@@ -3072,7 +3073,7 @@ workouts are kept day by day (Part 6 §2: Progress holds history), with doors to
   3 seconds of a rest, a get-ready or a set measured in time, a rising "go" when the next set starts after a rest or a get-ready.
   None while paused, for Pause or Resume, on coming back to the app, or after a tick more than 1.5 s late. The one player
   (`sound/soundNative.ts`, expo-audio 57.0.5) mixes with the person's music, never pausing it, and asks for no microphone; a copy
-  of the app built before it plays nothing. Sound on or off under the top buttons, kept for the person
+  of the app built before it plays nothing. Sound on or off beside the heart rate, kept for the person
   (`workout-sounds-<id>.json`, removed with the account). Sounds play while the app is open; with the phone locked or the app
   left, a rest ends silently.
 - **My Workout** has "Heart rate monitor" under History, opening the same box as Settings and the Running page, whose words now

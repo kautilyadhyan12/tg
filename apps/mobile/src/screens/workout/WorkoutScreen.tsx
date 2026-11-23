@@ -101,10 +101,10 @@ function Doing({ run, units, sound, press, onPutAway, onDiscard }: { run: Workou
         <Icon name="down" size={26} colour="text" />
       </Pressable>
       <View style={styles.topMiddle}>
-        <Txt kind="strong" numberOfLines={1} style={styles.centre}>
+        <Txt kind="strong" numberOfLines={1} fit style={styles.centre}>
           {name}
         </Txt>
-        <Txt kind="small" colour="text" style={[styles.centre, styles.digits]}>
+        <Txt kind="small" colour="text" numberOfLines={1} fit style={[styles.centre, styles.digits]}>
           {clock(run.activeMs)}
         </Txt>
       </View>
@@ -134,10 +134,18 @@ function Doing({ run, units, sound, press, onPutAway, onDiscard }: { run: Workou
         </Txt>
       </Pressable>
     </View>
-      <View style={styles.pills}>
-        {heart.monitor === null ? <View /> : <WorkoutHeart bpm={heart.bpm} />}
-        <SoundPill sound={sound} />
-      </View>
+    </View>
+  );
+  // The heart rate and the sound switch, in the page under the title: over the picture they could not grow with the words
+  // and ran over the title on a small phone at the largest text.
+  const pills = (
+    <View style={styles.pills}>
+      {heart.monitor === null ? <View style={styles.grow} /> : (
+        <View style={styles.heartRoom}>
+          <WorkoutHeart bpm={heart.bpm} />
+        </View>
+      )}
+      <SoundPill sound={sound} />
     </View>
   );
   return (
@@ -152,6 +160,7 @@ function Doing({ run, units, sound, press, onPutAway, onDiscard }: { run: Workou
           {...(run.phase === "rest" ? { foot: <Txt kind="body" colour="text">{setLine(run, units)}</Txt> } : {})}
         />
         <View style={styles.body}>
+          {pills}
           <View style={styles.wall}>
             {inSet && !timed ? (
               <>
@@ -358,6 +367,8 @@ function Row({ label, less, more, onPress, disabled, children }: { label: string
 const PLATE = 72;
 /** The top's buttons: taller than a press needs. */
 const TOP = 54;
+/** The heart rate and the sound switch under them. */
+const PILL = 48;
 
 /** The set's weight as the set-up box's plate, smaller: its number above the hub, the unit below; "NONE" for none. */
 function Plate({ grams, units }: { grams: number | null; units: Units }) {
@@ -416,16 +427,19 @@ const styles = StyleSheet.create({
   self: { alignSelf: "center" },
   pressed: { opacity: 0.85 },
   faint: { opacity: 0.35 },
-  tops: { gap: 8 },
-  topBar: { flexDirection: "row", alignItems: "center", gap: 4, marginHorizontal: -10 },
+  // The top's buttons in one panel over the picture, on one line and one height (Kd's click-through: "not layout properly
+  // and scattered around").
+  tops: { padding: 6, marginHorizontal: -10, borderRadius: 33, backgroundColor: colours.overWords, borderWidth: 1, borderColor: colours.lineStrong },
+  topBar: { flexDirection: "row", alignItems: "center", gap: 6 },
   // The heart rate and the sound switch under the top's buttons, over the picture (64a-vi).
-  pills: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap", marginHorizontal: -6 },
-  soundPill: { flexDirection: "row", alignItems: "center", gap: 7, minHeight: 40, paddingHorizontal: 13, borderRadius: sizes.round, backgroundColor: colours.veil, borderWidth: 1, borderColor: colours.lineStrong },
+  pills: { flexDirection: "row", flexWrap: "wrap", alignItems: "stretch", gap: 8 },
+  heartRoom: { flexGrow: 1, flexBasis: 180 },
+  soundPill: { flexDirection: "row", alignItems: "center", gap: 7, minHeight: PILL, paddingHorizontal: 14, borderRadius: sizes.round, backgroundColor: colours.raised, borderWidth: 1, borderColor: colours.lineStrong },
   // Pause and End are pressed mid-set, from a step back: big enough to hit at a glance (Kd: "pause, end is too small").
-  topRound: { width: TOP, height: TOP, borderRadius: TOP / 2, alignItems: "center", justifyContent: "center", backgroundColor: colours.overWords, borderWidth: 1, borderColor: colours.lineStrong },
-  topPill: { flexDirection: "row", gap: 8, minHeight: TOP, paddingHorizontal: 16, borderRadius: TOP / 2, alignItems: "center", justifyContent: "center", backgroundColor: colours.overWords, borderWidth: 1, borderColor: colours.lineStrong },
+  topRound: { width: TOP, height: TOP, borderRadius: TOP / 2, alignItems: "center", justifyContent: "center", backgroundColor: colours.raised, borderWidth: 1, borderColor: colours.lineStrong },
+  topPill: { flexDirection: "row", gap: 8, minHeight: TOP, paddingHorizontal: 16, borderRadius: TOP / 2, alignItems: "center", justifyContent: "center", backgroundColor: colours.raised, borderWidth: 1, borderColor: colours.lineStrong },
   topMiddle: { flex: 1 },
-  topEnd: { minHeight: TOP, paddingHorizontal: 18, borderRadius: TOP / 2, alignItems: "center", justifyContent: "center", backgroundColor: colours.overWords, borderWidth: 1, borderColor: colours.lineStrong },
+  topEnd: { minHeight: TOP, paddingHorizontal: 18, borderRadius: TOP / 2, alignItems: "center", justifyContent: "center", backgroundColor: colours.raised, borderWidth: 1, borderColor: colours.lineStrong },
   body: { paddingHorizontal: 16, paddingTop: 6, gap: 12 },
   wall: { paddingHorizontal: 14, paddingVertical: 4, borderRadius: 22, borderWidth: 1, borderColor: colours.timerEdge, backgroundColor: colours.timerFace },
   label: { fontFamily: fonts.bold, letterSpacing: 1.1, color: colours.timerWords },
