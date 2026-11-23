@@ -18,23 +18,23 @@ export async function turnOnLocation(): Promise<boolean> {
   }
 }
 
-/** `onAgain`: Start pressed again, once the person has allowed what was asked. */
-export function StartProblemBox({ problem, onAgain }: { problem: StartProblem; onAgain: () => void }) {
-  return (
-    <View style={styles.problem}>
-      <Txt kind="small" colour="badText">
-        {START_PROBLEM_WORDS[problem]}
-      </Txt>
-      {problem === "approximate" ? (
+/** The one thing to press for each problem. A switch over every kind: a new kind will not build until
+ *  it is given its own button here. */
+function AgainButtons({ problem, onAgain }: { problem: StartProblem; onAgain: () => void }) {
+  switch (problem) {
+    case "approximate":
+      return (
         <View style={styles.choices}>
           <Button kind="link" label="Allow precise location" onPress={onAgain} />
           <Button kind="quiet" label="Open settings" onPress={openAppSettings} />
         </View>
-      ) : problem === "settings" ? (
-        <Button kind="link" label="Open settings" onPress={openAppSettings} />
-      ) : problem === "denied" ? (
-        <Button kind="link" label="Allow location" onPress={onAgain} />
-      ) : problem === "off" ? (
+      );
+    case "settings":
+      return <Button kind="link" label="Open settings" onPress={openAppSettings} />;
+    case "denied":
+      return <Button kind="link" label="Allow location" onPress={onAgain} />;
+    case "off":
+      return (
         <Button
           kind="link"
           label="Turn on location"
@@ -44,7 +44,21 @@ export function StartProblemBox({ problem, onAgain }: { problem: StartProblem; o
             });
           }}
         />
-      ) : null}
+      );
+    case "failed":
+      // Android refused the run after 3, 2, 1.
+      return <Button kind="link" label="Start again" onPress={onAgain} />;
+  }
+}
+
+/** `onAgain`: Start pressed again, once the person has allowed what was asked. */
+export function StartProblemBox({ problem, onAgain }: { problem: StartProblem; onAgain: () => void }) {
+  return (
+    <View style={styles.problem}>
+      <Txt kind="small" colour="badText">
+        {START_PROBLEM_WORDS[problem]}
+      </Txt>
+      <AgainButtons problem={problem} onAgain={onAgain} />
     </View>
   );
 }

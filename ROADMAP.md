@@ -489,7 +489,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
    - V2b. **A member's page: its boxes**, in three by how each box opens (2026-11-23; spec §17.11, `Boxes`):
      - V2b-i. [x] **From the right**: Add member, Edit, Add membership, Change membership · merged 2026-11-23 · PR #626
      - V2b-ii. [x] **In the middle, money** · merged 2026-11-23 · PR #631
-     - V2b-iii. [ ] **In the middle, people, and under the button**: Invite, Remove, Delete permanently, Merge; Record a payment, More, Tags, Change payer.
+     - V2b-iii. [x] **In the middle, people, and under the button** · merged 2026-11-23 · PR #634
    - V3a. [ ] **Members: Your list** (web folder 1): the one-press picks, the list, people ticked and the bar, Send message, Tags, Remove, Filter from the right (`MembersNew*`).
    - V3b. [ ] **Members: In the app, waiting to join, and Staff** (web folder 1): a staff member's panel, Invite staff, Staff activity (`MembersNewApp`, `MembersNewStaff*`).
    - V4a. [ ] **Sell** (web folder 1): the register, a sale, products, tax (`Sell*`, `PhoneSell`); a sale's refund boxes and its receipt in the middle, on a member's Purchases too (V2b-ii).
@@ -804,6 +804,11 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
         - 37f-ii-a. [x] **The heart rate chart and your five heart rate zones** · merged 2026-11-13 · PR #539
         - 37f-ii-b. [x] **The voice saying your heart rate, and a watch kept connected by pairing it** · merged 2026-11-13 · PR #542
     - 37g. [x] **A run stands still when the runner does** · merged 2026-11-17 · PR #568
+    - The running faults found 2026-11-20 (38, the testers' two among them; Kd: *"i will follow your recommendation , write the briefs"*): four jobs, in this order, each one's design in `handoff/2026-11-23-37h.md` (`rulings/2026-11-23-37h.md`).
+      - 37h. [x] **The run's clock never goes back, and a current pace somebody can run** · merged 2026-11-23 · PR #633
+      - 37i. [ ] **The phone feels whether it is moving**: its motion sensor kept beside a run, nothing shown or sent; the two limits measured on real people and on Kd's phone.
+      - 37j. [ ] **Auto-pause and Start use the phone's motion**: a stop pauses within about 5 s on any phone; a phone that feels still but travels (a pram) is "on wheels" and the GPS decides.
+      - 37k. [ ] **The line holds still with Auto-pause off**: the still stretches go with the run to the server; the server goes live before the store build that sends them.
 38. [ ] **The global board** (its reminders moved to item 19e on 2026-11-05): last, as Kd ruled on 2026-11-01 (`rulings/2026-11-01-17c-ii-a.md`): Active days and Running, the server's checks, a stranger's profile, and follow requests for somebody who chose Hide me, seen from outside their gym; Follow with Followers and Following counts everywhere, gyms included (`rulings/2026-11-01-17c-ii-b.md`). It waits for items 18, 37, 53 and 64.
 40. [ ] **Workouts and runs from your watch** (Kd, 2026-11-12, `rulings/2026-11-12-37f-i.md`), after 37f: Android's Health Connect and a file upload (GPX, TCX, FIT) first, then Garmin's and Polar's own connections (Kd applies to Garmin's); Apple Health with the iPhone version. Workouts and runs with their heart rate, calories and distance, and weight from a smart scale; never sleep or heart rate variability.
 39. [ ] **Share with your photo** (Kd, 2026-10-18; spec Part 2 §11.8): after a workout, a meal photo or a run, the person takes or picks a photo and the stats are drawn on it, made on the phone and sent through the phone's own share menu. A run's map drawn on it hides its start and end near the person's home, as Strava's does (37a's plan, 2026-11-05). Built once for all three, after items 33 and 37 and exercise folder 2's 64; it brings Part 7 §5's share cards forward from After launch.

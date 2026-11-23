@@ -375,7 +375,8 @@ function openPerson(p, gym = IRON) {
     <MemberListPerson gymId={GYM} gym={gym} entryId={p.entryId} list={LIST} words={WORDS} readOnly={false} onClose={onClose} onChanged={onChanged} />,
   );
 }
-const page = () => within(screen.getAllByRole('dialog')[0]);
+/** The person's page, or the question open in the middle over it (V2b-iii). */
+const page = () => within(screen.queryByTestId('person-ask') ?? screen.getAllByRole('dialog')[0]);
 
 describe("a person's page", () => {
   it('a gym with no postal address: one person cannot be invited either, and the address is typed there, with the person left open (23d)', async () => {
@@ -435,7 +436,9 @@ describe("a person's page", () => {
       data: { entry: person({ invitation: queued, app: { word: 'invited', tone: 'grey', at: '2026-09-25T10:00:00.000Z', line: null, lineTone: 'plain' } }) },
     });
     fireEvent.click(button);
-    expect(await page().findByText('Invitation sent. It will arrive within a few minutes.')).toBeTruthy();
+    // The box in the middle closes; the page says what was done.
+    expect(await screen.findByText('Invitation sent. It will arrive within a few minutes.')).toBeTruthy();
+
     expect(orgService.inviteMemberListEntry).toHaveBeenCalledWith(GYM, ADA);
     expect(await page().findByText('Invited')).toBeTruthy();
     expect(page().queryByText('Not in the app')).toBeNull();
@@ -483,7 +486,8 @@ describe("a person's page", () => {
     expect(confirm.getByText(/3 times in 30 days/)).toBeTruthy();
     orgService.resendMemberListInvite.mockResolvedValue({ data: { invite: { outcome: 'queued', invitation: invitation(wentEmail, { sentAgain: 1 }) } } });
     fireEvent.click(confirm.getByRole('button', { name: 'Send again' }));
-    expect(await page().findByText('Invitation resent. It will arrive within a few minutes.')).toBeTruthy();
+    expect(await screen.findByText('Invitation resent. It will arrive within a few minutes.')).toBeTruthy();
+
     expect(orgService.resendMemberListInvite).toHaveBeenCalledWith(GYM, ADA);
     expect(orgService.inviteMemberListEntry).not.toHaveBeenCalled();
   });

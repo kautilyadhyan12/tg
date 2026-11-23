@@ -22,16 +22,19 @@ import {
   type KeptRunChoices,
   type KeptRunGuide,
   type MapColours,
-  type RunPause,
   type RunPoint,
   type Units,
 } from "@app/shared";
 import { colours } from "../../look/colours";
 import { AUTO_START, nextAutoPause, type AutoPauseState } from "./autoPause";
+import { closedPauses, elapsedMs, movingMsOf } from "./runLive";
 import { beginLine, guideAdvance, guideDone, guideNextLook, guideSchedule, guideSkip, nowLine, skipLine } from "./runGuide";
 import { PAUSE_WORDS, VOICE_AFTER_LOAD, VOICE_START, heartLine, voiceCheck, type VoiceState } from "./runVoice";
 import { runVoiceNative } from "./runVoiceNative";
 import { holdHeart, loadMonitor, savedHeartNow, takeHeartReadings } from "../../heart/monitor";
+
+// The run's clock is its own pure rules (runLive.ts); the screens read it from here as before.
+export { closedPauses, elapsedMs, movingMsOf };
 
 export const RUN_TASK = "run-location";
 
@@ -269,12 +272,6 @@ function markNow(run: LiveRun, settled: boolean): string[] {
 }
 
 // ── Today's planned run (37d-ii) ──────────────────────────────────────────────────────────────
-
-/** The guide's clock: ms from Go to `now`, the pauses left out. */
-export function movingMsOf(run: LiveRun, now: number): number {
-  const elapsed = elapsedMs(run, now);
-  return Math.max(0, elapsed - closedPauses(run, elapsed).reduce((t, [a, b]) => t + (b - a), 0));
-}
 
 /** The next look at the guide, in moving ms: points come each second, and the sums are worked out
  *  only when a step by distance could have ended. */
@@ -722,7 +719,9 @@ export async function pauseRun(now: number = Date.now()): Promise<void> {
   // The guide is moved on to the pause, so the step it holds is the one the person is on.
   const step = was === "running" ? guideNow(run, now, true) : { lines: [] };
   takeHeart(run);
-  if (run.phase === "running") run.pauses.push([Math.max(now - run.startedAt, lastOpenEnd(run)), null]);
+  // From the time the screen shows, which the GPS's own clock can put a second ahead of the phone's: a
+  // pause never takes the clock back.
+  if (run.phase === "running") run.pauses.push([Math.max(elapsedMs(run, now), lastOpenEnd(run)), null]);
   run.phase = "paused";
   run.pausedByPerson = true;
   auto = { ...AUTO_START, paused: true };
@@ -738,7 +737,7 @@ export async function resumeRun(now: number = Date.now()): Promise<void> {
   if (run === null || run.phase !== "paused") return;
   // What the monitor sent while paused is not the run's.
   takeHeartReadings();
-  closePause(run, now - run.startedAt);
+  closePause(run, elapsedMs(run, now));
   run.phase = "running";
   run.pausedByPerson = false;
   auto = AUTO_START;
@@ -856,16 +855,6 @@ export async function forgetRun(): Promise<void> {
   pausedTail = [];
   tell();
 }
-
-/** The run's pauses as the maths takes them: one still open ends now. */
-export function closedPauses(run: LiveRun, nowMs: number): RunPause[] {
-  return run.pauses.map(([from, to]): RunPause => [from, to ?? Math.max(from, nowMs)]);
-}
-
-/** Milliseconds from Go to now, or to Finish. A point's time is the GPS's own, which can be a second
- *  ahead of the phone's clock: the run is never shorter than its last point. */
-export const elapsedMs = (run: LiveRun, now: number): number =>
-  run.finishedMs ?? Math.min(RUN_MAX_ELAPSED_MS, Math.max(0, now - run.startedAt, run.points[run.points.length - 1]?.[0] ?? 0));
 
 /** A run left going a day or more: it ends there by itself, and waits to be saved. */
 export const runIsFull = (run: LiveRun, now: number): boolean =>

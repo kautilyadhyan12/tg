@@ -4,6 +4,7 @@ import { Check, Loader2, Search } from 'lucide-react';
 import { orgService, errorText } from '../../api/orgsApi';
 import { registerService } from '../../api/registerApi';
 import ReceiptBox from '../../components/console/ReceiptBox';
+import { MiddleBox } from '../../components/console/ConsoleBoxes';
 import { viewerPrivileges } from './consoleView';
 import { placeFor } from './consolePlaces';
 import { consoleIsReadOnly } from './billingView';
@@ -100,27 +101,24 @@ function FindPerson({ gymId, label, notId, disabled, onPick }) {
   );
 }
 
-/** A question box under the button that opened it: the change, who it changes, and Back. */
+/** Who pays for whom changes: asked in the middle, naming both (V2b-iii; spec Part 3 §17.11). A refusal is said at its top. */
 function AskBox({ words, busy, refusal, onYes, onBack, danger = false }) {
   return (
-    <div className="rounded-[14px] p-3 flex flex-col gap-3" style={{ background: 'var(--raise)' }} data-testid="payer-ask">
-      <p className="c-s15 c-w6 c-t1 m-0">{words.question}</p>
-      <p className="c-s14 c-t2 m-0">{words.detail}</p>
-      {refusal !== null ? (
-        <p className="c-s14 m-0" style={{ color: 'var(--bad)' }} role="alert">
-          {refusal}
-        </p>
-      ) : null}
-      <div className="flex flex-wrap gap-2">
-        <button type="button" className={danger ? 'c-btn c-btn-danger' : MAIN} disabled={busy} onClick={onYes}>
-          {busy ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : <Check aria-hidden="true" className="w-4 h-4" />}
-          {words.button}
-        </button>
-        <button type="button" className={PLAIN} disabled={busy} onClick={onBack}>
-          Back
-        </button>
+    <MiddleBox onClose={onBack} busy={busy} error={refusal}>
+      <div className="c-inbox flex flex-col gap-3" data-testid="payer-ask">
+        <p className="c-inbox-t c-s15 c-w6 c-t1 m-0">{words.question}</p>
+        <p className="c-s14 c-t2 m-0">{words.detail}</p>
+        <div className="c-inbox-a">
+          <button type="button" className={danger ? 'c-btn c-btn-danger' : MAIN} disabled={busy} onClick={onYes}>
+            {busy ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : <Check aria-hidden="true" className="w-4 h-4" />}
+            {words.button}
+          </button>
+          <button type="button" className={PLAIN} disabled={busy} onClick={onBack} data-autofocus>
+            Back
+          </button>
+        </div>
       </div>
-    </div>
+    </MiddleBox>
   );
 }
 
@@ -152,15 +150,14 @@ function PayForm({ gymId, country, item, person, payerName, today, onDone, onBac
   return (
     <form
       noValidate
-      className="rounded-[14px] p-3 flex flex-col gap-3"
-      style={{ background: 'var(--raise)' }}
+      className="c-inbox flex flex-col gap-3"
       data-testid="payer-pay"
       onSubmit={(e) => {
         e.preventDefault();
         if (!busy) void send();
       }}
     >
-      <p className="c-s15 c-w6 c-t1 m-0">{words === null ? `Record ${item.amount} for ${person.name}'s ${item.title.split(' · ')[0].toLowerCase()}` : words.title}</p>
+      <p className="c-inbox-t c-s15 c-w6 c-t1 m-0">{words === null ? `Record ${item.amount} for ${person.name}'s ${item.title.split(' · ')[0].toLowerCase()}` : words.title}</p>
       <p className="c-s14 c-t2 m-0">{`${words === null ? '' : `${words.detail} `}The receipt says ${payerName} paid.`}</p>
       {item.kind === 'bill' ? (
         <label className="c-field">
@@ -189,7 +186,7 @@ function PayForm({ gymId, country, item, person, payerName, today, onDone, onBac
           {refusal}
         </span>
       ) : null}
-      <div className="flex flex-wrap gap-2">
+      <div className="c-inbox-a">
         <button type="submit" className={MAIN} disabled={busy}>
           {busy ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : <Check aria-hidden="true" className="w-4 h-4" />}
           Record payment
@@ -465,16 +462,18 @@ export default function MemberPayer({ gymId, gym, entryId, name, readOnly, onCha
       ) : null}
 
       {open?.kind === 'find' ? (
-        <div className="rounded-[14px] p-3 flex flex-col gap-3" style={{ background: 'var(--raise)' }} data-testid="payer-find">
+        <div className="c-inbox flex flex-col gap-3" data-testid="payer-find">
           <FindPerson gymId={gymId} label={findLabel(open.mode)} notId={entryId} disabled={busy} onPick={(p) => void pickFor(open.mode, p)} />
           {refusal !== null ? (
             <p className="c-s14 m-0" style={{ color: 'var(--bad)' }} role="alert">
               {refusal}
             </p>
           ) : null}
-          <button type="button" className={`${PLAIN} self-start`} onClick={close}>
-            Back
-          </button>
+          <div className="c-inbox-a">
+            <button type="button" className={PLAIN} onClick={close}>
+              Back
+            </button>
+          </div>
         </div>
       ) : null}
       {open?.kind === 'confirm' && open.mode === 'payer' ? (

@@ -128,7 +128,8 @@ const drawPage = () =>
     </MemoryRouter>,
   );
 const pairRows = () => screen.findAllByTestId('duplicate-pair');
-const person = () => within(screen.getByTestId('member-person'));
+/** The pair's Merge duplicate box, in the middle over the page (V2b-iii). */
+const pairBox = () => within(screen.getByTestId('person-ask'));
 
 beforeEach(() => {
   vi.resetAllMocks();
@@ -149,14 +150,14 @@ describe('a pair opened side by side', () => {
     orgService.markDifferentPeople.mockResolvedValue({ data: { duplicates: { count: 1 } } });
     drawPage();
     fireEvent.click((await pairRows())[1]);
-    const compare = within(await person().findByTestId('merge-compare'));
+    const compare = within(await screen.findByTestId('merge-compare'));
     expect(compare.getByTestId('join-first-fullName').textContent).toBe('Bea Hart');
     expect(compare.getByTestId('join-second-fullName').textContent).toBe('Beatrice Hart');
-    expect(person().getByTestId('pair-why').textContent).toBe('These two may be the same member: same phone.');
+    expect(pairBox().getByTestId('pair-why').textContent).toBe('These two may be the same member: same phone.');
     // Both of Bea's records were read, and nobody else's.
     expect(orgService.getMemberListEntry.mock.calls.map((c) => c[1]).sort()).toEqual([BEA_1, BEA_2]);
 
-    fireEvent.click(person().getByTestId('different-people'));
+    fireEvent.click(pairBox().getByTestId('different-people'));
     await waitFor(() => expect(orgService.markDifferentPeople).toHaveBeenCalledWith(GYM, [BEA_1, BEA_2]));
     expect(orgService.mergeMemberListEntries).not.toHaveBeenCalled();
     // The panel closes and the page is read again, without Bea's pair.
@@ -171,16 +172,16 @@ describe('a pair opened side by side', () => {
     });
     drawPage();
     fireEvent.click((await pairRows())[0]);
-    const compare = within(await person().findByTestId('merge-compare'));
+    const compare = within(await screen.findByTestId('merge-compare'));
     expect(compare.getByTestId('join-first-fullName').textContent).toBe('Ada Lovelace');
-    expect(person().getByRole('button', { name: 'Merge' }).disabled).toBe(true);
-    fireEvent.click(person().getByTestId('keep-first'));
+    expect(pairBox().getByRole('button', { name: 'Merge' }).disabled).toBe(true);
+    fireEvent.click(pairBox().getByTestId('keep-first'));
     // The preview says what the one record will hold: Ada's own email, and her phone from the other.
-    const after = within(person().getByTestId('merge-preview'));
+    const after = within(pairBox().getByTestId('merge-preview'));
     expect(after.getByTestId('after-email').textContent).toBe('ada@members.example');
     expect(after.queryByTestId('after-phone')).toBeNull();
     expect(after.getByTestId('lost-phone').textContent).toContain('+447700900111');
-    fireEvent.click(person().getByRole('button', { name: 'Merge' }));
+    fireEvent.click(pairBox().getByRole('button', { name: 'Merge' }));
     await waitFor(() => expect(orgService.mergeMemberListEntries).toHaveBeenCalledWith(GYM, ADA_2, ADA_1, false));
     expect(orgService.markDifferentPeople).not.toHaveBeenCalled();
   });
@@ -189,11 +190,11 @@ describe('a pair opened side by side', () => {
     orgService.getMemberListDuplicates.mockResolvedValue(pairsPage([ADA_PAIR]));
     drawPage();
     fireEvent.click((await pairRows())[0]);
-    await person().findByTestId('merge-compare');
-    expect(person().getByTestId('different-people')).toBeTruthy();
+    await screen.findByTestId('merge-compare');
+    expect(pairBox().getByTestId('different-people')).toBeTruthy();
     // Back to the search, and another record picked: that is an ordinary merge, not this pair.
-    fireEvent.click(person().getByRole('button', { name: 'Back' }));
-    expect(person().queryByTestId('different-people')).toBeNull();
+    fireEvent.click(pairBox().getByRole('button', { name: 'Back' }));
+    expect(pairBox().queryByTestId('different-people')).toBeNull();
   });
 });
 

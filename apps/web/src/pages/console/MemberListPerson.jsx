@@ -86,7 +86,7 @@ import {
 } from './memberListPeople';
 import { personNextStep } from './personNextStepView';
 import { usePageOver } from '../../components/console/pageOver';
-import { SidePanel } from '../../components/console/ConsoleBoxes';
+import { MiddleBox, SidePanel } from '../../components/console/ConsoleBoxes';
 
 // One person on the gym's own list (ROADMAP 5b-i, 5b-v-c; spec Part 3 §18.7): everything
 // kept about them, the one button their state calls for, and under More, Remove (One
@@ -266,11 +266,14 @@ function Section({ title, note, children }) {
   );
 }
 
+/** The questions asked in the middle, over their page (V2b-iii; spec Part 3 §17.11, "Where a box opens"). */
+const ASK_MODES = new Set(['invite', 'again', 'inviteAgain', 'share', 'notThem', 'takeOff', 'delete']);
+
 /** The question a step asks before it acts: what happens, to whom, then its buttons. */
 function Ask({ testId, question, children }) {
   return (
-    <div className="c-card p-4 md:p-5 flex flex-col gap-3" data-testid={testId}>
-      <p className="c-s16 c-w6 c-t1 m-0">{question}</p>
+    <div className="c-inbox flex flex-col gap-3" data-testid={testId}>
+      <p className="c-inbox-t c-s16 c-w6 c-t1 m-0">{question}</p>
       {children}
     </div>
   );
@@ -1659,7 +1662,7 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
   };
 
   const cancel = (label = 'Cancel') => (
-    <button type="button" onClick={() => backTo('view')} className={PLAIN}>
+    <button type="button" onClick={() => backTo('view')} disabled={busy} className={PLAIN} data-autofocus>
       {label}
     </button>
   );
@@ -1671,7 +1674,7 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
       return (
         <Ask testId="confirm-invite" question={`Invite ${name} to the app?`}>
           <p className="c-s14 c-t2 m-0">One email goes to {p.email} with a link to the app.</p>
-          <div className="flex flex-wrap gap-2">
+          <div className="c-inbox-a">
             <button type="button" onClick={() => void sendInvite(false)} disabled={busy || readOnly} className={MAIN}>
               {busy ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : <Mail aria-hidden="true" className="w-4 h-4" />}
               Send invitation
@@ -1688,7 +1691,7 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
             Only when they ask for it, for example when they can&apos;t find the email. It goes to {p.email}. An invitation can be sent again{' '}
             {String(MEMBER_INVITE_AGAIN_PER_PERSON)} times in {String(MEMBER_INVITE_AGAIN_PERSON_DAYS)} days.
           </p>
-          <div className="flex flex-wrap gap-2">
+          <div className="c-inbox-a">
             <button type="button" onClick={() => void sendInvite(true)} disabled={busy || readOnly} className={MAIN}>
               {busy ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : <Mail aria-hidden="true" className="w-4 h-4" />}
               Send again
@@ -1712,7 +1715,7 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
           <p className="c-s14 c-t2 m-0">
             {why} They&apos;ll get one invitation email at {p.email}.
           </p>
-          <div className="flex flex-wrap gap-2">
+          <div className="c-inbox-a">
             <button type="button" onClick={() => void sendInvite(true)} disabled={busy || readOnly} className={MAIN}>
               {busy ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : <Mail aria-hidden="true" className="w-4 h-4" />}
               Invite again
@@ -1724,13 +1727,13 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
     }
     if (mode === 'share') {
       return (
-        <div className="flex flex-col gap-3">
+        <Ask testId="share-invite" question="Share the invitation">
           <p className="c-s14 c-t2 m-0">
             Send these words to {name} by WhatsApp, text or your own email. The link only lets them in when they sign in with {p.email}.
           </p>
           <ShareInvite gymName={gym.name} slug={gym.slug} email={p.email} />
-          <div>{cancel('Back')}</div>
-        </div>
+          <div className="c-inbox-a">{cancel('Back')}</div>
+        </Ask>
       );
     }
     if (mode === 'notThem' && notThem !== null) {
@@ -1741,7 +1744,7 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
             {appName} uses the app as {name}. If {appName} isn&apos;t {name}, remove their access to your {words.it ?? 'gym'} in the app. {name} stays on your
             list, and nothing more is sent to the email address {appName} uses: update {name}&apos;s email address with Edit before inviting them again.
           </p>
-          <div className="flex flex-wrap gap-2">
+          <div className="c-inbox-a">
             <button type="button" onClick={() => void notThisPerson(notThem)} disabled={busy || readOnly} className={DANGER}>
               Remove access
             </button>
@@ -1785,7 +1788,7 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
             </p>
           )}
           {sessions !== null ? <PtSessionsEnding ending={sessions} clockFormat={gym?.clockFormat} moved={ptEnding.moved} onePerson /> : null}
-          <div className="flex flex-wrap gap-2">
+          <div className="c-inbox-a">
             <button type="button" onClick={() => void takeOff()} disabled={busy || readOnly} className={DANGER} data-testid="take-off-press">
               {past ? 'Remove access' : sessions !== null ? `Remove and ${ptEndingAction(sessions)}` : 'Remove'}
             </button>
@@ -1837,7 +1840,7 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
             </p>
           )
         ) : null}
-        <div className="flex flex-wrap gap-2">
+        <div className="c-inbox-a">
           {blocked ? null : (
             <button type="button" onClick={() => void deleteForGood()} disabled={busy || readOnly} className={DANGER}>
               Delete permanently
@@ -1853,14 +1856,15 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
     if (joinPick !== null) {
       const roles = joinRoles();
       return (
-        <div className="flex flex-col gap-3">
+        <div className="c-inbox flex flex-col gap-3" data-testid="merge-box">
+          <p className="c-inbox-t c-s16 c-w6 c-t1 m-0">Merge duplicate</p>
           {onPair ? (
             <p className="c-s15 c-w6 c-t1 m-0" data-testid="pair-why">
               {`These two may be the same ${words.person}: ${pair.why.toLowerCase()}.`}
             </p>
           ) : null}
           <p className="c-s14 c-t2 m-0">
-            Merge duplicate: the two records become one. Choose the one to keep at the top of its column. It keeps everything it has, and takes the other&apos;s
+            The two records become one. Choose the one to keep at the top of its column. It keeps everything it has, and takes the other&apos;s
             details only where its own are empty. The other is removed.
           </p>
           <CompareRecords
@@ -1876,7 +1880,7 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
             }}
           />
           {roles !== null ? <MergePreview keep={roles.keep} remove={roles.remove} fields={fields} person={words.person} /> : null}
-          <div className="flex flex-wrap gap-2">
+          <div className="c-inbox-a">
             {/* Orange when it can be pressed, plainly grey until a record is chosen (as Import's). */}
             <button
               type="button"
@@ -1910,13 +1914,19 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
       );
     }
     if (pair !== null && picking === pair.otherId) {
-      return <p className="c-s14 c-t2 m-0">Opening the other record…</p>;
+      return (
+        <div className="c-inbox flex flex-col gap-3" data-testid="merge-box">
+          <p className="c-inbox-t c-s16 c-w6 c-t1 m-0">Merge duplicate</p>
+          <p className="c-s14 c-t2 m-0">Opening the other record…</p>
+        </div>
+      );
     }
     // Only the answer for what the box says now: an older search's answer is not shown.
     const found = joinResults !== null && joinResults.q === joinQuery.trim() ? joinResults : null;
     return (
-      <div className="flex flex-col gap-3">
-        <p className="c-s14 c-t2 m-0">Merge duplicate: find the other record of {p.fullName || 'this person'}. You choose which one to keep next.</p>
+      <div className="c-inbox flex flex-col gap-3" data-testid="merge-box">
+        <p className="c-inbox-t c-s16 c-w6 c-t1 m-0">Merge duplicate</p>
+        <p className="c-s14 c-t2 m-0">Find the other record of {p.fullName || 'this person'}. You choose which one to keep next.</p>
         <label className="relative block">
           <Search aria-hidden="true" className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 c-t3" />
           <input
@@ -1926,7 +1936,7 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
             placeholder="Name, email or phone"
             value={joinQuery}
             onChange={(e) => setJoinQuery(e.target.value)}
-            className="c-input pl-9"
+            className="c-input c-input-icon"
           />
         </label>
         {found?.error ? (
@@ -1957,8 +1967,8 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
             ))}
           </ul>
         ) : null}
-        <div>
-          <button type="button" onClick={() => setMode('view')} className={PLAIN}>
+        <div className="c-inbox-a">
+          <button type="button" onClick={() => backTo('view')} className={PLAIN} data-autofocus>
             Back
           </button>
         </div>
@@ -2026,6 +2036,8 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
         </div>
       ) : null;
 
+  /** A question or Merge duplicate is open, in the middle over their page. */
+  const asking = deleted === null && id !== null && shown !== null && loadError === null && (ASK_MODES.has(mode) || mode === 'join');
   /** Add member, or Edit: the panel from the right is open. */
   const formOpen = deleted === null && (id === null || (mode === 'edit' && shown !== null));
 
@@ -2063,19 +2075,31 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
         <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> Loading…
       </p>
     );
-  } else if (mode === 'invite' || mode === 'takeOff' || mode === 'delete' || mode === 'again' || mode === 'inviteAgain' || mode === 'share' || mode === 'notThem') {
-    body = renderConfirm(shown);
-  } else if (mode === 'join') {
-    body = renderJoin(shown);
   } else {
     body = renderDetails(shown);
   }
 
   // Under the name: past member, the App word and its line (§18.4), whatever step is open.
   const inv = shown !== null && deleted === null ? invitationView(shown, gymToday(gym?.timezone)) : null;
+  // What was just done: on the page, or in the box still open (the postal address saved, the person still to invite).
+  const noticeLine =
+    notice !== null ? (
+      <p className="c-s14 c-w5 m-0 flex items-center gap-2" style={{ color: 'var(--good)' }} role="status">
+        <Check aria-hidden="true" className="w-4 h-4" />
+        {notice}
+      </p>
+    ) : null;
+  // A question (Invite, Remove, Delete permanently) or Merge duplicate opens in the middle, over their page (V2b-iii).
+  const askBox = asking ? (
+    <MiddleBox onClose={() => backTo('view')} busy={busy} wide={mode === 'join'} testId="person-ask" label={mode === 'join' ? 'Merge duplicate' : undefined}>
+      {noticeLine}
+      {renderAlerts()}
+      {mode === 'join' ? renderJoin(shown) : renderConfirm(shown)}
+    </MiddleBox>
+  ) : null;
   // Their details on screen: the head holds the page's buttons, and the strip its next step.
   // Edit's panel opens over their page, which stays as it is behind it.
-  const viewing = (mode === 'view' || mode === 'edit') && shown !== null && deleted === null && loadError === null && id !== null;
+  const viewing = (mode === 'view' || mode === 'edit' || asking) && shown !== null && deleted === null && loadError === null && id !== null;
   const inviteNow = viewing ? personInviteAction(shown, gymToday(gym?.timezone)) : null;
   const step = viewing
     ? personNextStep({
@@ -2157,13 +2181,8 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
               {`Back to adding ${draft.fullName.trim() || `the new ${words.person}`}`}
             </button>
           ) : null}
-          {notice !== null ? (
-            <p className="c-s14 c-w5 m-0 flex items-center gap-2" style={{ color: 'var(--good)' }} role="status">
-              <Check aria-hidden="true" className="w-4 h-4" />
-              {notice}
-            </p>
-          ) : null}
-          {formOpen ? null : renderAlerts()}
+          {asking ? null : noticeLine}
+          {formOpen || asking ? null : renderAlerts()}
           {body}
         </div>
       </div>
@@ -2176,6 +2195,7 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
     <>
       {inShell ? createPortal(page, slot) : page}
       {panel}
+      {askBox}
     </>
   );
 }

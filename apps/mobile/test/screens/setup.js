@@ -307,7 +307,7 @@ jest.mock("expo-secure-store", () => {
 // reads what was asked of it; the points themselves are handed in by the test, as Android hands them
 // to the run's task.
 jest.mock("expo-location", () => {
-  const state = { services: true, granted: true, canAskAgain: true, accuracy: "fine", asked: 0, started: [], running: false, watching: 0, acceptsTurnOn: true, whileStopping: null };
+  const state = { services: true, granted: true, canAskAgain: true, accuracy: "fine", asked: 0, started: [], running: false, watching: 0, acceptsTurnOn: true, whileStopping: null, refusesStart: false };
   const answer = () => ({ granted: state.granted, canAskAgain: state.canAskAgain, status: state.granted ? "granted" : "denied", android: { accuracy: state.granted ? state.accuracy : "none" } });
   return {
     state,
@@ -325,7 +325,12 @@ jest.mock("expo-location", () => {
       state.asked += 1;
       return Promise.resolve(answer());
     },
+    // `refusesStart`: Android refusing the run's location service once (the phone locked during 3, 2, 1).
     startLocationUpdatesAsync: (task, options) => {
+      if (state.refusesStart) {
+        state.refusesStart = false;
+        return Promise.reject(new Error("Foreground service cannot be started"));
+      }
       state.started.push({ task, options });
       state.running = true;
       return Promise.resolve();
