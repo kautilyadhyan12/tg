@@ -10,6 +10,8 @@ import {
   exerciseRecordsSchema,
   historyDayOutSchema,
   historyMonthOutSchema,
+  historyRangeOutSchema,
+  workoutPageSchema,
   historyWorkoutSchema,
   type SavedSet,
 } from "@app/shared";
@@ -158,6 +160,114 @@ d("history and records for each exercise (real Postgres)", () => {
     await clear();
     await app?.close();
     await sql.end();
+  });
+
+  /** The calendar's days from `from` to `to` (64a-v). */
+  const range = async (who: Person, from: string, to: string) =>
+    historyRangeOutSchema.parse((await get(who, `/v1/training/days?from=${from}&to=${to}`)).json());
+  /** The first day of the calendar's year that ends on `to`. */
+  const yearTo = (to: string) => new Date(Date.parse(`${to}T00:00:00Z`) - 364 * DAY_MS).toISOString().slice(0, 10);
+  const todayIn = (timeZone: string) => dayIn(new Date(), timeZone);
+
+  describe("64a-v, the worst thing: somebody else's workout in a person's calendar or Recent Activity", () => {
+    it("the calendar's year holds only the person's own days; Recent Activity only their own workouts and names", async () => {
+      const [a, b] = [await person(), await person()];
+      await save(b, workout(daysAgo(4), [set()], { name: "Somebody else's" }));
+      await save(b, workout(daysAgo(6), [set()], { name: "Somebody else's" }));
+      const when = daysAgo(2);
+      await save(a, workout(when, [set()], { name: "Push day" }));
+      const today = todayIn("Asia/Kolkata");
+      expect((await range(a, yearTo(today), today)).days).toEqual([{ day: dayIn(when, "Asia/Kolkata"), workouts: 1 }]);
+      const listed = workoutPageSchema.parse((await get(a, "/v1/workouts?limit=3")).json());
+      expect(listed.items.map((w) => w.name)).toEqual(["Push day"]);
+      expect(JSON.stringify(listed)).not.toContain("Somebody else's");
+    });
+  });
+
+  describe("64a-v, the calendar's days", () => {
+    it("a workout counts on the same day in the year, the month and the day: the day in the zone it was done in", async () => {
+      const a = await person();
+      // 20:00 UTC is 01:30 the next day in Kolkata: the day there, never the UTC one.
+      const late = new Date(daysAgo(5).getTime() + 20 * 3_600_000);
+      await save(a, workout(late, [set()]));
+      // An old workout kept with no zone counts in the person's own zone (none set: UTC).
+      await oldWorkout(a, new Date(daysAgo(7).getTime() + 12 * 3_600_000));
+      const day = dayIn(late, "Asia/Kolkata");
+      expect(day).not.toBe(late.toISOString().slice(0, 10));
+      const oldDay = daysAgo(7).toISOString().slice(0, 10);
+      const today = todayIn("Asia/Kolkata");
+      expect((await range(a, yearTo(today), today)).days).toEqual([
+        { day: oldDay, workouts: 1 },
+        { day, workouts: 1 },
+      ]);
+      const month = historyMonthOutSchema.parse((await get(a, `/v1/training/month?month=${day.slice(0, 7)}`)).json());
+      expect(month.days).toContainEqual({ day, workouts: 1 });
+      expect(historyDayOutSchema.parse((await get(a, `/v1/training/days/${day}`)).json()).total).toBe(1);
+    });
+
+    it("counts only the days from 'from' to 'to', both included, each day's workouts together", async () => {
+      const a = await person();
+      const at = (n: number, minutes: number) => new Date(daysAgo(n).getTime() + 6 * 3_600_000 + minutes * 60_000);
+      for (const t of [at(3, 0), at(4, 0), at(4, 45), at(5, 0)]) await save(a, workout(t, [set()]));
+      const [k3, k4, k5] = [3, 4, 5].map((n) => dayIn(at(n, 0), "Asia/Kolkata")) as [string, string, string];
+      expect(await range(a, k4, k3)).toEqual({ from: k4, to: k3, days: [{ day: k4, workouts: 2 }, { day: k3, workouts: 1 }], limitedToDays: 90 });
+      expect((await range(a, k5, k5)).days).toEqual([{ day: k5, workouts: 1 }]);
+    });
+
+    // Round one, weak test 1: the query narrows by UTC days first, a day either side; a workout at the very start of
+    // `from` east of UTC, or the very end of `to` west of it, is still counted, and only there.
+    it("counts a workout at the very start of a day east of UTC and at the very end of a day west of it", async () => {
+      const a = await person();
+      // 02:00 in Kolkata on day F is 20:30 UTC the day before.
+      const f = dayIn(daysAgo(6), "Asia/Kolkata");
+      const early = new Date(Date.parse(`${f}T02:00:00+05:30`));
+      await save(a, workout(early, [set()]));
+      // 23:30 in Honolulu on day T is 09:30 UTC the day after.
+      const t = dayIn(daysAgo(4), "Pacific/Honolulu");
+      const late = new Date(Date.parse(`${t}T23:30:00-10:00`));
+      await save(a, workout(late, [set()], { timeZone: "Pacific/Honolulu" }));
+      expect((await range(a, f, f)).days).toEqual([{ day: f, workouts: 1 }]);
+      expect((await range(a, t, t)).days).toEqual([{ day: t, workouts: 1 }]);
+      const before = new Date(Date.parse(`${f}T00:00:00Z`) - DAY_MS).toISOString().slice(0, 10);
+      const after = new Date(Date.parse(`${t}T00:00:00Z`) + DAY_MS).toISOString().slice(0, 10);
+      expect((await range(a, before, before)).days).toEqual([]);
+      expect((await range(a, after, after)).days).toEqual([]);
+    });
+
+    it("a day's workouts name their exercises as the Library does, as a workout's page does (round one L2)", async () => {
+      const a = await person();
+      const when = daysAgo(3);
+      await save(a, workout(when, [set({ exercise: "plank", measuredIn: "time", target: 30, done: 30, weightGrams: null, durationMs: 30_000 }), set({ position: 1 })]));
+      const listed = historyDayOutSchema.parse((await get(a, `/v1/training/days/${dayIn(when, "Asia/Kolkata")}`)).json());
+      expect(listed.workouts[0]?.exerciseNames).toEqual([await libraryName("plank"), await libraryName("squat")]);
+      const page = historyWorkoutSchema.parse((await get(a, `/v1/training/workouts/${listed.workouts[0]?.workoutId ?? ""}`)).json());
+      expect(page.sets.map((s) => s.exerciseName)).toEqual(listed.workouts[0]?.exerciseNames);
+      // One the Library never had is named by nobody on the day's list too.
+      const slug = (await sql<{ slug: string }[]>`
+        SELECT slug FROM exercises WHERE id NOT IN (SELECT exercise_id FROM library_exercises) ORDER BY slug LIMIT 1`)[0]?.slug;
+      if (slug === undefined) throw new Error("every exercise has a Library row");
+      const old = await oldWorkout(a, daysAgo(9));
+      await sql`UPDATE workout_sets SET exercise_id = (SELECT id FROM exercises WHERE slug = ${slug}) WHERE workout_id = ${old}`;
+      const oldDay = historyDayOutSchema.parse((await get(a, `/v1/training/days/${daysAgo(9).toISOString().slice(0, 10)}`)).json());
+      expect(oldDay.workouts.map((w) => [w.exercises, w.exerciseNames])).toEqual([[[slug], [null]]]);
+    });
+
+    it("a free plan's year reads back 90 days and says so", async () => {
+      const a = await person();
+      await oldWorkout(a, daysAgo(200));
+      await oldWorkout(a, daysAgo(10));
+      const today = new Date().toISOString().slice(0, 10);
+      expect(await range(a, yearTo(today), today)).toMatchObject({ days: [{ day: daysAgo(10).toISOString().slice(0, 10), workouts: 1 }], limitedToDays: 90 });
+    });
+
+    it("a workout's page names the weight its calories were worked out at, as the summary does", async () => {
+      const a = await person();
+      const none = await save(a, workout(daysAgo(3), [set()]));
+      expect(historyWorkoutSchema.parse((await get(a, `/v1/training/workouts/${none}`)).json()).kcalWeightKg).toBeNull();
+      await sql`INSERT INTO body_measurements (user_id, measured_at, weight_kg, source) VALUES (${a.id}, now(), 82.5, 'self_reported')`;
+      const weighed = await save(a, workout(daysAgo(2), [set()]));
+      expect(historyWorkoutSchema.parse((await get(a, `/v1/training/workouts/${weighed}`)).json()).kcalWeightKg).toBe(82.5);
+    });
   });
 
   describe("the worst thing: one member's workouts read by, or told against, another", () => {
@@ -417,6 +527,11 @@ d("history and records for each exercise (real Postgres)", () => {
       ["/v1/training/month?month=2026-11&x=1", 400],
       ["/v1/training/days/2026-02-30", 400],
       ["/v1/training/days/today", 400],
+      ["/v1/training/days?from=2026-11-20&to=2026-11-19", 400],
+      ["/v1/training/days?from=2025-11-21&to=2026-11-22", 400],
+      ["/v1/training/days?from=2026-02-30&to=2026-03-02", 400],
+      ["/v1/training/days?from=2026-11-01", 400],
+      ["/v1/training/days?from=2026-11-01&to=2026-11-02&x=1", 400],
       ["/v1/training/workouts/not-an-id", 404],
       ["/v1/training/exercises/no_such_exercise/records", 404],
       ["/v1/training/exercises/Bad%20Word/records", 404],
@@ -435,7 +550,7 @@ d("history and records for each exercise (real Postgres)", () => {
     });
 
     it("nobody signed in reads nothing", async () => {
-      for (const path of ["/v1/training/month?month=2026-11", "/v1/training/days/2026-11-18", `/v1/training/workouts/${randomUUID()}`, "/v1/training/exercises/squat/records"]) {
+      for (const path of ["/v1/training/month?month=2026-11", "/v1/training/days?from=2026-11-01&to=2026-11-22", "/v1/training/days/2026-11-18", `/v1/training/workouts/${randomUUID()}`, "/v1/training/exercises/squat/records"]) {
         expect((await get(null, path)).statusCode).toBe(401);
       }
     });

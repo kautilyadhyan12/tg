@@ -165,6 +165,7 @@ const platformSchema = z.enum(["web", "android", "ios"]);
 
 const toListItem = (w: repo.WorkoutRow) => ({
   id: w.id,
+  name: w.name,
   startedAt: w.startedAt.toISOString(),
   platform: platformSchema.parse(w.platform),
   setsCount: w.setsCount,

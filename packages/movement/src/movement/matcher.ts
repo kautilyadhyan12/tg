@@ -14,10 +14,11 @@
 //   - then a moment more, so a jump from the top is seen (only leaving the floor reads it), and the rep is judged by
 //     every rule;
 //   - a rep whose drive is not seen for longer than a moment, or that lasts longer than any rep, decides nothing.
-import type { Movement, MovementRead, MovementReady, MovementRule } from "@app/shared";
+import type { CheckedMistake, ExerciseCamera, Movement, MovementRead, MovementReady, MovementRule } from "@app/shared";
 import { KP } from "@app/shared";
 import { MEASURE_LIST, type MeasureName, type MeasuredBody, type Reading } from "../body/measures.js";
 import type { SteadyBody } from "../body/steady.js";
+import { checkExercise, checkedOf, formOf, mistakeReading, turnOf, type FormCheck } from "./form.js";
 
 /** A jump this high or higher from the top of a rep is never let through, however its feet are hidden or its pictures
  *  missing (52a-ii-a): under Kd's lowest real squat jump (12 cm; his four squat-jump videos lift the ankles 12 to 34
@@ -150,6 +151,9 @@ export interface RepResult {
   /** Every rule's reading while the person stood ready before it (a drop, a rise, a change, a lift, a travel and a time
    *  are 0). */
   readonly standing: Readonly<Record<string, number | null>>;
+  /** For a counted rep, each mistake the exercise has the camera check, in its file's order: made, fine, or not seen from
+   *  where the phone stands (form.ts). Empty for a rep not counted, and when no exercise was given. */
+  readonly form: readonly FormCheck[];
 }
 
 export type MatchState = "waiting" | "ready" | "rep";
@@ -308,6 +312,8 @@ interface Standing {
   readonly heights: ReadonlyMap<string, number>;
   readonly feet: readonly ({ readonly x: number; readonly y: number } | null)[];
   readonly reads: Readonly<Record<string, number | null>>;
+  /** Each checked mistake's reading while standing ready, the middle of the moment; null where not seen. */
+  readonly form: readonly (number | null)[];
 }
 
 interface Sample {
@@ -320,6 +326,10 @@ interface Sample {
   /** Each foot point along "down" on the picture as the model gave it (picture heights); null when not seen, or lost
    *  for the rest of the rep (`Rep.lost`). */
   readonly feet: readonly (number | null)[];
+  /** Each checked mistake's reading this frame, on the picture only (form.ts); null where not given. */
+  readonly form: readonly (number | null)[];
+  /** How much of the body's line from left to right the picture shows this frame (form.ts `turnOf`). */
+  readonly turn: number | null;
 }
 
 interface Rep {
@@ -384,12 +394,19 @@ export class MovementMatcher {
   private tops: { readonly t: number; readonly feet: readonly Spot[]; readonly along: readonly (number | null)[] }[] = [];
   /** For each foot point, where it was last seen at a top. */
   private lastTop: Spot[] = [];
+  /** The mistakes the exercise has the camera check (none when no exercise is given): judged in counted reps only. */
+  private readonly mistakes: readonly CheckedMistake[];
 
+  /** `exercise`: the exercise's camera file, whose checked mistakes are judged inside each counted rep; without one the
+   *  matcher only counts (the measuring of a movement's own numbers). */
   constructor(
     private readonly movement: Movement,
     private readonly limits: MatchLimits = MATCH_LIMITS,
+    exercise: ExerciseCamera | null = null,
   ) {
     checkMovement(movement);
+    if (exercise !== null) checkExercise(exercise, movement);
+    this.mistakes = checkedOf(exercise);
     const depthRule = movement.rules.find((r) => r.read.kind === "drop" && r.role === "count" && r.atLeast !== undefined);
     if (depthRule?.atLeast === undefined || !(depthRule.atLeast > 0)) throw new Error(`${movement.name} has no depth to count a rep by.`);
     this.depth = depthRule.atLeast;
@@ -662,7 +679,11 @@ export class MovementMatcher {
     });
     const drive = median(drives) ?? 0;
     const size = median(frames.map((f) => f.size ?? 0)) ?? 0;
-    const partial: Standing = { t: last.t, drive, size, heights, feet, reads: {} };
+    const form = this.mistakes.map((m) => median(frames.flatMap((f) => {
+      const v = mistakeReading(m, f.measured);
+      return v === null ? [] : [v];
+    })));
+    const partial: Standing = { t: last.t, drive, size, heights, feet, reads: {}, form };
     const reads: Record<string, number | null> = {};
     for (const rule of this.movement.rules) {
       reads[rule.name] = ["drop", "rise", "change", "lift", "travel", "time"].includes(rule.read.kind) ? 0 : median(frames.flatMap((f) => {
@@ -700,7 +721,7 @@ export class MovementMatcher {
       reads[rule.name] = rule.read.kind === "lift" ? (bothEnds(along) ? 0 : null) : this.read(rule.read, measured, rep.standing, placed, heights);
       if (rule.read.kind === "travel") jointly[rule.name] = feetMoved(placed, rep.standing).together;
     }
-    return { t, drop, reads, jointly, feet: along };
+    return { t, drop, reads, jointly, feet: along, form: this.mistakes.map((m) => mistakeReading(m, measured)), turn: turnOf(measured) };
   }
 
   /** The longest break in a rep's readings that decides nothing: `gap`, or one and a half of the rep's own frame step
@@ -949,7 +970,17 @@ export class MovementMatcher {
     const readings: Record<string, number | null> = {};
     for (const rule of this.movement.rules) readings[rule.name] = this.statOf(rule, rep);
     const end = rep.back ?? rep.samples[rep.samples.length - 1]?.t ?? rep.start;
-    return { start: rep.start, end, readings, standing: rep.standing.reads, ...this.verdictOf(rep, readings, (r) => r.seen === "always" && (readings[r.name] ?? null) === null) };
+    const verdict = this.verdictOf(rep, readings, (r) => r.seen === "always" && (readings[r.name] ?? null) === null);
+    return { start: rep.start, end, readings, standing: rep.standing.reads, ...verdict, form: verdict.verdict === "counted" ? this.formOf(rep) : [] };
+  }
+
+  /** The form judge, inside a counted rep only (spec §12.2 stage 6): each checked mistake over the rep's frames from its
+   *  start to where it came back up, the moment after left out (a person may turn to the phone then). */
+  private formOf(rep: Rep): FormCheck[] {
+    const back = rep.back;
+    const frames = back === null ? rep.samples : rep.samples.filter((s) => s.t <= back);
+    const longest = this.longestBreak(rep);
+    return this.mistakes.map((m, k) => formOf(m, k, frames, rep.standing.form[k] ?? null, this.limits.bottomBand, longest));
   }
 
   /** A rep whose drive was lost from view on its way: judged on what was seen of it, and otherwise undecided, by the
@@ -958,13 +989,13 @@ export class MovementMatcher {
     const readings: Record<string, number | null> = {};
     for (const rule of this.movement.rules) readings[rule.name] = this.statOf(rule, rep);
     const drive = (r: MovementRule): boolean => r.read.kind === "drop" && r.role === "count";
-    return { start: rep.start, end: t, readings, standing: rep.standing.reads, ...this.verdictOf(rep, readings, drive) };
+    return { start: rep.start, end: t, readings, standing: rep.standing.reads, ...this.verdictOf(rep, readings, drive), form: [] };
   }
 
   /** A rep longer than any rep of its kind is not one: no count and no word. */
   private judgeLong(rep: Rep, t: number): RepResult {
     const readings: Record<string, number | null> = {};
     for (const rule of this.movement.rules) readings[rule.name] = this.statOf(rule, rep);
-    return { start: rep.start, end: t, verdict: "other", rule: null, reason: null, readings, standing: rep.standing.reads };
+    return { start: rep.start, end: t, verdict: "other", rule: null, reason: null, readings, standing: rep.standing.reads, form: [] };
   }
 }

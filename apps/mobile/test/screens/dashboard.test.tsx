@@ -330,6 +330,29 @@ describe("the Dashboard, with the person's own numbers", () => {
     expect(new Set(reads.map((one) => one.headers.authorization))).toEqual(new Set(["Bearer access-2"]));
   });
 
+  // 64a-v: a workout in Recent Activity says the name the person gave it, as History does, and opens set by set.
+  it("a workout in Recent Activity says its name and opens its own page, set by set", async () => {
+    const id = "1b6f0a3e-2c4d-4e5f-8a9b-0c1d2e3f4a5b";
+    const at = hoursAgo(1);
+    const server = await openApp({
+      ...trained,
+      "/v1/workouts": ok(page([{ ...workoutRow(id, at), name: "Push day" }], true)),
+      [`/v1/training/workouts/${id}`]: ok({
+        workoutId: id, name: "Push day", startedAt: at, endedAt: null, timeZone: null, startedFrom: "none", effort: null, heartAvg: 128, heartMax: 161,
+        durationMs: 42 * 60_000, kcalPoint: 348, kcalCalcVersion: 4, kcalWeightKg: null, platform: "android",
+        sets: [{ position: 0, exercise: "squat", exerciseName: "Squat", measuredIn: "reps", target: 12, done: 12, weightGrams: 60_000, restSeconds: 60, durationMs: 40_000, counted: "hand" }],
+        newRecords: [],
+      }),
+    });
+    const recentBox = within(await screen.findByTestId("recent-activity"));
+    await fireEvent.press(await recentBox.findByRole("button", { name: /^Push day/ }));
+    expect(await screen.findByLabelText("Time, 42:00")).toBeTruthy();
+    expect(screen.getByText("About 348 kcal, at 70 kg")).toBeTruthy();
+    expect(screen.getByText("Heart rate 128 average · 161 highest")).toBeTruthy();
+    expect(screen.getByLabelText("Set 1, 12 reps  60 kg")).toBeTruthy();
+    expect(server.asked.filter((one) => one.path === `/v1/training/workouts/${id}`)).toHaveLength(1);
+  });
+
   it("Total Sessions, the hours, the calories and the week count runs with the workouts", async () => {
     const otherDay = weekOf(new Date()).find((day) => !day.today)?.key ?? "";
     await openApp({

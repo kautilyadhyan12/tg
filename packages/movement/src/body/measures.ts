@@ -36,7 +36,7 @@
 //     have been (`Floor`);
 //   - a width: how far apart two points are, in the body's own trunks (shoulder to hip); the
 //     flat picture shows it as much as it shows the body's own line from left to right (the
-//     shoulders for the hands, the hips for the feet);
+//     shoulders for the hands, the hips for the feet and the knees);
 //   - left against right: the left's reading less the right's.
 import { KP } from "@app/shared";
 import { LongMemory, Memory } from "./memory.js";
@@ -420,6 +420,18 @@ const apart =
     return size(minus(p, q)) / s.perMetre / s.trunk;
   };
 
+/** How far apart the hips are, in trunks: the body's own line from left to right. On the flat picture only as much as
+ *  the picture shows that line: side on it points at the phone, and its share tells how far the body is turned. */
+const across =
+  (a: number, b: number): Of =>
+  (s) => {
+    const p = s.point(a);
+    const q = s.point(b);
+    if (p === null || q === null || s.trunk === null) return null;
+    s.facing(a, b);
+    return size(minus(p, q)) / s.perMetre / s.trunk;
+  };
+
 const leftAgainstRight =
   (left: Of, right: Of): Of =>
   (s) => {
@@ -484,6 +496,8 @@ const DEFS = [
   { name: "right ankle height", unit: "legs", of: R.ankleUp, check: R.ankleNow },
   { name: "hands apart", unit: "trunks", of: apart(KP.left_wrist, KP.right_wrist, [KP.left_shoulder, KP.right_shoulder]) },
   { name: "feet apart", unit: "trunks", of: apart(KP.left_ankle, KP.right_ankle, [KP.left_hip, KP.right_hip]) },
+  { name: "knees apart", unit: "trunks", of: apart(KP.left_knee, KP.right_knee, [KP.left_hip, KP.right_hip]) },
+  { name: "hips apart", unit: "trunks", of: across(KP.left_hip, KP.right_hip) },
   { name: "elbows, left against right", unit: "degrees", of: leftAgainstRight(L.elbow, R.elbow) },
   { name: "shoulders, left against right", unit: "degrees", of: leftAgainstRight(L.shoulder, R.shoulder) },
   { name: "hips, left against right", unit: "degrees", of: leftAgainstRight(L.hip, R.hip) },

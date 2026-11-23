@@ -40,7 +40,7 @@ function withoutRep(frames: readonly MovementFrame[], rep: { start: number; end:
 }
 
 /** A rep at a time in the video (`start`, `end` in ms of the video), as a run holds it after its lead-in. */
-const rep = (start: number, end: number, verdict: RepResult["verdict"], rule: string | null = null): RepResult => ({ start: start + LEAD_IN, end: end + LEAD_IN, verdict, rule, reason: null, readings: {}, standing: {} });
+const rep = (start: number, end: number, verdict: RepResult["verdict"], rule: string | null = null): RepResult => ({ start: start + LEAD_IN, end: end + LEAD_IN, verdict, rule, reason: null, readings: {}, standing: {}, form: [] });
 
 describe("the worst thing: a phone that counts or speaks differently is never the same", () => {
   const entry = entryOf("squat_reference");

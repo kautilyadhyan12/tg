@@ -2300,6 +2300,63 @@ that sets the numbers (`measuringMovement`) keeps every rule with no number, so 
 squat's 0.2 s; on master's engine it gave no rep at all to set numbers from on 20 of the 22 squat sets with reps under
 uneven pictures and on 11 at 8 a second, most likely for that break (52b-ii, which sets numbers next).
 
+**As built, the squat's form check (52b-ii-a, 2026-11-22; `rulings/2026-11-22-52b-ii-a.md`).** **An exercise's camera
+file** (`packages/movement/exercises/squat.json`, checked by `exerciseCameraSchema` in `@app/shared` and by `checkExercise`
+against its movement) lists every common mistake of its research file (Kd's "Normal Squat (Bodyweight Squat) Guide", its
+eleven) and the Library's (ACE's feet that shift), under the Library's own ids where it has them (§13.3), each marked one of
+four: **checked** by the camera; left to the **counting** (quarter reps: "knees bent", told "Go lower to count."; feet that
+shift: "feet stay in place", another movement); **cannot see**, with why, measured where it can be; **not checked** yet, with
+why and the job that will. **The form judge** (`packages/movement/src/movement/form.ts`) runs inside a counted rep only, on
+the rep's own frames from its start to back up, and reads the picture only: a 3D reading alone never gives advice. A mistake
+is read at the bottom (the middle of the matcher's own bottom frames, seen in at least half of them), on the way up against
+the bottom (from the deepest frame until half way back up), or over the rep (its furthest, seen for at least 0.3 s), as it is
+or against the person's own standing before the rep; a lean ("side") only where the body stands side on, its hips' line
+showing at most 0.57 of itself on the picture (a new measure, "hips apart"; at the bottom of the 23 squat sets, side on 0.14
+to 0.53, from the front 0.61 to 1.00), and a width ("front") wherever the picture shows the body's line across. A body turned
+from the phone shows a lean or a width shorter than it is (a lean's forward line √(1 − share²) of itself, a width the hips'
+share), so a rep is fine only when the largest the mistake could truly be at that turn stays inside its line, and otherwise
+unseen (round one: a half-turned body had been read fine; on the 57 counted reps of the 23 sets, the lean is fine on 26 and
+unseen on 31, the knees fine on 16 and unseen on 41). `RepResult.form` carries, for each checked mistake of a counted rep,
+made, fine or unseen ("the camera cannot see this from here", for that rep). **A line** is set by `form-check` from the same reps the
+movement's numbers are set from (the nine people, as filmed and as each replay that sets numbers), never nearer the reps than
+the further out of the form standard's line and the furthest proper rep, each moved out by the camera's own room on that
+reading (in 99 reps of 100), rounded outward; each person left out in turn; `form-check` prints, and the file says, how many
+reps as filmed and how many people read each mistake, the line resting on them alone. **Checked:** *leaning too far forward*, the trunk
+at the bottom side on, at most 46 degrees (the research file's 30 to 45 moderate, plus 0.41 of room; the furthest proper rep
+40.06, of 118; 46 in every fold; read on 14 reps as filmed of three people, the light-gym woman, the green-mat man and the
+man filmed from the floor); *knees caving inward*, the knees' width less the feet's against standing, over the rep, at
+least -0.06 of a trunk (never closer together than they stood, ACE's knees over the second toes, less 0.05 of room; the
+furthest proper rep 0, of 144; -0.11 to -0.03 in the folds; read on 17 reps as filmed of six people, three prisoner
+squatters, the two sumo squatters, whose wide stance is "not checked", and the floor man). From the front the bottom of a squat points the thighs at the
+phone and its knees' width is never read there, so it is read on the way down and up (on 16 counted reps of the 23 good-form sets; the 17 above are the measuring run's reps of
+the sets that set numbers). **Measured:** on the 23 good-form squat sets (the eight people, the twins, his floor and raised
+sets) no mistake is marked, as filmed and under each of the 14 held replays, with every person's numbers and with their own
+left out (600 runs), nor in the phone's own runs of the same pictures, which mark what the laptop marks on every rep both
+count, paired by when it was (the three sets the phone counts one fewer on included, round one); every other
+movement's dips carry no form check. Drawn onto every rep of those sets that reads it (`scripts/mistakes.ts`: the trunk turned
+forward about the hips, or the knees carried towards each other, in 3D and on the picture through a 26 mm lens, growing with
+the knees' bend), each mistake searched to just past its line (2 degrees, 0.03 of a trunk) is marked on all its reps (26 for
+the lean, 16 for the knees), each still counted, with no other mistake; just short of its line none is; and the reading
+follows the drawing (each rep's lean moves within a quarter of the degrees drawn; frame by frame in each set, the knees'
+width moves by 0.95 to 1.26 of what the drawing carried there in the middle, and never the other way). The counter takes 35
+to 98 microseconds a frame with the form check, 21 to 95 without, in two runs (66 and 55 in the middle, the 23 sets, measured
+the same hour). **Not checked, each measured:** *hips rising before the chest* (the chest's lean half way out of the bottom against
+the bottom: his proper floor squats read 3.1 to 4.2 degrees, once 12.6, and a line set from the eight others alone, all
+filmed from hip height, lies at 3) and *knees shooting far forward with the hips high* (side on, the shins' lean less the
+thighs' at the bottom: his proper squats -17 to -29, the eight others -32 at most, their line -30): each line set without him
+marks his proper squats, and he is the only person filmed from the floor (53's live tries, 54); the stance's width is the sumo
+squat's own (54, with the twins). **Cannot see:** heels lifting (the heel point alone wanders up to 11.5 cm on proper squats
+from the floor, 5.1 from hip height), bouncing (proper squats stay at the bottom for as little as 0.10 s), the lower back
+rounding (no point on the spine), the knees locked hard, the breath held. **Found while building, mended:** from the front,
+knees drawn caving in read as knees far forward (a knee moving sideways turns the thigh and shin on the picture as a forward
+lean does), hence "side"; the knees' width needed half a rep's frames, which a front-on rep only just gave, so the knees drawn
+in a little were no longer seen, hence 0.3 s. **Limits, in plain sight:** a counted squat is told it leans too far from 46 to
+52 degrees; past 52 the movement's own "chest up" reads it as another movement, neither counted nor told (Kd's ruling of
+2026-11-16), until 52b-ii-b, which tells it "Keep your chest up." when it is a squat in every other way (Kd, 2026-11-23); the
+knees caving in is read only facing the phone or half turned; the lean's line rests on three people and the research file's
+"moderate, about 30 to 45 degrees", a usual range rather than a source that names a mistake, so before the coach says it (53)
+it is backed by a primary source or Kd's ruling, or set from more side-on bodies.
+
 An exercise that does not pass is published as "count by hand", never with a wrong camera
 count. Kd tries one exercise of each kind of movement on the phone, about a dozen, never
 each one. After launch the server sees, for each exercise, how often members changed the
@@ -2967,6 +3024,36 @@ screen (`apps/mobile/src/screens/workout/Summary.tsx`, words `afterWords.ts`, ta
 - **A workout started from a saved workout** (My Workout holds one still in the list) is sent as `startedFrom: "saved"`; the workout's
   file keeps the mark (`workoutRunSchema.startedFrom`, absent for one kept before).
 - **The policy** says the phone keeps a copy of saved workouts and each save or delete until it reaches the server.
+
+**As built in 64a-v (2026-11-22, Kd's drawing of that day).** History is Me → Progress → Calendar, the one place a person's
+workouts are kept day by day (Part 6 §2: Progress holds history), with doors to it:
+- **The calendar's days** are 61b's rule since 64a-v: `GET /v1/training/days?from=YYYY-MM-DD&to=YYYY-MM-DD` (`historyRangeQuerySchema`,
+  both days included, at most 366, else 400; the person's own; within the history's 120 reads a minute) counts each workout on
+  the day in the zone it was done in, as the month, the day and an exercise's records do; the phone asks for the year that ends on
+  its today. The old `/v1/progress/heatmap` stays for the web. The year is read again each time the server takes a finished workout,
+  and while finished workouts wait on the phone the calendar says "1 workout is saved on this phone. It shows here once it reaches
+  your account."
+- **A day** (`GET /v1/training/days/:day`): its workouts, each with its picture (its first exercise's), its name ("Workout" for one
+  never named), "7:05 am · 42 min · 9 sets" (a workout under a minute is "1 min", never "0 min"), its exercises ("Bench Press,
+  Barbell Curl and Plank", past three "… and 2 more"), and its calories. An exercise is named by ONE rule on the day and on the
+  workout's page (`serverFirst`, round one L2): the server's Library name (the day's read carries `exerciseNames` since 64a-v),
+  then the Library kept on the phone (`useNamed`), then its id word made readable. Today's box, which lies over the calendar,
+  says the workouts still on the phone itself, never "No workout this day" (round one H1), and the day open is read again when
+  the server takes one; pages read again from the newest workout sent (`useSentCount`), as the waiting list keeps only 50 ids.
+- **One workout** (`apps/mobile/src/screens/workout/PastWorkout.tsx`, `GET /v1/training/workouts/:id`): the screen after a workout's
+  own pieces (`WorkoutParts.tsx`, shared with the summary): the wall timer with the time trained, calories and sets, "About 238
+  kcal for you, at 82 kg" (the weight the save used, `kcalWeightKg` on the read since 64a-v), how hard it was as the stars kept,
+  the heart rate where one was kept, the new records with what each was (`recordValues` and Epley's formula now in
+  `packages/shared`, one rule for both screens), then every set, exercise by exercise, a gold PR on the set that made a record.
+  A workout of any age opens. Not found: "This workout is no longer in your history."; unread: "Your workout couldn't load." with
+  Try again. An answer for a workout left, coming late, is never drawn on the next one's page.
+- **Doors:** Today's Recent Activity names a workout as the person did (the old `/v1/workouts` list carries `name` since 64a-v) and
+  opens it, as a run's row opens the run; a row that opens a page has an arrow. My Workout has **History** ("Your past workouts,
+  day by day") under the saved workouts, opening Progress on the calendar.
+- **Measured** (2026-11-22, `apps/api/tools/measure-training-history.ts`, local database, 846,685 sets in the table): for the person
+  of five years, the calendar's year held the server answering nobody for at most 1.8 ms (a free plan's 90 days, 2 KB) and 1.2 ms
+  (all 365 days, 8 KB).
+- **Not in 64a-v:** stars given from History; a workout deleted or repeated from History (neither the web nor the phone has them).
 
 ### 13.7 The jobs (ROADMAP Stage 5, exercise folder 2; ROADMAP wins where they differ)
 

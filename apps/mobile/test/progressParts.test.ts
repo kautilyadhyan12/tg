@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { bestTimeSchema, bodyMeasurementSchema, workoutListItemSchema, calorieForecastSchema, progressPredictionsSchema, weekGoalPredictionSchema, type BodyMeasurement, type SteadyPace } from "@app/shared";
+import { bestTimeSchema, bodyMeasurementSchema, historyWorkoutListedSchema, calorieForecastSchema, progressPredictionsSchema, weekGoalPredictionSchema, type BodyMeasurement, type SteadyPace } from "@app/shared";
 import { average, bestIndex, columnCentres, firstFigure, guides, monotoneControls, monotonePath, rangeWords, tagWords } from "../src/screens/progress/chartRules";
-import { activeDaysWords, clockWords, daySaid, daySum, dayTitle, dayWindow, dayWorkouts, level, monthCells, monthPickSaid, monthRange, monthsToPick, monthWords, nextMonth, squareSaid, windowWorkouts, yearColumns, beyondPlan } from "../src/screens/progress/calendarRules";
-import { addDays, dayKeyOf } from "../src/screens/progress/progressRules";
+import { activeDaysWords, clockWords, daySaid, daySum, dayTitle, dayWorkouts, level, monthCells, monthPickSaid, monthRange, monthsToPick, monthWords, nextMonth, pastWhen, squareSaid, waitingWords, windowWorkouts, workoutName, yearColumns, yearRange, beyondPlan } from "../src/screens/progress/calendarRules";
+import { namedFrom } from "../src/screens/workout/pastWords";
+import { realLibrary } from "./realLibrary";
+import { addDays } from "../src/screens/progress/progressRules";
 import { entryRows, latestWeight, slices } from "../src/screens/progress/otherRules";
 import { bestTimeMini, forecastMini, plateauMini, predictionsFrom, tenths, weekGoalMini } from "../src/screens/progress/predictionWords";
 
@@ -261,12 +263,12 @@ describe("the calendar's month", () => {
   // 90 days into a 91st. The calendar keeps only the days it draws, so no count takes such a day in.
   it("keeps only the server's days that it draws: the window's first day to today", () => {
     const sent = [
-      { date: "2025-11-04", count: 1 },
-      { date: "2025-11-05", count: 2 },
-      { date: "2026-08-06", count: 1 },
-      { date: "2026-08-07", count: 1 },
-      { date: TODAY, count: 1 },
-      { date: "2026-11-05", count: 4 },
+      { day: "2025-11-04", workouts: 1 },
+      { day: "2025-11-05", workouts: 2 },
+      { day: "2026-08-06", workouts: 1 },
+      { day: "2026-08-07", workouts: 1 },
+      { day: TODAY, workouts: 1 },
+      { day: "2026-11-05", workouts: 4 },
     ];
     expect([...windowWorkouts(sent, TODAY, 365).keys()]).toEqual(["2025-11-05", "2026-08-06", "2026-08-07", TODAY]);
     expect([...windowWorkouts(sent, TODAY, 90).keys()]).toEqual(["2026-08-07", TODAY]);
@@ -335,20 +337,16 @@ describe("Body", () => {
   });
 });
 
-// The day box (Kd's click-through, 35c-i): the worst thing it could do is show a workout under a day it
-// was not done on. Its window is the day as the phone's own clock keys it, the same keys the calendar's
-// cells and today use: its first instant and its last are that day, the instant it ends is the next.
+// The calendar's year (64a-v): the days it asks the server for end today and are the days it draws, a leap day among them.
 describe("a day tapped on the calendar", () => {
-  // With the days the clocks change in Europe (29 Mar, 25 Oct) and America (8 Mar, 1 Nov).
-  const keys = ["2026-10-26", "2026-01-01", "2025-12-31", "2026-03-29", "2026-10-25", "2026-03-08", "2026-11-01", "2024-02-29", TODAY];
-  it.each(keys)("reads %s from its first instant to the first instant of the next day, and no further", (key) => {
-    const { from, to } = dayWindow(key);
-    expect(dayKeyOf(new Date(from))).toBe(key);
-    expect(dayKeyOf(new Date(Date.parse(from) - 1))).toBe(addDays(key, -1));
-    expect(dayKeyOf(new Date(Date.parse(to) - 1))).toBe(key);
-    expect(dayKeyOf(new Date(to))).toBe(addDays(key, 1));
-    expect(from).toMatch(/Z$/);
-    expect(to).toMatch(/Z$/);
+  it.each([
+    [TODAY, 365, "2025-11-05"],
+    ["2024-12-31", 365, "2024-01-02"],
+    ["2025-03-01", 365, "2024-03-02"],
+    [TODAY, 1, TODAY],
+  ])("the year ending %s over %s days begins %s", (today, span, from) => {
+    expect(yearRange(today, span)).toEqual({ from, to: today });
+    expect([...windowWorkouts([{ day: from, workouts: 1 }, { day: addDays(from, -1), workouts: 1 }], today, span).keys()]).toEqual([from]);
   });
 
   it("names the day, with its year only when it is not this year's", () => {
@@ -366,27 +364,61 @@ describe("a day tapped on the calendar", () => {
     expect(clockWords(at)).toBe(words);
   });
 
-  // The walk member's own two workouts of 26 October (aihg_b, 2026-11-04), as the server lists them,
-  // the newest first.
-  const item = (o: Record<string, unknown>) =>
-    workoutListItemSchema.parse({ platform: "android", setsCount: 3, totalReps: 30, kcalCalcVersion: 1, qualityFlags: [], ...o });
-  const late = item({ id: "8d1b5b8e-1c3e-4f53-9d0e-8a9c2b1f0a11", startedAt: new Date(2026, 9, 26, 18, 31).toISOString(), durationMs: 35 * 60_000, avgFormScore: 83, kcalPoint: 21 });
-  const early = item({ id: "2f6a9c4d-7e1b-4a8f-b3c2-5d6e7f8a9b0c", startedAt: new Date(2026, 9, 26, 18, 30).toISOString(), durationMs: 40 * 60_000, avgFormScore: 84, kcalPoint: 21 });
+  // Two workouts of one day as the server lists them (GET /v1/training/days/:day, 64a-v), the Library's own three
+  // exercises named from its copy on the phone; "deadlift" is one the phone's copy does not hold.
+  const item = (o: Record<string, unknown>) => historyWorkoutListedSchema.parse({ name: null, endedAt: null, setsCount: 3, kcalPoint: null, exercises: [], exerciseNames: [], ...o });
+  const late = item({ workoutId: "8d1b5b8e-1c3e-4f53-9d0e-8a9c2b1f0a11", name: "Push day", startedAt: new Date(2026, 9, 26, 18, 31).toISOString(), durationMs: 35 * 60_000, setsCount: 9, kcalPoint: 238, exercises: ["barbell_curl", "squat", "plank"] });
+  const early = item({ workoutId: "2f6a9c4d-7e1b-4a8f-b3c2-5d6e7f8a9b0c", startedAt: new Date(2026, 9, 26, 18, 30).toISOString(), durationMs: 40 * 60_000, kcalPoint: 21, exercises: ["deadlift"] });
+  const named = namedFrom(realLibrary());
 
-  it("lists the day's workouts earliest first, each with its time, minutes, sets, reps, form and calories", () => {
-    expect(dayWorkouts([late, early]).map((w) => [w.when, w.what, w.kcal])).toEqual([
-      ["6:30 pm · 40 min", "3 sets · 30 reps · form 84", "21"],
-      ["6:31 pm · 35 min", "3 sets · 30 reps · form 83", "21"],
+  it("lists the day's workouts earliest first, each with its name, time, minutes, sets, exercises and calories", () => {
+    expect(dayWorkouts([late, early], named).map((w) => [w.name, w.when, w.exercises, w.first, w.kcal])).toEqual([
+      ["Workout", "6:30 pm · 40 min · 3 sets", "Deadlift", "deadlift", "21"],
+      ["Push day", "6:31 pm · 35 min · 9 sets", "Barbell Curl, Squat and Plank", "barbell_curl", "238"],
     ]);
-    expect(dayWorkouts([early])[0]?.said).toBe("6:30 pm · 40 min, 3 sets · 30 reps · form 84, 21 kcal");
-    expect(daySum([late, early])).toEqual({ workouts: "2", trained: "1h 15m", kcal: "42" });
+    expect(dayWorkouts([late], named)[0]?.said).toBe("Push day, 6:31 pm · 35 min · 9 sets, Barbell Curl, Squat and Plank, 238 kcal");
+    expect(daySum([late, early])).toEqual({ workouts: "2", trained: "1h 15m", kcal: "259" });
   });
 
   it("leaves out what a workout does not have, and never adds up a number nobody has", () => {
-    const bare = item({ id: "5a4b3c2d-1e0f-4a9b-8c7d-6e5f4a3b2c1d", startedAt: new Date(2026, 9, 26, 7, 0).toISOString(), setsCount: 1, totalReps: 1, durationMs: null, avgFormScore: null, kcalPoint: null });
-    expect(dayWorkouts([bare]).map((w) => [w.when, w.what, w.kcal])).toEqual([["7:00 am", "1 set · 1 rep", null]]);
+    const bare = item({ workoutId: "5a4b3c2d-1e0f-4a9b-8c7d-6e5f4a3b2c1d", name: "  ", startedAt: new Date(2026, 9, 26, 7, 0).toISOString(), setsCount: 1, durationMs: null });
+    expect(dayWorkouts([bare], named).map((w) => [w.name, w.when, w.exercises, w.first, w.kcal])).toEqual([["Workout", "7:00 am · 1 set", "", null, null]]);
+    expect(dayWorkouts([bare], named)[0]?.said).toBe("Workout, 7:00 am · 1 set");
     expect(daySum([bare])).toEqual({ workouts: "1", trained: null, kcal: null });
     expect(daySum([bare, early])).toEqual({ workouts: "2", trained: "40 min", kcal: "21" });
+  });
+
+  // Round one L2: a day's row names an exercise as the workout's page does: the server's Library name first (it knows one
+  // since removed from the phone's copy), then the phone's copy, then the id word; never two names for one exercise.
+  it("names a day's exercises by the server's Library name first, then the phone's copy, then the id word", () => {
+    const w = item({ workoutId: "7c6b5a4d-3e2f-4a1b-9c8d-7e6f5a4b3c2e", startedAt: new Date(2026, 9, 26, 9, 0).toISOString(), durationMs: null, exercises: ["deadlift", "barbell_curl", "romanian_deadlift"], exerciseNames: ["Deadlift (Conventional)", null, null] });
+    expect(dayWorkouts([w], named)[0]?.exercises).toBe("Deadlift (Conventional), Barbell Curl and Romanian deadlift");
+  });
+
+  // Found on the walk (64a-v): a plank held 18 s read "0 min".
+  it("says a workout under a minute as 1 min, never 0 min, alone and in the day's sum", () => {
+    const short = item({ workoutId: "6b5a4c3d-2e1f-4a0b-9c8d-7e6f5a4b3c2d", startedAt: new Date(2026, 9, 26, 23, 22).toISOString(), setsCount: 1, durationMs: 18_000, exercises: ["plank"] });
+    expect(dayWorkouts([short], named)[0]?.when).toBe("11:22 pm · 1 min · 1 set");
+    expect(daySum([short]).trained).toBe("1 min");
+    expect(daySum([item({ workoutId: short.workoutId, startedAt: short.startedAt, durationMs: 0 })]).trained).toBe("0 min");
+  });
+
+  it.each([
+    [null, "Workout"],
+    ["", "Workout"],
+    ["  Leg day ", "Leg day"],
+  ])("names a workout named %j as %j", (name, words) => {
+    expect(workoutName(name)).toBe(words);
+  });
+
+  it("says when a workout began on its page, its year only when not this year's", () => {
+    expect(pastWhen(new Date(2026, 10, 18, 7, 5), "2026-11-22")).toBe("Wednesday 18 November · 7:05 am");
+    expect(pastWhen(new Date(2025, 11, 31, 23, 59), "2026-11-22")).toBe("Wednesday 31 December 2025 · 11:59 pm");
+  });
+
+  it("says how many finished workouts wait on the phone", () => {
+    expect(waitingWords(1)).toBe("1 workout is saved on this phone. It shows here once it reaches your account.");
+    expect(waitingWords(2)).toBe("2 workouts are saved on this phone. They show here once they reach your account.");
   });
 });
 

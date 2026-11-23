@@ -17,6 +17,9 @@ export interface ListedRow {
   sets_count: number;
   kcal_point: number | null;
   exercises: string[] | null;
+  /** Each exercise's Library name, in the same order; null for one the Library never had (64a-v). JSON, as the driver
+   *  reads a NULL inside a text[] as the word "NULL" (round one's own test found it). */
+  exercise_names: (string | null)[] | null;
   total: number;
 }
 
@@ -36,17 +39,38 @@ export async function monthDays(sql: Sql, userId: string, month: string, fallbac
     GROUP BY day ORDER BY day`;
 }
 
-/** A day's workouts in the order they started, the first `most`; each row carries how many there are. */
+/** The days from `from` to `to` (both "YYYY-MM-DD", both included) the person worked out on, and how many
+ *  workouts on each, by the same rule as `monthDays`. */
+export async function rangeDays(sql: Sql, userId: string, from: string, to: string, fallbackZone: string, floor: Date | null): Promise<{ day: string; n: number }[]> {
+  return sql<{ day: string; n: number }[]>`
+    WITH w AS (
+      SELECT (started_at AT TIME ZONE COALESCE(time_zone, ${fallbackZone}))::date AS day
+      FROM workouts
+      WHERE user_id = ${userId}
+        AND started_at >= (${from}::date - 1)::timestamp AT TIME ZONE 'UTC'
+        AND started_at < (${to}::date + 2)::timestamp AT TIME ZONE 'UTC'
+        AND (${floor === null} OR started_at >= ${floor}))
+    SELECT to_char(day, 'YYYY-MM-DD') AS day, count(*)::int AS n
+    FROM w WHERE day BETWEEN ${from}::date AND ${to}::date
+    GROUP BY day ORDER BY day`;
+}
+
+/** A day's workouts in the order they started, the first `most`; each row carries how many there are, and its
+ *  exercises with their Library names, as a workout's own page names them. */
 export async function dayWorkouts(sql: Sql, userId: string, day: string, fallbackZone: string, floor: Date | null, most: number): Promise<ListedRow[]> {
   return sql<ListedRow[]>`
     SELECT w.id, w.name, w.started_at, w.ended_at, w.duration_ms, w.sets_count, w.kcal_point,
-           (SELECT array_agg(x.slug ORDER BY x.first_place)
-              FROM (SELECT e.slug, min(s.set_index) AS first_place
-                      FROM workout_sets s JOIN exercises e ON e.id = s.exercise_id
-                     WHERE s.workout_id = w.id AND s.user_id = ${userId}
-                     GROUP BY e.slug) x) AS exercises,
+           ex.exercises, ex.exercise_names,
            count(*) OVER ()::int AS total
     FROM workouts w
+    LEFT JOIN LATERAL (
+      SELECT array_agg(x.slug ORDER BY x.first_place) AS exercises, json_agg(x.name ORDER BY x.first_place) AS exercise_names
+      FROM (SELECT e.slug, min(l.entry->'text'->'en'->>'name') AS name, min(s.set_index) AS first_place
+              FROM workout_sets s
+                JOIN exercises e ON e.id = s.exercise_id
+                LEFT JOIN library_exercises l ON l.exercise_id = e.id
+             WHERE s.workout_id = w.id AND s.user_id = ${userId}
+             GROUP BY e.slug) x) ex ON true
     WHERE w.user_id = ${userId}
       AND w.started_at >= (${day}::date - 1)::timestamp AT TIME ZONE 'UTC'
       AND w.started_at < (${day}::date + 2)::timestamp AT TIME ZONE 'UTC'
