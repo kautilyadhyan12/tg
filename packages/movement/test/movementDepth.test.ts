@@ -5,7 +5,7 @@
 // then every proper squat in every video counts what was counted by eye, and none is told to go lower.
 import { describe, expect, it } from "vitest";
 import { MATCH_LIMITS, breakOf } from "../src/index.js";
-import { asReplayed, fit, measuringMovement, proofVideos, readMovement, repsOf, runMovement } from "../scripts/movementCheck.js";
+import { asReplayed, fit, measuringMovement, proofVideos, readMovement, replayed, repsOf, runMovement } from "../scripts/movementCheck.js";
 import { REPLAYS } from "../scripts/replays.js";
 
 const SQUAT = readMovement("squat");
@@ -77,11 +77,23 @@ describe("how deep comes from the form standard, never from how shallow anybody 
     }
   });
 
-  it("the hips: the least a leg bent to the knees' number lets them sink, 1 - sin(knees / 2), with no room of its own", () => {
+  it("the hips: the least a leg bent to 114 degrees lets them sink, 1 - sin 57, with no room of its own", () => {
     const depth = rule("depth");
-    const knees = rule("knees bent").atMost ?? 0;
     expect(depth.standard?.room).toBe("none");
-    expect(depth.standard?.at).toBe(Math.round((1 - Math.sin(((knees / 2) * Math.PI) / 180)) * 1000) / 1000);
+    expect(depth.standard?.at).toBe(Math.round((1 - Math.sin(((114 / 2) * Math.PI) / 180)) * 1000) / 1000);
     expect(depth.atLeast).toBe(Math.floor((depth.standard?.at ?? 0) * 100) / 100);
+    expect(depth.atLeast).toBe(0.16);
+  });
+
+  it("not the knees' 116 (0.152, 0.15): a rep starts and is back at lines set from the hips', and so low a man's own floor set at 15 a second loses a squat", () => {
+    const knees = rule("knees bent").atMost ?? 0;
+    expect(knees).toBe(116);
+    const at116 = Math.floor((1 - Math.sin(((knees / 2) * Math.PI) / 180)) * 100) / 100;
+    expect(at116).toBe(0.15);
+    const fifteen = REPLAYS.find((r) => r.name === "15 a second");
+    const v = VIDEOS.find((x) => x.video.label === "floor_phone_test 0-12 s");
+    if (fifteen === undefined || v === undefined) throw new Error("no replay or set");
+    const lower: typeof SQUAT = { ...SQUAT, rules: SQUAT.rules.map((r) => (r.name === "depth" ? { ...r, atLeast: at116 } : r)) };
+    expect([replayed(SQUAT, v, fifteen).count, replayed(lower, v, fifteen).count]).toEqual([3, 2]);
   });
 });

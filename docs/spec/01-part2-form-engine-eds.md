@@ -2384,13 +2384,17 @@ clock that went back is a new set, as it is to the matcher. **The two marks** a 
 yet). **The measuring run now reads with the movement's own break** (`breakOf`: the squat's 202 ms, which hides no 10 cm jump, where
 the measuring movement alone took the plain 0.1 s), so uneven pictures and 8 a second give their reps (430 reps set the numbers, 356
 before; every squat set that sets numbers gives reps under both). The numbers it set, kept by Kd: the knees' line 116 (the camera's
-room 5.13 degrees on 387 pairs, 3.88 on 313 before: 114), so the hips' line, 1 − sin 58 degrees = 0.152, is 0.15 (0.16); the stance
-0.22 (0.21); knees caving inward at least -0.12 of a trunk (room 0.10 on 148 reps, the furthest proper rep -0.02; -0.06 before), so
-a small cave is no longer called; the lean stays 46. With them every squat set counts as by eye as filmed, every other movement 0,
-the kettlebell push press 0, and the phone's own runs are the same as the laptop's on 97 of 100 sets, as before. 17 counted reps read
-the knees (16 before: a rep begins a little earlier with the hips' line at 0.15); on two half-turned sumo reps (`sumo_squat_2a` at
-9.1 s, `sumo_squat_2b` at 7.7 s) knees drawn 0.02 to 0.08 m in leave the knees' width in sight too briefly, so the camera says
-nothing there, and from 0.12 m it marks them. **Open:** the coach's line for each mistake, and how often a correction is spoken (53).
+room 5.13 degrees on 387 pairs, 3.88 on 313 before: 114); the stance 0.22 (0.21); knees caving inward at least -0.12 of a trunk
+(room 0.10 on 148 reps, the furthest proper rep -0.02; -0.06 before), so a small cave is no longer called; the lean stays 46. **The
+hips' line stays 0.16**, the least a leg bent to 114 degrees allows (1 − sin 57), no longer the knees' own line: at 116 it would be
+0.152, so 0.15, and a rep starts and is back at lines set from it (half of it, and a quarter of a rep's own depth); so low, on GitHub's
+run, his first shiny-floor set at 15 a second and his walk back begun at 3.23 s each lost a squat, two running together, and 14 of
+the floor view's pinned readings moved; at 0.16 every one is as before (`movementDepth.test.ts` pins the lost squat at 0.15). With
+these numbers every squat set counts as by eye as filmed and under every held replay, every other movement 0, the kettlebell push
+press 0, jumps and the floor view as before, and the phone's own runs are the same as the laptop's on 97 of 100 sets, as before. On a
+half-turned sumo rep (`sumo_squat_2b` at 7.7 s) knees drawn in just under what passes -0.15 leave the knees' width in sight too
+briefly, so the camera says nothing there, and at 0.12 m it marks them. **Open:** the coach's line for each mistake, and how often a
+correction is spoken (53).
 
 An exercise that does not pass is published as "count by hand", never with a wrong camera
 count. Kd tries one exercise of each kind of movement on the phone, about a dozen, never

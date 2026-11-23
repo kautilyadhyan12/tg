@@ -105,9 +105,9 @@ describe("the chest drawn past chest up onto real squats: told to keep it up, or
 
 describe("each mistake drawn onto real squats is marked, and no other", () => {
   // `edge`: reps at the edge of what the camera sees of them, which the search cannot draw to the target, just past or just
-  // short of the line (`past`, `short`): on the sumo squats, half turned, the knees drawn 0.02 to 0.08 m in at the bottom
-  // leave the picture's knees' width in sight too briefly, so the camera says nothing there, and from 0.12 m it sees and
-  // marks them again (`further`, metres). Each stays counted and unmarked where it could not be drawn, and is marked further.
+  // short of the line (`past`, `short`): on a sumo squat, half turned, knees drawn in just under what passes -0.15 leave the
+  // picture's knees' width in sight too briefly, so the camera says nothing there, and at 0.12 m it sees and marks them
+  // again (`further`, metres). Each stays counted and unmarked where it could not be drawn, and is marked further.
   const cases = [
     { id: "lean_forward", draw: leanForward, step: 2, most: 60, near: 0.5, reps: 26, edge: { past: [], short: [] }, further: 0 },
     {
@@ -116,8 +116,8 @@ describe("each mistake drawn onto real squats is marked, and no other", () => {
       step: 0.03,
       most: 0.25,
       near: 0.01,
-      reps: 17,
-      edge: { past: ["sumo_squat_2a 9.1 s", "sumo_squat_2b 7.7 s"], short: ["sumo_squat_2a 9.1 s"] },
+      reps: 16,
+      edge: { past: ["sumo_squat_2b 7.7 s"], short: [] },
       further: 0.12,
     },
   ] as const;

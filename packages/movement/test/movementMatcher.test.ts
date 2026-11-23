@@ -186,9 +186,9 @@ describe("the squat's own videos count what a person counts by eye", () => {
     // Until 52b-i the depth was a quarter of the way back from the shallowest person's rep, so without him it rose to 0.23,
     // over his first rep (0.226 of a leg).
     expect([row("prisoner_squat_2").count, row("prisoner_squat_2").leftOut]).toEqual([3, 3]);
-    // The same line in every fold, the file's own (0.15 since 52b-ii-b, the knees' line 116: 1 - sin 58 degrees).
+    // The same line in every fold, the file's own.
     const depth = SQUAT.rules.find((r) => r.name === "depth")?.atLeast;
-    expect(depth).toBe(0.15);
+    expect(depth).toBe(0.16);
     for (const fold of TABLE.folds) expect([fold.person, fold.fitted.find((f) => f.rule === "depth")?.bound]).toEqual([fold.person, depth]);
   });
 
