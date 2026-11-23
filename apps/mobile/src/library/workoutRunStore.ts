@@ -1,6 +1,7 @@
-import type { RunExercise, SavedSet, WorkoutRun, WorkoutSave } from "@app/shared";
+import { heartSums, type RunExercise, type SavedSet, type WorkoutRun, type WorkoutSave } from "@app/shared";
 import type { TextStore } from "../screens/food/outbox";
-import { press as pressRun, setsInAll, startRun, toSave, type Press, type Start } from "./workoutRun";
+import { press as pressRun, setsInAll, startRun, toSave, withHeart, type HeartIn, type Press, type Start } from "./workoutRun";
+import { soundsOf, type WorkoutSound } from "./workoutSounds";
 import { readRun, type WorkoutWaiting } from "./workoutSaving";
 
 // The workout a person is doing on this phone (ROADMAP Stage 5 64a-ii): one at a time, written to a file of their own
@@ -24,6 +25,9 @@ export interface Finished {
   done: readonly SavedSet[];
   /** Its exercises as they were at Start: their names and kinds for the summary. */
   plan: readonly RunExercise[];
+  /** Its average and highest heart rate, worked out as the server does from what the save sends (64a-vi); null with
+   *  under a minute of it, or no monitor. */
+  heart: { avg: number; max: number } | null;
 }
 
 export interface RunStore {
@@ -55,6 +59,10 @@ export interface RunStoreSetup {
   platform: WorkoutSave["platform"];
   appVersion: string;
   clock: () => number;
+  /** The person's own monitor's readings since the last take (64a-vi); none without a monitor. */
+  heart?: () => readonly HeartIn[];
+  /** What a press sounds (64a-vi): the layer plays them, or not where the person turned sound off. */
+  sound?: (sounds: readonly WorkoutSound[]) => void;
 }
 
 const placeOf = (r: WorkoutRun): string => `${r.phase}/${String(r.ex)}/${String(r.set)}/${String(r.paused)}/${String(r.done.length)}`;
@@ -106,7 +114,9 @@ export function createRunStore(setup: RunStoreSetup): RunStore {
   const finish = (done: WorkoutRun) => {
     run = null;
     pending = done;
+    const save = toSave(done, setup.platform, setup.appVersion);
     finished = {
+      heart: save === null ? null : heartSums(save.heart, [], Date.parse(save.endedAt) - Date.parse(save.startedAt)),
       workoutId: done.workoutId,
       name: done.name,
       activeMs: done.activeMs,
@@ -156,6 +166,8 @@ export function createRunStore(setup: RunStoreSetup): RunStore {
       }
       const made = startRun(s);
       if (made === null || setsInAll(made) === 0) return "nothing";
+      // Readings from before Start are not this workout's.
+      setup.heart?.();
       run = made;
       finished = null;
       keep(made);
@@ -168,7 +180,11 @@ export function createRunStore(setup: RunStoreSetup): RunStore {
     },
     press: (p, now) => {
       if (run === null) return;
-      const out = pressRun(run, p, now);
+      const before = run;
+      // The readings that came since the last press belong to the workout as it was until now (paused: none).
+      const out = pressRun(withHeart(before, setup.heart?.() ?? [], now), p, now);
+      const sounds = soundsOf(before, out.kind === "gone" ? null : out.run, p, now);
+      if (sounds.length > 0) setup.sound?.(sounds);
       if (out.kind === "gone") {
         run = null;
         void write("");

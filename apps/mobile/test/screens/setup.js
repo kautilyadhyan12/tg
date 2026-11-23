@@ -390,6 +390,11 @@ jest.mock("../../src/screens/running/runVoiceNative", () => {
     },
   };
 });
+// The app's sound player (64a-vi), expo-audio's: `played` lists each sound handed to it, in order.
+jest.mock("../../src/sound/soundNative", () => {
+  const sounds = { played: [] };
+  return { sounds, soundNative: { play: (name) => sounds.played.push(name) } };
+});
 // The heart rate monitor's Bluetooth (37f-i), modules/heart-rate's Android code. `strap.near`: the monitors in
 // reach, each with the bytes it sends (`send(id, bytes, at)` hands one notification over as the Android code
 // would, whether it is watched or not: the app's own code must leave out what is not its monitor's).

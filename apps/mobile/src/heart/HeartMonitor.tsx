@@ -47,10 +47,10 @@ function readHeard(raw: unknown): Heard | null {
   return heard.success ? heard.data : null;
 }
 
-const SAVED = "Saved. It connects when you start a run.";
+const SAVED = "Saved. It connects when you start a run or a workout.";
 /** What Save says, after pairing or none. */
 const PAIR_SAID = {
-  paired: "Paired and saved. It connects when you start a run.",
+  paired: "Paired and saved. It connects when you start a run or a workout.",
   notNeeded: SAVED,
   notPaired: "Saved, not paired. If it says No signal later, press Change monitor.",
 } as const;
@@ -130,7 +130,7 @@ export function HeartMonitorSheet({ open, onClose, monitor }: { open: boolean; o
         <SavedStep monitor={monitor} said={said} running={running} onChange={() => { setSaid(null); setStep({ kind: "find" }); }} onRemove={() => { setStep({ kind: "remove" }); }} />
       ) : step.kind === "remove" && monitor !== null ? (
         <View style={styles.step}>
-          <Txt kind="body">{`${monitorName(monitor.name)} won't connect to your runs.`}</Txt>
+          <Txt kind="body">{`${monitorName(monitor.name)} won't connect to your runs or workouts.`}</Txt>
           <Button
             kind="danger"
             label="Remove"
@@ -145,7 +145,7 @@ export function HeartMonitorSheet({ open, onClose, monitor }: { open: boolean; o
         </View>
       ) : step.kind === "removed" ? (
         <View style={styles.step}>
-          <Txt kind="body">{step.paired ? `Removed. ${step.name} is still paired with this phone.` : `Removed. ${step.name} won't connect to your runs.`}</Txt>
+          <Txt kind="body">{step.paired ? `Removed. ${step.name} is still paired with this phone.` : `Removed. ${step.name} won't connect to your runs or workouts.`}</Txt>
           {step.paired ? <Button kind="plain" label="Bluetooth settings" say="Open Bluetooth settings to unpair it" wide onPress={openBluetoothSettings} /> : null}
           <Button kind="link" label="Connect another" style={styles.centred} onPress={() => { setStep({ kind: "find" }); }} />
         </View>

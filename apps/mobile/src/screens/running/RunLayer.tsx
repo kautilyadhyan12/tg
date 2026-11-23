@@ -9,7 +9,6 @@ import {
   RUN_MAX_POINTS,
   heartLineOf,
   heartSums,
-  heartZoneOf,
   heartZoneSeconds,
   runRecordsSchema,
   runSums,
@@ -31,7 +30,8 @@ import { Sheet } from "../../look/Sheet";
 import { fonts, Txt } from "../../look/Txt";
 import { useSession } from "../../session/SessionProvider";
 import { useHeartMax } from "../../heart/heartMax";
-import { HeartCard, HeartMaxSheet, zoneColour } from "../../heart/HeartZones";
+import { HeartPill } from "../../heart/HeartPill";
+import { HeartCard, HeartMaxSheet } from "../../heart/HeartZones";
 import { loadMonitor, useHeartNow } from "../../heart/monitor";
 import { newGoalId } from "../goals/words";
 import { accountUnits } from "../setup/Setup";
@@ -336,21 +336,6 @@ export function gpsLight(lastFix: LiveRun["lastFix"], now: number): Gps {
   if (lastFix === null || now - lastFix.at > 8000) return { word: "Finding GPS", tone: "none" };
   if (lastFix.accuracyM !== null && lastFix.accuracyM > 20) return { word: "Weak GPS", tone: "weak" };
   return { word: "GPS", tone: "good" };
-}
-
-/** The heart rate now beside the GPS light (37f-i): No signal, never 0 and never an old number. With a
- *  maximum heart rate (37f-ii-a), its zone too, in the zone's colour. */
-function HeartPill({ bpm, max }: { bpm: number | null; max: number | null }) {
-  const zone = bpm === null || max === null ? null : heartZoneOf(bpm, max);
-  const said = bpm === null ? "Heart rate: no signal" : `Heart rate ${String(bpm)} beats a minute${zone === null ? "" : `, zone ${String(zone)}`}`;
-  return (
-    <View accessibilityLabel={said} style={[styles.heartPill, zone === null ? null : { borderColor: colours[zoneColour(zone)] }]} testID="heart-pill">
-      <Icon name="heart" size={14} colour={bpm === null ? "textFaint" : zone === null ? "orange" : zoneColour(zone)} />
-      <Txt kind="small" colour={bpm === null ? "textFaint" : "text"}>
-        {bpm === null ? "No signal" : `${String(bpm)} bpm${zone === null ? "" : ` · Zone ${String(zone)}`}`}
-      </Txt>
-    </View>
-  );
 }
 
 function GpsPill({ gps }: { gps: Gps }) {
@@ -918,7 +903,6 @@ const styles = StyleSheet.create({
   bigName: { fontFamily: fonts.bold },
   pill: { flexDirection: "row", alignItems: "center", gap: 7, paddingHorizontal: 12, paddingVertical: 7, borderRadius: sizes.round, backgroundColor: colours.veil, borderWidth: 1, borderColor: colours.lineStrong },
   pills: { flexDirection: "row", alignItems: "center", gap: 8, flexShrink: 1, flexWrap: "wrap" },
-  heartPill: { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 12, paddingVertical: 7, borderRadius: sizes.round, backgroundColor: colours.veil, borderWidth: 1, borderColor: colours.lineStrong },
   dot: { width: 8, height: 8, borderRadius: sizes.round },
   dotGood: { backgroundColor: colours.good, boxShadow: `0 0 10px ${colours.good}` },
   dotWeak: { backgroundColor: colours.gold },
