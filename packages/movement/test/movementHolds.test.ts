@@ -5,7 +5,7 @@
 // clock stopping as the legs come down.
 import { describe, expect, it } from "vitest";
 import { engineSetSummarySchema, holdMovementSchema, movementFileSchema, timedMovementSchema, type ExerciseCamera, type HoldMovement } from "@app/shared";
-import { HOLD_LIMITS, HoldMatcher, HoldRecord, checkHold, heldOf, parseMovementFile } from "../src/index.js";
+import { HOLD_LIMITS, HoldMatcher, HoldRecord, checkHold, heldOf, parseMovementFile, readPosition, within } from "../src/index.js";
 import { runOf } from "../scripts/measureCheck.js";
 import { HOLD_ROOM, heldByEye, holdHolds, holdReplayTable, holdTable, phoneHoldTable, readHold, readMovementFile, runHold } from "../scripts/holdCheck.js";
 import { proofVideos } from "../scripts/movementCheck.js";
@@ -13,6 +13,15 @@ import { forMovement, isOther } from "../scripts/movementVideos.js";
 import { REPLAYS } from "../scripts/replays.js";
 
 const L_SIT = readHold("l-sit");
+/** A hold's exercise file, for its set's summary: the L-sit's is 54's; its mistakes are not checked yet. */
+const EXERCISE: ExerciseCamera = {
+  format: 1,
+  id: "l_sit",
+  version: 1,
+  movement: "l-sit",
+  research: "Kd's research file, \"Parallel-Bar Tuck L-Sit\".",
+  mistakes: [{ id: "legs_sag", name: "Legs sagging below level", source: "Kd's research file.", camera: "not checked", why: "54 checks a hold's mistakes." }],
+};
 const VIDEOS = proofVideos();
 const TABLE = holdTable(L_SIT, VIDEOS);
 
@@ -102,6 +111,50 @@ describe("a hold's clock, frame by frame", () => {
     ]);
   });
 
+  it("a clock that goes back is a new set: a hold let go before it, or going on as it goes back, is never carried into the next", () => {
+    const held = (from: number, to: number, a: number, b: number, t0 = 0): { t: number; holds: boolean }[] =>
+      Array.from({ length: Math.round((to - from) / 100) + 1 }, (_, k) => {
+        const t = t0 + from + k * 100;
+        return { t, holds: t - t0 >= a && t - t0 <= b };
+      });
+    // A 5 s hold, let go, then the time goes back to 0 and a hold from 1 to 3 s in a 0 to 4 s set: 2 s, never 7.
+    expect(heldOf([...held(0, 5500, 0, 5000), ...held(0, 4000, 1000, 3000)]).holds.map((x) => [x.start, x.end])).toEqual([[1000, 3000]]);
+    // The time goes back while still held: the same.
+    expect(heldOf([...held(0, 5000, 0, 5000), ...held(0, 4000, 1000, 3000)]).heldMs).toBe(2000);
+  });
+
+  it("the set's summary too: his L-sit read twice, the clock going back between, holds the second reading's time alone", () => {
+    const v = VIDEOS.find((x) => x.video.label === "l_sit_bars_2");
+    if (v === undefined) throw new Error("no video");
+    const { measured } = runOf(v.video);
+    const once = (record: HoldRecord, matcher: HoldMatcher): void => {
+      for (const m of measured) record.add(matcher.next(m));
+    };
+    const single = new HoldRecord(EXERCISE, L_SIT, 1);
+    const m1 = new HoldMatcher(L_SIT);
+    once(single, m1);
+    const twice = new HoldRecord(EXERCISE, L_SIT, 1);
+    const m2 = new HoldMatcher(L_SIT);
+    once(twice, m2);
+    once(twice, m2);
+    expect(single.summary().holdMs).toBeGreaterThan(2000);
+    expect(twice.summary().holdMs).toBe(single.summary().holdMs);
+  });
+
+  it("a picture that repeats the one before's time decides nothing: the frame before is given again, never \"Keep your whole body in view.\"", () => {
+    const v = VIDEOS.find((x) => x.video.label === "l_sit_bars_1");
+    if (v === undefined) throw new Error("no video");
+    const { measured } = runOf(v.video);
+    const matcher = new HoldMatcher(L_SIT);
+    const frames = measured.slice(0, 120).map((m) => matcher.next(m));
+    const last = measured[119];
+    if (last === undefined) throw new Error("no frame");
+    const again = matcher.next(last);
+    expect(frames[119]?.holding).toBe(true);
+    expect(again).toEqual({ ...frames[119], hold: null });
+    expect(again.unseen).toBe(false);
+  });
+
   it("refuses a hold that names a measure the engine does not have", () => {
     const bad: HoldMovement = { ...L_SIT, position: [{ read: { kind: "value", measures: ["left wing"] }, atLeast: 1, from: "x" }] };
     expect(() => {
@@ -139,15 +192,7 @@ describe("a hold's set summary: the time held, no reps, no form score yet", () =
   it("his L-sit on the dip station: held from when the body is learned to 3.10 s, watched all but the first half second", () => {
     const v = VIDEOS.find((x) => x.video.label === "l_sit_bars_2");
     if (v === undefined) throw new Error("no video");
-    const exercise: ExerciseCamera = {
-      format: 1,
-      id: "l_sit",
-      version: 1,
-      movement: "l-sit",
-      research: "Kd's research file, \"Parallel-Bar Tuck L-Sit\".",
-      mistakes: [{ id: "legs_sag", name: "Legs sagging below level", source: "Kd's research file.", camera: "not checked", why: "54 checks a hold's mistakes." }],
-    };
-    const record = new HoldRecord(exercise, L_SIT, 1);
+    const record = new HoldRecord(EXERCISE, L_SIT, 1);
     const { measured } = runOf(v.video);
     const matcher = new HoldMatcher(L_SIT);
     for (const m of measured) record.add(matcher.next(m));
@@ -174,5 +219,29 @@ describe("the phone's own runs of every proof video (test/phone-points): the L-s
     expect(own).toHaveLength(2);
     expect(own.filter((r) => Math.abs((r.phoneMs ?? -1e9) - r.laptopMs) > HOLD_ROOM).map((r) => [r.label, r.laptopMs, r.phoneMs])).toEqual([]);
     expect(rows.filter((r) => isOther(r.entry, L_SIT.name) && r.phoneMs !== 0).map((r) => [r.label, r.phoneMs])).toEqual([]);
+  });
+});
+describe("written for 54: a long sit on the floor reads as an L-sit, since nothing in its position reads the body as held up", () => {
+  it("at the top of a straight-leg sit-up, sat on the floor, the thighs, trunk, knees and elbows are each inside the L-sit's lines; only his arms, the plate held overhead, are not", () => {
+    const v = VIDEOS.find((x) => x.video.label === "sit_up_plate_0");
+    if (v === undefined) throw new Error("no video");
+    const { measured } = runOf(v.video);
+    const t0 = measured[0]?.t ?? 0;
+    const top = measured.filter((m) => m.t - t0 >= 1500 && m.t - t0 <= 1800);
+    const inside = (k: number) => top.filter((m) => {
+      const c = L_SIT.position[k];
+      const r = c === undefined ? null : readPosition(c.read, m);
+      return c !== undefined && r !== null && within(r, c);
+    }).length;
+    expect(top.length).toBeGreaterThanOrEqual(8);
+    expect([0, 1, 2, 3].map((k) => inside(k) > 0)).toEqual([true, true, true, true]);
+    expect(inside(4)).toBe(0);
+  });
+});
+
+/** The L-sit's numbers, as the file says them, are the ones hold-check sets: the tests prove the file the phone runs. */
+describe("the numbers in movements/l-sit.json are the ones hold-check sets from the videos", () => {
+  it("each condition's bound", () => {
+    expect(TABLE.fitted.map((f) => f.bound)).toEqual(L_SIT.position.map((c) => c.atLeast ?? c.atMost));
   });
 });

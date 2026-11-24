@@ -59,11 +59,19 @@ describe("the sit-up and the hip thrust count every rep a person counts by eye",
       expect(r.count).toBe(r.entry.reps);
       // With the person's own videos left out of the numbers: the same, or the case written on the video, never more.
       if (r.leftOut !== null) {
-        if (r.entry.leftOutOpen?.fewer === true) expect(r.leftOut).toBeLessThan(r.entry.reps ?? 0);
-        else expect(r.leftOut).toBe(r.entry.reps);
+        // A written case counts exactly what it writes, fewer than by eye (round one: "fewer" alone let any lower count pass).
+        const known = r.entry.leftOutOpen;
+        if (known?.fewer === true) {
+          expect(r.leftOut).toBeLessThan(r.entry.reps ?? 0);
+          expect(r.leftOut).toBe(known.count);
+        } else expect(r.leftOut).toBe(r.entry.reps);
       }
     },
   );
+
+  it.each([SIT_UP, HIP_THRUST].map((m) => [m.name, m] as const))("the numbers in movements/%s.json are the ones movement-check sets, so these tests prove the file the phone runs", (_name, m) => {
+    expect(tableOf(m).fitted.map((f) => [f.rule, f.bound])).toEqual(m.rules.map((r) => [r.name, r.atLeast ?? r.atMost]));
+  });
 
   it("the sit-up from six people, filmed from the side, from the feet and from a phone on the floor; the hip thrust from only two the camera can judge", () => {
     const judged = (m: Movement) => tableOf(m).rows.filter((r) => r.entry.movement === m.name && r.entry.reps !== null);

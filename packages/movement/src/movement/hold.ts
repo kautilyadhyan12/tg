@@ -1,7 +1,6 @@
 // A hold (spec Part 2 §12.3, §11.8 step 6; ROADMAP 52c-ii): a clock that runs only while the position is held. It reads a
 // hold's file (`holdMovementSchema`): a list of conditions, each a body measure inside its bound, every one of which must
-// hold in a picture for that picture to be held. Pure, like the matcher: the same frames in give the same time out, and a
-// picture the camera could not read is never held time.
+// hold in a picture for that picture to be held. Pure, like the matcher: the same frames in give the same time out.
 //
 // The worst thing a hold could do to a person is time a hold nobody held, or keep the clock running after they let go. So:
 //   - the position must hold for a whole second (`settle`) before it is a hold; a leg raise passing through it, or a
@@ -9,8 +8,12 @@
 //     it all along), so a real hold is timed as long as it lasted;
 //   - the clock stops at the last picture held: the picture a condition breaks in, and every picture after it, is never
 //     held time;
-//   - a picture in which a condition cannot be read (the body hidden, a part off the picture) is not held time either, and
-//     a gap in the held pictures longer than a break (`gap`) ends the hold: what was not seen is never counted.
+//   - a picture in which a condition cannot be read (the body hidden, a part off the picture) never starts or ends a hold by
+//     itself: unread pictures between two held ones are bridged, and counted, only while the gap between the two held
+//     pictures is no longer than a break (`gap`, 0.2 s: the phone's live mode drops pictures so); a longer gap ends the hold,
+//     and what was not seen then is never counted. So a hold's time can be a little more than the time the camera read the
+//     person (a set's `watchedMs`), never more than the set's own length;
+//   - a clock that goes back is a new set: nothing of the old one is carried, its time held included.
 import type { HoldMovement } from "@app/shared";
 import type { MeasuredBody } from "../body/measures.js";
 import { readPosition, unknownMeasures, within } from "./matcher.js";
@@ -79,8 +82,12 @@ export function heldNow(hold: HoldMovement, measured: MeasuredBody): boolean | n
 /** The holds in a run of pictures, and the time held, by the rules above (`HoldMatcher` gives the same, picture by picture). */
 export function heldOf(pictures: readonly HeldPicture[], limits: HoldLimits = HOLD_LIMITS): { heldMs: number; holds: HoldResult[] } {
   const clock = new HoldClock(limits);
-  const holds: HoldResult[] = [];
+  let holds: HoldResult[] = [];
+  let lastT: number | null = null;
   for (const p of pictures) {
+    // A clock that went back is a new set, as it is to the clock.
+    if (lastT !== null && p.t < lastT) holds = [];
+    lastT = p.t;
     const ended = clock.next(p.t, p.holds);
     if (ended !== null) holds.push(ended);
   }
@@ -94,17 +101,21 @@ class HoldClock {
   /** The run of held pictures going on: its first and last held picture; null when none. */
   private run: { start: number; last: number } | null = null;
   private done = 0;
+  /** The newest picture's time, held or not: a picture earlier than it is a clock that went back. */
+  private lastT: number | null = null;
 
   constructor(private readonly limits: HoldLimits) {}
 
-  /** A clock that went back starts afresh. Returns a hold that ended here. */
+  /** A clock that went back starts afresh, whether a hold was going on or had ended: nothing of the old set is carried, its
+   *  time held included (round one: a 5 s hold let go before the time went back was still counted in the next set). Returns a
+   *  hold that ended here. */
   next(t: number, holds: boolean | null): HoldResult | null {
-    const run = this.run;
-    if (run !== null && t < run.last) {
+    if (this.lastT !== null && t < this.lastT) {
       this.run = null;
       this.done = 0;
-      return this.next(t, holds);
     }
+    this.lastT = t;
+    const run = this.run;
     // A gap longer than a break since the last held picture ends the run (what was not seen is not counted).
     let ended: HoldResult | null = null;
     if (run !== null && (holds === false || t - run.last > this.limits.gap)) {
@@ -148,7 +159,8 @@ class HoldClock {
 /** A hold, picture by picture, from the body measures (50c). */
 export class HoldMatcher {
   private readonly clock: HoldClock;
-  private lastT: number | null = null;
+  /** The frame given for the newest picture: given again for a picture that repeats its time. */
+  private lastFrame: HoldFrame | null = null;
 
   constructor(
     private readonly hold: HoldMovement,
@@ -160,15 +172,20 @@ export class HoldMatcher {
 
   next(measured: MeasuredBody): HoldFrame {
     const t = measured.t;
-    const held = this.lastT !== null && t === this.lastT ? null : heldNow(this.hold, measured);
-    this.lastT = t;
+    // A picture with the same time as the one before decides nothing: the frame before is given again, never "unseen" (a
+    // camera that repeats a picture would flash "Keep your whole body in view." on a hold going fine; round one).
+    const before = this.lastFrame;
+    if (before !== null && t === before.t) return { ...before, hold: null };
+    const held = heldNow(this.hold, measured);
     const hold = this.clock.next(t, held);
-    return { t, holding: held === true && this.clock.holding(), heldMs: this.clock.heldMs(), unseen: held === null, reason: held === null ? this.hold.unseen : null, hold };
+    const frame: HoldFrame = { t, holding: held === true && this.clock.holding(), heldMs: this.clock.heldMs(), unseen: held === null, reason: held === null ? this.hold.unseen : null, hold };
+    this.lastFrame = frame;
+    return frame;
   }
 
   /** The set has ended: a hold going on ends at its last picture held. */
   finish(): HoldFrame | null {
-    const t = this.lastT;
+    const t = this.lastFrame?.t ?? null;
     if (t === null) return null;
     const hold = this.clock.finish();
     return { t, holding: false, heldMs: this.clock.heldMs(), unseen: false, reason: null, hold };

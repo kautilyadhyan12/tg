@@ -25,9 +25,12 @@ describe.each([readMovement("sit-up"), readMovement("hip-thrust")])("$name, unde
     expect(rows.filter((r) => isOther(r.entry, movement.name)).length).toBeGreaterThanOrEqual(HELD.length * 100);
   });
 
-  it("its own videos hold, but the cases written on them", () => {
+  it("its own videos hold, but the cases written on them, and a written case never counts more than by eye", () => {
     const wrong = rows.filter((r) => r.entry.movement === movement.name && !holds(r) && !openRow(r)).map((r) => [r.replay.name, r.label, r.count, r.leftOut]);
     expect(wrong).toEqual([]);
+    // Round one: a written replay case is fewer reps, never an extra one.
+    const more = rows.filter((r) => r.entry.movement === movement.name && openRow(r) && (r.count > r.most || (r.leftOut ?? 0) > r.most)).map((r) => [r.replay.name, r.label, r.count, r.leftOut]);
+    expect(more).toEqual([]);
   });
 
   it("every other movement counts 0 and is told nothing", () => {

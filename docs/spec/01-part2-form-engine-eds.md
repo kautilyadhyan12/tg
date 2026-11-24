@@ -2490,14 +2490,20 @@ sets a line the other misses (side on the trunk reads level at 92 degrees, facin
 move), so both count 0 with themselves left out, and the one facing the phone loses thrusts done 1.5 and 2 times as slowly (her hips'
 height not read near the bottom): all written, for 54's videos. **A hold** (`holdMovementSchema`, `HoldMatcher`): a clock that runs
 only while every condition of the position holds, each read; the position must hold for a whole second before it is a hold, that
-second counted too (`HOLD_LIMITS.settle`); the picture a condition breaks in, and every one after, is never held time, nor a picture not
-read, and a gap longer than 0.2 s ends it. `HoldRecord` gives a hold's set its `holdMs` (§2.4), no reps and no form score yet. **The
+second counted too (`HOLD_LIMITS.settle`); the picture a condition breaks in, and every one after, is never held time; unread
+pictures between two held ones are bridged, and counted, while that gap is no longer than 0.2 s, and a longer gap ends the hold (so a
+hold's time can be a little more than the time watched, never more than the set); a clock that goes back is a new set, its old time
+dropped, and a repeated picture decides nothing. `HoldRecord` gives a hold's set its `holdMs` (§2.4), no reps and no form score yet. **The
 L-sit** (`movements/l-sit.json`, numbers by `hold-check` from every picture held by eye): thighs at least 71 degrees from hanging, trunk
 at most 9, knees at least 155, elbows at least 165, the arms down within 18. His two videos are timed 7.87 and 3.10 s, as the
 pictures show (the second's clock stops at the last picture before the video cuts to him hanging his knees), as filmed and under all 14
 held replays (within 0.25 s, less what a passer-by hides, stretched when done slower or faster); every other video (120: the leg and
 knee raises on the bars, a captain's chair, sitting on a chair, the support hold, lying) is timed 0. **Not passing yet:** two people,
-so each counts 0 with himself left out (one's legs a little below level, the other leaning 6 to 8 degrees forward): written. Both of his
+so each counts 0 with himself left out (one's legs a little below level, the other leaning 6 to 8 degrees forward): written. And
+nothing in its position reads the body as held up off the floor (round one): a long sit on the floor, the legs straight and the hands on
+the floor by the hips, reads as an L-sit (at the top of a straight-leg sit-up four of its five conditions hold, the plate held overhead
+failing the fifth); 54 adds a reading that tells held up from on the floor, with a long-sit video among the proof, or makes it timed
+only, as the support hold is. Both of his
 clips are of the full L-sit, the legs straight; the tuck L-sit his research file describes is a seated body's shape (54). **Timed only**
 (`timedMovementSchema`): a plain timer, the camera judging nothing, with why. **The support hold** (`movements/support-hold.json`) is
 timed only: made as a hold from his video it times him 6.60 s, and 28 of the 121 other videos, 75 s in all (people standing, calf
