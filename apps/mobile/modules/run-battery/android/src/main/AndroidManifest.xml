@@ -1,0 +1,14 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+  <!-- The phone's battery limit on this app (37l): asking whether the app is limited, and opening its Settings page, need no permission.
+       The two Settings pages are named here so that Android lets the app see which app holds them, and open only the phone's own. -->
+  <queries>
+    <intent>
+      <action android:name="android.settings.VIEW_ADVANCED_POWER_USAGE_DETAIL" />
+      <data android:scheme="package" />
+    </intent>
+    <intent>
+      <action android:name="android.settings.APPLICATION_DETAILS_SETTINGS" />
+      <data android:scheme="package" />
+    </intent>
+  </queries>
+</manifest>

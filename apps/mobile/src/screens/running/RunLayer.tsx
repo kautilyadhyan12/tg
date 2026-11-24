@@ -35,6 +35,7 @@ import { HeartCard, HeartMaxSheet } from "../../heart/HeartZones";
 import { loadMonitor, useHeartNow } from "../../heart/monitor";
 import { newGoalId } from "../goals/words";
 import { accountUnits } from "../setup/Setup";
+import { batteryLimited } from "./BatteryLimit";
 import {
   RUN_TASK,
   closedPauses,
@@ -70,7 +71,8 @@ import { currentPace } from "./runLive";
 import { clock, distance, pace, paceWord, runName, runWhen, unitWord, METRES_PER_MILE } from "./runWords";
 
 /** What stood in the way of Start, said under it with its button. */
-export type StartProblem = "denied" | "settings" | "approximate" | "off" | "failed";
+/** "battery": the phone limits this app in the background, so a run stops recording with the screen off (37l). */
+export type StartProblem = "denied" | "settings" | "approximate" | "off" | "failed" | "battery";
 
 export const START_PROBLEM_WORDS: Record<StartProblem, string> = {
   denied: "Allow location to record your run.",
@@ -78,6 +80,7 @@ export const START_PROBLEM_WORDS: Record<StartProblem, string> = {
   approximate: "Turn on Precise location to measure your run.",
   off: "Turn on your phone's location to record your run.",
   failed: "Your run couldn't start. Try again.",
+  battery: "Your phone's battery setting stops run recording when the screen is off.",
 };
 
 /** What a run tells the Running tab once it is saved, or waiting to be sent. */
@@ -85,8 +88,9 @@ export type RunDone = { name: string; waiting: boolean } | null;
 
 interface RunLayerValue {
   /** Start: asks for the location if it must, then counts down. null when the count has begun. With
-   *  a guide, today's planned run, step by step (37d-ii). */
-  start: (autoPause: boolean, guide?: KeptRunGuide | null) => Promise<StartProblem | null>;
+   *  a guide, today's planned run, step by step (37d-ii). `anyway`: the person chose Start anyway on a phone that
+   *  limits the app (37l). */
+  start: (autoPause: boolean, guide?: KeptRunGuide | null, anyway?: boolean) => Promise<StartProblem | null>;
   /** Back to the run that is going on. */
   open: () => void;
   run: LiveRun | null;
@@ -183,10 +187,12 @@ export function RunLayerProvider({ children }: { children: ReactNode }) {
     });
   }, [me, session, hasRun, finished]);
 
-  const start = useCallback(async (autoPause: boolean, guide: KeptRunGuide | null = null): Promise<StartProblem | null> => {
+  const start = useCallback(async (autoPause: boolean, guide: KeptRunGuide | null = null, anyway = false): Promise<StartProblem | null> => {
     setStartFailed(false);
     const problem = await askLocation();
     if (problem !== null) return problem;
+    // The location first, as Android asks it; then, only on a phone that limits this app, the battery (37l).
+    if (!anyway && batteryLimited()) return "battery";
     setDone(null);
     setShown(true);
     setCounting({ autoPause, guide });
