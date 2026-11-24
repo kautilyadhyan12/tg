@@ -1,0 +1,101 @@
+{
+  "format": 1,
+  "name": "lunge",
+  "counting": "one side at a time",
+  "side": {
+    "measure": "shins, left against right",
+    "working": "less",
+    "from": "At the bottom of a lunge the front shin stands near upright and the back shin lies near flat: the side whose shin leans the less is the front leg, the rep's side. Read over the rep's lower half, where the legs are split all through."
+  },
+  "alsoFrom": {
+    "movement": "squat",
+    "why": "A lunge's trunk stands as upright as a squat's or more (Kd's research files: the torso upright, or leaning forward very slightly from the hips), so \"chest up\" is set from the squat's people too: six lunge people alone, one left out, set it from 21 to 39 degrees, and the woman whose reverse lunges lean 25 to 28 was refused with her own videos left out."
+  },
+  "phone": "On the floor or a low stand, 2 to 3 metres away, the whole body in the picture with room for the step: side-on, or in between.",
+  "drive": {
+    "measure": "hips height",
+    "toward": "lower"
+  },
+  "ready": [
+    {
+      "read": {
+        "kind": "value",
+        "measures": [
+          "left knee",
+          "right knee"
+        ]
+      },
+      "atLeast": 160,
+      "from": "Standing tall: the knees within 20 degrees of straight (the usual definition; not fitted)."
+    },
+    {
+      "read": {
+        "kind": "value",
+        "measures": [
+          "trunk lean"
+        ]
+      },
+      "atMost": 20,
+      "from": "Standing tall: the trunk within 20 degrees of upright (the usual definition; not fitted)."
+    }
+  ],
+  "rules": [
+    {
+      "name": "depth",
+      "role": "count",
+      "at": "bottom",
+      "read": {
+        "kind": "drop"
+      },
+      "atLeast": 0.26,
+      "seen": "always",
+      "short": "Go lower to count.",
+      "unseen": "Keep your whole body in view.",
+      "from": "Set by movement-check from 6 people's videos (scripts/movementVideos.ts), as filmed and as each replay that sets numbers (scripts/replays.ts), 200 reps: a quarter of the way back towards standing from the shallowest rep (0.35; standing 0)."
+    },
+    {
+      "name": "knees bent",
+      "role": "count",
+      "at": "bottom",
+      "read": {
+        "kind": "value",
+        "measures": [
+          "left knee",
+          "right knee"
+        ]
+      },
+      "atMost": 120,
+      "seen": "always",
+      "short": "Go lower to count.",
+      "unseen": "Keep your whole body in view.",
+      "from": "Set by movement-check from 6 people's videos (scripts/movementVideos.ts), as filmed and as each replay that sets numbers (scripts/replays.ts), 200 reps: a quarter of the way back towards standing from the shallowest rep (103.86; standing 167.35)."
+    },
+    {
+      "name": "legs split",
+      "role": "match",
+      "at": "lower half",
+      "read": {
+        "kind": "apart",
+        "measure": "shins, left against right"
+      },
+      "atLeast": 25,
+      "seen": "or another movement",
+      "from": "Set by movement-check from 6 people's videos (scripts/movementVideos.ts), as filmed and as each replay that sets numbers (scripts/replays.ts), 200 reps: beyond the furthest rep by half its distance from the middle rep (44.65; standing 4.92)."
+    },
+    {
+      "name": "chest up",
+      "role": "match",
+      "at": "bottom",
+      "read": {
+        "kind": "value",
+        "measures": [
+          "trunk lean"
+        ]
+      },
+      "atMost": 57,
+      "seen": "always",
+      "unseen": "Keep your whole body in view.",
+      "from": "Set by movement-check from 6 people's videos (scripts/movementVideos.ts), as filmed and as each replay that sets numbers (scripts/replays.ts), 588 reps: beyond the furthest rep by half its distance from the middle rep (43.58; standing 2.51)."
+    }
+  ]
+}

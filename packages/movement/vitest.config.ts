@@ -12,6 +12,7 @@ export const PROOF_FILES = [
   "test/movementWalkBack.test.ts",
   "test/movementFloorView.test.ts",
   "test/movementFormProof.test.ts",
+  "test/movementKindsReplays.test.ts",
 ];
 
 export default defineConfig({

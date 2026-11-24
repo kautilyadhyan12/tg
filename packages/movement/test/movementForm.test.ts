@@ -32,7 +32,8 @@ describe("the worst thing: nobody squatting properly is told to change their for
   });
 
   it("52b-ii-b's worst thing: on no video Kd's folders hold, as filmed, is any rep told \"Keep your chest up.\"", () => {
-    expect(VIDEOS.length).toBe(100);
+    // 101 since 52c-i: a man's rooftop lunges are two takes joined by a fade, each a set of its own.
+    expect(VIDEOS.length).toBe(101);
     const told = VIDEOS.flatMap((v) => runMovement(SQUAT, v.video, EXERCISE).reps.filter((r) => r.verdict === "refused").map((r) => `${v.video.label} ${((r.start - 1000) / 1000).toFixed(1)} s`));
     expect(told).toEqual([]);
   });
@@ -56,7 +57,7 @@ describe("the worst thing: nobody squatting properly is told to change their for
 
 describe("a mistake is judged only inside a counted rep", () => {
   it("every other movement counts 0, and none of its dips carries a form check", () => {
-    const others = VIDEOS.filter((v) => v.entry.movement === null);
+    const others = VIDEOS.filter((v) => v.entry.movement !== "squat");
     expect(others.length).toBeGreaterThan(50);
     for (const v of others) {
       const run = runMovement(SQUAT, v.video, EXERCISE);

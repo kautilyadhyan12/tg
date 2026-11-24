@@ -14,7 +14,7 @@ describe("the worst thing: no other movement is counted as a squat however the w
   });
 
   it("the passer-by acts on every other movement too: in each video it hides points it saw", () => {
-    const others = VIDEOS.filter((v) => v.entry.movement === null && v.entry.reps !== null && v.entry.open === undefined);
+    const others = VIDEOS.filter((v) => v.entry.movement !== "squat" && v.entry.reps !== null && v.entry.open === undefined);
     expect(others.length).toBeGreaterThanOrEqual(30);
     for (const replay of HELD.filter((r) => r.name.startsWith("passer-by"))) {
       for (const v of others) {

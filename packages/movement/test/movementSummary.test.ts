@@ -24,6 +24,7 @@ const rep = (verdict: RepResult["verdict"], statuses: readonly FormStatus[], sta
   standing: {},
   form: statuses.map((status, k) => ({ mistake: `m${String(k)}`, reading: status === "unseen" ? null : 1, status })),
   turn: 0.3,
+  side: null,
 });
 
 describe("a rep's score: of the mistakes the camera could see, the share that were fine", () => {

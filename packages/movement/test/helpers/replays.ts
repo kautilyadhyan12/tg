@@ -12,6 +12,6 @@ export const HELD: readonly Replay[] = REPLAYS.filter((r) => r.hold);
 
 /** The rows of the judged videos `which` picks, under `replays`. */
 export function rowsOf(replays: readonly Replay[], which: "squat" | "other"): ReplayRow[] {
-  const videos = VIDEOS.filter((v) => (which === "squat" ? v.entry.movement === "squat" : v.entry.movement === null));
+  const videos = VIDEOS.filter((v) => (which === "squat" ? v.entry.movement === "squat" : v.entry.movement !== "squat"));
   return replayTable(SQUAT, videos, replays, EXERCISE);
 }
