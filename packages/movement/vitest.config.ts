@@ -13,6 +13,7 @@ export const PROOF_FILES = [
   "test/movementFloorView.test.ts",
   "test/movementFormProof.test.ts",
   "test/movementKindsReplays.test.ts",
+  "test/movementFloorWorkReplays.test.ts",
 ];
 
 export default defineConfig({

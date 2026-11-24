@@ -29,6 +29,8 @@ export {
   SLOWEST_RATE,
   hopTime,
   breakOf,
+  readPosition,
+  within,
   type MatchFrame,
   type MatchLimits,
   type MatchState,
@@ -36,5 +38,6 @@ export {
   type Verdict,
 } from "./movement/matcher.js";
 export { FORM_SEEN, FORM_SEEN_FOR, OUT_OF_BOTTOM, SIDE_ON, checkExercise, checkedOf, formOf, mistakeReading, sideOn, turnOf, type FormCheck, type FormFrame, type FormStatus } from "./movement/form.js";
-export { parseExercise, parseMovement } from "./movement/load.js";
-export { MOVEMENT_ENGINE_VERSION, SetRecord, WATCHED_GAP, repScore } from "./movement/summary.js";
+export { HOLD_LIMITS, HoldMatcher, checkHold, heldNow, heldOf, type HeldPicture, type HoldFrame, type HoldLimits, type HoldResult } from "./movement/hold.js";
+export { parseExercise, parseHold, parseMovement, parseMovementFile } from "./movement/load.js";
+export { HoldRecord, MOVEMENT_ENGINE_VERSION, SetRecord, WATCHED_GAP, repScore } from "./movement/summary.js";

@@ -61,7 +61,7 @@ if (values.write) {
       return `Set by movement-check from its standard, ${String(rule.standard.at)} (its source beside it), used as it is. The people's furthest rep reads ${num(Math.round(f.from * 100) / 100)}.`;
     }
     if (rule?.standard?.room === "none") {
-      return `Set by movement-check from the form standard, ${String(rule.standard.at)} (its source beside it), the least the body allows, so with no room of its own; rounded the forgiving way. The people's shallowest rep reads ${num(Math.round(f.from * 100) / 100)}.`;
+      return `Set by movement-check from the form standard, ${String(rule.standard.at)} (its source beside it, which says why it takes no room of its own), used as it is; rounded the forgiving way. The people's shallowest rep reads ${num(Math.round(f.from * 100) / 100)}.`;
     }
     if (rule?.standard !== undefined && f.room !== undefined) {
       const way = rule.atLeast !== undefined ? "minus" : "plus";

@@ -32,7 +32,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { ExerciseCamera, Movement, MovementFrame, MovementRule } from "@app/shared";
-import { FOOT_ROOM, MATCH_LIMITS, MovementMatcher, NEVER_JUMP, SLOWEST_RATE, breakOf, parseExercise, parseMovement, type MatchLimits, type RepResult } from "../src/index.js";
+import { FOOT_ROOM, MATCH_LIMITS, MEASURE_LIST, MovementMatcher, NEVER_JUMP, SLOWEST_RATE, breakOf, parseExercise, parseMovement, type MatchLimits, type RepResult } from "../src/index.js";
 import { readKept, videoOf, type Video } from "./bodyCheck.js";
 import { runOf } from "./measureCheck.js";
 import { MOVEMENT_VIDEOS, forMovement, framesOf, isOther, labelOf, type MovementVideo } from "./movementVideos.js";
@@ -44,6 +44,19 @@ export const EXERCISES = join(import.meta.dirname, "../exercises");
 
 /** While the reps are found to set the numbers from, a rep starts at half of this drop, in legs: about 7 cm. */
 export const MEASURING_DEPTH = 0.15;
+/** The same for a drive on an angle, degrees (52c-ii: the sit-up's trunk lean): a rep starts at half of it, 7.5 degrees,
+ *  about what 0.075 of a leg moves the shoulders at the end of a trunk (0.6 of a leg long: 7.2 degrees). */
+export const MEASURING_ANGLE = 15;
+
+/** The measuring depth in the drive's own unit. */
+export function measuringDepthOf(movement: Movement): number {
+  return isAngleDrive(movement) ? MEASURING_ANGLE : MEASURING_DEPTH;
+}
+
+/** Whether the movement's drive is an angle (degrees), not a height. */
+export function isAngleDrive(movement: Movement): boolean {
+  return MEASURE_LIST.find((m) => m.name === movement.drive.measure)?.unit === "degrees";
+}
 /** A count rule is placed this share of the shallowest rep's way from standing. */
 export const COUNT_SHARE = 0.75;
 /** A match rule is placed beyond the furthest rep by this share of its distance from the middle rep. */
@@ -143,7 +156,7 @@ export function measuringMovement(movement: Movement): Movement {
   return {
     ...movement,
     rules: movement.rules.map((r): MovementRule => {
-      if (r.read.kind === "drop" && r.role === "count") return { ...r, atLeast: MEASURING_DEPTH };
+      if (r.read.kind === "drop" && r.role === "count") return { ...r, atLeast: measuringDepthOf(movement) };
       return r.atLeast !== undefined ? { ...r, atLeast: Number.NEGATIVE_INFINITY } : { ...r, atMost: Number.POSITIVE_INFINITY };
     }),
   };
@@ -221,7 +234,8 @@ function middle(values: readonly number[]): number {
   return s[Math.floor(s.length / 2)] ?? 0;
 }
 
-function step(rule: MovementRule): number {
+function step(rule: MovementRule, movement: Movement): number {
+  const unit = (name: string): string | undefined => MEASURE_LIST.find((m) => m.name === name)?.unit;
   switch (rule.read.kind) {
     case "time":
       return 0.05;
@@ -229,6 +243,11 @@ function step(rule: MovementRule): number {
     case "gap":
     case "apart":
       return 1;
+    case "drop":
+      return isAngleDrive(movement) ? 1 : 0.01;
+    case "change":
+      // A change of an angle (the sit-up's thighs) to a whole degree, of a height or a width to a hundredth.
+      return rule.read.measures.every((n) => unit(n) === "degrees") ? 1 : 0.01;
     default:
       return 0.01;
   }
@@ -362,10 +381,10 @@ export function fit(movement: Movement, videos: readonly ProofVideo[], also: Als
     // A count rule is rounded the forgiving way (counting is a little forgiving, §12.1); a match rule towards the reps, its
     // room already given (what kind of movement it was is strict): rounded outward, a kettlebell swing read 34.07 with
     // pictures skipped where "hips and knees together" was 34.24, and was counted (52a-ii-b-i).
-    const bound = rounded(raw, step(rule), rule.role === "count" ? !atLeast : atLeast);
+    const bound = rounded(raw, step(rule, movement), rule.role === "count" ? !atLeast : atLeast);
     return {
       rule: rule.name,
-      bound: rule.read.kind === "lift" && !atLeast ? Math.min(bound, rounded(LIFT_CEILING, step(rule), false)) : bound,
+      bound: rule.read.kind === "lift" && !atLeast ? Math.min(bound, rounded(LIFT_CEILING, step(rule, movement), false)) : bound,
       from: extreme,
       standing,
       reps: values.length,

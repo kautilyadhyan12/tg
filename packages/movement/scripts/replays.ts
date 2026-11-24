@@ -49,6 +49,9 @@ export interface Replay {
   /** The frames as the phone would get them. `reps`: the times of the reps the movement counted on the video as it is,
    *  in the video's own clock, for a replay that must happen at a rep's top or bottom. */
   readonly edit: (frames: Frames, seed: number, reps: readonly { readonly start: number; readonly end: number }[]) => MovementFrame[];
+  /** For a replay that does the same movement faster or slower: how many times as long it takes (a hold done 1.5 times as
+   *  slowly is held 1.5 times as long). */
+  readonly pace?: number;
   /** For a replay that hides a rep: how many reps it may take away (each one hidden, never counted). */
   readonly hides?: number;
   /** Whether the replay changed this video at all; a row it did not change proves nothing (nearer, for a body that
@@ -868,9 +871,9 @@ export const REPLAYS: readonly Replay[] = [
   { name: "chip's gap", words: "every point moved by the gap the phone's chosen set-up reads from the laptop", hold: true, edit: chipsGap("pose_landmarker_full.cpu.t4"), fits: true },
   { name: "passer-by", words: "somebody walks past in front between reps (with no pause between them, the rep they cover is not seen)", hold: true, edit: passerBy(betweenReps), hides: 1, fits: false },
   { name: "passer-by at the bottom", words: "somebody walks past in front at the bottom of a rep: that rep is not seen", hold: true, edit: passerBy(atBottom), hides: 1, fits: false },
-  { name: "faster", words: "the same reps done in three quarters of the time", hold: true, edit: tempo(0.75), fits: false },
-  { name: "slower", words: "the same reps done 1.5 times as slowly", hold: true, edit: tempo(1.5), fits: false },
-  { name: "twice as slow", words: "the same reps done twice as slowly", hold: true, edit: tempo(2), fits: false },
+  { name: "faster", words: "the same reps done in three quarters of the time", hold: true, edit: tempo(0.75), pace: 0.75, fits: false },
+  { name: "slower", words: "the same reps done 1.5 times as slowly", hold: true, edit: tempo(1.5), pace: 1.5, fits: false },
+  { name: "twice as slow", words: "the same reps done twice as slowly", hold: true, edit: tempo(2), pace: 2, fits: false },
   {
     name: "on the floor",
     words: "the phone standing on the floor, its lens about 15 cm up and leaning back 14 degrees, as a man's own floor phone stood (shown, not held: it does not yet read as his floor squats do)",

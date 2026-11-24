@@ -286,7 +286,7 @@ describe("the set's summary of the rep made by hand passes the server's own chec
 
   it("a good rep, side on: one rep scored 100, nothing made, the whole 5 s watched", () => {
     const s = summaryOf();
-    expect(s).toMatchObject({ exercise: "squat", setIndex: 1, reps: 1, repScores: [100], avgFormScore: 100, view: "side", mode: "engine", engineVersion: "2.0.0", definitionVersion: EXERCISE.version });
+    expect(s).toMatchObject({ exercise: "squat", setIndex: 1, reps: 1, repScores: [100], avgFormScore: 100, view: "side", mode: "engine", engineVersion: "2.1.0", definitionVersion: EXERCISE.version });
     // A partial match takes {} for any faults: compared whole.
     expect(s.faultCounts).toEqual({});
     expect([s.durationMs, s.watchedMs]).toEqual([5000, 5000]);
@@ -427,8 +427,11 @@ describe("a movement file the engine cannot use rightly is refused before it is 
     expect(movementSchema.safeParse({ ...SQUAT, rules: [...SQUAT.rules, { ...pace, at: "rep" }] }).success).toBe(true);
   });
 
-  it("refuses a drive or a rise on anything but a height, and apart on anything but left against right", () => {
-    expect(() => parseMovement({ ...SQUAT, drive: { measure: "left knee", toward: "lower" } })).toThrow(/not a height/);
+  it("refuses a drive on anything but a height or an angle, a rise on anything but a height, and apart on anything but left against right", () => {
+    // Since 52c-ii a drive may be an angle (the sit-up's trunk lean), never a width or a left-against-right measure.
+    expect(() => parseMovement({ ...SQUAT, drive: { measure: "feet apart", toward: "lower" } })).toThrow(/not a height or an angle/);
+    expect(() => parseMovement({ ...SQUAT, drive: { measure: "knees, left against right", toward: "lower" } })).toThrow(/not a height or an angle/);
+    expect(() => parseMovement({ ...SQUAT, drive: { measure: "left knee", toward: "lower" } })).not.toThrow();
     expect(() => parseMovement(withRule(at("chest up"), { read: { kind: "rise", measures: ["left knee"] } }))).toThrow(/not a height/);
     expect(() => parseMovement(withRule(at("hips alike"), { read: { kind: "apart", measure: "trunk lean" } }))).toThrow(/not left against right/);
     expect(() => parseMovement(SQUAT)).not.toThrow();
