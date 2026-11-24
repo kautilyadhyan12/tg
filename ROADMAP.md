@@ -490,7 +490,9 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
      - V2b-i. [x] **From the right**: Add member, Edit, Add membership, Change membership · merged 2026-11-23 · PR #626
      - V2b-ii. [x] **In the middle, money** · merged 2026-11-23 · PR #631
      - V2b-iii. [x] **In the middle, people, and under the button** · merged 2026-11-23 · PR #634
-   - V3a. [ ] **Members: Your list** (web folder 1): the one-press picks, the list, people ticked and the bar, Send message, Tags, Remove, Filter from the right (`MembersNew*`).
+   - V3a. **Members: Your list**, in two (2026-11-23; board `Members`):
+     - V3a-i. [x] **The page, quick filters, the list, the bar and Filter from the right** · merged 2026-11-23 · PR #635
+     - V3a-ii. [ ] **The boxes the bar opens**: Send message, Tags, Remove, Delete permanently, where `Boxes` says
    - V3b. [ ] **Members: In the app, waiting to join, and Staff** (web folder 1): a staff member's panel, Invite staff, Staff activity (`MembersNewApp`, `MembersNewStaff*`).
    - V4a. [ ] **Sell** (web folder 1): the register, a sale, products, tax (`Sell*`, `PhoneSell`); a sale's refund boxes and its receipt in the middle, on a member's Purchases too (V2b-ii).
    - V4b. [ ] **Memberships** (web folder 1): the price list, adding a type, discounts (`Memberships*`, `MembershipAdd`).
@@ -806,7 +808,8 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
     - 37g. [x] **A run stands still when the runner does** · merged 2026-11-17 · PR #568
     - The running faults found 2026-11-20 (38, the testers' two among them; Kd: *"i will follow your recommendation , write the briefs"*): four jobs, in this order, each one's design in `handoff/2026-11-23-37h.md` (`rulings/2026-11-23-37h.md`).
       - 37h. [x] **The run's clock never goes back, and a current pace somebody can run** · merged 2026-11-23 · PR #633
-      - 37i. [ ] **The phone feels whether it is moving**: its motion sensor kept beside a run, nothing shown or sent; the two limits measured on real people and on Kd's phone.
+      - 37i. [x] **The phone feels whether it is moving** · merged 2026-11-24 · PR #637
+      - 37l. [ ] **A run keeps recording with the screen off** (first, before 37j; Kd's "go", 2026-11-24, `rulings/2026-11-23-37i.md`): the run's foreground service stays on all run (measured: the store build stops it 65 ms after Start, and 6 minutes locked bring 0 location fixes); the Running page says when the phone's battery setting will stop a run, with a button to the exact setting.
       - 37j. [ ] **Auto-pause and Start use the phone's motion**: a stop pauses within about 5 s on any phone; a phone that feels still but travels (a pram) is "on wheels" and the GPS decides.
       - 37k. [ ] **The line holds still with Auto-pause off**: the still stretches go with the run to the server; the server goes live before the store build that sends them.
 38. [ ] **The global board** (its reminders moved to item 19e on 2026-11-05): last, as Kd ruled on 2026-11-01 (`rulings/2026-11-01-17c-ii-a.md`): Active days and Running, the server's checks, a stranger's profile, and follow requests for somebody who chose Hide me, seen from outside their gym; Follow with Followers and Following counts everywhere, gyms included (`rulings/2026-11-01-17c-ii-b.md`). It waits for items 18, 37, 53 and 64.

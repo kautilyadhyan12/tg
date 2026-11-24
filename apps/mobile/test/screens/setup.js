@@ -390,6 +390,44 @@ jest.mock("../../src/screens/running/runVoiceNative", () => {
     },
   };
 });
+// The phone's motion sensor during a run (37i), modules/run-motion's Android code. `motion.send(at, sd, n)` hands one
+// finished second over as the Android code would, whether it is reading or not: the app's own code must leave out
+// what is not the run's. `starts` and `stops` count the calls, `reading` says whether it reads now, `missing`
+// stands for a phone with no such code (an iPhone, a copy built before it), `fails` for a sensor that throws.
+jest.mock("../../src/screens/running/runMotionNative", () => {
+  const fresh = () => ({ missing: false, fails: false, reading: false, starts: 0, stops: 0, waiting: [] });
+  const motion = { ...fresh() };
+  motion.send = (at, sd, n = 25) => {
+    motion.waiting.push({ at, sd, n });
+  };
+  motion.reset = () => Object.assign(motion, fresh());
+  const native = {
+    start: () => {
+      if (motion.fails) throw new Error("sensor");
+      motion.starts += 1;
+      motion.reading = true;
+      return true;
+    },
+    stop: () => {
+      if (motion.fails) throw new Error("sensor");
+      motion.stops += 1;
+      motion.reading = false;
+      motion.waiting = [];
+    },
+    take: () => {
+      if (motion.fails) throw new Error("sensor");
+      const out = motion.waiting;
+      motion.waiting = [];
+      return out;
+    },
+  };
+  return {
+    motion,
+    get runMotionNative() {
+      return motion.missing ? null : native;
+    },
+  };
+});
 // The app's sound player (64a-vi), expo-audio's: `played` lists each sound handed to it, in order.
 jest.mock("../../src/sound/soundNative", () => {
   const sounds = { played: [] };
