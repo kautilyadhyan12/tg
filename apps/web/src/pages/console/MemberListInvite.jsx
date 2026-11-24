@@ -448,10 +448,9 @@ export default function MemberListInvite({
             {loadingMore ? 'Loading…' : 'Load more'}
           </button>
         ) : null}
-      </>
-    );
-    footer = (
-      <div className="flex flex-col gap-3 w-full">
+
+        {/* At the end of the words, just above the buttons: only the buttons stay at the foot, so the people above
+            are never covered on a small phone. */}
         <p className="c-s14 c-t2">
           Each {words.person} receives one invitation email from {gym.name}, sent by KWAZO, with a link to join. Only someone who signs in with that email address can join.
         </p>
@@ -460,6 +459,10 @@ export default function MemberListInvite({
             {MEMBER_INVITE_PERMISSION_WORDS.replace('{gym}', gym.name).replace('{people}', words.people)}
           </PermissionTick>
         ) : null}
+      </>
+    );
+    footer = (
+      <div className="flex flex-col gap-3 w-full">
         {error !== null ? (
           <p className="c-s14 c-t1" role="alert">
             {error}

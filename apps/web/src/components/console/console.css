@@ -1725,6 +1725,16 @@
   .c-ask-head { top: -28px; margin: -28px -28px 0; padding: 28px 20px 0 28px; }
   .c-ask-foot { bottom: -28px; margin: 0 -28px -28px; padding: 16px 28px 28px; }
 }
+/* A window too short for the foot to stay (a phone turned sideways, a laptop at 200 %): it scrolls with the words. */
+@media (max-height: 560px) {
+  .c-ask-foot { position: static; }
+}
+/* Inside a box in the middle, on a touch screen or a narrow window, its X, choices and tabs are 44 px too. */
+@media (pointer: coarse), (max-width: 767px) {
+  .c-ask .c-icon-btn { width: 44px; height: 44px; }
+  .c-ask .c-chip,
+  .c-ask .c-utab { min-height: 44px; }
+}
 /* Invite to app: its people in columns, wider in the middle of a computer. */
 @media (min-width: 1024px) {
   .c-ask-wide:has(.c-ask-head) { width: min(1120px, calc(100vw - 48px)); }
