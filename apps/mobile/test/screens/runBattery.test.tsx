@@ -1,17 +1,20 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react-native";
 import { AppState, Linking } from "react-native";
 import { App } from "../../src/App";
-import { BATTERY_LIMIT_TITLE, BATTERY_LIMIT_WORDS } from "../../src/screens/running/BatteryLimit";
-import { phoneRunFiles, resetRecorder } from "../../src/screens/running/recorder";
+import { BATTERY_ON_WORDS } from "../../src/screens/running/BatteryLimit";
+import { phoneRunFiles, resetRecorder, runNow } from "../../src/screens/running/recorder";
+import { START_PROBLEM_WORDS } from "../../src/screens/running/RunLayer";
 import { RAVI, fakeServer, kept, memoryStore, profile, tokens } from "../kit";
 
 // A run keeps recording with the screen off (ROADMAP Stage 5 item 37l). Measured on Kd's phone, 2026-11-24: with this
 // app set to Restricted in the phone's battery settings, Android takes the run's service off foreground seconds after
 // Start and the run stops recording when the screen turns off; set free, the same build recorded every second of
-// 8 minutes with the screen off. The app cannot lift the limit. Its Running page says so, before Start, with the
-// button to the phone's page for it.
+// 8 minutes with the screen off. The app cannot lift the limit. Start says so, only on a phone that limits the app
+// (Kd: "only when it does not allow ... only there it should appear"), after the location, with the button to the
+// phone's page for it and Start anyway.
 
 const extra = { copyName: "Feature 2", apiUrl: "http://localhost:3000" };
+const WORDS = START_PROBLEM_WORDS.battery;
 
 interface Battery {
   restricted: boolean;
@@ -35,7 +38,7 @@ beforeEach(async () => {
     handlers.push(handler);
     return { remove: () => undefined };
   });
-  Object.assign(location, { services: true, granted: true, canAskAgain: true, accuracy: "fine", asked: 0, started: [], running: false, acceptsTurnOn: true });
+  Object.assign(location, { services: true, granted: true, canAskAgain: true, accuracy: "fine", asked: 0, started: [], running: false, acceptsTurnOn: true, refusesStart: false });
   for (const name of ["run-now.json", "run-now-0.json", "run-settings.json", "run-map.json"]) phoneRunFiles.remove(name);
   battery.reset();
   resetRecorder();
@@ -65,40 +68,106 @@ async function openRunning(s: ReturnType<typeof runServer>) {
   expect(await screen.findByRole("button", { name: "Start run" })).toBeTruthy();
 }
 
+async function pressStart() {
+  await fireEvent.press(screen.getByRole("button", { name: "Start run" }));
+}
+
 describe("the worst thing: a runner starts a run that stops with the screen and is never told why", () => {
-  it("a phone that limits the app says so on the page with START, with the button to its battery page", async () => {
+  it("on a phone that limits the app, Start says so before 3, 2, 1, with the button to its battery page", async () => {
     battery.restricted = true;
     await openRunning(runServer());
-    expect(await screen.findByText(BATTERY_LIMIT_TITLE)).toBeTruthy();
-    expect(screen.getByText(BATTERY_LIMIT_WORDS)).toBeTruthy();
+    await pressStart();
+    expect(await screen.findByText(WORDS)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Start now" })).toBeNull();
     await fireEvent.press(screen.getByRole("button", { name: "Open this app's battery settings" }));
     expect(battery.opens).toBe(1);
   });
 
-  // What Android can answer, and what the page must do with each: a phone that does not limit the app is never
-  // told it does (a warning that is false is worse than none), and one that cannot answer says nothing.
+  // What Android can answer, and what Start must do with each: a phone that does not limit the app is never asked
+  // (most phones; a warning that is false is worse than none), and one that cannot answer goes straight to 3, 2, 1.
   it.each([
-    { name: "limited", set: { restricted: true }, shown: true },
-    { name: "not limited", set: { restricted: false }, shown: false },
-    { name: "no such code on the phone (an iPhone, a copy built before it)", set: { missing: true, restricted: true }, shown: false },
-    { name: "the phone's answer fails", set: { fails: true, restricted: true }, shown: false },
-  ])("$name: warning shown is $shown", async ({ set, shown }) => {
+    { name: "limited", set: { restricted: true }, asked: true },
+    { name: "not limited", set: { restricted: false }, asked: false },
+    { name: "no such code on the phone (an iPhone, a copy built before it)", set: { missing: true, restricted: true }, asked: false },
+    { name: "the phone's answer fails", set: { fails: true, restricted: true }, asked: false },
+  ])("$name: the box is shown is $asked", async ({ set, asked }) => {
     Object.assign(battery, set);
     await openRunning(runServer());
-    await waitFor(() => {
-      expect(screen.queryByText(BATTERY_LIMIT_TITLE) !== null).toBe(shown);
-    });
-    expect(screen.queryByText(BATTERY_LIMIT_WORDS) !== null).toBe(shown);
+    await pressStart();
+    if (asked) {
+      expect(await screen.findByText(WORDS)).toBeTruthy();
+      expect(screen.queryByRole("button", { name: "Start now" })).toBeNull();
+    } else {
+      expect(await screen.findByRole("button", { name: "Start now" })).toBeTruthy();
+      expect(screen.queryByText(WORDS)).toBeNull();
+    }
+  });
+
+  it("the location is asked first: with the phone's location off, that is said, not the battery", async () => {
+    battery.restricted = true;
+    location.services = false;
+    await openRunning(runServer());
+    await pressStart();
+    expect(await screen.findByText(START_PROBLEM_WORDS.off)).toBeTruthy();
+    expect(screen.queryByText(WORDS)).toBeNull();
   });
 });
 
-describe("what the person does about it", () => {
-  it("Start is still there and works while the limit is on: nothing is taken away", async () => {
+describe("what the runner does about it", () => {
+  it("Start anyway counts down and the run records, as it is: nothing is held back", async () => {
     battery.restricted = true;
     await openRunning(runServer());
-    await screen.findByText(BATTERY_LIMIT_TITLE);
-    await fireEvent.press(screen.getByRole("button", { name: "Start run" }));
+    await pressStart();
+    await fireEvent.press(await screen.findByRole("button", { name: "Start anyway" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Start now" }));
+    await waitFor(() => {
+      expect(runNow()?.phase).toBe("running");
+    });
+  });
+
+  it("back from the phone's settings with background usage allowed, the box says so and Start goes straight on", async () => {
+    battery.restricted = true;
+    await openRunning(runServer());
+    await pressStart();
+    await screen.findByText(WORDS);
+    battery.restricted = false;
+    await act(() => {
+      comeBack();
+    });
+    expect(await screen.findByText(BATTERY_ON_WORDS)).toBeTruthy();
+    expect(screen.queryByText(WORDS)).toBeNull();
+    await pressStart();
     expect(await screen.findByRole("button", { name: "Start now" })).toBeTruthy();
+    expect(screen.queryByText(BATTERY_ON_WORDS)).toBeNull();
+  });
+
+  it("back from the phone's settings still limited, the box stays", async () => {
+    battery.restricted = true;
+    await openRunning(runServer());
+    await pressStart();
+    await screen.findByText(WORDS);
+    await act(() => {
+      comeBack();
+    });
+    expect(screen.getByText(WORDS)).toBeTruthy();
+    expect(screen.queryByText(BATTERY_ON_WORDS)).toBeNull();
+  });
+
+  it("the phone puts the limit back (Kd's does at each fresh start): the next Start asks again, never trusting the last answer", async () => {
+    battery.restricted = true;
+    await openRunning(runServer());
+    await pressStart();
+    await screen.findByText(WORDS);
+    battery.restricted = false;
+    await act(() => {
+      comeBack();
+    });
+    await screen.findByText(BATTERY_ON_WORDS);
+    battery.restricted = true;
+    await pressStart();
+    expect(await screen.findByText(WORDS)).toBeTruthy();
+    expect(screen.queryByText(BATTERY_ON_WORDS)).toBeNull();
+    expect(screen.queryByRole("button", { name: "Start now" })).toBeNull();
   });
 
   it("the button opens the app's own settings where the battery page cannot be opened", async () => {
@@ -107,6 +176,7 @@ describe("what the person does about it", () => {
     const settings = jest.spyOn(Linking, "openSettings").mockResolvedValue(undefined);
     settings.mockClear();
     await openRunning(runServer());
+    await pressStart();
     await fireEvent.press(await screen.findByRole("button", { name: "Open this app's battery settings" }));
     expect(battery.opens).toBe(1);
     expect(settings).toHaveBeenCalledTimes(1);
@@ -115,30 +185,12 @@ describe("what the person does about it", () => {
   it("the button opens the app's own settings when the phone's code throws", async () => {
     battery.restricted = true;
     await openRunning(runServer());
-    await screen.findByText(BATTERY_LIMIT_TITLE);
+    await pressStart();
+    await screen.findByText(WORDS);
     battery.fails = true;
     const settings = jest.spyOn(Linking, "openSettings").mockResolvedValue(undefined);
     settings.mockClear();
     await fireEvent.press(screen.getByRole("button", { name: "Open this app's battery settings" }));
     expect(settings).toHaveBeenCalledTimes(1);
-  });
-
-  it("the line goes when the person comes back from the phone's settings with the limit off, and comes back if it is put on again", async () => {
-    battery.restricted = true;
-    await openRunning(runServer());
-    await screen.findByText(BATTERY_LIMIT_TITLE);
-    battery.restricted = false;
-    await act(() => {
-      comeBack();
-    });
-    await waitFor(() => {
-      expect(screen.queryByText(BATTERY_LIMIT_TITLE)).toBeNull();
-    });
-    // This phone puts the limit back when the app starts afresh: the next look says so again.
-    battery.restricted = true;
-    await act(() => {
-      comeBack();
-    });
-    expect(await screen.findByText(BATTERY_LIMIT_TITLE)).toBeTruthy();
   });
 });

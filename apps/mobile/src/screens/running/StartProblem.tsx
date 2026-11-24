@@ -5,6 +5,7 @@ import * as Location from "expo-location";
 import { Button } from "../../look/Button";
 import { Txt } from "../../look/Txt";
 import { openAppSettings, START_PROBLEM_WORDS, type StartProblem } from "./RunLayer";
+import { openBatterySettings } from "./BatteryLimit";
 
 /** The phone's location turned on in Android's own box (Google's, as the GPS light asks); its
  *  Location page where a phone has no such box. True once it is on. */
@@ -20,7 +21,7 @@ export async function turnOnLocation(): Promise<boolean> {
 
 /** The one thing to press for each problem. A switch over every kind: a new kind will not build until
  *  it is given its own button here. */
-function AgainButtons({ problem, onAgain }: { problem: StartProblem; onAgain: () => void }) {
+function AgainButtons({ problem, onAgain, onAnyway }: { problem: StartProblem; onAgain: () => void; onAnyway: () => void }) {
   switch (problem) {
     case "approximate":
       return (
@@ -48,17 +49,26 @@ function AgainButtons({ problem, onAgain }: { problem: StartProblem; onAgain: ()
     case "failed":
       // Android refused the run after 3, 2, 1.
       return <Button kind="link" label="Start again" onPress={onAgain} />;
+    case "battery":
+      // The phone's own words for the switch (Settings, the app, App battery usage); a run is never held back.
+      return (
+        <View style={styles.choices}>
+          <Button kind="link" label="Allow background usage" say="Open this app's battery settings" onPress={openBatterySettings} />
+          <Button kind="quiet" label="Start anyway" onPress={onAnyway} />
+        </View>
+      );
   }
 }
 
-/** `onAgain`: Start pressed again, once the person has allowed what was asked. */
-export function StartProblemBox({ problem, onAgain }: { problem: StartProblem; onAgain: () => void }) {
+/** `onAgain`: Start pressed again, once the person has allowed what was asked. `onAnyway`: the run started as it is, on a
+ *  phone that limits the app (37l). */
+export function StartProblemBox({ problem, onAgain, onAnyway }: { problem: StartProblem; onAgain: () => void; onAnyway: () => void }) {
   return (
     <View style={styles.problem}>
       <Txt kind="small" colour="badText">
         {START_PROBLEM_WORDS[problem]}
       </Txt>
-      <AgainButtons problem={problem} onAgain={onAgain} />
+      <AgainButtons problem={problem} onAgain={onAgain} onAnyway={onAnyway} />
     </View>
   );
 }
