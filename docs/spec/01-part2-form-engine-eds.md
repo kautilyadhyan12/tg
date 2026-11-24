@@ -2462,6 +2462,48 @@ and he counts 1 of 2 (the line set at 49); the Smith machine split squat, a twin
 standing tall, 4 of 10 by eye (54); the squat jack as Kd's research file describes it stays low and never jumps up, and his two videos
 stand up between jacks, so it is not made here (54).
 
+**As built, floor work, holds and timed only (52c-ii, 2026-11-24; `rulings/2026-11-24-52c-ii.md`).** **Floor work** is a rep
+counted from a body lying or seated low, with no new kind of counting: a movement's drive (`drive`) may now go `toward` "lower" or
+"higher", on an angle as well as a height (never a width or a left-against-right measure), and an angle's stillness is 3 degrees
+(`MatchLimits.stillAngle`: the same as 0.03 of a leg at the end of a trunk; a still lying, seated or held body's trunk lean moved at
+most 1.2 degrees in any 0.2 s on six still spans); standing ready waits for the feet on the floor line only where the drive is a
+height. A set may end at the far end of its last rep (`lastRep`): a rep held still out there when the set ends is judged then (a man
+still sat up after his third sit-up as his video ends: 3 of 3; without it, 2). **The sit-up** (`movements/sit-up.json`): the trunk's
+lean falls from lying as the trunk comes up; lying back is the trunk 60 degrees or more from upright **and the thighs within 20 of
+level or above**, since the trunk's lean alone is the same bent forward: with the trunk alone, deadlifts, Romanian deadlifts, good
+mornings and a swing counted up to 3 each as sit-ups (lying for a sit-up the thighs read 83 to 176 degrees from hanging, bent
+forward 10 to 44). Its depth is 45 degrees, the end of a crunch's whole range in Kd's "Decline Sit-Up" file (30 to 45), used as it
+is, told "Sit up higher to count."; "thighs stay" at most 55 degrees and "hips stay down" at most 0.21 of a leg, each set from the
+people (without the hips' rule a dumbbell hip thrust's lowering, its trunk falling 46 degrees, counts). **Measured:** six people (four
+weighted sit-ups, a decline sit-up and Kd's own straight-leg sit-ups from a phone on the floor and on a bed, found in two of his
+"usual positions" videos: lying flat, sitting up and lying back twice each) count 16 of 16 as filmed and under all 14 held replays and
+the four shown; every other video (114) counts 0 and is told nothing, with every set of numbers; written: the man filmed from his feet
+counts 0 with his own video left out (his hips read 0.15 moved, the others at most 0.11). A decline sit-up whose trunk comes up 25 to
+35 degrees by the camera, a decline crunch by the research file's own measure, is reported. **The hip thrust**
+(`movements/hip-thrust.json`): the hips' height rises from low; its start is the knees and hips each bent 130 degrees or less and
+the trunk 65 or less from upright, the back on the bench and short of lying (first built on the knees alone, its start also held at
+the top of a thrust, so a thrust split in two, and a sit-up lying down read as a short hip thrust and was told so); depth 0.15 of a leg,
+"hips open" 146, "back on the bench" at least 39 (a body that stood up reads under 20), "shoulders stay" at most 0.15. Of Kd's four
+videos two are judged, 5 of 5 as filmed and under 12 of the 14 held replays, and two reported (filmed from in front and above, the hips'
+height is not read at the top of each thrust; the other, the model loses the man). **Not passing yet:** each of the two women alone
+sets a line the other misses (side on the trunk reads level at 92 degrees, facing the phone 57; facing the phone the shoulders barely
+move), so both count 0 with themselves left out, and the one facing the phone loses thrusts done 1.5 and 2 times as slowly (her hips'
+height not read near the bottom): all written, for 54's videos. **A hold** (`holdMovementSchema`, `HoldMatcher`): a clock that runs
+only while every condition of the position holds, each read; the position must hold for a whole second before it is a hold, that
+second counted too (`HOLD_LIMITS.settle`); the picture a condition breaks in, and every one after, is never held time, nor a picture not
+read, and a gap longer than 0.2 s ends it. `HoldRecord` gives a hold's set its `holdMs` (§2.4), no reps and no form score yet. **The
+L-sit** (`movements/l-sit.json`, numbers by `hold-check` from every picture held by eye): thighs at least 71 degrees from hanging, trunk
+at most 9, knees at least 155, elbows at least 165, the arms down within 18. His two videos are timed 7.87 and 3.10 s, as the
+pictures show (the second's clock stops at the last picture before the video cuts to him hanging his knees), as filmed and under all 14
+held replays (within 0.25 s, less what a passer-by hides, stretched when done slower or faster); every other video (120: the leg and
+knee raises on the bars, a captain's chair, sitting on a chair, the support hold, lying) is timed 0. **Not passing yet:** two people,
+so each counts 0 with himself left out (one's legs a little below level, the other leaning 6 to 8 degrees forward): written. Both of his
+clips are of the full L-sit, the legs straight; the tuck L-sit his research file describes is a seated body's shape (54). **Timed only**
+(`timedMovementSchema`): a plain timer, the camera judging nothing, with why. **The support hold** (`movements/support-hold.json`) is
+timed only: made as a hold from his video it times him 6.60 s, and 28 of the 121 other videos, 75 s in all (people standing, calf
+raises, deadlifts): to the camera it is standing with the arms by the sides. The movement engine is 2.1.0. Of his 21 new videos (13 of
+these exercises, 8 others lying or held on the bars), 2.1 MB of body points.
+
 An exercise that does not pass is published as "count by hand", never with a wrong camera
 count. Kd tries one exercise of each kind of movement on the phone, about a dozen, never
 each one. After launch the server sees, for each exercise, how often members changed the

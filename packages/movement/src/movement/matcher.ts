@@ -744,10 +744,10 @@ export class MovementMatcher {
     // The last `stillFor` of the rep, and the newest frame older than that, so it always spans `stillFor` (as `recent`).
     const inside = rep.samples.filter((s) => last.t - s.t <= L.stillFor);
     const edge = rep.samples.filter((s) => last.t - s.t > L.stillFor).pop();
-    const window = edge === undefined ? inside : [edge, ...inside];
-    const first = window[0];
+    const span = edge === undefined ? inside : [edge, ...inside];
+    const first = span[0];
     if (first === undefined || last.t - first.t < L.stillFor) return false;
-    const drops = window.map((s) => s.drop);
+    const drops = span.map((s) => s.drop);
     if (drops.some((d) => d === null)) return false;
     const seen = drops.filter((d): d is number => d !== null);
     return Math.max(...seen) - Math.min(...seen) <= this.stillBy && Math.min(...seen) >= L.startShare * this.depth;
