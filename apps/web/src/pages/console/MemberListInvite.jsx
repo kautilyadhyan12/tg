@@ -96,6 +96,8 @@ export default function MemberListInvite({
   const [loadingMore, setLoadingMore] = useState(false);
   /** undefined: no person open · an id: that person's page, over this one. */
   const [openId, setOpenId] = useState(undefined);
+  // What opened the box: the keys go back there, also after a person's page opened in its place and closed.
+  const [opener] = useState(() => document.activeElement);
   /** Bumped when the count must be read again (a change on a person's page). */
   const [countTick, setCountTick] = useState(0);
   /** Bumped when the lists must be read again (that, or a list that moved under a press). */
@@ -489,7 +491,7 @@ export default function MemberListInvite({
     <>
       {/* A name opens their page in its place; its Back brings the box back as it was (what it holds is kept here). */}
       {openId === undefined ? (
-        <AskSheet title={`Invite ${words.people} to the app`} testId="invite-box" onClose={onClose} busy={sending} wide footer={footer}>
+        <AskSheet title={`Invite ${words.people} to the app`} testId="invite-box" onClose={onClose} busy={sending} wide opener={opener} footer={footer}>
           {body}
         </AskSheet>
       ) : null}

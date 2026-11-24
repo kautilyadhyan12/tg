@@ -601,3 +601,23 @@ describe('Invite in the middle', () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('Invite gives the keys back', () => {
+  it('to what opened it, also after a person page opened in its place and closed (round one re-check)', async () => {
+    const opener = document.createElement('button');
+    opener.textContent = 'Invite to app';
+    document.body.appendChild(opener);
+    opener.focus();
+    const { unmount } = openInvite(preview());
+    orgService.getMemberListEntry.mockResolvedValue({ data: { entry: person({ entryId: AVA.entryId, fullName: 'Ava Thompson', email: AVA.email }) } });
+    await waitFor(() => expect(rows()).toHaveLength(2));
+    fireEvent.click(rows()[0]);
+    const page = within(await screen.findByTestId('member-person'));
+    page.getAllByRole('button', { name: 'Close' })[0].focus();
+    fireEvent.click(page.getAllByRole('button', { name: 'Close' })[0]);
+    await screen.findByTestId('invite-box');
+    unmount();
+    expect(document.activeElement).toBe(opener);
+    opener.remove();
+  });
+});

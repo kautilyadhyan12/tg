@@ -1732,7 +1732,7 @@
 }
 /* Short and wide enough (a laptop at 200 %, a phone turned sideways): the foot's buttons side by side, so the list keeps
    its room. */
-@media (max-height: 560px) and (min-width: 480px) {
+@media (max-height: 560px) and (min-width: 480px) and (max-width: 767px) {
   .c-ask-foot { padding-top: 8px; padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px)); }
   .c-ask-foot.c-ask-a,
   .c-ask-foot .c-ask-a { flex-direction: row-reverse; flex-wrap: wrap; justify-content: flex-start; }

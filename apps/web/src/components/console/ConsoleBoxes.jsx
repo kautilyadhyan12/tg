@@ -291,24 +291,24 @@ const InMiddle = createContext(false);
  *  outside do what its own Keep it does (`onClose`), never while it is sending. `error` is said
  *  inside it, as the page behind is covered. A box inside one already in the middle is drawn
  *  where it is, so a question that turns into another stays one box. `wide`: for two records side by side (Merge duplicate). */
-export function MiddleBox({ label, onClose, busy = false, error = null, testId, role = 'alertdialog', wide = false, children }) {
+export function MiddleBox({ label, onClose, busy = false, error = null, testId, role = 'alertdialog', wide = false, opener = null, children }) {
   const inside = useContext(InMiddle);
   if (inside) return children;
   return (
-    <MiddleShell label={label} onClose={onClose} busy={busy} error={error} testId={testId} role={role} wide={wide}>
+    <MiddleShell label={label} onClose={onClose} busy={busy} error={error} testId={testId} role={role} wide={wide} opener={opener}>
       {children}
     </MiddleShell>
   );
 }
 
-function MiddleShell({ label, onClose, busy, error, testId, role, wide, children }) {
+function MiddleShell({ label, onClose, busy, error, testId, role, wide, opener: given, children }) {
   const boxRef = useRef(null);
   const cancel = () => {
     if (!busy) onClose();
   };
   const { ready, draw } = useLookHost();
   // What had the keys as the box is first drawn, before the page draws again under it: a ⋯ on a row is gone by then.
-  const [opener] = useState(() => document.activeElement);
+  const [opener] = useState(() => given ?? document.activeElement);
   useBoxKeys(boxRef, cancel, ready, opener);
   useStillPage();
   // The box is named by its question, the first `c-inbox-t` in it, read each time it is drawn; by `label` while it
@@ -358,13 +358,14 @@ function MiddleShell({ label, onClose, busy, error, testId, role, wide, children
 
 /** 3b. In the middle, a box with a title, a close X and a foot that stays (V3a-ii, the Members
  *  bar's boxes): its words scroll between them. `wide`: a list of people in columns (Invite to
- *  app). Escape, pressing outside and the X do what `onClose` does, never while `busy`. */
-export function AskSheet({ title, testId, onClose, footer, busy = false, wide = false, children }) {
+ *  app). Escape, pressing outside and the X do what `onClose` does, never while `busy`. `opener`: where the keys go
+ *  back to, when the box is drawn again after something opened in its place. */
+export function AskSheet({ title, testId, onClose, footer, busy = false, wide = false, opener = null, children }) {
   const cancel = () => {
     if (!busy) onClose();
   };
   return (
-    <MiddleBox label={title} onClose={onClose} busy={busy} testId={testId} role="dialog" wide={wide}>
+    <MiddleBox label={title} onClose={onClose} busy={busy} testId={testId} role="dialog" wide={wide} opener={opener}>
       <div className="c-ask-head">
         <h2 className="c-h2 c-ask-title">{title}</h2>
         <button type="button" aria-label="Close" onClick={cancel} disabled={busy} className="c-icon-btn">
