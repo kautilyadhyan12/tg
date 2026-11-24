@@ -1697,6 +1697,39 @@
   .c-ask-a .c-btn { width: auto; }
 }
 
+/* A box in the middle with a title and a foot that stay while its words scroll (AskSheet; V3a-ii,
+   the Members bar's boxes): the title and its X at the top, the buttons at the foot. */
+.c-ask-head {
+  position: sticky;
+  top: -20px;
+  z-index: 1;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin: -20px -16px 0;
+  padding: 20px 8px 0 16px;
+  background: var(--sheet);
+}
+.c-ask-title { flex: 1 1 auto; min-width: 0; margin: 0; padding-top: 6px; }
+.c-ask:has(> .c-ask-head) > .c-grab { display: none; }
+.c-ask-foot {
+  position: sticky;
+  bottom: calc(-20px - env(safe-area-inset-bottom, 0px));
+  z-index: 1;
+  margin: 0 -16px calc(-20px - env(safe-area-inset-bottom, 0px));
+  padding: 12px 16px calc(20px + env(safe-area-inset-bottom, 0px));
+  border-top: 1px solid var(--line);
+  background: var(--sheet);
+}
+@media (min-width: 768px) {
+  .c-ask-head { top: -28px; margin: -28px -28px 0; padding: 28px 20px 0 28px; }
+  .c-ask-foot { bottom: -28px; margin: 0 -28px -28px; padding: 16px 28px 28px; }
+}
+/* Invite to app: its people in columns, wider in the middle of a computer. */
+@media (min-width: 1024px) {
+  .c-ask-wide:has(.c-ask-head) { width: min(1120px, calc(100vw - 48px)); }
+}
+
 /* A question box a page draws (cancel, freeze, refund, void, waive): a raised box under what was
    pressed, or, inside the middle box (V2b-ii), the sheet itself, its question the box's title and
    its last row of buttons the box's foot. */

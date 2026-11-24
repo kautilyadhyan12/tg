@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { AlertTriangle, Check, ChevronRight, Loader2, Mail, X } from 'lucide-react';
+import { AlertTriangle, Check, ChevronRight, Loader2, Mail } from 'lucide-react';
 import { MEMBER_INVITE_PERMISSION_WORDS } from '@app/shared';
 import { orgService, errorText, inviteChangedPreview, selectionChanged } from '../../api/orgsApi';
 import MemberListPerson from './MemberListPerson';
 import { ShareInvite } from './ShareInvite';
 import PostalAddressBox from '../../components/console/PostalAddressBox';
+import { AskSheet } from '../../components/console/ConsoleBoxes';
 import { viewerPrivileges } from './consoleView';
 import { canOpenPlace } from './consolePlaces';
 import {
@@ -405,10 +406,10 @@ export default function MemberListInvite({
                     >
                       <span className="flex flex-col gap-0.5 min-w-0" style={{ gridArea: 'who' }}>
                         <span className="c-s15 c-w6 c-t1 c-ell">{p.fullName || 'No name'}</span>
-                        {why !== null && p.email !== null ? <span className="c-s13 c-t2 c-ell">{p.email}</span> : null}
+                        {why !== null && p.email !== null ? <span className="c-s14 c-t2 c-ell">{p.email}</span> : null}
                       </span>
                       {gymWords !== '' ? (
-                        <span className="md:hidden c-s13 c-t2" style={{ gridArea: 'words' }}>
+                        <span className="md:hidden c-s14 c-t2" style={{ gridArea: 'words' }}>
                           {gymWords}
                         </span>
                       ) : null}
@@ -451,7 +452,7 @@ export default function MemberListInvite({
     );
     footer = (
       <div className="flex flex-col gap-3 w-full">
-        <p className="c-s13 c-t2">
+        <p className="c-s14 c-t2">
           Each {words.person} receives one invitation email from {gym.name}, sent by KWAZO, with a link to join. Only someone who signs in with that email address can join.
         </p>
         {reach > 0 && blocked === null ? (
@@ -464,7 +465,7 @@ export default function MemberListInvite({
             {error}
           </p>
         ) : null}
-        <div className="grid grid-cols-[1fr_auto] md:flex md:justify-end gap-2 md:gap-3">
+        <div className="c-ask-a">
           <button
             type="button"
             onClick={() => void send()}
@@ -483,33 +484,10 @@ export default function MemberListInvite({
   }
 
   return (
-    <div className="fixed inset-0 z-50" style={{ background: 'var(--scrim)' }}>
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-label={`Invite ${words.people} to the app`}
-        data-testid="invite-box"
-        className="c-sheet absolute inset-x-0 bottom-0 top-6 md:top-6 md:bottom-6 md:left-1/2 md:right-auto md:-translate-x-1/2 md:w-[1120px] md:max-w-[calc(100%-48px)] flex flex-col rounded-t-[20px] md:rounded-[20px] border"
-        style={{ borderColor: 'var(--card-line)' }}
-      >
-        <div className="flex items-center gap-3 pl-4 pr-2 pt-3 md:px-7 md:pt-6 md:pb-2">
-          <h2 className="c-h2 flex-grow" style={{ fontSize: 22, lineHeight: '28px', fontWeight: 700 }}>
-            Invite {words.people} to the app
-          </h2>
-          <button type="button" aria-label="Close" onClick={onClose} className="c-icon-btn">
-            <X aria-hidden="true" className="w-5 h-5" />
-          </button>
-        </div>
-        {/* The scroller is a plain box and its content a column inside it: were the scroller
-            itself a flex column, the table would shrink to fit and cut its last rows off
-            instead of scrolling (Kd's click-through, 2026-09-28). */}
-        <div className="px-4 pt-2 pb-4 md:px-7 md:pt-3 md:pb-6 overflow-y-auto overscroll-contain flex-grow min-h-0" data-testid="invite-scroll">
-          <div className="flex flex-col gap-4">{body}</div>
-        </div>
-        <div className="flex px-4 pt-3 pb-5 md:px-7 md:py-4 border-t md:justify-end" style={{ borderColor: 'var(--line)', background: 'var(--card)' }}>
-          {footer}
-        </div>
-      </div>
+    <>
+      <AskSheet title={`Invite ${words.people} to the app`} testId="invite-box" onClose={onClose} busy={sending} wide footer={footer}>
+        {body}
+      </AskSheet>
       {openId !== undefined ? (
         <MemberListPerson
           key={openId}
@@ -524,6 +502,6 @@ export default function MemberListInvite({
           onChanged={personChanged}
         />
       ) : null}
-    </div>
+    </>
   );
 }

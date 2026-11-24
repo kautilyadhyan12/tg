@@ -11,7 +11,8 @@ import {
 } from '@app/shared';
 import { orgService, errorCode, errorText, groupMessagePeopleChanged, selectionChanged } from '../../api/orgsApi';
 import { Names } from './MemberListRemove';
-import { Refusal, Sheet } from './MemberListTags';
+import { Refusal } from './MemberListTags';
+import { AskSheet } from '../../components/console/ConsoleBoxes';
 import { messageBoxWords, messageCount, messageDoneLine, selectedWords } from './memberListPeople';
 
 // A MESSAGE TO THE PEOPLE SELECTED (spec Part 3 §16.8; ROADMAP 20f-i). One box, in the
@@ -227,8 +228,8 @@ export default function MemberListMessage({ gymId, selection, picked, onSelectio
   }
 
   return (
-    <Sheet title="Send message" testId="message-box" onClose={onClose} footer={footer}>
+    <AskSheet title="Send message" testId="message-box" onClose={onClose} busy={busy} footer={footer}>
       {body}
-    </Sheet>
+    </AskSheet>
   );
 }

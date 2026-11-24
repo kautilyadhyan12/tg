@@ -12,7 +12,8 @@ import { consoleIsReadOnly } from './billingView';
 import { placeFor } from './consolePlaces';
 import { SENT_AUTOMATIC_ASK, SENT_AUTOMATIC_NOTE } from './messageSettingsView';
 import MemberListPerson from './MemberListPerson';
-import { Refusal, Sheet } from './MemberListTags';
+import { Refusal } from './MemberListTags';
+import { AskSheet } from '../../components/console/ConsoleBoxes';
 import { initialsOf, sentByDay, sentGoneWords, sentTime, sentToWords, sentTodayWords } from './memberListPeople';
 
 // SENT MESSAGES (spec Part 3 §16.8; ROADMAP 20f-ii): the messages this gym sent to the
@@ -44,7 +45,7 @@ function SentTo({ gymId, message, onOpenPerson, onClose }) {
   const { sentTo } = state;
   const more = sentTo === null ? 0 : sentTo.named - sentTo.people.length;
   return (
-    <Sheet
+    <AskSheet
       title={sentToWords(message.people)}
       testId="sent-to-box"
       onClose={onClose}
@@ -105,7 +106,7 @@ function SentTo({ gymId, message, onOpenPerson, onClose }) {
           ) : null}
         </>
       ) : null}
-    </Sheet>
+    </AskSheet>
   );
 }
 

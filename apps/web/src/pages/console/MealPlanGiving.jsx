@@ -5,7 +5,8 @@ import { MEMBER_LIST_SELECTION_CHANGED_WORDS } from '@app/shared';
 import { errorText, selectionChanged } from '../../api/orgsApi';
 import { mealPlansService } from '../../api/mealPlansApi';
 import { Names } from './MemberListRemove';
-import { Refusal, Sheet } from './MemberListTags';
+import { Refusal } from './MemberListTags';
+import { AskSheet } from '../../components/console/ConsoleBoxes';
 import { GIVE_WORDS, groupLabel, peopleCount, throughLine, toLabel } from './mealPlansView';
 
 // WHO GETS A MEAL PLAN (ROADMAP Stage 2 24a-ii; spec Part 6 §16.6). On a plan's page: who it is
@@ -442,24 +443,24 @@ export function GiveMealPlanSheet({ gymId, gymSlug, selection, words, onSelectio
   const plansTo = `/console/${gymSlug}/plans`;
   const footer =
     done !== null ? (
-      <button type="button" onClick={onClose} className="c-btn c-btn-p col-span-2">
+      <button type="button" onClick={onClose} className="c-btn c-btn-p c-btn-lg">
         Done
       </button>
     ) : (
       <>
-        <button type="button" onClick={onClose} disabled={busy} className="c-btn c-btn-quiet">
-          Cancel
-        </button>
         {plans !== null && plans.length > 0 ? (
-          <button type="button" onClick={give} disabled={busy || preview === null || preview.count === 0} className="c-btn c-btn-p" data-testid="give-selected-press">
+          <button type="button" onClick={give} disabled={busy || preview === null || preview.count === 0} className="c-btn c-btn-p c-btn-lg md:order-2" data-testid="give-selected-press">
             {busy ? 'Giving…' : GIVE_WORDS.press(preview?.count ?? 0, words)}
           </button>
         ) : null}
+        <button type="button" onClick={onClose} disabled={busy} className="c-btn c-btn-s c-btn-lg md:order-1">
+          Cancel
+        </button>
       </>
     );
 
   return (
-    <Sheet title={GIVE_WORDS.sheetTitle} testId="give-meal-plan" onClose={onClose} footer={footer}>
+    <AskSheet title={GIVE_WORDS.sheetTitle} testId="give-meal-plan" onClose={onClose} busy={busy} footer={footer}>
       {done !== null ? (
         <div className="flex flex-col gap-3">
           <p className="c-s15 c-w6" role="status" style={{ color: 'var(--good)' }}>
@@ -500,7 +501,7 @@ export function GiveMealPlanSheet({ gymId, gymSlug, selection, words, onSelectio
           {error !== null ? <Refusal>{error}</Refusal> : null}
         </>
       )}
-    </Sheet>
+    </AskSheet>
   );
 }
 

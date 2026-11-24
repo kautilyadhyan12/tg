@@ -35,6 +35,10 @@ function useLookHost() {
   return { ready: host !== null, draw };
 }
 
+/** The boxes open now, the newest last: only the newest takes Escape and Tab (a member's page opened
+ *  from a box in the middle, over it). */
+const OPEN_BOXES = [];
+
 /** Keys while a box is open: focus moves into it, Tab stays inside it, Escape asks to close
  *  it, and focus goes back to what had it when the box closes. */
 /** `opener`: what had the keys when the box was first drawn, where that was read before the page changed under it. */
@@ -46,6 +50,8 @@ function useBoxKeys(boxRef, onEscape, ready, opener = null) {
   useEffect(() => {
     if (!ready) return undefined;
     const before = opener ?? document.activeElement;
+    const me = {};
+    OPEN_BOXES.push(me);
     const box = boxRef.current;
     if (box !== null) {
       const first = box.querySelector('[data-autofocus]') ?? box.querySelector(FOCUSABLE);
@@ -53,7 +59,7 @@ function useBoxKeys(boxRef, onEscape, ready, opener = null) {
     }
     const onKey = (event) => {
       const el = boxRef.current;
-      if (el === null) return;
+      if (el === null || OPEN_BOXES[OPEN_BOXES.length - 1] !== me) return;
       if (event.key === 'Escape') {
         event.stopPropagation();
         escape.current?.();
@@ -79,6 +85,7 @@ function useBoxKeys(boxRef, onEscape, ready, opener = null) {
     document.addEventListener('keydown', onKey, true);
     return () => {
       document.removeEventListener('keydown', onKey, true);
+      OPEN_BOXES.splice(OPEN_BOXES.indexOf(me), 1);
       if (!(before instanceof HTMLElement)) return;
       if (before.isConnected) {
         before.focus();
@@ -344,6 +351,27 @@ function MiddleShell({ label, onClose, busy, error, testId, role, wide, children
         {children}
       </div>
     </InMiddle.Provider>,
+  );
+}
+
+/** 3b. In the middle, a box with a title, a close X and a foot that stays (V3a-ii, the Members
+ *  bar's boxes): its words scroll between them. `wide`: a list of people in columns (Invite to
+ *  app). Escape, pressing outside and the X do what `onClose` does, never while `busy`. */
+export function AskSheet({ title, testId, onClose, footer, busy = false, wide = false, children }) {
+  const cancel = () => {
+    if (!busy) onClose();
+  };
+  return (
+    <MiddleBox label={title} onClose={onClose} busy={busy} testId={testId} role="dialog" wide={wide}>
+      <div className="c-ask-head">
+        <h2 className="c-h2 c-ask-title">{title}</h2>
+        <button type="button" aria-label="Close" onClick={cancel} disabled={busy} className="c-icon-btn">
+          <X aria-hidden="true" className="w-5 h-5" />
+        </button>
+      </div>
+      <div className="flex flex-col gap-5">{children}</div>
+      <div className="c-ask-a c-ask-foot">{footer}</div>
+    </MiddleBox>
   );
 }
 

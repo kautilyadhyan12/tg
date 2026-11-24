@@ -3,7 +3,8 @@ import { Check, Loader2 } from 'lucide-react';
 import { MEMBER_LIST_SELECTION_CHANGED_WORDS } from '@app/shared';
 import { orgService, cardRequestPeopleChanged, errorText, selectionChanged } from '../../api/orgsApi';
 import { Names } from './MemberListRemove';
-import { Refusal, Sheet } from './MemberListTags';
+import { Refusal } from './MemberListTags';
+import { AskSheet } from '../../components/console/ConsoleBoxes';
 import { cardAskBoxWords, cardAskDoneLine, selectedWords } from './memberListPeople';
 
 // ASK TO ADD CARD (ROADMAP 18d-vii). One box, as Send message's: it names who will be asked to add
@@ -167,8 +168,8 @@ export default function MemberListCardAsk({ gymId, selection, picked, today = nu
   }
 
   return (
-    <Sheet title="Ask to add card" testId="card-ask-box" onClose={onClose} footer={footer}>
+    <AskSheet title="Ask to add card" testId="card-ask-box" onClose={onClose} busy={busy} footer={footer}>
       {body}
-    </Sheet>
+    </AskSheet>
   );
 }

@@ -347,6 +347,13 @@ describe('read without leaning in (Kd, 2026-11-19, V1-f): no words under 14 px',
     '../../pages/console/TerminalRefundWait.jsx',
     // V3a-i: Members, Your list, its quick filters and the Filter from the right.
     '../../pages/console/MemberListPanel.jsx',
+    // V3a-ii: the boxes the Members bar opens, in the middle.
+    '../../pages/console/MemberListRemove.jsx',
+    '../../pages/console/MemberListDelete.jsx',
+    '../../pages/console/MemberListTags.jsx',
+    '../../pages/console/MemberListMessage.jsx',
+    '../../pages/console/MemberListCardAsk.jsx',
+    '../../pages/console/MemberListInvite.jsx',
   ];
   it.each(REDESIGNED)('%s has no 12 or 13 px words', (file) => {
     const text = readFileSync(fileURLToPath(new URL(file, import.meta.url)), 'utf8');
