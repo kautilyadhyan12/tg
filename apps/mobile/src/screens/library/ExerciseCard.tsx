@@ -27,7 +27,7 @@ export function ExerciseCard({ entry, sex, onOpen }: { entry: PhoneLibraryEntry;
         <ExerciseThumb id={entry.id} kind={entry.kind} picture={entry.picture} style={own && sex !== null ? styles.photoBeside : styles.photo} />
         {/* The person's own figure only: none until their setup answer is known, never the other one. */}
         {sex === null ? null : (
-          <View style={styles.mini}>
+          <View style={[styles.mini, own ? styles.miniOnLight : null]}>
             <MuscleFigure sex={sex} side={sideFor(entry.muscles.main)} lit={litMuscles(entry.muscles)} width={36} />
           </View>
         )}
@@ -36,7 +36,8 @@ export function ExerciseCard({ entry, sex, onOpen }: { entry: PhoneLibraryEntry;
         </Txt>
       </View>
       <View style={styles.body}>
-        <Txt kind="strong" numberOfLines={2}>
+        {/* Three lines: a long name ("Standing Dumbbell Calf Raise") is never cut at the phone's largest text. */}
+        <Txt kind="strong" numberOfLines={3}>
           {en.name}
         </Txt>
         <View style={styles.level}>
@@ -72,6 +73,8 @@ const styles = StyleSheet.create({
   top: { height: 124, overflow: "hidden" },
   photo: { position: "absolute", top: 0, left: 0, width: "100%", height: "100%" },
   // Its own picture leaves the small muscle box's width free on the right (36 + its padding, edge and gap).
+  // On a light picture's own colour the box is darker, as drawn, so the figure reads.
+  miniOnLight: { backgroundColor: colours.overWords },
   photoBeside: { position: "absolute", top: 0, left: 0, bottom: 0, right: 58 },
   mini: { position: "absolute", right: 6, top: 6, paddingVertical: 5, paddingHorizontal: 6, borderRadius: 12, borderWidth: 1, borderColor: colours.lineStrong, backgroundColor: colours.overPicture },
   // Over the picture with no fade, so the picture keeps its own colours: the word carries its own shadow.
