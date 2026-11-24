@@ -20,6 +20,7 @@ import { autoPauseChoice, chooseAutoPause, chooseMapColours, chooseVoice, mapCol
 import { RefusedRuns } from "./RefusedRuns";
 import { RUN_BAR_ROOM, gpsLight, useRunLayer, type StartProblem } from "./RunLayer";
 import { StartProblemBox } from "./StartProblem";
+import { BatteryLimitRow, useBatteryLimited } from "./BatteryLimit";
 import { useRunOutbox } from "./RunOutbox";
 import { useLookOpen } from "../setupFirst";
 import { RunPage } from "./RunPage";
@@ -108,6 +109,8 @@ export function RunningTab({ units, parts }: { units: Units; parts: ReactNode })
     void readRunChoices();
   }, []);
   const canSpeak = useCanSpeak(focused && voiceOn);
+  // The phone's battery limit on this app stops a run when the screen turns off (37l).
+  const batteryLimited = useBatteryLimited(focused);
   // No voice code of this app's on this phone (an iPhone, until Stage 5 item 21): the row stays.
   const noVoiceYet = runVoiceNative === null;
   const [problem, setProblem] = useState<StartProblem | null>(null);
@@ -273,7 +276,8 @@ export function RunningTab({ units, parts }: { units: Units; parts: ReactNode })
             />
           )}
           <View style={styles.rows}>
-            <View style={styles.row}>
+            {batteryLimited ? <BatteryLimitRow /> : null}
+            <View style={[styles.row, batteryLimited ? styles.rowLine : null]}>
               <View style={styles.grow}>
                 <Txt kind="body">Auto-pause</Txt>
                 <Txt kind="small" colour="textFaint">

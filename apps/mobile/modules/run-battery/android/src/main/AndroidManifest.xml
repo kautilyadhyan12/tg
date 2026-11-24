@@ -1,0 +1,3 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+  <!-- The phone's battery limit on this app (37l): asking whether the app is limited, and opening its Settings page, need no permission. -->
+</manifest>
