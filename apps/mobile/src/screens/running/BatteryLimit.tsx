@@ -26,4 +26,4 @@ export function openBatterySettings(): void {
 }
 
 /** Said where the box was when the person comes back with the limit lifted. */
-export const BATTERY_ON_WORDS = "Background usage is on, so your run will keep recording with the screen off.";
+export const BATTERY_ON_WORDS = "Battery setting changed. Your run will keep recording with the screen off.";

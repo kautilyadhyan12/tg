@@ -50,10 +50,10 @@ function AgainButtons({ problem, onAgain, onAnyway }: { problem: StartProblem; o
       // Android refused the run after 3, 2, 1.
       return <Button kind="link" label="Start again" onPress={onAgain} />;
     case "battery":
-      // The phone's own words for the switch (Settings, the app, App battery usage); a run is never held back.
+      // The setting is named as the phone names its page (Battery); a run is never held back.
       return (
         <View style={styles.choices}>
-          <Button kind="link" label="Allow background usage" say="Open this app's battery settings" onPress={openBatterySettings} />
+          <Button kind="link" label="Change battery setting" say="Open this app's battery settings" onPress={openBatterySettings} />
           <Button kind="quiet" label="Start anyway" onPress={onAnyway} />
         </View>
       );

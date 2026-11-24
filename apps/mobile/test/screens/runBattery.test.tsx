@@ -125,7 +125,7 @@ describe("what the runner does about it", () => {
     });
   });
 
-  it("back from the phone's settings with background usage allowed, the box says so and Start goes straight on", async () => {
+  it("back from the phone's settings with the battery setting changed, the box says so and Start goes straight on", async () => {
     battery.restricted = true;
     await openRunning(runServer());
     await pressStart();

@@ -159,7 +159,7 @@ export function RunningTab({ units, parts }: { units: Units; parts: ReactNode })
   useEffect(() => {
     if (!focused) setBatteryOn(false);
   }, [focused]);
-  // The box asked for background usage: when the person comes back with it allowed, the box goes and says so.
+  // The box asked to change the battery setting: when the person comes back with it changed, the box goes and says so.
   useEffect(() => {
     if (problem !== "battery") return;
     const heard = AppState.addEventListener("change", (next) => {
