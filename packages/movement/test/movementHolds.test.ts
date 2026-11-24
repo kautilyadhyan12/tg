@@ -228,14 +228,15 @@ describe("written for 54: a long sit on the floor reads as an L-sit, since nothi
     const { measured } = runOf(v.video);
     const t0 = measured[0]?.t ?? 0;
     const top = measured.filter((m) => m.t - t0 >= 1500 && m.t - t0 <= 1800);
-    const inside = (k: number) => top.filter((m) => {
+    const holdsIn = (m: (typeof top)[number], k: number): boolean => {
       const c = L_SIT.position[k];
       const r = c === undefined ? null : readPosition(c.read, m);
       return c !== undefined && r !== null && within(r, c);
-    }).length;
+    };
     expect(top.length).toBeGreaterThanOrEqual(8);
-    expect([0, 1, 2, 3].map((k) => inside(k) > 0)).toEqual([true, true, true, true]);
-    expect(inside(4)).toBe(0);
+    // All four in the same picture (re-check: each in some picture proved less), and the arms in none.
+    expect(top.filter((m) => [0, 1, 2, 3].every((k) => holdsIn(m, k))).length).toBeGreaterThan(0);
+    expect(top.filter((m) => holdsIn(m, 4)).length).toBe(0);
   });
 });
 
