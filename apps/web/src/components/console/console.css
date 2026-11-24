@@ -1725,9 +1725,19 @@
   .c-ask-head { top: -28px; margin: -28px -28px 0; padding: 28px 20px 0 28px; }
   .c-ask-foot { bottom: -28px; margin: 0 -28px -28px; padding: 16px 28px 28px; }
 }
-/* A window too short for the foot to stay (a phone turned sideways, a laptop at 200 %): it scrolls with the words. */
-@media (max-height: 560px) {
-  .c-ask-foot { position: static; }
+/* A short window (a small phone, a phone turned sideways, a laptop at 200 %): the title scrolls away with the words,
+   leaving the room to the list and to the foot, which keeps what Send waits for beside it. */
+@media (max-height: 700px) {
+  .c-ask-head { position: static; }
+}
+/* Short and wide enough (a laptop at 200 %, a phone turned sideways): the foot's buttons side by side, so the list keeps
+   its room. */
+@media (max-height: 560px) and (min-width: 480px) {
+  .c-ask-foot { padding-top: 8px; padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px)); }
+  .c-ask-foot.c-ask-a,
+  .c-ask-foot .c-ask-a { flex-direction: row-reverse; flex-wrap: wrap; justify-content: flex-start; }
+  .c-ask-foot .c-ask-a .c-btn,
+  .c-ask-foot.c-ask-a > .c-btn { width: auto; }
 }
 /* Inside a box in the middle, on a touch screen or a narrow window, its X, choices and tabs are 44 px too. */
 @media (pointer: coarse), (max-width: 767px) {

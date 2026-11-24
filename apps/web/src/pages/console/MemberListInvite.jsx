@@ -487,9 +487,12 @@ export default function MemberListInvite({
 
   return (
     <>
-      <AskSheet title={`Invite ${words.people} to the app`} testId="invite-box" onClose={onClose} busy={sending} wide footer={footer}>
-        {body}
-      </AskSheet>
+      {/* A name opens their page in its place; its Back brings the box back as it was (what it holds is kept here). */}
+      {openId === undefined ? (
+        <AskSheet title={`Invite ${words.people} to the app`} testId="invite-box" onClose={onClose} busy={sending} wide footer={footer}>
+          {body}
+        </AskSheet>
+      ) : null}
       {openId !== undefined ? (
         <MemberListPerson
           key={openId}

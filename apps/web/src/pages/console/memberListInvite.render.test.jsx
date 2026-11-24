@@ -345,13 +345,22 @@ describe("Invite's page", () => {
     expect(box().queryByRole('button', { name: 'Load more' })).toBeNull();
   });
 
-  it("a row opens that person's page over Invite's", async () => {
+  it("a row opens that person's page in Invite's place, and closing it brings Invite back as it was (V3a-ii)", async () => {
     openInvite(preview());
     orgService.getMemberListEntry.mockResolvedValue({ data: { entry: person({ entryId: AVA.entryId, fullName: 'Ava Thompson', email: AVA.email }) } });
     await waitFor(() => expect(rows()).toHaveLength(2));
+    tick();
     fireEvent.click(rows()[0]);
     await waitFor(() => expect(orgService.getMemberListEntry).toHaveBeenCalledWith(GYM, AVA.entryId));
-    expect(screen.getAllByRole('dialog')).toHaveLength(2);
+    // Their page is the one on screen: the box is not drawn over it.
+    expect(screen.queryByTestId('invite-box')).toBeNull();
+    const page = within(screen.getByTestId('member-person'));
+    fireEvent.click(page.getAllByRole('button', { name: 'Close' })[0]);
+    await waitFor(() => expect(screen.queryByTestId('member-person')).toBeNull());
+    expect(rows()).toHaveLength(2);
+    expect(box().getByRole('checkbox', { name: "These are Iron House's members, and I have permission to email them." }).getAttribute('aria-checked')).toBe('true');
+    expect(box().getByRole('button', { name: 'Send 2 invitations' }).disabled).toBe(false);
+    expect(onClose).not.toHaveBeenCalled();
   });
 
   it('afterwards: how many are on the way, and the words and link to share', async () => {
