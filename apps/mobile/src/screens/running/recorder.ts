@@ -405,37 +405,50 @@ async function writeState(run: LiveRun): Promise<void> {
 }
 
 /** The open points file, written again whole; a full one is never written again. */
+/** Every file holding one of the last `unwritten` of a list, written again whole, the open one always: a batch
+ *  after the screen was off can fill more than one file at once (37i's round one, L1). */
+async function writeParts(list: readonly unknown[], unwritten: number, name: (i: number) => string): Promise<void> {
+  if (list.length === 0) return;
+  const last = Math.floor((list.length - 1) / POINTS_PER_FILE);
+  const first = Math.min(last, Math.floor(Math.max(0, list.length - unwritten) / POINTS_PER_FILE));
+  for (let i = first; i <= last; i++) await files.write(name(i), JSON.stringify(list.slice(i * POINTS_PER_FILE, (i + 1) * POINTS_PER_FILE)));
+}
+
 async function writePoints(run: LiveRun): Promise<void> {
-  if (run.points.length === 0) return;
-  const last = Math.floor((run.points.length - 1) / POINTS_PER_FILE);
-  await files.write(pointsFile(last), JSON.stringify(run.points.slice(last * POINTS_PER_FILE)));
-  // The file before it is written whole once, when the open one moved on past it.
-  if (last > 0 && run.points.length % POINTS_PER_FILE <= unwritten) {
-    await files.write(pointsFile(last - 1), JSON.stringify(run.points.slice((last - 1) * POINTS_PER_FILE, last * POINTS_PER_FILE)));
-  }
+  await writeParts(run.points, unwritten, pointsFile);
   unwritten = 0;
 }
 
-/** The open heart rate file, as the points' are written. */
+/** The heart rate's files, as the points' are written. */
 async function writeHeart(run: LiveRun): Promise<void> {
-  if (run.heart.length === 0) return;
-  const last = Math.floor((run.heart.length - 1) / POINTS_PER_FILE);
-  await files.write(heartFile(last), JSON.stringify(run.heart.slice(last * POINTS_PER_FILE)));
-  if (last > 0 && run.heart.length % POINTS_PER_FILE <= heartUnwritten) {
-    await files.write(heartFile(last - 1), JSON.stringify(run.heart.slice((last - 1) * POINTS_PER_FILE, last * POINTS_PER_FILE)));
-  }
+  await writeParts(run.heart, heartUnwritten, heartFile);
   heartUnwritten = 0;
 }
 
-/** The open motion file, as the points' are written. */
+/** The motion's files, as the points' are written. */
 async function writeMotion(run: LiveRun): Promise<void> {
-  if (run.motion.length === 0) return;
-  const last = Math.floor((run.motion.length - 1) / POINTS_PER_FILE);
-  await files.write(motionFile(last), JSON.stringify(run.motion.slice(last * POINTS_PER_FILE)));
-  if (last > 0 && run.motion.length % POINTS_PER_FILE <= motionUnwritten) {
-    await files.write(motionFile(last - 1), JSON.stringify(run.motion.slice((last - 1) * POINTS_PER_FILE, last * POINTS_PER_FILE)));
-  }
+  await writeParts(run.motion, motionUnwritten, motionFile);
   motionUnwritten = 0;
+}
+
+/** A list kept beside the points read back from its files. One that does not read loses what it held, never the run:
+ *  the files after it are numbered again from the next write, and those past the end are removed, so Save and
+ *  Discard find every one (37i's round one, L2). */
+async function readParts<T>(count: number, name: (i: number) => string, read: (text: string) => T[] | null): Promise<{ list: T[]; lost: boolean }> {
+  const list: T[] = [];
+  let lost = false;
+  for (let i = 0; i < count; i++) {
+    try {
+      const part = await files.read(name(i));
+      const kept = part === null ? null : read(part);
+      if (kept === null) lost = true;
+      else list.push(...kept);
+    } catch {
+      lost = true;
+    }
+  }
+  if (lost) for (let i = Math.ceil(list.length / POINTS_PER_FILE); i < count; i++) files.remove(name(i));
+  return { list, lost };
 }
 
 async function keep(run: LiveRun): Promise<void> {
@@ -526,24 +539,19 @@ export async function loadRun(): Promise<LiveRun | null> {
       const part = await files.read(pointsFile(i));
       if (part !== null) points.push(...keptRunPointsSchema.parse(JSON.parse(part)));
     }
-    const heart: [number, number][] = [];
-    for (let i = 0; i < state.heartFiles; i++) {
-      const part = await files.read(heartFile(i));
-      // A heart rate file that cannot be read loses its heart rate, never the run.
-      const kept = part === null ? null : keptRunHeartSchema.safeParse(JSON.parse(part));
-      if (kept?.success === true) heart.push(...kept.data);
-    }
-    const motion: [number, number][] = [];
-    for (let i = 0; i < state.motionFiles; i++) {
-      // A motion file that cannot be read loses its motion, never the run.
-      try {
-        const part = await files.read(motionFile(i));
-        const kept = part === null ? null : keptRunMotionSchema.safeParse(JSON.parse(part));
-        if (kept?.success === true) motion.push(...kept.data);
-      } catch {
-        // Left out.
-      }
-    }
+    const hearts = await readParts(state.heartFiles, heartFile, (text) => {
+      const kept = keptRunHeartSchema.safeParse(JSON.parse(text));
+      return kept.success ? kept.data : null;
+    });
+    const motions = await readParts(state.motionFiles, motionFile, (text) => {
+      const kept = keptRunMotionSchema.safeParse(JSON.parse(text));
+      return kept.success ? kept.data : null;
+    });
+    const heart = hearts.list;
+    const motion = motions.list;
+    // What was read is written again from the first file at the next write.
+    if (hearts.lost) heartUnwritten = heart.length;
+    if (motions.lost) motionUnwritten = motion.length;
     const last = points[points.length - 1];
     current = {
       runId: state.runId,
@@ -636,7 +644,11 @@ export async function takeLocations(data: unknown, now: number = Date.now()): Pr
         closePause(run, change.at);
         run.phase = "running";
         // The steps that started the clock again were taken while paused: they are the run's.
-        for (const kept of pausedTail) if (kept[0] >= change.at && run.points.length < RUN_MAX_POINTS) run.points.push(kept);
+        for (const kept of pausedTail) {
+          if (kept[0] < change.at || run.points.length >= RUN_MAX_POINTS) continue;
+          run.points.push(kept);
+          unwritten += 1;
+        }
         writtenAt = 0;
       }
     }

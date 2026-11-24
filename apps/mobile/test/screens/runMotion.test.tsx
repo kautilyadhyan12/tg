@@ -121,14 +121,15 @@ describe("the motion is kept with the run", () => {
   it("a second past Finish is not kept, and the sensor stops at Finish", async () => {
     const run = await startRun(RAVI.id, randomUUID(), false, Date.now());
     await feed(1, 10);
-    // Finished at 10.5 s, with the sensor's seconds up to 12 s not yet taken.
+    // Finished at 10.5 s, with the sensor's seconds up to 12 s not yet taken: the one before Finish is the run's.
+    motion.send(run.startedAt + 10_400, 1);
     motion.send(run.startedAt + 11_000, 1);
     motion.send(run.startedAt + 12_000, 1);
     await act(async () => {
       await finishRun(run.startedAt + 10_500);
     });
     expect(motion.reading).toBe(false);
-    expect(runNow()?.motion.map(([ms]) => ms)).toEqual([1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000, 10_000]);
+    expect(runNow()?.motion.map(([ms]) => ms)).toEqual([1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000, 10_000, 10_400]);
   });
 
   it("a run read back after the app was closed has its motion, across files, and the sensor is read again", async () => {
@@ -148,6 +149,55 @@ describe("the motion is kept with the run", () => {
     await act(() => resumeRun(run.startedAt + 701_000));
     await feed(702, 3);
     expect(runNow()?.motion.slice(-3).map(([ms]) => ms)).toEqual([702_000, 703_000, 704_000]);
+  });
+
+  it("a batch from a locked screen that fills two files at once is kept whole, points and motion (round one, L1)", async () => {
+    const run = await startRun(RAVI.id, randomUUID(), false, Date.now());
+    await feed(1, 500);
+    await act(() => pauseRun(run.startedAt + 500_500));
+    await act(() => resumeRun(run.startedAt + 500_600));
+    // 900 seconds handed over at once: past both 600 and 1200, the most the sensor code keeps.
+    await feed(501, 900);
+    await act(() => pauseRun(run.startedAt + 1_400_500));
+    resetRecorder();
+    motion.reset();
+    const back = await act(() => loadRun());
+    expect(back?.motion).toHaveLength(1400);
+    expect(back?.points).toHaveLength(1400);
+    expect(back?.motion.map(([ms]) => ms)).toEqual(Array.from({ length: 1400 }, (_, i) => (i + 1) * 1000));
+  });
+
+  it("after a motion file that does not read, Discard still removes every motion file (round one, L2)", async () => {
+    const run = await startRun(RAVI.id, randomUUID(), false, Date.now());
+    for (let start = 1; start <= 700; start += 100) await feed(start, 100);
+    await act(() => pauseRun(run.startedAt + 700_500));
+    await phoneRunFiles.write("run-now-motion-0.json", "{not json");
+    resetRecorder();
+    motion.reset();
+    const back = await act(() => loadRun());
+    expect(back?.motion.map(([ms]) => ms)).toEqual(Array.from({ length: 100 }, (_, i) => (601 + i) * 1000));
+    await act(() => resumeRun(run.startedAt + 701_000));
+    await feed(702, 5);
+    await act(() => pauseRun(run.startedAt + 707_500));
+    // Read back again, the seconds are in order and once each.
+    resetRecorder();
+    const again = await act(() => loadRun());
+    expect(again?.motion).toHaveLength(105);
+    await act(() => forgetRun());
+    for (const name of MOTION_FILES) expect(await phoneRunFiles.read(name)).toBeNull();
+  });
+
+  it("a heart rate file that does not read loses the heart rate, never the run", async () => {
+    const run = await startRun(RAVI.id, randomUUID(), false, Date.now());
+    await feed(1, 30);
+    await act(() => pauseRun(run.startedAt + 30_500));
+    const state = JSON.parse((await phoneRunFiles.read("run-now.json")) ?? "{}") as Record<string, unknown>;
+    await phoneRunFiles.write("run-now.json", JSON.stringify({ ...state, heartFiles: 1 }));
+    await phoneRunFiles.write("run-now-heart-0.json", "{not json");
+    resetRecorder();
+    const back = await act(() => loadRun());
+    expect(back?.points).toHaveLength(30);
+    expect(back?.heart).toEqual([]);
   });
 
   it("a motion file that does not read loses the motion, never the run", async () => {
