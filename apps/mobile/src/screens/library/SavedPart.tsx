@@ -1,15 +1,14 @@
 import { PLANNED_WORKOUT_LIMITS, type PhoneLibraryEntry } from "@app/shared";
 import { useEffect, useState } from "react";
-import { AppState, Image, Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from "react-native";
+import { AppState, Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from "react-native";
 import { Button } from "../../look/Button";
 import { colours, sizes } from "../../look/colours";
 import { Field } from "../../look/Field";
 import { Icon } from "../../look/Icon";
-import { pictures } from "../../look/pictures";
 import { Sheet } from "../../look/Sheet";
 import { fonts, Txt } from "../../look/Txt";
 import { fromSaved, NAME_MOST, nameOf as cleanName, plannedOf } from "../../library/myWorkout";
-import { exercisePicture } from "../../library/pictures";
+import { ExerciseThumb } from "./ExerciseImage";
 import { rebased, savedState, type Planned, type ShownSaved } from "../../library/savedWorkouts";
 import { planOf } from "../../library/workoutSetup";
 import type { MyWorkoutHook } from "./useLibrary";
@@ -485,7 +484,7 @@ function SavedRow({ entry, inMine, entryOf, busy, onLoad, onDelete }: RowProps) 
           {first === null ? (
             <Icon name="dumbbell" size={20} colour="textFaint" />
           ) : (
-            <Image source={pictures[exercisePicture(first.id, first.kind)]} resizeMode="contain" style={styles.thumbPicture} accessible={false} />
+            <ExerciseThumb id={first.id} kind={first.kind} picture={first.picture} style={styles.thumbPicture} />
           )}
         </View>
         <View style={styles.grow}>

@@ -37,7 +37,12 @@ jest.mock("expo-brightness", () => ({
   restoreSystemBrightnessAsync: jest.fn(() => Promise.resolve()),
 }));
 // A workout's id from the phone's proper random source (64a-ii); Node's own here.
-jest.mock("expo-crypto", () => ({ randomUUID: () => require("node:crypto").randomUUID() }));
+jest.mock("expo-crypto", () => ({
+  randomUUID: () => require("node:crypto").randomUUID(),
+  CryptoDigestAlgorithm: { SHA256: "SHA-256" },
+  // As the phone's own: the digest of the bytes given, as an ArrayBuffer of its own (62a).
+  digest: (_algorithm, data) => Promise.resolve(Uint8Array.from(require("node:crypto").createHash("sha256").update(Buffer.from(data)).digest()).buffer),
+}));
 jest.mock("expo-keep-awake", () => ({
   activateKeepAwakeAsync: jest.fn(() => Promise.resolve()),
   deactivateKeepAwake: jest.fn(() => Promise.resolve()),
@@ -70,6 +75,10 @@ jest.mock("expo-file-system", () => {
     }
     base64() {
       return files.has(this.uri) ? Promise.resolve(files.get(this.uri)) : Promise.reject(new Error("no such file"));
+    }
+    /** The file's text as its bytes (an exercise's picture, 62a, is checked by its sha256). */
+    arrayBuffer() {
+      return files.has(this.uri) ? Promise.resolve(Uint8Array.from(Buffer.from(String(files.get(this.uri)))).buffer) : Promise.reject(new Error("no such file"));
     }
     move(to) {
       files.set(to.uri, files.get(this.uri));

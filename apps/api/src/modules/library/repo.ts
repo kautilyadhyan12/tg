@@ -136,6 +136,17 @@ export async function checkedCopyText(sql: Sql | TransactionSql, version: number
   return copy.body;
 }
 
+/** Whether a published exercise names this picture or clip (job 62a): one the Library shows or history still names,
+ *  never a removed one's, and never a file no exercise names. A read of the Library's rows, about 200 at most. */
+export async function namesMedia(sql: Sql | TransactionSql, file: string): Promise<boolean> {
+  const rows = await sql<{ named: boolean }[]>`
+    SELECT EXISTS (
+      SELECT 1 FROM library_exercises
+      WHERE status <> 'removed' AND (entry->'picture'->>'file' = ${file} OR entry->'clip'->>'file' = ${file})
+    ) AS named`;
+  return rows[0]?.named === true;
+}
+
 /** The rules of the one flag that puts a person on beta (Part 2 §9.3): the same flag as the old
  *  definitions' beta, so a tester is on beta for both. */
 export async function betaFlagRules(sql: Sql | TransactionSql): Promise<unknown> {

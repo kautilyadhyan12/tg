@@ -231,7 +231,7 @@ describe("the copy kept on the phone", () => {
     const state = await refreshLibrary(s.ask, file, null);
     expect(s.asked).toEqual([{ method: "GET", path: LIBRARY_PATH }]);
     expect(file.writes).toBe(1);
-    expect(state.kind === "ready" ? offered(state.library).map((e) => e.id).sort() : state.kind).toEqual(["barbell_curl", "plank", "squat"]);
+    expect(state.kind === "ready" ? offered(state.library).map((e) => e.id).sort() : state.kind).toEqual(readdirSync(FOLDER).map((name) => name.replace(/.json$/, "")).sort());
     expect(state.kind === "ready" ? state.library.exercises.some((e) => e.id === "old_crunch") : false).toBe(true);
   });
 

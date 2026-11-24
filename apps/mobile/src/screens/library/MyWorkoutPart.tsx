@@ -1,20 +1,19 @@
 import { useIsFocused } from "@react-navigation/native";
 import { RUN_SETS_MOST, WORKOUT_SAVE_LIMITS, type PhoneLibraryEntry, type RunExercise } from "@app/shared";
 import { useRef, useState, type ReactNode } from "react";
-import { Image, Pressable, StyleSheet, TextInput, View } from "react-native";
+import { Pressable, StyleSheet, TextInput, View } from "react-native";
 import { Button } from "../../look/Button";
 import { Badge, Card } from "../../look/Card";
 import { colours, sizes } from "../../look/colours";
 import { Icon } from "../../look/Icon";
 import { Page } from "../../look/Page";
-import { pictures } from "../../look/pictures";
 import { PictureTop } from "../../look/PictureTop";
 import { Sheet } from "../../look/Sheet";
 import { bpmWords, HeartMonitorSheet, monitorName } from "../../heart/HeartMonitor";
 import { useHeartNow } from "../../heart/monitor";
 import { fonts, Txt } from "../../look/Txt";
 import { EMPTY, NAME_MOST, type Item } from "../../library/myWorkout";
-import { exercisePicture } from "../../library/pictures";
+import { ExerciseThumb } from "./ExerciseImage";
 import type { Units } from "../../library/records";
 import type { LibraryFile } from "../../library/store";
 import { estimate, planLine, planOf, summaryLine } from "../../library/workoutSetup";
@@ -351,7 +350,7 @@ function Row({ item, entry, units, reorder, first, last, onOpen, onRemove, onMov
           {entry === null ? (
             <Icon name="dumbbell" size={20} colour="textFaint" />
           ) : (
-            <Image source={pictures[exercisePicture(entry.id, entry.kind)]} resizeMode="contain" style={styles.thumbPicture} accessible={false} />
+            <ExerciseThumb id={entry.id} kind={entry.kind} picture={entry.picture} style={styles.thumbPicture} />
           )}
         </View>
         <View style={styles.grow}>

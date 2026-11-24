@@ -47,6 +47,29 @@ export const phoneLibraryEntrySchema = z.object({
     }),
   }),
   sources: z.array(z.object({ name: z.string().min(1).max(200), url: z.string().max(400) })).max(10).default([]),
+  /** The exercise's own picture (62a): its file, named by its sha256, its shape and the colour round its edge. One the
+   *  phone cannot read is none, and the exercise shows the app's picture of its kind, as before. */
+  picture: z
+    .object({
+      file: z.string().regex(/^[0-9a-f]{64}\.webp$/),
+      width: z.number().int().min(1).max(10_000),
+      height: z.number().int().min(1).max(10_000),
+      ground: z.string().regex(/^#[0-9A-Fa-f]{6}$/),
+    })
+    .nullable()
+    .catch(null)
+    .default(null),
+  /** The exercise's clip (62a; played in 62b). One the phone cannot read is none. */
+  clip: z
+    .object({
+      file: z.string().regex(/^[0-9a-f]{64}\.mp4$/),
+      width: z.number().int().min(1).max(10_000),
+      height: z.number().int().min(1).max(10_000),
+      seconds: z.number().min(0).max(600),
+    })
+    .nullable()
+    .catch(null)
+    .default(null),
 });
 export type PhoneLibraryEntry = z.infer<typeof phoneLibraryEntrySchema>;
 

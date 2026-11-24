@@ -1,0 +1,113 @@
+{
+  "id": "kettlebell_goblet_squat",
+  "status": "live",
+  "kind": "strength",
+  "level": "beginner",
+  "muscles": {
+    "main": [
+      "rectus_femoris",
+      "vastus_lateralis",
+      "vastus_medialis",
+      "glute_max"
+    ],
+    "also": [
+      "biceps_femoris",
+      "inner_hamstrings",
+      "adductors"
+    ],
+    "steady": [
+      "glute_med",
+      "abs",
+      "transverse_abdominis",
+      "obliques",
+      "lower_back",
+      "lats"
+    ]
+  },
+  "equipment": [
+    "kettlebell"
+  ],
+  "set": {
+    "measuredIn": "reps",
+    "weight": "usually",
+    "eachSide": false,
+    "start": {
+      "sets": 3,
+      "reps": 10
+    }
+  },
+  "energy": {
+    "compendium": "02052"
+  },
+  "text": {
+    "en": {
+      "name": "Kettlebell Goblet Squat",
+      "otherNames": [
+        "Goblet squat",
+        "Kettlebell squat"
+      ],
+      "about": "A standing squat holding one kettlebell by the horns at your chest. The weight in front helps you stay upright and squat deeper, and it builds strength in the thighs and glutes.",
+      "steps": [
+        "Stand with your feet hip- to shoulder-width apart, toes pointing straight ahead or slightly out.",
+        "Hold a kettlebell by the horns at chest height, close to your body, with your elbows tucked in.",
+        "Brace your core and stand tall with your chest up and your weight over your whole foot.",
+        "Push your hips back and down between your knees, keeping your chest up and the kettlebell at your chest.",
+        "Lower until your thighs are at least parallel to the floor, or deeper if your lower back stays flat.",
+        "Push both feet into the floor to stand back up, squeezing your glutes at the top."
+      ],
+      "mistakes": [
+        {
+          "id": "knees_cave_in",
+          "says": "Knees fall inward as you lower. Push your knees out so they stay in line with your toes."
+        },
+        {
+          "id": "chest_drops",
+          "says": "Chest drops and you lean too far forward. Stay tall and let the kettlebell at your chest hold you upright."
+        },
+        {
+          "id": "bell_drifts_away",
+          "says": "Kettlebell drifts away from your chest. Keep it held close against your chest with your elbows tucked in."
+        },
+        {
+          "id": "too_shallow",
+          "says": "Squat stops well above parallel. Lower until your thighs are at least parallel, as far as your back stays flat."
+        },
+        {
+          "id": "rushed_reps",
+          "says": "Reps are jerky or rushed. Lower and stand up at a steady, controlled pace."
+        }
+      ],
+      "cautions": [
+        "Do not push through knee, hip or back pain that keeps coming back as you squat. Change the exercise, and if the pain continues, see a qualified healthcare professional."
+      ]
+    }
+  },
+  "sources": [
+    {
+      "name": "National Academy of Sports Medicine (NASM), Exercise Library: Goblet Squat",
+      "url": "https://www.nasm.org/resource-center/exercise-library/goblet-squat"
+    },
+    {
+      "name": "National Academy of Sports Medicine (NASM), The Goblet Squat: A Trainer's Coaching and Programming Guide",
+      "url": "https://www.nasm.org/resource-center/blog/training/how-to-perform-goblet-squats"
+    },
+    {
+      "name": "American Council on Exercise (ACE), Exercise Library: Goblet Squat",
+      "url": "https://acefitness.org/resources/everyone/exercise-library/362/goblet-squat/"
+    }
+  ],
+  "clip": {
+    "file": "eed8ce2674394cb4f5ca10a1372c77f7ef184f6815710fea0fa1854944d4df5c.mp4",
+    "width": 720,
+    "height": 1280,
+    "bytes": 190721,
+    "seconds": 4
+  },
+  "picture": {
+    "file": "a06ecbc9700efabc5f97a7c7d64eaab096d3553a7a6b34bd3bf39222598d8022.webp",
+    "width": 720,
+    "height": 1280,
+    "bytes": 29732,
+    "ground": "#D5D5D5"
+  }
+}

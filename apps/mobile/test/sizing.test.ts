@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { pictureTopHeight, modalHeight } from "../src/look/sizing";
+import { pictureTopHeight, modalHeight, wholePictureHeight, WHOLE_PICTURE_LEAST } from "../src/look/sizing";
 
 // Screen shapes in the phone's own points (dp), width by height: shapes, not any one model's measured size.
 describe("a page over the app", () => {
@@ -30,5 +30,26 @@ describe("a page's own picture on phones of every size", () => {
     ["a tablet", 800, 1280, 704],
   ])("%s: at most 55 % of the screen's height", (_name, width, height, drawn) => {
     expect(pictureTopHeight(width, height, 1)).toBe(drawn);
+  });
+});
+
+describe("an exercise's own picture, whole, under the page's top buttons (62a)", () => {
+  const tall = { width: 720, height: 1280 };
+  const wide = { width: 1280, height: 720 };
+  // 92 points above it: the phone's clock and the row of the close button.
+  it.each([
+    ["a tall picture, a phone like Kd's", 412, 915, tall, 411],
+    ["a tall picture, a small phone", 360, 760, tall, 326],
+    ["a wide picture, a phone like Kd's: its own shape", 412, 915, wide, 232],
+    ["a wide picture, a small phone: its own shape", 360, 760, wide, 203],
+    ["a tall picture, a folding phone opened", 690, 830, tall, 365],
+    ["a wide picture, a folding phone opened", 690, 830, wide, 365],
+    ["a tall picture, a tablet", 800, 1280, tall, 612],
+  ])("%s: never more than 55 % of the screen with the space above it", (_name, width, height, picture, drawn) => {
+    expect(wholePictureHeight(width, height, picture, 92)).toBe(drawn);
+  });
+
+  it("a phone on its side still shows the person: never under the least", () => {
+    expect(wholePictureHeight(915, 412, tall, 92)).toBe(WHOLE_PICTURE_LEAST);
   });
 });

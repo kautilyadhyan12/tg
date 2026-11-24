@@ -86,6 +86,7 @@ const SENDS_NOTHING_ABOUT_A_PERSON: Record<string, string> = {
   JOIN_CODES: "the server's own",
   MEMBER_TAP: "the server's own",
   PHOTO_DIR: "our own disk",
+  LIBRARY_MEDIA_DIR: "our own disk: the app's own exercise pictures and clips, nobody's data",
   SUPPORT_EMAIL: "our own address",
   REVIEW_EMAIL: "our own address, for Google's reviewers",
   REVIEW_CODE: "the code of our own address for Google's reviewers",

@@ -1,6 +1,7 @@
 // Workout → Exercises: the Exercise Library on the phone (ROADMAP Stage 5 63a). The worst thing it could do to
 // a person is open an exercise without its caution, so that is tested first, on every tab of the page. The
 // exercises are the real files, sent as the server publishes them.
+import { createHash } from "node:crypto";
 import { readdirSync, readFileSync } from "node:fs";
 import { heartSums, type OnboardingAnswers } from "@app/shared";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react-native";
@@ -12,6 +13,7 @@ import { fireGestureHandler, getByGestureTestId } from "react-native-gesture-han
 import { FIGURES, type FigureName } from "../../src/library/figures";
 import { DOUBLE_TAP_ZOOM, toStage, WHOLE, zoomAbout, type View as Zoom } from "../../src/library/stage";
 import { forgetStores } from "../../src/library/myWorkout";
+import { forgetAskedMedia, keptMedia } from "../../src/library/media";
 import { heartNative } from "../../src/heart/heartNative";
 import { loadMonitor, resetHeart, saveMonitor } from "../../src/heart/monitor";
 import { startRun } from "../../src/library/workoutRun";
@@ -24,8 +26,12 @@ const FOLDER = `${__dirname}/../../../../packages/shared/library/exercises/`;
 const METS: Record<string, number> = { squat: 3, plank: 2.8, barbell_curl: 3.5 };
 const PLANK_CAUTION = "If you feel pain in your lower back, stop at once and see a qualified professional.";
 
-function download(more: Record<string, unknown>[] = [], fingerprint = "a".repeat(64)) {
-  const exercises = readdirSync(FOLDER).map((name) => {
+/** The three exercises these tests were written about, read from their real files. The Library grows file by file
+ *  (job 65), so a test that counts it names what it counts; 62a's tests read every file in the folder. */
+const TESTED = ["barbell_curl.json", "plank.json", "squat.json"];
+
+function download(more: Record<string, unknown>[] = [], fingerprint = "a".repeat(64), files: readonly string[] = TESTED) {
+  const exercises = files.map((name) => {
     const file = JSON.parse(readFileSync(`${FOLDER}${name}`, "utf8")) as Record<string, unknown>;
     return { ...file, status: "live", met: METS[String(file.id)] ?? 3 };
   });
@@ -129,6 +135,111 @@ beforeEach(() => {
   // The phone's files outlive a test in the stand-in: each test starts on a phone that never opened the Library.
   for (const one of Paths.document.list()) if (one.name.startsWith("library-") || one.name.startsWith("figure-") || one.name.startsWith("my-workout-") || one.name.startsWith("workout") || one.name.startsWith("saved-")) one.delete();
   forgetStores();
+});
+
+describe("62a: each exercise's own picture", () => {
+  const sha = (text: string) => createHash("sha256").update(text).digest("hex");
+  const GOBLET = "the goblet squat's own picture";
+  const RDL = "the Romanian deadlift's own picture";
+  const gobletFile = `${sha(GOBLET)}.webp`;
+  const rdlFile = `${sha(RDL)}.webp`;
+  /** Two real files of the folder, each given a picture whose name is the sha256 of its test bytes. */
+  const withOwn = (name: string, file: string, ground: string) => {
+    const real = JSON.parse(readFileSync(`${FOLDER}${name}`, "utf8")) as Record<string, unknown>;
+    return { ...real, status: "live", met: 5, picture: { file, width: 720, height: 1280, bytes: 30, ground }, clip: null };
+  };
+  const both = () => download([withOwn("kettlebell_goblet_squat.json", gobletFile, "#D5D5D5"), withOwn("dumbbell_romanian_deadlift.json", rdlFile, "#D1D1D1")]);
+  /** What the server's media address answers, by name; a name it does not hold is refused as a 404. */
+  const served = new Map<string, string>();
+  const asked: { url: string; auth: string | undefined }[] = [];
+  const landed = jest.mocked(File.downloadFileAsync).getMockImplementation();
+  /** The address a picture is drawn from. */
+  const uriOf = (element: { props: { source?: unknown } }): string => {
+    const source = element.props.source;
+    return typeof source === "object" && source !== null && "uri" in source && typeof source.uri === "string" ? source.uri : "";
+  };
+
+  beforeEach(() => {
+    served.clear();
+    asked.length = 0;
+    forgetAskedMedia();
+    jest.mocked(File.downloadFileAsync).mockImplementation((url, to, options) => {
+      asked.push({ url, auth: options?.headers?.authorization });
+      const name = url.slice(url.lastIndexOf("/") + 1);
+      const body = served.get(name);
+      if (body === undefined) return Promise.reject(new Error("UnableToDownload: 404"));
+      (to as File).write(body);
+      return Promise.resolve(to as File);
+    });
+  });
+  afterEach(() => {
+    if (landed !== undefined) jest.mocked(File.downloadFileAsync).mockImplementation(landed);
+  });
+
+  it("the worst thing: each exercise shows its own picture, never another's, asked for signed in by its own name", async () => {
+    served.set(gobletFile, GOBLET);
+    served.set(rdlFile, RDL);
+    await openLibrary(libraryServer({ library: () => ({ status: 200, body: both() }) }).ask);
+    const goblet = await screen.findByTestId("own-picture-kettlebell_goblet_squat");
+    const rdl = await screen.findByTestId("own-picture-dumbbell_romanian_deadlift");
+    expect(uriOf(goblet).endsWith(`/library-media/${gobletFile}`)).toBe(true);
+    expect(uriOf(rdl).endsWith(`/library-media/${rdlFile}`)).toBe(true);
+    // An exercise with no picture of its own keeps the app's picture of its kind.
+    expect(screen.getByTestId("kind-picture-squat")).toBeTruthy();
+    expect(asked.map((a) => a.url).sort()).toEqual([`${extra.apiUrl}/v1/library/media/${rdlFile}`, `${extra.apiUrl}/v1/library/media/${gobletFile}`].sort());
+    expect(asked.every((a) => a.auth?.startsWith("Bearer ") === true)).toBe(true);
+  });
+
+  it("what comes under a name that is not that file (swapped) is thrown away: the app's own picture stays", async () => {
+    served.set(gobletFile, RDL);
+    served.set(rdlFile, RDL);
+    await openLibrary(libraryServer({ library: () => ({ status: 200, body: both() }) }).ask);
+    expect(await screen.findByTestId("own-picture-dumbbell_romanian_deadlift")).toBeTruthy();
+    await settle(50);
+    expect(screen.queryByTestId("own-picture-kettlebell_goblet_squat")).toBeNull();
+    expect(screen.getByTestId("kind-picture-kettlebell_goblet_squat")).toBeTruthy();
+    expect(keptMedia(gobletFile)).toBeNull();
+    expect(new File(Paths.document, `library-media/${gobletFile}.part`).exists).toBe(false);
+  });
+
+  it("a phone without the picture yet shows the app's picture; once it has come it is kept and never asked for again", async () => {
+    await openLibrary(libraryServer({ library: () => ({ status: 200, body: both() }) }).ask);
+    await settle(50);
+    expect(screen.getByTestId("kind-picture-kettlebell_goblet_squat")).toBeTruthy();
+    await screen.unmount();
+    served.set(gobletFile, GOBLET);
+    await openLibrary(libraryServer({ library: () => ({ status: 200, body: both() }) }).ask);
+    expect(await screen.findByTestId("own-picture-kettlebell_goblet_squat")).toBeTruthy();
+    await screen.unmount();
+    served.clear();
+    asked.length = 0;
+    await openLibrary(libraryServer({ library: () => ({ status: 200, body: both() }) }).ask);
+    expect(await screen.findByTestId("own-picture-kettlebell_goblet_squat")).toBeTruthy();
+    expect(asked.map((a) => a.url)).not.toContain(`${extra.apiUrl}/v1/library/media/${gobletFile}`);
+  });
+
+  it("the page shows the picture whole with the name under it, and My Workout's row shows it small", async () => {
+    served.set(gobletFile, GOBLET);
+    await openLibrary(libraryServer({ library: () => ({ status: 200, body: both() }) }).ask);
+    await screen.findByTestId("own-picture-kettlebell_goblet_squat");
+    await openExercise(/^Kettlebell Goblet Squat,/);
+    const page = await screen.findByTestId("page-picture-kettlebell_goblet_squat");
+    expect(uriOf(page).endsWith(gobletFile)).toBe(true);
+    expect(page.props.resizeMode).toBe("contain");
+    expect(screen.getAllByText("Kettlebell Goblet Squat").length).toBeGreaterThan(0);
+    expect(screen.getByText("Goblet squat · Kettlebell squat")).toBeTruthy();
+    await fireEvent.press(screen.getByRole("button", { name: "Add to workout" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Open My Workout" }));
+    expect((await screen.findAllByTestId("own-picture-kettlebell_goblet_squat")).length).toBeGreaterThan(0);
+  });
+
+  it("every exercise in the real folder is offered, each with the app's picture until its own has come", async () => {
+    const all = readdirSync(FOLDER);
+    await openLibrary(libraryServer({ library: () => ({ status: 200, body: download([], "b".repeat(64), all) }) }).ask);
+    expect(await screen.findByText(`${String(all.length)} exercises · A to Z`)).toBeTruthy();
+    await settle(50);
+    for (const name of all) expect(screen.getByTestId(`kind-picture-${name.replace(/\.json$/, "")}`)).toBeTruthy();
+  });
 });
 
 describe("an exercise's page never hides its caution", () => {

@@ -7,7 +7,7 @@ import { Rise } from "../../look/Motion";
 import { Sheet } from "../../look/Sheet";
 import { fonts, Txt } from "../../look/Txt";
 import { pictures } from "../../look/pictures";
-import { exercisePicture } from "../../library/pictures";
+import { ExerciseThumb } from "../library/ExerciseImage";
 import { useSession } from "../../session/SessionProvider";
 import { useZoneSaved } from "../../session/TimeZoneSync";
 import { useNamed } from "../library/useLibrary";
@@ -279,7 +279,11 @@ function DayBox({ day, onPhone, sent }: { day: string; onPhone: number; sent: nu
                 }}
                 style={({ pressed }) => [styles.dayWorkout, pressed ? styles.pressed : null]}
               >
-                <Image source={pictures[w.first === null ? "exhero" : exercisePicture(w.first, named(w.first).kind)]} resizeMode="cover" style={styles.dayThumb} accessible={false} />
+                {w.first === null ? (
+                  <Image source={pictures.exhero} resizeMode="cover" style={styles.dayThumb} accessible={false} />
+                ) : (
+                  <ExerciseThumb id={w.first} kind={named(w.first).kind} picture={named(w.first).picture} fit="cover" style={styles.dayThumb} />
+                )}
                 <View style={styles.grow}>
                   <Txt kind="strong" numberOfLines={1}>
                     {w.name}
