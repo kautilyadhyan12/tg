@@ -848,7 +848,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
             - 52b-ii-b. [x] **"Keep your chest up.", each rep's score and the set's summary** (with 52b-iii) — merged 2026-11-23 (PR #630).
         - 52b-iii. Built with 52b-ii-b on 2026-11-23 (`handoff/2026-11-23-52b-ii-b.md`).
     - 52c. **The other kinds of counting** (split 2026-11-23 in two, the standing kinds first; `handoff/2026-11-23-52c-i.md` keeps its line as first written):
-        - 52c-i. [ ] **A jump in a fast rhythm, and one side at a time**: the squat jump and the lunge, each counted from its own videos.
+        - 52c-i. [x] **A jump in a fast rhythm, and one side at a time** — merged 2026-11-24 (PR #636).
         - 52c-ii. [ ] **Floor work, holds and timed only**: a body read lying or held still (sit-ups, hip thrusts, the bar hold), their videos measured first.
     - 52d. [ ] **One person locked on**: a busy gym, a passer-by, a mirror (§11.8). Since 51c the phone asks the model for one
       person, so the model itself picks the body: the job is to notice when the body followed has changed (51c's plain sign,
