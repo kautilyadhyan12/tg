@@ -21,7 +21,7 @@ const EAST_PER_DEG = (A / W) * Math.cos(LAT * RAD) * RAD;
 function liveRun(points: RunPoint[], pauses: [number, number | null][] = [], phase: LiveRun["phase"] = "running"): LiveRun {
   return {
     runId: "run", userId: "me", startedAt: GO, phase, pausedByPerson: false, autoPause: false, pauses, points,
-    finishedMs: null, lastFix: null, here: null, guide: null, heart: [],
+    finishedMs: null, lastFix: null, here: null, guide: null, heart: [], motion: [],
   };
 }
 

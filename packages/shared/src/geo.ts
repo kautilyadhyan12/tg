@@ -396,10 +396,15 @@ export const keptRunStateSchema = z.object({
   guide: keptRunGuideSchema.nullable().default(null),
   /** Its heart rate's files (37f-i); none for one kept before. */
   heartFiles: z.number().int().nonnegative().default(0),
+  /** Its motion's files (37i); none for one kept before. */
+  motionFiles: z.number().int().nonnegative().default(0),
 });
 /** A run's heart rate kept beside its points: [ms into the run, bpm]. */
 export const keptRunHeartSchema = z.array(z.tuple([z.number(), z.number().int().min(HEART_BPM_LEAST).max(HEART_BPM_MOST)]));
 export const keptRunPointsSchema = z.array(z.tuple([z.number(), z.number(), z.number(), z.number().nullable()]));
+/** How much the phone was shaken in each second of a run (37i), kept beside its points and never sent:
+ *  [ms into the run, the standard deviation of the acceleration's size in hundredths of a m/s²]. */
+export const keptRunMotionSchema = z.array(z.tuple([z.number(), z.number().int().nonnegative()]));
 
 /** The run's choices (37a, 37a-ii, 37b-i): Auto-pause, the voice, the account's units, kept for a run
  *  the phone carries on with the app closed, and the map's colours. One missing or unreadable keeps its
@@ -435,6 +440,13 @@ export const phoneLocationsSchema = z.object({
   ),
 });
 export type PhoneLocations = z.infer<typeof phoneLocationsSchema>;
+
+/** What the phone's motion sensor code hands over during a run (37i, `apps/mobile/modules/run-motion`): for each
+ *  second finished since the last take, its end (ms since 1970, the phone's clock), the standard deviation over
+ *  it of the acceleration's size in m/s², and how many readings it held. A second the sensor did not report is
+ *  not handed over: not known, never still. */
+export const phoneMotionSchema = z.array(z.object({ at: z.number(), sd: z.number().nonnegative(), n: z.number().int().nonnegative() })).max(10_000);
+export type PhoneMotion = z.infer<typeof phoneMotionSchema>;
 
 /** A saved run the server refused, kept whole on the phone: the person may send it again or
  *  remove it, and nothing they ran is ever thrown away by the app (round one of 37a, H1). */

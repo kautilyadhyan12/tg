@@ -1,0 +1,3 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+  <!-- The phone's motion during a run (37i): Android's accelerometer needs no permission. -->
+</manifest>
