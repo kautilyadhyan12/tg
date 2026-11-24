@@ -3,6 +3,9 @@ package expo.modules.runbattery
 import android.app.ActivityManager
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ActivityInfo
+import android.content.pm.ApplicationInfo
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
@@ -28,8 +31,9 @@ class RunBatteryModule : Module() {
       (ctx.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager)?.isBackgroundRestricted ?: false
     }
 
-    /** Opens this app's battery page ("App battery usage"), or its App info page where a phone has none by that name.
-     *  False when neither opened. */
+    /** Opens this app's battery page ("App battery usage"), or its App info page where a phone has none by that name,
+     *  only ever from an app that came with the phone: the first page's name is not a public one, and an app installed
+     *  later could claim it. False when neither opened. */
     Function("open") {
       val ctx = context ?: return@Function false
       val app = Uri.parse("package:" + ctx.packageName)
@@ -39,7 +43,8 @@ class RunBatteryModule : Module() {
       )
       for (page in pages) {
         try {
-          ctx.startActivity(page.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+          val phones = phoneOwn(ctx, page) ?: continue
+          ctx.startActivity(page.setClassName(phones.packageName, phones.name).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
           return@Function true
         } catch (e: Exception) {
           // This page is not on this phone: the next one.
@@ -47,5 +52,17 @@ class RunBatteryModule : Module() {
       }
       false
     }
+  }
+
+  /** The page of an app that came with the phone that opens this, if any. */
+  private fun phoneOwn(ctx: Context, page: Intent): ActivityInfo? {
+    val pm = ctx.packageManager
+    val found = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+      pm.queryIntentActivities(page, PackageManager.ResolveInfoFlags.of(PackageManager.MATCH_DEFAULT_ONLY.toLong()))
+    } else {
+      @Suppress("DEPRECATION")
+      pm.queryIntentActivities(page, PackageManager.MATCH_DEFAULT_ONLY)
+    }
+    return found.firstOrNull { (it.activityInfo.applicationInfo.flags and ApplicationInfo.FLAG_SYSTEM) != 0 }?.activityInfo
   }
 }

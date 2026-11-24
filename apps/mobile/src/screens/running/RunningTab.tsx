@@ -201,9 +201,11 @@ export function RunningTab({ units, parts }: { units: Units; parts: ReactNode })
     said !== null ? (
       <StartProblemBox problem={said} onAgain={() => void start(from, pressedBox)} onAnyway={() => void start(from, pressedBox, true)} />
     ) : batteryOn ? (
-      <Txt kind="small" colour="goodText">
-        {BATTERY_ON_WORDS}
-      </Txt>
+      <View style={styles.problem}>
+        <Txt kind="small" colour="goodText">
+          {BATTERY_ON_WORDS}
+        </Txt>
+      </View>
     ) : null;
 
   return (

@@ -34,9 +34,14 @@ const comeBack = () => {
 
 beforeEach(async () => {
   handlers = [];
+  // A listener the page lets go of is never heard again, as on the phone.
   jest.spyOn(AppState, "addEventListener").mockImplementation((_type, handler) => {
     handlers.push(handler);
-    return { remove: () => undefined };
+    return {
+      remove: () => {
+        handlers = handlers.filter((h) => h !== handler);
+      },
+    };
   });
   Object.assign(location, { services: true, granted: true, canAskAgain: true, accuracy: "fine", asked: 0, started: [], running: false, acceptsTurnOn: true, refusesStart: false });
   for (const name of ["run-now.json", "run-now-0.json", "run-settings.json", "run-map.json"]) phoneRunFiles.remove(name);
@@ -75,12 +80,16 @@ async function pressStart() {
 describe("the worst thing: a runner starts a run that stops with the screen and is never told why", () => {
   it("on a phone that limits the app, Start says so before 3, 2, 1, with the button to its battery page", async () => {
     battery.restricted = true;
+    const settings = jest.spyOn(Linking, "openSettings").mockResolvedValue(undefined);
     await openRunning(runServer());
     await pressStart();
     expect(await screen.findByText(WORDS)).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Start now" })).toBeNull();
+    settings.mockClear();
     await fireEvent.press(screen.getByRole("button", { name: "Open this app's battery settings" }));
     expect(battery.opens).toBe(1);
+    // The battery page alone: App info is not opened on top of it.
+    expect(settings).not.toHaveBeenCalled();
   });
 
   // What Android can answer, and what Start must do with each: a phone that does not limit the app is never asked
@@ -168,6 +177,57 @@ describe("what the runner does about it", () => {
     expect(await screen.findByText(WORDS)).toBeTruthy();
     expect(screen.queryByText(BATTERY_ON_WORDS)).toBeNull();
     expect(screen.queryByRole("button", { name: "Start now" })).toBeNull();
+  });
+
+  // Coming back to the app is heard only while the battery box is shown: anything else said under Start stays, and
+  // nobody is told a setting changed that they never touched.
+  it.each([
+    { name: "nothing under Start", set: { restricted: false }, services: true, words: null },
+    { name: "the location box", set: { restricted: true }, services: false, words: START_PROBLEM_WORDS.off },
+  ])("back in the app with $name, nothing is said of the battery", async ({ set, services, words }) => {
+    Object.assign(battery, set);
+    location.services = services;
+    await openRunning(runServer());
+    if (words !== null) {
+      await pressStart();
+      await screen.findByText(words);
+    }
+    battery.restricted = false;
+    await act(() => {
+      comeBack();
+    });
+    expect(screen.queryByText(BATTERY_ON_WORDS)).toBeNull();
+    if (words !== null) expect(screen.getByText(words)).toBeTruthy();
+  });
+
+  it("once Start anyway is pressed, coming back to the app says nothing of the battery", async () => {
+    battery.restricted = true;
+    await openRunning(runServer());
+    await pressStart();
+    await fireEvent.press(await screen.findByRole("button", { name: "Start anyway" }));
+    await screen.findByRole("button", { name: "Start now" });
+    battery.restricted = false;
+    await act(() => {
+      comeBack();
+    });
+    expect(screen.queryByText(BATTERY_ON_WORDS)).toBeNull();
+  });
+
+  it("the line that the setting changed is gone once the Running page is left", async () => {
+    battery.restricted = true;
+    await openRunning(runServer());
+    await pressStart();
+    await screen.findByText(WORDS);
+    battery.restricted = false;
+    await act(() => {
+      comeBack();
+    });
+    await screen.findByText(BATTERY_ON_WORDS);
+    await fireEvent.press(screen.getByRole("tab", { name: "Dashboard" }));
+    await fireEvent.press(await screen.findByRole("tab", { name: "Workout" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Running" }));
+    expect(await screen.findByRole("button", { name: "Start run" })).toBeTruthy();
+    expect(screen.queryByText(BATTERY_ON_WORDS)).toBeNull();
   });
 
   it("the button opens the app's own settings where the battery page cannot be opened", async () => {

@@ -18,7 +18,7 @@ import kotlin.math.sqrt
 //
 // Held by the app's process, not by its screen, as the heart rate monitor is (modules/heart-rate): the readings are
 // summed for as long as the app's process lives, the screen locked included only while Android keeps the app working
-// (a phone set to Restricted in its battery settings takes the run's service off foreground; the Running page says so, 37l). For each second
+// (a phone set to Restricted in its battery settings takes the run's service off foreground; Start says so, 37l). For each second
 // it keeps one number, the standard deviation over that second of the acceleration's size (gravity included, so
 // how the phone is held does not matter), and the app takes them when it next looks (`take`), with each batch of
 // location points. Nothing here decides what is still or moving: the app's own code does, where it is tested.
