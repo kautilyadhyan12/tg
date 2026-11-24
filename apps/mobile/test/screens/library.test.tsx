@@ -202,6 +202,33 @@ describe("62a: each exercise's own picture", () => {
     expect(new File(Paths.document, `library-media/${gobletFile}.part`).exists).toBe(false);
   });
 
+  it("a sign-in the server no longer takes is renewed once, and the picture is asked for again with the new one", async () => {
+    served.set(gobletFile, GOBLET);
+    const plain = jest.mocked(File.downloadFileAsync).getMockImplementation();
+    let refused = false;
+    jest.mocked(File.downloadFileAsync).mockImplementation((url, to, options) => {
+      if (!refused && url.endsWith(gobletFile)) {
+        refused = true;
+        asked.push({ url, auth: options?.headers?.authorization });
+        // Expo's own words on Android for a 401.
+        return Promise.reject(new Error("Unable to download file: response has status: 401"));
+      }
+      if (plain === undefined) return Promise.reject(new Error("no download"));
+      return plain(url, to, options);
+    });
+    // Each renewal gives a new sign-in, as the server does.
+    const base = libraryServer({ library: () => ({ status: 200, body: both() }) });
+    let renewals = 2;
+    const ask: Ask = (url, init) =>
+      new URL(url).pathname === "/v1/auth/refresh" ? Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ tokens: tokens(++renewals) }) }) : base.ask(url, init);
+    await openLibrary(ask);
+    expect(await screen.findByTestId("own-picture-kettlebell_goblet_squat")).toBeTruthy();
+    const goblet = asked.filter((a) => a.url.endsWith(gobletFile));
+    expect(goblet).toHaveLength(2);
+    expect(goblet[1]?.auth?.startsWith("Bearer ")).toBe(true);
+    expect(goblet[1]?.auth).not.toBe(goblet[0]?.auth);
+  });
+
   it("a phone without the picture yet shows the app's picture; once it has come it is kept and never asked for again", async () => {
     await openLibrary(libraryServer({ library: () => ({ status: 200, body: both() }) }).ask);
     await settle(50);
