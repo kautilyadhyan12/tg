@@ -42,13 +42,16 @@ describe('Delete permanently from the bar, in the middle', () => {
     expect(press).not.toHaveBeenCalled();
   });
 
-  it('while it is deleting, Escape, outside and the X do not close it, and what happened is said in it', async () => {
+  it("while it is deleting, Don't delete, Escape, outside and the X do not close it, and what happened is said in it", async () => {
     let finish;
     const press = vi.fn(() => new Promise((resolve) => (finish = resolve)));
     render(<DeleteHost press={press} />);
     fireEvent.click(await screen.findByRole('button', { name: 'Delete 2 permanently' }));
     expect(press).toHaveBeenCalledTimes(1);
     expect(press).toHaveBeenCalledWith(DIGEST);
+    expect(screen.getByRole('button', { name: "Don't delete" }).disabled).toBe(true);
+    expect(screen.getByRole('button', { name: 'Close' }).disabled).toBe(true);
+    fireEvent.click(screen.getByRole('button', { name: "Don't delete" }));
     fireEvent.keyDown(document, { key: 'Escape' });
     fireEvent.click(screen.getByTestId('box-outside'));
     fireEvent.click(screen.getByRole('button', { name: 'Close' }));

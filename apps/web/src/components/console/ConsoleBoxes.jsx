@@ -38,6 +38,7 @@ function useLookHost() {
 /** The boxes open now, the newest last: only the newest takes Escape and Tab (a member's page opened
  *  from a box in the middle, over it). */
 const OPEN_BOXES = [];
+const isNewest = (boxRef) => OPEN_BOXES[OPEN_BOXES.length - 1] === boxRef;
 
 /** Keys while a box is open: focus moves into it, Tab stays inside it, Escape asks to close
  *  it, and focus goes back to what had it when the box closes. */
@@ -50,7 +51,7 @@ function useBoxKeys(boxRef, onEscape, ready, opener = null) {
   useEffect(() => {
     if (!ready) return undefined;
     const before = opener ?? document.activeElement;
-    const me = {};
+    const me = boxRef;
     OPEN_BOXES.push(me);
     const box = boxRef.current;
     if (box !== null) {
@@ -335,7 +336,8 @@ function MiddleShell({ label, onClose, busy, error, testId, role, wide, children
       shown.current = true;
       return;
     }
-    if (box.contains(document.activeElement)) return;
+    // A box opened over this one (a member's page from Invite to app) keeps the keys.
+    if (box.contains(document.activeElement) || !isNewest(boxRef)) return;
     (box.querySelector('[data-autofocus]') ?? box).focus();
   });
   return draw(

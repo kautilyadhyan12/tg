@@ -316,9 +316,10 @@ export function MemberTagsManage({ gymId, gymTags, words, readOnly, onChanged, o
     <AskSheet
       title="Manage tags"
       testId="tags-manage"
+      busy={busy}
       onClose={onClose}
       footer={
-        <button type="button" onClick={onClose} className="c-btn c-btn-p c-btn-lg">
+        <button type="button" onClick={onClose} disabled={busy} className="c-btn c-btn-p c-btn-lg">
           Done
         </button>
       }

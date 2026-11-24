@@ -560,3 +560,35 @@ describe('Add and invite', () => {
     expect(orgService.addMemberListEntry).toHaveBeenCalledWith(GYM, { fullName: 'Cy Walker', email: 'cy@members.example' });
   });
 });
+
+// V3a-ii: Invite in the middle (round one of the review).
+describe('Invite in the middle', () => {
+  it('the tick Send waits for is at the foot, beside Send, however long the list', async () => {
+    const many = Array.from({ length: 40 }, (_, i) => invitee(`Person ${String(i + 1)}`));
+    openInvite(preview({ reach: 40 }), FILTERS, { reach: many });
+    await waitFor(() => expect(rows()).toHaveLength(40));
+    const foot = screen.getByTestId('invite-box').querySelector('.c-ask-foot');
+    const permission = box().getByRole('checkbox', { name: "These are Iron House's members, and I have permission to email them." });
+    expect(foot.contains(permission)).toBe(true);
+    expect(foot.contains(box().getByRole('button', { name: 'Send 40 invitations' }))).toBe(true);
+  });
+
+  it('while it is sending, Cancel, the X, Escape and pressing outside do not close it', async () => {
+    openInvite(preview());
+    let finish;
+    orgService.pressInvite.mockImplementation(() => new Promise((resolve) => (finish = resolve)));
+    const send = await box().findByRole('button', { name: 'Send 2 invitations' });
+    tick();
+    fireEvent.click(send);
+    await waitFor(() => expect(orgService.pressInvite).toHaveBeenCalledTimes(1));
+    expect(box().getByRole('button', { name: 'Cancel' }).disabled).toBe(true);
+    expect(box().getByRole('button', { name: 'Close' }).disabled).toBe(true);
+    fireEvent.keyDown(document, { key: 'Escape' });
+    fireEvent.click(screen.getByTestId('box-outside'));
+    expect(onClose).not.toHaveBeenCalled();
+    finish({ data: { invited: { queued: 2, skipped: NONE, version: 7 } } });
+    expect(await box().findByText('2 invitations are being sent.')).toBeTruthy();
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+});

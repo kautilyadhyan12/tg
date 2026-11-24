@@ -255,7 +255,7 @@ export default function MemberListRemove({ door, gym, words, load, press, onSele
               {button}
             </button>
           ) : null}
-          <button type="button" onClick={onClose} className="c-btn c-btn-s c-btn-lg md:order-1">
+          <button type="button" onClick={onClose} disabled={removing} className="c-btn c-btn-s c-btn-lg md:order-1">
             Cancel
           </button>
         </div>

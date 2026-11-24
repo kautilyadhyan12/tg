@@ -1735,6 +1735,9 @@
   .c-ask .c-chip,
   .c-ask .c-utab { min-height: 44px; }
 }
+/* A box opened over one in the middle (a member's page from Invite to app): its dimmed cover goes over the box under
+   it too; the panel itself, drawn after the cover, stays on top. */
+.c-ask ~ .c-scrim { z-index: 61; }
 /* Invite to app: its people in columns, wider in the middle of a computer. */
 @media (min-width: 1024px) {
   .c-ask-wide:has(.c-ask-head) { width: min(1120px, calc(100vw - 48px)); }

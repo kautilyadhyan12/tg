@@ -180,7 +180,7 @@ export default function MemberListDelete({ words, load, press, onSelectionChange
               {deleteButton(preview)}
             </button>
           ) : null}
-          <button type="button" onClick={onClose} className="c-btn c-btn-s c-btn-lg md:order-1">
+          <button type="button" onClick={onClose} disabled={deleting} className="c-btn c-btn-s c-btn-lg md:order-1">
             {question !== null ? "Don't delete" : 'Close'}
           </button>
         </div>

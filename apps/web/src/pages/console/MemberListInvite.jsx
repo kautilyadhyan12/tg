@@ -449,20 +449,19 @@ export default function MemberListInvite({
           </button>
         ) : null}
 
-        {/* At the end of the words, just above the buttons: only the buttons stay at the foot, so the people above
-            are never covered on a small phone. */}
+        {/* The long sentence at the end of the words; the tick Send waits for stays at the foot, beside Send. */}
         <p className="c-s14 c-t2">
           Each {words.person} receives one invitation email from {gym.name}, sent by KWAZO, with a link to join. Only someone who signs in with that email address can join.
         </p>
+      </>
+    );
+    footer = (
+      <div className="flex flex-col gap-3 w-full">
         {reach > 0 && blocked === null ? (
           <PermissionTick checked={permission} onChange={setPermission}>
             {MEMBER_INVITE_PERMISSION_WORDS.replace('{gym}', gym.name).replace('{people}', words.people)}
           </PermissionTick>
         ) : null}
-      </>
-    );
-    footer = (
-      <div className="flex flex-col gap-3 w-full">
         {error !== null ? (
           <p className="c-s14 c-t1" role="alert">
             {error}
@@ -478,7 +477,7 @@ export default function MemberListInvite({
             {sending ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : <Mail aria-hidden="true" className="w-4 h-4" />}
             {reach === 1 ? 'Send 1 invitation' : `Send ${count(reach)} invitations`}
           </button>
-          <button type="button" onClick={onClose} className="c-btn c-btn-s c-btn-lg md:order-1">
+          <button type="button" onClick={onClose} disabled={sending} className="c-btn c-btn-s c-btn-lg md:order-1">
             Cancel
           </button>
         </div>
