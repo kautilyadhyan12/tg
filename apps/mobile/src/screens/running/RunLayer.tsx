@@ -80,7 +80,7 @@ export const START_PROBLEM_WORDS: Record<StartProblem, string> = {
   approximate: "Turn on Precise location to measure your run.",
   off: "Turn on your phone's location to record your run.",
   failed: "Your run couldn't start. Try again.",
-  battery: "Your phone's battery setting stops run recording when the screen is off. Recording always ends when you press Finish.",
+  battery: "Your phone's battery setting stops run recording when the screen is off.",
 };
 
 /** What a run tells the Running tab once it is saved, or waiting to be sent. */
