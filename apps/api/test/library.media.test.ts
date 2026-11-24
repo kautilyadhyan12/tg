@@ -60,9 +60,15 @@ const PLANK_CLIP_FILE = `${sha(mp4("the plank's own clip, as it was made"))}.mp4
 /** A file on the server that no exercise names. */
 const LOOSE = webp("a picture no exercise names");
 const LOOSE_FILE = `${sha(LOOSE)}.webp`;
-/** Bytes that are their name's sha256 but not a WebP: named by the removed exercise below. */
+/** Bytes that are their name's sha256 but not a WebP. */
 const NOT_A_PICTURE = Buffer.from("plain words, named as if they were a picture");
 const NOT_A_PICTURE_FILE = `${sha(NOT_A_PICTURE)}.webp`;
+/** A removed exercise's own picture and clip: whole, held by the server, each its name's sha256, so only the
+ *  exercise's status can keep them from being sent. */
+const REMOVED_PICTURE = webp("the removed curl's own picture");
+const REMOVED_CLIP = mp4("the removed curl's own clip");
+const REMOVED_PICTURE_FILE = `${sha(REMOVED_PICTURE)}.webp`;
+const REMOVED_CLIP_FILE = `${sha(REMOVED_CLIP)}.mp4`;
 
 /** What the server's folder holds, by name; the plank's clip holds the squat's clip's bytes. */
 const held = new Map<string, Buffer>([
@@ -72,6 +78,8 @@ const held = new Map<string, Buffer>([
   [PLANK_CLIP_FILE, SQUAT_CLIP],
   [LOOSE_FILE, LOOSE],
   [NOT_A_PICTURE_FILE, NOT_A_PICTURE],
+  [REMOVED_PICTURE_FILE, REMOVED_PICTURE],
+  [REMOVED_CLIP_FILE, REMOVED_CLIP],
 ]);
 const store: LibraryMediaStore = { read: (file) => Promise.resolve(held.get(file) ?? null) };
 
@@ -121,7 +129,7 @@ d("an exercise's picture and clip (real Postgres)", () => {
     await set("squat", { picture: picture(SQUAT_PICTURE_FILE), clip: clip(SQUAT_CLIP_FILE) });
     await set("plank", { picture: picture(PLANK_PICTURE_FILE), clip: clip(PLANK_CLIP_FILE) });
     // A removed exercise's picture is no longer sent: the curl stands in for one.
-    await set("barbell_curl", { picture: picture(NOT_A_PICTURE_FILE), clip: clip(LOOSE_FILE) }, "removed");
+    await set("barbell_curl", { picture: picture(REMOVED_PICTURE_FILE), clip: clip(REMOVED_CLIP_FILE) }, "removed");
   }, 120_000);
 
   afterAll(async () => {
@@ -171,8 +179,14 @@ d("an exercise's picture and clip (real Postgres)", () => {
       expect((await media(LOOSE_FILE)).statusCode).toBe(404);
     });
 
-    it("a removed exercise's picture is 404, whatever the server holds", async () => {
-      expect((await media(NOT_A_PICTURE_FILE)).statusCode).toBe(404);
+    it("a file nobody names is 404 to a phone that says it holds it, never 304", async () => {
+      expect((await media(LOOSE_FILE, { "if-none-match": `"${LOOSE_FILE.slice(0, 64)}"` })).statusCode).toBe(404);
+    });
+
+    it("a removed exercise's picture and clip are 404, though the server holds them whole", async () => {
+      expect(holdsItsName(named(REMOVED_PICTURE_FILE), REMOVED_PICTURE)).toBe(true);
+      expect((await media(REMOVED_PICTURE_FILE)).statusCode).toBe(404);
+      expect((await media(REMOVED_CLIP_FILE)).statusCode).toBe(404);
     });
 
     it("a name an exercise names that the server does not hold is 404 (the phone keeps the app's own picture)", async () => {
