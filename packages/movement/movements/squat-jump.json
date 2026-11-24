@@ -42,16 +42,16 @@
       "read": {
         "kind": "drop"
       },
-      "atLeast": 0.11,
+      "atLeast": 0.1,
       "seen": "always",
       "standard": {
-        "at": 0.113,
+        "at": 0.101,
         "room": "none",
-        "source": "The hips sink at least this far, in legs, when both knees bend to 125 degrees, the knees' line (120 and the camera's room): a hip stands no higher above its ankle than a leg bent so allows, thigh and shin of equal length (Drillis and Contini, as Winter gives them): 1 - sin(62.5 degrees) = 0.113."
+        "source": "The hips sink at least this far, in legs, when both knees bend to 128 degrees, the knees' own line (\"knees bent\": the research file's 120 and the camera's room): a hip stands no higher above its ankle than a leg bent so allows, thigh and shin of equal length (Drillis and Contini, as Winter gives them): 1 - sin(64 degrees) = 0.101."
       },
       "short": "Go lower to count.",
       "unseen": "Keep your whole body in view.",
-      "from": "Set by movement-check from the form standard, 0.113 (its source beside it), the least the body allows, so with no room of its own; rounded the forgiving way. The people's shallowest rep reads 0.35."
+      "from": "Set by movement-check from the form standard, 0.101 (its source beside it), the least the body allows, so with no room of its own; rounded the forgiving way. The people's shallowest rep reads 0.35."
     },
     {
       "name": "knees bent",

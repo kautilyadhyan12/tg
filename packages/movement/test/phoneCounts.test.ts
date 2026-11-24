@@ -76,6 +76,14 @@ describe("the worst thing: a phone that counts or speaks differently is never th
     expect(differences(short, { count: 0, reps: [rep(1000, 2000, "short", "depth")] })).toHaveLength(1);
   });
 
+  it("a lunge given another leg on the phone differs, though the count and the reps agree (52c-i)", () => {
+    const onLeg = (side: RepResult["side"]): RepResult => ({ ...rep(0, 1000, "counted"), side });
+    const left = { count: 1, reps: [onLeg("left")] };
+    expect(differences(left, { count: 1, reps: [onLeg("right")] })).toEqual(["the laptop says 0.0 s counted on the left leg, the phone on the right leg"]);
+    expect(differences(left, { count: 1, reps: [onLeg(null)] })).toHaveLength(1);
+    expect(differences(left, left)).toEqual([]);
+  });
+
   it("a dip read as another movement says nothing, so it alone never makes a difference", () => {
     expect(differences({ count: 0, reps: [] }, { count: 0, reps: [rep(0, 1000, "other", "chest up")] })).toEqual([]);
   });

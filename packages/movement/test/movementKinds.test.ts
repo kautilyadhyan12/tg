@@ -7,11 +7,9 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { movementSchema, type Movement, type MovementFrame, type SeenPerson } from "@app/shared";
 import { MovementMatcher, checkMovement, type RepResult } from "../src/index.js";
 import type { Video } from "../scripts/bodyCheck.js";
-import { LEAD_IN, MOVEMENTS, proofTable, proofVideos, readMovement, runMovement } from "../scripts/movementCheck.js";
+import { LEAD_IN, proofTable, proofVideos, readExercise, readMovement, runMovement } from "../scripts/movementCheck.js";
 import { MOVEMENT_VIDEOS, forMovement, isOther } from "../scripts/movementVideos.js";
 import { phoneTable, type PhoneRow } from "../scripts/phoneCounts.js";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import { editPeople } from "./helpers/body.js";
 
 const SQUAT_JUMP = readMovement("squat-jump");
@@ -167,16 +165,30 @@ describe("a jump is the whole body carried up: a foot point thrown up for a pict
   });
 });
 
-describe("a standing read on the move: squat jumpers never stand still", () => {
-  // The whole videos, from their low first pictures: nobody in them stands still between jumps.
-  const whole = (name: string): Video => {
-    const e = MOVEMENT_VIDEOS.find((x) => x.file === `movement-points/${name}`);
-    if (e === undefined) throw new Error(`no video ${name}`);
-    const v = proofVideos([{ file: e.file, movement: e.movement, person: e.person, view: e.view, reps: e.reps, sets: false, seen: e.seen }])[0];
-    if (v === undefined) throw new Error(`no video ${name}`);
-    return v.video;
-  };
+/** A kept file whole, every set of it as one video, as no cut of the list plays it. */
+function whole(name: string): Video {
+  const e = MOVEMENT_VIDEOS.find((x) => x.file === `movement-points/${name}`);
+  if (e === undefined) throw new Error(`no video ${name}`);
+  const v = proofVideos([{ file: e.file, movement: e.movement, person: e.person, view: e.view, reps: e.reps, sets: false, seen: e.seen }])[0];
+  if (v === undefined) throw new Error(`no video ${name}`);
+  return v.video;
+}
 
+/** The files this job plays as cut sets (52c-i): the squat jumps from their first upright picture, the rooftop lunges as
+ *  two takes. Whole, the squat and its camera file still see them (round one, T3). */
+const CUT_FILES = ["squat_jump_1", "squat_jump_2", "squat_jump_3", "squat_jump_4", "fresh_lunge_forward_barbell_2"];
+
+describe("the squat sees the files this job cuts into sets whole as well: each counts 0 and is told nothing", () => {
+  const squat = readMovement("squat");
+  const exercise = readExercise("squat", squat);
+  it.each(CUT_FILES)("%s, whole, under the squat and its camera file", (name) => {
+    const run = runMovement(squat, whole(name), exercise);
+    expect(run.count).toBe(0);
+    expect(run.reps.filter((x) => x.reason !== null || x.verdict === "refused")).toEqual([]);
+  });
+});
+
+describe("a standing read on the move: squat jumpers never stand still", () => {
   it("counted as a plain rep, from standing still, a whole squat jump video counts nothing", () => {
     const still: Movement = { ...SQUAT_JUMP, counting: "rep", rules: SQUAT_JUMP.rules.filter((r) => r.name !== "feet leave the floor") };
     for (const name of ["squat_jump_1", "squat_jump_3"]) expect([name, runMovement(still, whole(name)).count]).toEqual([name, 0]);
@@ -189,23 +201,26 @@ describe("a standing read on the move: squat jumpers never stand still", () => {
 });
 
 describe("a movement file says its kind of counting, and the engine refuses one it cannot read rightly", () => {
-  const raw = (name: string): Record<string, unknown> => JSON.parse(readFileSync(join(MOVEMENTS, `${name}.json`), "utf8")) as Record<string, unknown>;
-  const rules = (m: Record<string, unknown>): Record<string, unknown>[] => m["rules"] as Record<string, unknown>[];
-  const without = (m: Record<string, unknown>, key: string): Record<string, unknown> => Object.fromEntries(Object.entries(m).filter(([k]) => k !== key));
+  const SQUAT = readMovement("squat");
+  const without = (m: object, key: string): Record<string, unknown> => Object.fromEntries(Object.entries(m).filter(([k]) => k !== key));
+  const feetDown = SQUAT.rules.filter((r) => r.name === "feet stay down");
 
   it("the three files parse, each its kind", () => {
-    expect(["squat", "squat-jump", "lunge"].map((n) => movementSchema.parse(raw(n)).counting)).toEqual(["rep", "jump", "one side at a time"]);
+    expect([SQUAT, SQUAT_JUMP, LUNGE].map((m) => m.counting)).toEqual(["rep", "jump", "one side at a time"]);
+    expect([SQUAT, SQUAT_JUMP, LUNGE].map((m) => movementSchema.safeParse(m).success)).toEqual([true, true, true]);
   });
 
   it.each([
-    ["one side at a time with no side said", () => without(raw("lunge"), "side")],
-    ["a side said on a movement not counted by side", () => ({ ...raw("squat"), side: raw("lunge")["side"] })],
-    ["a jump with no rule asking the feet to leave the floor", () => ({ ...raw("squat-jump"), rules: rules(raw("squat-jump")).filter((r) => r["name"] !== "feet leave the floor") })],
-    ["the feet asked to leave the floor in a movement that is not a jump", () => ({ ...raw("squat-jump"), counting: "fast rhythm" })],
-    ["a jump that also asks the feet to stay down", () => ({ ...raw("squat-jump"), rules: [...rules(raw("squat-jump")), { ...rules(raw("squat")).find((r) => r["name"] === "feet stay down"), from: "x" }] })],
-    ["a count rule that makes a rep it cannot see another movement", () => ({ ...raw("lunge"), rules: rules(raw("lunge")).map((r) => (r["name"] === "depth" ? { ...without(r, "unseen"), seen: "or another movement" } : r)) })],
-    ["a match rule set from a standard moved by the camera's room", () => ({ ...raw("squat-jump"), rules: rules(raw("squat-jump")).map((r) => (r["name"] === "feet leave the floor" ? { ...r, standard: { at: 0.08, room: "camera", source: "x" } } : r)) })],
+    ["one side at a time with no side said", () => without(LUNGE, "side")],
+    ["a side said on a movement not counted by side", () => ({ ...SQUAT, side: LUNGE.side })],
+    ["a jump with no rule asking the feet to leave the floor", () => ({ ...SQUAT_JUMP, rules: SQUAT_JUMP.rules.filter((r) => r.name !== "feet leave the floor") })],
+    ["the feet asked to leave the floor in a movement that is not a jump", () => ({ ...SQUAT_JUMP, counting: "fast rhythm" })],
+    ["a jump that also asks the feet to stay down", () => ({ ...SQUAT_JUMP, rules: [...SQUAT_JUMP.rules, ...feetDown] })],
+    ["a count rule that makes a rep it cannot see another movement", () => ({ ...LUNGE, rules: LUNGE.rules.map((r) => (r.name === "depth" ? { ...without(r, "unseen"), seen: "or another movement" } : r)) })],
+    ["a match rule set from a standard moved by the camera's room", () => ({ ...SQUAT_JUMP, rules: SQUAT_JUMP.rules.map((r) => (r.name === "feet leave the floor" ? { ...r, standard: { at: 0.08, room: "camera", source: "x" } } : r)) })],
+    ["another movement named by anything but a movement file's name", () => ({ ...SQUAT_JUMP, alsoFrom: { movement: "../squat", why: "x" } })],
   ])("refuses %s", (_what, make) => {
+    expect(feetDown).toHaveLength(1);
     expect(movementSchema.safeParse(make()).success).toBe(false);
   });
 

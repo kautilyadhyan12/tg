@@ -2441,14 +2441,15 @@ place); and the plain sign of a changed body allows a trunk moving straight up o
 take-off or landing (5.1 to 7.1 m/s on the four squat-jump videos, at most 0.6 across), every real change of body on the files
 moving 2.2 m/s or more across, so all twelve swaps of the videos that set numbers and the bench file's six are still told. The
 squat's numbers and table are as before. **The numbers** (`movement-check`, each person left out in turn): the squat jump, depth at
-least 0.11 of a leg (the knees' line 125 by the hips' geometry, 1 − sin 62.5°), knees at most 128 degrees (the research file's "about
-90 to 120", 120 plus the camera's room), chest up at most 65, the jump at least 0.08 m (its people's smallest, under every replay,
-0.12), stance holds 0.23 and hips alike 43 of a trunk and degrees; the lunge, depth at least 0.26, knees at most 120, legs split at
+least 0.10 of a leg (the knees' own line, 128, by the hips' geometry, 1 − sin 64°), knees at most 128 degrees (the research file's
+"about 90 to 120", 120 plus the camera's room), chest up at most 65, the jump at least 0.08 m (its people's smallest, under every replay,
+0.12), stance holds 0.23 and hips alike 43 of a trunk and degrees; the lunge, depth at least 0.26, knees at most 120 (from its people's shallowest: no source gives the shallowest lunge that is one), legs split at
 least 25 degrees (its people's narrowest 45), chest up at most 57. **Measured:** the squat jump
 counts its four people's 16 jumps as filmed and under every held replay (12 of 16 where a passer-by hides one at a time, as it must;
 15 of 16 done twice as slowly, written: gravity sets a jump's time in the air); the lunge counts 26 of 26 lunges of eight people as
 filmed and under every held replay (the half-turned woman's first lunge, begun 0.2 s into her video at the very edge of standing
-tall, lost shaken or slowed: written), every counted lunge given the leg the pictures show in front (13 left, 10 right, by eye);
+tall, lost shaken or slowed: written), every counted lunge given the leg the pictures show in front (13 left, 13 right, by eye,
+and the phone's runs give each the same leg);
 every other movement Kd's folders hold (97 videos under the squat jump, 88 under the lunge, the squat's own among them) counts 0 and
 is told nothing, as filmed and under every held replay, with every person's numbers and with each left out, but Kd's two squat
 jacks under the squat jump (3 and 2: each of his wide squats ends with a jump up as his feet come in; written, 54); the phone's own

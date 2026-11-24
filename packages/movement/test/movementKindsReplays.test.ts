@@ -4,7 +4,8 @@
 // their own left out; every other movement Kd's folders hold counts 0 and is told nothing; every lunge counted is given
 // the leg the pictures show in front. A few minutes and about 2 GB: one of the proof files (vitest.config.ts).
 import { beforeAll, describe, expect, it } from "vitest";
-import { holds, openRow, proofVideos, readMovement, replayTable, type ReplayRow } from "../scripts/movementCheck.js";
+import { holds, openRow, proofVideos, readExercise, readMovement, replayTable, runMovement, type ProofVideo, type ReplayRow } from "../scripts/movementCheck.js";
+import { MOVEMENT_VIDEOS } from "../scripts/movementVideos.js";
 import { isOther } from "../scripts/movementVideos.js";
 import { REPLAYS } from "../scripts/replays.js";
 
@@ -35,13 +36,55 @@ describe.each([readMovement("squat-jump"), readMovement("lunge")])("$name, under
   });
 
   it("where it counts every lunge, each is given the leg the pictures show in front", () => {
-    const sided = rows.filter((r) => r.entry.sides !== undefined && r.count === r.entry.sides.length);
+    const own = rows.filter((r) => r.entry.movement === movement.name && r.entry.sides !== undefined);
+    const sided = own.filter((r) => r.count === r.entry.sides?.length);
     for (const r of sided) {
       expect([r.replay.name, r.label, r.reps.filter((x) => x.verdict === "counted").map((x) => x.side)]).toEqual([r.replay.name, r.label, r.entry.sides]);
     }
-    // Where a replay counts fewer, every lunge it counts is still given a leg of the video's own.
-    for (const r of rows.filter((x) => x.entry.sides !== undefined)) {
-      for (const x of r.reps.filter((y) => y.verdict === "counted")) expect(r.entry.sides).toContain(x.side);
+    // Where a replay counts fewer, every lunge it counts is given the leg the eye gave it, never only one of the video's
+    // legs (round one, T2): in a video with one leg throughout, that leg; in one whose legs take turns, the leg of the filmed
+    // lunge it overlaps in time, which needs a replay that keeps the video's own clock (a passer-by does; the reps done
+    // faster or slower do not, and those must count every lunge of such a video).
+    const tempo = new Set(["faster", "slower", "twice as slow"]);
+    for (const r of own.filter((x) => x.count < (x.entry.sides?.length ?? 0))) {
+      const sides = r.entry.sides ?? [];
+      const counted = r.reps.filter((y) => y.verdict === "counted");
+      if (new Set(sides).size === 1) {
+        for (const x of counted) expect([r.replay.name, r.label, x.side]).toEqual([r.replay.name, r.label, sides[0]]);
+        continue;
+      }
+      expect([r.replay.name, r.label, tempo.has(r.replay.name)]).toEqual([r.replay.name, r.label, false]);
+      const v = VIDEOS.find((x) => x.video.label === r.label);
+      if (v === undefined) throw new Error(`no video ${r.label}`);
+      const filmed = runMovement(movement, v.video).reps.filter((x) => x.verdict === "counted");
+      expect([r.label, filmed.length]).toEqual([r.label, sides.length]);
+      for (const x of counted) {
+        const k = filmed.findIndex((f) => Math.min(f.end, x.end) > Math.max(f.start, x.start));
+        expect([r.replay.name, r.label, k >= 0, x.side]).toEqual([r.replay.name, r.label, true, sides[k]]);
+      }
     }
+  });
+});
+
+describe("the squat sees the files this job cuts into sets whole, under every held replay: 0 and nothing told (round one, T3)", () => {
+  // The squat jumps from their low first pictures, the rooftop lunges across their fade: the stretches the cut sets leave out.
+  const files = ["squat_jump_1", "squat_jump_2", "squat_jump_3", "squat_jump_4", "fresh_lunge_forward_barbell_2"];
+  let rows: ReplayRow[] = [];
+  beforeAll(() => {
+    const squat = readMovement("squat");
+    const wholes: ProofVideo[] = proofVideos(
+      files.map((name) => {
+        const e = MOVEMENT_VIDEOS.find((x) => x.file === `movement-points/${name}`);
+        if (e === undefined) throw new Error(`no video ${name}`);
+        return { file: e.file, movement: e.movement, person: e.person, view: e.view, reps: e.reps, sets: false, seen: e.seen };
+      }),
+    );
+    rows = replayTable(squat, wholes, HELD, readExercise("squat", squat)).filter((r) => r.tried);
+  }, 600_000);
+
+  it("each counts 0 and is told nothing", () => {
+    expect(new Set(rows.map((r) => r.label))).toEqual(new Set(files));
+    expect(rows.filter((r) => r.count !== 0).map((r) => [r.replay.name, r.label, r.count])).toEqual([]);
+    expect(rows.flatMap((r) => r.reps.filter((x) => x.reason !== null).map((x) => [r.replay.name, r.label, x.reason]))).toEqual([]);
   });
 });

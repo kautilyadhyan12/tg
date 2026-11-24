@@ -9,6 +9,7 @@
 //   - every rep that says something on the screen (counted; short, with the rule that fell short; unseen, where the camera
 //     could not judge it), in the same order, each the same verdict and the same rule, at the same place in the video (the
 //     two reps overlap);
+//   - for a movement counted one side at a time (52c-i), each of those reps' side, the leg a lunge is given;
 //   - for an exercise's form check (52b-ii-a), the mistakes marked in each rep both count, paired by when it was (so
 //     even where the two count apart), the same ones;
 //   - and the coach's lines, once there are any (53 makes them): until then there is nothing more to compare.
@@ -95,6 +96,9 @@ export function differences(laptop: Run, phone: Run): string[] {
     else if (y === undefined && x !== undefined) out.push(`the phone does not say ${repWords(x)}`);
     else if (x !== undefined && y !== undefined && (x.verdict !== y.verdict || x.rule !== y.rule || !overlap(x, y))) {
       out.push(`the laptop says ${repWords(x)}, the phone ${repWords(y)}`);
+    } else if (x !== undefined && y !== undefined && x.side !== y.side) {
+      // A movement counted one side at a time (52c-i): the same rep given another leg is told differently.
+      out.push(`the laptop says ${repWords(x)} on the ${x.side ?? "unknown"} leg, the phone on the ${y.side ?? "unknown"} leg`);
     }
   }
   for (const p of pairedMarks(laptop, phone)) {

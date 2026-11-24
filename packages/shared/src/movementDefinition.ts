@@ -133,7 +133,7 @@ export const movementSchema = z
     /** Another movement whose people also set this movement's "match" rules that it has too, by name and reading, with
      *  why: a squat jump's dip is a squat, so what a squat holds there (the chest, the stance) is set from the squat's
      *  people as well as from the squat jump's (movement-check). It changes nothing the engine does. */
-    alsoFrom: z.object({ movement: z.string().min(1).max(60), why: from }).strict().optional(),
+    alsoFrom: z.object({ movement: z.string().regex(/^[a-z0-9]+(-[a-z0-9]+)*$/).max(60), why: from }).strict().optional(),
     /** Where the phone stands, in a line for the person. */
     phone: z.string().min(1).max(400),
     /** The measure whose fall from standing is the rep, read on the picture. */
