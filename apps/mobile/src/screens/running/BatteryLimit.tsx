@@ -25,5 +25,7 @@ export function openBatterySettings(): void {
   void Linking.openSettings();
 }
 
-/** Said where the box was when the person comes back with the limit lifted. */
-export const BATTERY_ON_WORDS = "Battery setting changed. Your run will keep recording with the screen off.";
+/** Said where the box was when the person comes back with the limit lifted. What happened, and no more: on Kd's phone
+ *  the memory manager closed a run lifted to "Optimised" 76 s after the screen went off, so recording to the end is not
+ *  the app's to promise. */
+export const BATTERY_ON_WORDS = "Battery setting changed.";
