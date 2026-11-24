@@ -11,15 +11,18 @@
 // are set from all the people but one and tried on that one, in turn. Each video is played with its first and last
 // pictures held for a second (the engine learns a body in its first half second), and only the time held inside the video's
 // own clock is counted.
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, readFileSync } from "node:fs";
+import { basename, join } from "node:path";
 import type { HoldMovement, MovementFile, MovementReady } from "@app/shared";
 import { HoldMatcher, parseMovementFile, readPosition, type HoldResult } from "../src/index.js";
-import type { Video } from "./bodyCheck.js";
+import { readKept, type KeptFile, type Video } from "./bodyCheck.js";
 import { runOf } from "./measureCheck.js";
 import { LEAD_IN, MOVEMENTS, asReplayed, seedOf, withLeadIn, type ProofVideo } from "./movementCheck.js";
-import { isOther, type MovementVideo } from "./movementVideos.js";
+import { MOVEMENT_VIDEOS, framesOf, isOther, labelOf, type MovementVideo } from "./movementVideos.js";
+import { phoneFileOf, readManifest, refusal } from "./phoneCounts.js";
 import { REPLAYS, type Replay } from "./replays.js";
+
+const TEST = join(import.meta.dirname, "../test");
 
 /** Any movement file, by its kind of counting. */
 export function readMovementFile(name: string): MovementFile {
@@ -176,6 +179,35 @@ export function holdReplayTable(hold: HoldMovement, videos: readonly ProofVideo[
 }
 
 export const holdHolds = (r: HoldReplayRow): boolean => r.heldMs >= r.least && r.heldMs <= r.most;
+
+// ── The phone's own runs (test/phone-points, phoneCounts.ts) ─────────────────────────────────────────────────────────
+export interface HoldPhoneRow {
+  readonly label: string;
+  readonly entry: MovementVideo;
+  readonly laptopMs: number;
+  /** Null when the phone has not run the video, or its file is refused (`refusal`). */
+  readonly phoneMs: number | null;
+  readonly why: string | null;
+}
+
+/** Every proof video timed by the hold from the laptop's kept file and from the phone's own reading of the same pictures:
+ *  the same when the two lie within `HOLD_ROOM`, as a person would see it on the clock. */
+export function phoneHoldTable(hold: HoldMovement, entries: readonly MovementVideo[] = MOVEMENT_VIDEOS): HoldPhoneRow[] {
+  const manifest = readManifest();
+  const read = (path: string): KeptFile => readKept(new Uint8Array(readFileSync(path)));
+  const asVideo = (file: KeptFile, entry: MovementVideo): Video => ({ label: file.header.label, frames: framesOf(entry, file.frames), sets: false, why: "judged, never setting a number" });
+  return entries.map((entry) => {
+    const kept = read(join(TEST, `${entry.file}.bodypoints`));
+    const label = labelOf(entry, kept.header.label);
+    const laptopMs = runHold(hold, asVideo(kept, entry)).heldMs;
+    const path = phoneFileOf(entry);
+    if (!existsSync(path)) return { label, entry, laptopMs, phoneMs: null, why: "the phone has not run this video" };
+    const phone = read(path);
+    const refused = refusal(kept, phone, manifest.files[basename(path)]?.kept ?? null);
+    if (refused !== null) return { label, entry, laptopMs, phoneMs: null, why: refused };
+    return { label, entry, laptopMs, phoneMs: runHold(hold, asVideo(phone, entry)).heldMs, why: null };
+  });
+}
 
 export interface HoldRow {
   readonly label: string;

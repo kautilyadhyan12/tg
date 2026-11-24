@@ -2472,7 +2472,7 @@ still sat up after his third sit-up as his video ends: 3 of 3; without it, 2). *
 lean falls from lying as the trunk comes up; lying back is the trunk 60 degrees or more from upright **and the thighs within 20 of
 level or above**, since the trunk's lean alone is the same bent forward: with the trunk alone, deadlifts, Romanian deadlifts, good
 mornings and a swing counted up to 3 each as sit-ups (lying for a sit-up the thighs read 83 to 176 degrees from hanging, bent
-forward 10 to 44). Its depth is 45 degrees, the end of a crunch's whole range in Kd's "Decline Sit-Up" file (30 to 45), used as it
+forward 10 to 44), **and the shins 20 degrees or more from hanging**, since at the top of a hip thrust the trunk and thighs read so too (lying for a sit-up the shins read 28 to 90 degrees, at the top of a hip thrust 0 to 11; without it, the phone's own reading of a man sliding down off his hip-thrust bench counted a sit-up). Its depth is 45 degrees, the end of a crunch's whole range in Kd's "Decline Sit-Up" file (30 to 45), used as it
 is, told "Sit up higher to count."; "thighs stay" at most 55 degrees and "hips stay down" at most 0.21 of a leg, each set from the
 people (without the hips' rule a dumbbell hip thrust's lowering, its trunk falling 46 degrees, counts). **Measured:** six people (four
 weighted sit-ups, a decline sit-up and Kd's own straight-leg sit-ups from a phone on the floor and on a bed, found in two of his
@@ -2502,7 +2502,12 @@ clips are of the full L-sit, the legs straight; the tuck L-sit his research file
 (`timedMovementSchema`): a plain timer, the camera judging nothing, with why. **The support hold** (`movements/support-hold.json`) is
 timed only: made as a hold from his video it times him 6.60 s, and 28 of the 121 other videos, 75 s in all (people standing, calf
 raises, deadlifts): to the camera it is standing with the arms by the sides. The movement engine is 2.1.0. Of his 21 new videos (13 of
-these exercises, 8 others lying or held on the bars), 2.1 MB of body points.
+these exercises, 8 others lying or held on the bars), 2.1 MB of body points. **The phone's own runs** of the 21 (the chosen set-up on the
+laptop's pictures, 10 minutes of Kd's phone, kept in `test/phone-points`): under the sit-up and the L-sit every one of the 122 proof
+videos counts, says and is timed as on the laptop; under the hip thrust two differ, both filmed from the front and written on each (the
+barbell man's first thrust seen on the phone where the laptop could not; the Smith machine woman's hips read up again after her last
+thrust, which would tell her "Push your hips higher to count."); under the squat, the squat jump and the lunge, the new videos read the
+same on both (119 of 122 under the squat, the same three of his floor squats written as before).
 
 An exercise that does not pass is published as "count by hand", never with a wrong camera
 count. Kd tries one exercise of each kind of movement on the phone, about a dozen, never

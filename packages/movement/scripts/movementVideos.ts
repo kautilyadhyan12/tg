@@ -79,6 +79,7 @@ export interface KnownCases {
   readonly open?: string;
   readonly leftOutOpen?: LeftOutOpen;
   readonly replayOpen?: { readonly replays: readonly string[]; readonly why: string };
+  readonly phoneOpen?: { readonly why: string; readonly differences: readonly string[] };
 }
 
 const other = (file: string, person: string, view: View, seen: string): MovementVideo => ({ file, movement: null, person, view, reps: 0, sets: false, seen });
@@ -644,6 +645,16 @@ export const MOVEMENT_VIDEOS: readonly MovementVideo[] = [
     seen:
       "2026-11-24 (52c-ii), 16 frames drawn with the model's points: the one man in each, filmed from in front of his feet and above. He settles low, then three hip thrusts (the tops at 3.3, 6.0 and 8.9 s), and slides down off the bench to the floor as it ends. " +
       "Reported, never judged: from there the picture shortens his thighs at the top of each thrust, and his hips' height on the picture is not given for longer than a break (3.4 to 4.2, 6.3 to 6.6 and 9.0 to 9.6 s), nor his feet on the floor line from 6.9 to 7.5 s; a hip thrust's phone stands side-on (movements/hip-thrust.json).",
+    under: {
+      "hip-thrust": {
+        phoneOpen: {
+          why:
+            "None: a video reported, never judged. From in front and above, the laptop's reading loses his hips' height at the top of his " +
+            "first thrust for longer than a break, the phone's does not, so the phone counts it where the laptop says it could not see it.",
+          differences: ["the laptop counts 0, the phone 1", "the laptop says 2.6 s unseen (depth), the phone 2.6 s counted"],
+        },
+      },
+    },
   },
   {
     file: "movement-points/hip_thrust_smith_1",
@@ -669,6 +680,13 @@ export const MOVEMENT_VIDEOS: readonly MovementVideo[] = [
             "slowly those stretches pass the break, so her first thrust has no start position read and is not measured, and her second decides " +
             "nothing (1.5 times) or is split in two, its last 0.9 s read as a short thrust (twice). A hip thrust's phone stands side-on: the " +
             "woman filmed side on counts every thrust under every replay.",
+        },
+        phoneOpen: {
+          why:
+            "53 and 54: facing the phone, as she lowers after her second thrust the phone's reading puts her hips back up 0.17 of a leg before " +
+            "the video ends, so it would tell her \"Push your hips higher to count.\" for a thrust she never began (the laptop reads her down). " +
+            "A hip thrust's phone stands side-on; the side-on woman's thrusts read the same on both.",
+          differences: ["the phone also says 8.3 s short (hips open)"],
         },
       },
     },

@@ -7,7 +7,7 @@ import { describe, expect, it } from "vitest";
 import { engineSetSummarySchema, holdMovementSchema, movementFileSchema, timedMovementSchema, type ExerciseCamera, type HoldMovement } from "@app/shared";
 import { HOLD_LIMITS, HoldMatcher, HoldRecord, checkHold, heldOf, parseMovementFile } from "../src/index.js";
 import { runOf } from "../scripts/measureCheck.js";
-import { HOLD_ROOM, heldByEye, holdHolds, holdReplayTable, holdTable, readHold, readMovementFile, runHold } from "../scripts/holdCheck.js";
+import { HOLD_ROOM, heldByEye, holdHolds, holdReplayTable, holdTable, phoneHoldTable, readHold, readMovementFile, runHold } from "../scripts/holdCheck.js";
 import { proofVideos } from "../scripts/movementCheck.js";
 import { forMovement, isOther } from "../scripts/movementVideos.js";
 import { REPLAYS } from "../scripts/replays.js";
@@ -160,5 +160,19 @@ describe("a hold's set summary: the time held, no reps, no form score yet", () =
     expect(Math.abs((s.holdMs ?? 0) - 2600) <= HOLD_ROOM).toBe(true);
     // Watched from 0.50 s, when the body is learned: the whole set but its first half second.
     expect(Math.abs(s.durationMs - (s.watchedMs ?? 0) - 500) <= 34).toBe(true);
+  });
+});
+describe("the phone's own runs of every proof video (test/phone-points): the L-sit's clock reads the phone as it reads the laptop", () => {
+  const rows = phoneHoldTable(L_SIT);
+
+  it("every video has the phone's own run", () => {
+    expect(rows.filter((r) => r.phoneMs === null).map((r) => [r.label, r.why])).toEqual([]);
+  });
+
+  it("each L-sit is timed from the phone within a quarter of a second of the laptop, and every other video 0", () => {
+    const own = rows.filter((r) => r.entry.movement === L_SIT.name);
+    expect(own).toHaveLength(2);
+    expect(own.filter((r) => Math.abs((r.phoneMs ?? -1e9) - r.laptopMs) > HOLD_ROOM).map((r) => [r.label, r.laptopMs, r.phoneMs])).toEqual([]);
+    expect(rows.filter((r) => isOther(r.entry, L_SIT.name) && r.phoneMs !== 0).map((r) => [r.label, r.phoneMs])).toEqual([]);
   });
 });

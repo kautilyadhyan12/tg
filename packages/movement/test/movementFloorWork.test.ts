@@ -3,12 +3,13 @@
 // from low, the shoulders on a bench). The worst thing they could do to a person: count a rep nobody did. So the first
 // tests are every other movement Kd's folders hold, standing and lying, which must count 0 and be told nothing under
 // each, with its own numbers and with every set of numbers made with one person left out.
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 import { movementSchema, type Movement } from "@app/shared";
 import { MATCH_LIMITS, MovementMatcher, checkMovement, type RepResult } from "../src/index.js";
 import { LEAD_IN, proofTable, proofVideos, readMovement, runMovement, withLeadIn } from "../scripts/movementCheck.js";
 import { runOf } from "../scripts/measureCheck.js";
-import { isOther } from "../scripts/movementVideos.js";
+import { MOVEMENT_VIDEOS, forMovement, isOther } from "../scripts/movementVideos.js";
+import { asWritten, phoneTable, type PhoneRow } from "../scripts/phoneCounts.js";
 
 const SIT_UP = readMovement("sit-up");
 const HIP_THRUST = readMovement("hip-thrust");
@@ -136,5 +137,22 @@ describe("a set may end sat up after its last sit-up, held there: that sit-up is
       if (m !== undefined) count = matcher.next(b, m).count;
     });
     expect([count, matcher.finish()?.count ?? count]).toEqual([2, 2]);
+  });
+});
+describe("the phone's own runs of every proof video (test/phone-points), judged under each by what a person would be told", () => {
+  const rowsOf = new Map<string, PhoneRow[]>();
+  beforeAll(() => {
+    for (const m of [SIT_UP, HIP_THRUST]) rowsOf.set(m.name, phoneTable(m, MOVEMENT_VIDEOS.map((e) => forMovement(e, m.name))));
+  }, 600_000);
+
+  it.each([SIT_UP, HIP_THRUST].map((m) => [m.name] as const))("under the %s the phone counts and says what the laptop does on every video, but the cases written on them", (name) => {
+    const rows = rowsOf.get(name) ?? [];
+    expect(rows).toHaveLength(MOVEMENT_VIDEOS.length);
+    expect(rows.filter((r) => r.verdict !== "same" && !asWritten(r)).map((r) => [r.label, r.verdict, r.why])).toEqual([]);
+  });
+
+  it("the sit-up the same on every video; the hip thrust differs on its two videos filmed from the front, exactly as written on each", () => {
+    expect((rowsOf.get(SIT_UP.name) ?? []).filter((r) => r.verdict !== "same").map((r) => r.label)).toEqual([]);
+    expect((rowsOf.get(HIP_THRUST.name) ?? []).filter((r) => r.verdict !== "same").map((r) => r.label)).toEqual(["hip_thrust_barbell", "hip_thrust_smith_1"]);
   });
 });
