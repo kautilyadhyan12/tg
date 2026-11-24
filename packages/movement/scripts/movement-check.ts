@@ -31,18 +31,20 @@ for (const f of fitted) {
 
 console.log("\nEvery video: reps by eye, counted, counted with that person left out of the numbers");
 for (const r of rows) {
-  const eye = r.entry.reps === null ? "?" : String(r.entry.reps);
+  const must = r.entry.movement === name ? r.entry.reps : 0;
+  const eye = must === null ? "?" : String(must);
   const right =
-    r.entry.reps === null
+    must === null
       ? "reported"
-      : r.count === r.entry.reps && (r.leftOut === null || r.leftOut === r.entry.reps)
+      : r.count === must && (r.leftOut === null || r.leftOut === must)
         ? "right"
-        : r.entry.open !== undefined || (r.count === r.entry.reps && r.leftOut === r.entry.leftOutOpen?.count)
+        : r.entry.open !== undefined ||
+            (r.count === must && (r.leftOut === r.entry.leftOutOpen?.count || (r.entry.leftOutOpen?.fewer === true && r.leftOut !== null && r.leftOut < must)))
           ? "OPEN"
           : "WRONG";
   const why = r.reps.filter((x) => x.verdict !== "counted").map((x) => `${(x.start / 1000).toFixed(1)}s ${x.verdict}${x.rule === null ? "" : `: ${x.rule}`}`);
   console.log(
-    `  ${pad(r.label, 40)} ${pad(r.entry.view, 7)} ${pad(r.entry.movement ?? "other", 6)} eye ${pad(eye, 2)} counted ${pad(String(r.count), 2)} left out ${pad(r.leftOut === null ? "-" : String(r.leftOut), 2)} ${pad(right, 8)} ${why.join("; ")}`,
+    `  ${pad(r.label, 40)} ${pad(r.entry.view, 7)} ${pad(r.entry.movement ?? "other", 10)} eye ${pad(eye, 2)} counted ${pad(String(r.count), 2)} left out ${pad(r.leftOut === null ? "-" : String(r.leftOut), 2)} ${pad(right, 8)} ${why.join("; ")}`,
   );
 }
 for (const r of rows.filter((x) => x.entry.open !== undefined)) console.log(`\nOpen: ${r.label}, counted ${String(r.count)}: ${r.entry.open ?? ""}`);
@@ -55,6 +57,9 @@ if (values.write) {
   const people = folds.map((f) => f.person);
   const words = (f: Fitted): string => {
     const rule = movement.rules.find((r) => r.name === f.rule);
+    if (rule?.standard?.room === "none" && rule.role === "match") {
+      return `Set by movement-check from its standard, ${String(rule.standard.at)} (its source beside it), used as it is. The people's furthest rep reads ${num(Math.round(f.from * 100) / 100)}.`;
+    }
     if (rule?.standard?.room === "none") {
       return `Set by movement-check from the form standard, ${String(rule.standard.at)} (its source beside it), the least the body allows, so with no room of its own; rounded the forgiving way. The people's shallowest rep reads ${num(Math.round(f.from * 100) / 100)}.`;
     }
@@ -63,7 +68,7 @@ if (values.write) {
       return `Set by movement-check from the form standard, ${String(rule.standard.at)} (its source beside it), ${way} the camera's own room on this reading: the same rep's change from as filmed to each replay that sets numbers, in 99 reps of 100 (${String(f.room.pairs)} reps, ${String(people.length)} people): ${num(Math.round(f.room.size * 1000) / 1000)}; rounded the forgiving way. Their shallowest rep reads ${num(Math.round(f.from * 100) / 100)}.`;
     }
     const how = rule?.role === "count" ? "a quarter of the way back towards standing from the shallowest rep" : "beyond the furthest rep by half its distance from the middle rep";
-    const ceiling = rule?.read.kind === "lift" ? `, and no higher than an 8 cm jump seen at 8 pictures a second less 2 cm (LIFT_CEILING in scripts/movementCheck.ts, ${LIFT_CEILING.toFixed(3)})` : "";
+    const ceiling = rule?.read.kind === "lift" && rule.atMost !== undefined ? `, and no higher than an 8 cm jump seen at 8 pictures a second less 2 cm (LIFT_CEILING in scripts/movementCheck.ts, ${LIFT_CEILING.toFixed(3)})` : "";
     return `Set by movement-check from ${String(people.length)} people's videos (scripts/movementVideos.ts), as filmed and as each replay that sets numbers (scripts/replays.ts), ${String(f.reps)} reps: ${how} (${num(Math.round(f.from * 100) / 100)}; standing ${num(Math.round(f.standing * 100) / 100)})${ceiling}.`;
   };
   const out = withNumbers(movement, fitted);
@@ -79,7 +84,7 @@ if (values.replays) {
   console.log(`\nEach judged video played again the ways the world changes it (scripts/replays.ts)`);
   for (const replay of replays) {
     const own = rows.filter((r) => r.replay === replay && r.entry.movement === name);
-    const others = rows.filter((r) => r.replay === replay && r.entry.movement === null);
+    const others = rows.filter((r) => r.replay === replay && r.entry.movement !== name);
     const counted = own.reduce((n, r) => n + r.count, 0);
     const eye = own.reduce((n, r) => n + r.most, 0);
     const untried = [...own, ...others].filter((r) => !r.tried);

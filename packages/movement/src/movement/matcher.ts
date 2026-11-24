@@ -44,9 +44,15 @@ export const FOOT_ROOM = 0.01;
  *  to 1.1 cm in 95 of 100, 51b-i). */
 export const FOOT_ENDS_AGREE = 0.03;
 
+/** A rule read over a rep's "lower half" reads the frames at least this share as deep as its deepest. */
+const LOWER_HALF = 0.5;
+
 /** The smallest jump never counted as a squat, metres (52a-ii-a; movementHops.test.ts): under Kd's lowest real squat
  *  jump, 12 cm. */
 export const NEVER_JUMP = 0.08;
+/** Metres: a picture beside a jump's highest must show both feet at least this far up for it to be one (`liftOf`): half
+ *  the smallest jump the squat never counts. */
+const JUMP_SUPPORT = NEVER_JUMP / 2;
 /** The fewest pictures a second the engine takes (`MatchLimits.stillFor`). */
 export const SLOWEST_RATE = 8;
 
@@ -99,6 +105,9 @@ export interface MatchLimits {
   /** A rep that tried: not counted for falling short ("short", with its reason) only when every count rule went at
    *  least this share of the way from standing to its number; a shallower dip is another movement, with no word. */
   readonly tried: number;
+  /** For a movement counted in a fast rhythm or as a jump: where the person stands is also read on the move, from the
+   *  frames of the last this long, ms, in which they stood upright on the floor (`movingStanding`). */
+  readonly moving: number;
 }
 
 /**
@@ -115,8 +124,10 @@ export interface MatchLimits {
  * lets the lowest real jump (12 cm, 52a-ii-a) taking off at 0.2 s rise past twice the feet's number before the rep is
  * judged, even with pictures skipped. `bottomBand`: a
  * tenth of the deepest. `lost`: half a second. `longest`: 15 s, longer than any held rep a movement of this kind has.
- * `gap`: 0.1 s, three frames at 30 a second, for a movement with no "feet stay down" (with one, the break is the hop's
- * own time in the air; a phone that skips 4 camera pictures leaves 133 ms). `lower`: a second, longer than any
+ * `gap`: 0.2 s for a movement with no "feet stay down" (with one, the break is the hop's own time in the air, 202 ms for
+ * the squat): the phone's live mode leaves up to 4 camera pictures between two it reads, 133 ms, and half again. It was
+ * 0.1 s, three frames at 30 a second, until 52c-i: no movement then lacked "feet stay down", and the squat jump's feet
+ * were lost at every such gap. `lower`: a second, longer than any
  * pause at the bottom of a rep on Kd's videos. `tried`: three quarters of the way: advice is strict (§12.1), so a dip in doubt is silent (a
  * barbell good morning's knees went exactly half way).
  */
@@ -129,9 +140,10 @@ export const MATCH_LIMITS: MatchLimits = {
   bottomBand: 0.1,
   lost: 500,
   longest: 15000,
-  gap: 100,
+  gap: 200,
   lower: 1000,
   tried: 0.75,
+  moving: 2000,
 };
 
 export type Verdict =
@@ -170,6 +182,9 @@ export interface RepResult {
   /** How much of the body's line from left to right, its hips, the picture showed at the bottom of the rep, the middle
    *  of the bottom's frames (form.ts `turnOf`: about 1 facing the phone, near 0 side on); null when not seen. */
   readonly turn: number | null;
+  /** For a movement counted one side at a time, the side the rep was (`sideOf`: a lunge's front leg), in the pose model's
+   *  own left and right; null for any other movement, or where the camera could not tell. */
+  readonly side: "left" | "right" | null;
 }
 
 export type MatchState = "waiting" | "ready" | "rep";
@@ -187,6 +202,10 @@ export interface MatchFrame {
   /** A rep that was judged in this frame. */
   readonly rep: RepResult | null;
 }
+
+/** Whether the camera must see a rule for the rep to be judged: "always" (unseen, the rep decides nothing) or "or another
+ *  movement" (unseen, the rep is another movement). */
+const mustSee = (rule: MovementRule): boolean => rule.seen !== "when-seen";
 
 /** Whether a rule reads a rep's moment after with every frame: leaving the floor, the feet lifted or a height risen above
  *  standing. (The feet's travel reads it too, but only both feet together: `jointly`.) */
@@ -284,7 +303,12 @@ const isLeftAgainstRight = (name: string): boolean => name.includes("left agains
  *  nothing; a drive or rise on anything but a height, or "apart" on anything but a left-against-right measure, would
  *  read in the wrong unit. */
 export function checkMovement(movement: Movement): void {
-  const names = [movement.drive.measure, ...movement.ready.flatMap((r) => namesOf(r.read)), ...movement.rules.flatMap((r) => namesOf(r.read))];
+  const names = [
+    movement.drive.measure,
+    ...movement.ready.flatMap((r) => namesOf(r.read)),
+    ...movement.rules.flatMap((r) => namesOf(r.read)),
+    ...(movement.side === undefined ? [] : [movement.side.measure]),
+  ];
   const unknown = names.filter((n) => !KNOWN.has(n));
   if (unknown.length > 0) throw new Error(`${movement.name} names measures the engine does not have: ${unknown.join(", ")}.`);
   const wrong = [
@@ -294,6 +318,7 @@ export function checkMovement(movement: Movement): void {
       if (r.read.kind === "apart" && !isLeftAgainstRight(r.read.measure)) return [`"${r.name}" reads ${r.read.measure}, not left against right`];
       return [];
     }),
+    ...(movement.side === undefined || isLeftAgainstRight(movement.side.measure) ? [] : [`its side is told by ${movement.side.measure}, not left against right`]),
   ];
   if (wrong.length > 0) throw new Error(`${movement.name}: ${wrong.join("; ")}.`);
 }
@@ -349,6 +374,12 @@ interface Sample {
   readonly form: readonly (number | null)[];
   /** How much of the body's line from left to right the picture shows this frame (form.ts `turnOf`). */
   readonly turn: number | null;
+  /** The reading that tells the rep's side (`Movement.side`), both ways; null for a movement not counted by side. */
+  readonly side: Reading | null;
+  /** How far the drive fell from standing, read on the picture or, where the picture does not give it, in 3D: whether
+   *  the whole body was carried up in a jump (`liftOf`). In the air the picture often gives no hips' height while the
+   *  3D points do (a woman's squat jump: none on the picture for the first 0.1 s of each flight). */
+  readonly dropEither: number | null;
 }
 
 interface Rep {
@@ -417,6 +448,14 @@ export class MovementMatcher {
   private lastTop: Spot[] = [];
   /** The mistakes the exercise has the camera check (none when no exercise is given): judged in counted reps only. */
   private readonly mistakes: readonly CheckedMistake[];
+  /** Where the person stands is also read on the move (a fast rhythm, a jump): `movingStanding`. */
+  private readonly onTheMove: boolean;
+  /** The frames of the last `moving` in which the person stood upright on the floor, for a movement read on the move. */
+  private upright: Recent[] = [];
+  /** The last standing read on the move, kept while no frame of the last `moving` stood upright on the floor. */
+  private lastMoving: Standing | null = null;
+  /** The times of the last ten frames, for a rep's frame step before it has its own (`longestBreak`). */
+  private frameTimes: number[] = [];
 
   /** `exercise`: the exercise's camera file, whose checked mistakes are judged inside each counted rep; without one the
    *  matcher only counts (the measuring of a movement's own numbers). */
@@ -433,6 +472,7 @@ export class MovementMatcher {
     this.depth = depthRule.atLeast;
     this.watched = [...new Set(movement.rules.flatMap((r) => (r.read.kind === "rise" || r.read.kind === "change" ? r.read.measures : [])))];
     this.gap = breakOf(movement, limits);
+    this.onTheMove = movement.counting === "fast rhythm" || movement.counting === "jump";
   }
 
   next(body: SteadyBody, measured: MeasuredBody): MatchFrame {
@@ -442,6 +482,7 @@ export class MovementMatcher {
     if (this.lastT !== null && t === this.lastT) return this.still(t);
     if (this.lastT !== null && t < this.lastT) this.reset();
     this.lastT = t;
+    this.frameTimes = [...this.frameTimes.slice(-9), t];
     const L = this.limits;
     const drive = readingOf(measured, this.movement.drive.measure)?.flat ?? null;
     if (drive !== null) this.lastDrive = t;
@@ -476,6 +517,7 @@ export class MovementMatcher {
     const older = this.recent.filter((r) => t - r.t > L.stillFor);
     const edge = older[older.length - 1];
     this.recent = edge === undefined ? inside : [edge, ...inside];
+    if (this.onTheMove) this.keepUpright({ t, drive, ready, heights, feet, size: body.size, measured });
     this.held.push({ t, drive, ready });
     const heldOlder = this.held.filter((h) => t - h.t > L.lower);
     const heldEdge = heldOlder[heldOlder.length - 1];
@@ -485,6 +527,8 @@ export class MovementMatcher {
     // up is judged after its moment by what it needs then (the feet), the drive seen or not.
     if (this.lastDrive === null || t - this.lastDrive > L.lost) {
       this.standing = null;
+      this.upright = [];
+      this.lastMoving = null;
       if (this.rep !== null && this.rep.back === null) return this.end(t, this.judgeLost(this.rep, t));
     }
 
@@ -511,12 +555,14 @@ export class MovementMatcher {
         // would otherwise begin a "next rep" one picture later, and a jump in the moment after would never be judged
         // (round one: a 20 cm jump on a man's floor video was counted so).
         judged = this.judge(rep);
-        const origin = this.originOf(rep.standing);
+        // Read on the move, the next rep stands where the person stood upright between the two (`movingStanding`).
+        const origin = this.originOf(this.onTheMove ? (this.movingStanding() ?? rep.standing) : rep.standing);
         const next: Rep = { start: t, standing: origin, samples: [], lastSeen: t, back: null, seenAt: [], lost: [], placed: [], before: this.topRest() };
         this.tops = [];
-        next.samples.push(this.sampleOf(t, drop, measured, next, feet, raw, heights));
+        const fromOrigin = drive === null ? null : origin.drive - drive;
+        next.samples.push(this.sampleOf(t, fromOrigin, measured, next, feet, raw, heights));
         this.rep = next;
-        return this.frame(t, drop, judged);
+        return this.frame(t, fromOrigin, judged);
       } else if (t - rep.back >= L.after && !this.waitsOnHidden(rep)) {
         judged = this.judge(rep);
         this.rep = null;
@@ -536,6 +582,8 @@ export class MovementMatcher {
     }
     if (still !== null) this.anchor = still.drive;
     if (still !== null) this.standing = still;
+    // Never still, read on the move (a fast rhythm, a jump): where the person stood upright on the floor (`movingStanding`).
+    if (found === null && this.onTheMove) this.standing = this.movingStanding() ?? this.standing;
     const standing = this.standing;
     // Never while the person stands tall (`standsTall`): a body standing tall with the drive below the line is a standing
     // that reads lower than the one first taken, never a rep begun (52b-i).
@@ -629,6 +677,9 @@ export class MovementMatcher {
     this.recent = [];
     this.held = [];
     this.standing = null;
+    this.upright = [];
+    this.lastMoving = null;
+    this.frameTimes = [];
     this.rep = null;
     this.lastDrive = null;
   }
@@ -686,6 +737,40 @@ export class MovementMatcher {
     if (!frames.every((f) => f.ready && f.drive !== null && f.size !== null && f.measured.onFloor)) return null;
     const drives = frames.map((f) => f.drive ?? 0);
     if (Math.max(...drives) - Math.min(...drives) > L.still) return null;
+    return this.standingOf(frames);
+  }
+
+  /** Whether the person stands upright on the floor in this frame: every condition of the movement's standing ready held,
+   *  each measure they name read on both sides, the drive seen, the body's size read and the feet on the floor line. */
+  private isUpright(f: Recent): boolean {
+    const names = this.movement.ready.flatMap((c) => namesOf(c.read));
+    return f.ready && f.drive !== null && f.size !== null && f.measured.onFloor && names.every((n) => either(readingOf(f.measured, n)) !== null);
+  }
+
+  /** Keeps the frames of the last `moving` in which the person stood upright on the floor. */
+  private keepUpright(f: Recent): void {
+    if (this.isUpright(f)) this.upright.push(f);
+    this.upright = this.upright.filter((u) => f.t - u.t <= this.limits.moving);
+  }
+
+  /**
+   * Where the person stands, read on the move (a fast rhythm, a jump): the middle of the frames of the last `moving` in
+   * which they stood upright on the floor, with no stillness asked. Between two squat jumps nobody stands still: the
+   * body is upright on the floor for a few pictures as it lands and takes off, and in the air between. Upright with both
+   * knees within 20 degrees of straight and the trunk within 20 of upright, the hips stand within a few hundredths of a
+   * leg of where they stand still; the feet on the floor line keep out every picture taken in the air. With no such
+   * frame in the last `moving`, the last standing read so is kept: at 8 pictures a second the few pictures a jumper
+   * stands upright on the floor are often never taken. Null until one is read, and after the person is lost.
+   */
+  private movingStanding(): Standing | null {
+    if (this.upright.length > 0) this.lastMoving = this.standingOf(this.upright);
+    return this.lastMoving;
+  }
+
+  /** Where the person stood over these frames: the middle of each reading. */
+  private standingOf(frames: readonly Recent[]): Standing {
+    const last = frames[frames.length - 1];
+    const drives = frames.map((f) => f.drive ?? 0);
     const heights = new Map<string, number>();
     for (const name of this.watched) {
       const m = median(frames.flatMap((f) => (f.heights.has(name) ? [f.heights.get(name) ?? 0] : [])));
@@ -706,7 +791,7 @@ export class MovementMatcher {
       const v = mistakeReading(m, f.measured);
       return v === null ? [] : [v];
     })));
-    const partial: Standing = { t: last.t, drive, size, heights, feet, reads: {}, form };
+    const partial: Standing = { t: last?.t ?? 0, drive, size, heights, feet, reads: {}, form };
     const reads: Record<string, number | null> = {};
     for (const rule of this.movement.rules) {
       reads[rule.name] = ["drop", "rise", "change", "lift", "travel", "time"].includes(rule.read.kind) ? 0 : median(frames.flatMap((f) => {
@@ -744,14 +829,20 @@ export class MovementMatcher {
       reads[rule.name] = rule.read.kind === "lift" ? (bothEnds(along) ? 0 : null) : this.read(rule.read, measured, rep.standing, placed, heights);
       if (rule.read.kind === "travel") jointly[rule.name] = feetMoved(placed, rep.standing).together;
     }
-    return { t, drop, reads, jointly, feet: along, form: this.mistakes.map((m) => mistakeReading(m, measured)), turn: turnOf(measured) };
+    const side = this.movement.side === undefined ? null : (readingOf(measured, this.movement.side.measure) ?? null);
+    const hips = either(readingOf(measured, this.movement.drive.measure));
+    const dropEither = hips === null ? null : rep.standing.drive - hips;
+    return { t, drop, reads, jointly, feet: along, form: this.mistakes.map((m) => mistakeReading(m, measured)), turn: turnOf(measured), side, dropEither };
   }
 
   /** The longest break in a rep's readings that decides nothing: `gap`, or one and a half of the rep's own frame step
    *  (the middle of its last ten), whichever is longer. One measure for the whole matcher, so a point lost and a rule
-   *  broken off are told by the same break. */
+   *  broken off are told by the same break. A rep of one frame has no step of its own yet: the frames just before it
+   *  give it (at 8 pictures a second a squat jump's feet were otherwise lost at its second frame, 134 ms after its
+   *  first, past the plain 0.1 s break; 52c-i). */
   private longestBreak(rep: Rep): number {
-    const times = rep.samples.slice(-10).map((s) => s.t);
+    const own = rep.samples.slice(-10).map((s) => s.t);
+    const times = own.length >= 2 ? own : this.frameTimes;
     const steps = times.slice(1).map((x, k) => x - (times[k] ?? x));
     return Math.max(this.gap, 1.5 * (median(steps) ?? 0));
   }
@@ -789,10 +880,12 @@ export class MovementMatcher {
    *  the two feet hid it (on a man's ten sets, 55 of 900 drawn jumps of 8 to 12 cm counted; with this and
    *  `FOOT_ENDS_AGREE`, 9). It stays in the reading: set aside instead, a proper squat whose other foot slid was refused
    *  (round one). Null when no frame read both ends of a foot against a resting place. */
-  private liftOf(rep: Rep): number | null {
+  private liftOf(rep: Rep, carried: boolean): number | null {
     const size = rep.standing.size;
     if (!(size > 0)) return null;
     const back = rep.back ?? Number.POSITIVE_INFINITY;
+    // The frames in which the hips were down in the dip, below where the person stands by more than its shake.
+    const dipAt = new Set(rep.samples.filter((s) => s.drop !== null && s.drop >= this.limits.still).map((s) => s.t));
     const rest = FEET.map((_, k) => {
       const seen = rep.samples.flatMap((s) => {
         const v = s.feet[k] ?? null;
@@ -805,10 +898,16 @@ export class MovementMatcher {
       // seen before the rep rests where it was lowest: once back up it may be in the air.
       const after = median(seen.filter((x) => x.t >= back).map((x) => x.v));
       const before = rep.before[k] ?? null;
-      const stands = before === null ? null : after === null ? before : Math.max(after, before);
+      // A jump the movement asks for: where the foot stood while the hips were down in the dip, never the moments before
+      // and after the rep, which in a run of jumps are both in the air (a woman's squat jumps: her feet 7 cm up the
+      // picture then, and her 22 cm jumps read 3 to 6 cm).
+      const inDip = carried ? median(seen.filter((x) => dipAt.has(x.t)).map((x) => x.v)) : null;
+      const stands = carried ? inDip : before === null ? null : after === null ? before : Math.max(after, before);
       return stands === null ? lowest : Math.min(lowest, stands + FOOT_ROOM * size);
     });
     let most: number | null = null;
+    // For a jump the movement asks for, each picture's reading in order (null where nothing was read).
+    const row: (number | null)[] = [];
     for (const s of rep.samples) {
       const rise = s.feet.map((v, k) => {
         const r = rest[k] ?? null;
@@ -816,10 +915,32 @@ export class MovementMatcher {
       });
       // At the bottom only with both feet read: side on, the shin's tilt moves the near foot's points up the picture
       // while the far foot is hidden behind it (the green-mat man, 2.6 to 3.1 cm), and a hop lifts both feet.
+      // A jump the movement asks for is read only where the whole body was carried up with the feet: the hips above where
+      // the person stands by more than the shake of standing. A foot point the model throws up for a picture, at the
+      // bottom of a squat or while standing, never makes a jump (on a man's floor video, his near foot 10 cm up for one
+      // picture as a squat began). Such a frame, its hips and feet read, says the body did not leave the floor: a squat
+      // done where a squat jump was chosen reads no jump, and says nothing, never "the camera could not see". A frame
+      // whose hips were not read says nothing either way.
       const deep = s.drop !== null && s.drop >= this.depth;
-      const body = deep && !FOOT_ENDS.every(([heel, toes]) => (rise[heel] ?? null) !== null && (rise[toes] ?? null) !== null) ? null : liftOfFrame(rise, deep);
-      if (body !== null) most = Math.max(most ?? 0, body);
+      // Both feet read, heel and toes, at the bottom; and for a jump the movement asks for, in every frame: a jump lifts
+      // both feet, and one foot read alone may be stepping (a man stepping out of his split squat, his other foot hidden,
+      // the floor line moving under the step: his hips read above where he stood, and the one foot read a 8 cm jump).
+      const both = FOOT_ENDS.every(([heel, toes]) => (rise[heel] ?? null) !== null && (rise[toes] ?? null) !== null);
+      const body = (deep || carried) && !both ? null : liftOfFrame(rise, deep);
+      const lifted = body === null || !carried ? body : s.dropEither === null ? null : s.dropEither <= -this.limits.still ? body : 0;
+      if (carried) row.push(lifted);
+      else if (lifted !== null) most = Math.max(most ?? 0, lifted);
     }
+    // A jump is the highest picture of it, held up by a picture beside it: one with both feet at least `JUMP_SUPPORT` up.
+    // Both feet thrown up the picture for a single picture as a squat stands up are no jump (a woman's squats filmed from
+    // the front: each was counted as a squat jump so). A real one is in the air for 2·√(2h/g): at 8 pictures a second the
+    // pictures beside the top of a 12 cm jump, Kd's lowest, are at least 4.3 cm up (a picture 125 ms from the top drops
+    // ½·g·0.125² = 7.7 cm), so every one is held up; a 10 cm one may not be, and is never counted rather than wrongly.
+    row.forEach((v, k) => {
+      if (v === null) return;
+      const beside = [row[k - 1] ?? null, row[k + 1] ?? null].some((w) => w !== null && w >= JUMP_SUPPORT);
+      most = Math.max(most ?? 0, beside ? v : 0);
+    });
     return most;
   }
 
@@ -831,7 +952,7 @@ export class MovementMatcher {
     if (last === undefined) return false;
     const longest = this.longestBreak(rep);
     return this.movement.rules.some((r) => {
-      if (r.seen !== "always" || !afterToo(r) || (last.reads[r.name] ?? null) !== null) return false;
+      if (!mustSee(r) || !afterToo(r) || (last.reads[r.name] ?? null) !== null) return false;
       const seenAt = [...rep.samples].reverse().find((x) => (x.reads[r.name] ?? null) !== null)?.t ?? rep.start;
       return last.t - seenAt <= longest;
     });
@@ -909,10 +1030,11 @@ export class MovementMatcher {
     const L = this.limits;
     const samples = this.samplesFor(rule, rep);
     if (rule.read.kind === "time") return ((rep.back ?? samples[samples.length - 1]?.t ?? rep.start) - rep.start) / 1000;
-    if (rule.at === "bottom") {
+    if (rule.at === "bottom" || rule.at === "lower half") {
       const deepest = Math.max(...samples.map((s) => s.drop ?? Number.NEGATIVE_INFINITY));
       if (!Number.isFinite(deepest)) return null;
-      const bottom = samples.filter((s) => s.drop !== null && s.drop >= deepest * (1 - L.bottomBand));
+      const share = rule.at === "bottom" ? 1 - L.bottomBand : LOWER_HALF;
+      const bottom = samples.filter((s) => s.drop !== null && s.drop >= deepest * share);
       return median(bottom.flatMap((s) => {
         const v = s.reads[rule.name] ?? null;
         return v === null ? [] : [v];
@@ -923,11 +1045,11 @@ export class MovementMatcher {
       return v === null ? [] : [{ t: s.t, v }];
     });
     if (read.length === 0) return null;
-    if (rule.seen === "always" && this.brokenOff(read.map((r) => r.t), samples, rep)) return null;
+    if (mustSee(rule) && this.brokenOff(read.map((r) => r.t), samples, rep)) return null;
     // The rep's newest frame without a reading: the part may be hidden in the air, so nothing is decided (a set that
     // ends, or a next rep that begins, while the feet are hidden).
-    if (rule.seen === "always" && (samples[samples.length - 1]?.reads[rule.name] ?? null) === null) return null;
-    if (rule.read.kind === "lift") return this.liftOf(rep);
+    if (mustSee(rule) && (samples[samples.length - 1]?.reads[rule.name] ?? null) === null) return null;
+    if (rule.read.kind === "lift") return this.liftOf(rep, rule.atLeast !== undefined);
     const values = read.map((r) => r.v);
     // In the moment after, the feet's travel is a jump only when both feet moved: one foot stepping or turning as the
     // person goes to the phone after their last rep is not a jump, and that rep was done (`samplesFor`).
@@ -965,7 +1087,8 @@ export class MovementMatcher {
       this.movement.rules.find((r) => {
         if (r.role !== role) return false;
         const v = readings[r.name] ?? null;
-        if (v === null) return false;
+        // A rule whose unseen reading makes the rep another movement (`seen` "or another movement") breaks unseen.
+        if (v === null) return r.seen === "or another movement";
         return (r.atLeast !== undefined && v < r.atLeast) || (r.atMost !== undefined && v > r.atMost);
       });
     const other = failing("match");
@@ -995,7 +1118,7 @@ export class MovementMatcher {
     const end = rep.back ?? rep.samples[rep.samples.length - 1]?.t ?? rep.start;
     const unseen = (r: MovementRule): boolean => r.seen === "always" && (readings[r.name] ?? null) === null;
     const verdict = this.verdictOf(rep, readings, unseen);
-    const base = { start: rep.start, end, readings, standing: rep.standing.reads, turn: this.turnAtBottom(rep) };
+    const base = { start: rep.start, end, readings, standing: rep.standing.reads, turn: this.turnAtBottom(rep), side: this.sideOf(rep) };
     const refused = verdict.verdict === "other" ? this.refusedOf(rep, readings, unseen) : null;
     if (refused !== null) return { ...base, verdict: "refused", rule: refused.rule, reason: refused.words, form: [refused.check] };
     return { ...base, ...verdict, form: verdict.verdict === "counted" ? this.formOf(rep) : [] };
@@ -1027,7 +1150,8 @@ export class MovementMatcher {
   private refusedOf(rep: Rep, readings: Readonly<Record<string, number | null>>, unseen: (r: MovementRule) => boolean): { rule: string; words: string; check: FormCheck } | null {
     const broken = this.movement.rules.filter((r) => {
       const v = readings[r.name] ?? null;
-      return v !== null && ((r.atLeast !== undefined && v < r.atLeast) || (r.atMost !== undefined && v > r.atMost));
+      if (v === null) return r.seen === "or another movement";
+      return (r.atLeast !== undefined && v < r.atLeast) || (r.atMost !== undefined && v > r.atMost);
     });
     // Only once the set has counted a rep of this movement: a dip before that may be another movement's (round one: under the
     // floor view a kettlebell swing's first dip, half turned, broke "chest up" alone), and every other movement counts 0.
@@ -1046,6 +1170,31 @@ export class MovementMatcher {
     return check.status === "made" ? { rule: rule.name, words: refused.words, check } : null;
   }
 
+  /**
+   * The rep's side, for a movement counted one side at a time (`Movement.side`): over the rep's lower half, each frame
+   * whose readings of the side's measure agree on which side is larger (on the picture and in 3D, or the one given) says
+   * that side; the side most frames say is the rep's. Null with no such frame, or as many each way: the camera could not
+   * tell, and never guesses.
+   */
+  private sideOf(rep: Rep): "left" | "right" | null {
+    const how = this.movement.side;
+    if (how === undefined) return null;
+    const deepest = this.deepest(rep);
+    let more = 0;
+    let less = 0;
+    for (const s of rep.samples) {
+      if (s.drop === null || s.drop < deepest * LOWER_HALF || s.side === null) continue;
+      const seen = [s.side.flat, s.side.world].filter((v): v is number => v !== null && v !== 0);
+      if (seen.length === 0 || !(seen.every((v) => v > 0) || seen.every((v) => v < 0))) continue;
+      if ((seen[0] ?? 0) > 0) more++;
+      else less++;
+    }
+    if (more === less) return null;
+    // Left less right above 0: the left side's own reading is the larger.
+    const leftLarger = more > less;
+    return leftLarger === (how.working === "more") ? "left" : "right";
+  }
+
   /** The middle of the body's turn to the phone over the rep's bottom frames (`RepResult.turn`). */
   private turnAtBottom(rep: Rep): number | null {
     const deepest = this.deepest(rep);
@@ -1059,13 +1208,13 @@ export class MovementMatcher {
     const readings: Record<string, number | null> = {};
     for (const rule of this.movement.rules) readings[rule.name] = this.statOf(rule, rep);
     const drive = (r: MovementRule): boolean => r.read.kind === "drop" && r.role === "count";
-    return { start: rep.start, end: t, readings, standing: rep.standing.reads, ...this.verdictOf(rep, readings, drive), form: [], turn: this.turnAtBottom(rep) };
+    return { start: rep.start, end: t, readings, standing: rep.standing.reads, ...this.verdictOf(rep, readings, drive), form: [], turn: this.turnAtBottom(rep), side: null };
   }
 
   /** A rep longer than any rep of its kind is not one: no count and no word. */
   private judgeLong(rep: Rep, t: number): RepResult {
     const readings: Record<string, number | null> = {};
     for (const rule of this.movement.rules) readings[rule.name] = this.statOf(rule, rep);
-    return { start: rep.start, end: t, verdict: "other", rule: null, reason: null, readings, standing: rep.standing.reads, form: [], turn: this.turnAtBottom(rep) };
+    return { start: rep.start, end: t, verdict: "other", rule: null, reason: null, readings, standing: rep.standing.reads, form: [], turn: this.turnAtBottom(rep), side: null };
   }
 }

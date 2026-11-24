@@ -412,7 +412,10 @@ describe("a movement file the engine cannot use rightly is refused before it is 
     expect(movementSchema.safeParse(withRule(at("chest up"), { short: "Go lower to count." })).success).toBe(false);
     expect(movementSchema.safeParse(withRule(at("chest up"), { unseen: undefined })).success).toBe(false);
     expect(movementSchema.safeParse(withRule(at("hips alike"), { unseen: "Keep your whole body in view." })).success).toBe(false);
-    expect(movementSchema.safeParse(withRule(at("chest up"), { standard: depth?.standard })).success).toBe(false);
+    // A match rule may be set from a standard used as it is (52c-i: the squat jump's jump), never one moved by the camera's
+    // room, which only makes counting forgiving.
+    expect(movementSchema.safeParse(withRule(at("chest up"), { standard: SQUAT.rules[at("knees bent")]?.standard })).success).toBe(false);
+    expect(movementSchema.safeParse(withRule(at("chest up"), { standard: depth?.standard })).success).toBe(true);
     expect(movementSchema.safeParse(withRule(at("depth"), { short: "go lower" })).success).toBe(false);
     expect(movementSchema.safeParse(withRule(at("depth"), { short: "Go lower.\nNow." })).success).toBe(false);
     expect([depth?.short, chest?.unseen]).toEqual(["Go lower to count.", "Keep your whole body in view."]);

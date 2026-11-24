@@ -40,7 +40,7 @@ describe("the worst thing: good squats with the phone on the floor are counted, 
 });
 
 describe("his eleven videos of other positions, from the floor and raised", () => {
-  const others = proofVideos(MOVEMENT_VIDEOS.filter((v) => v.file.startsWith("movement-points/usual_") && v.movement === null));
+  const others = proofVideos(MOVEMENT_VIDEOS.filter((v) => v.file.startsWith("movement-points/usual_") && v.movement !== "squat"));
 
   it("are eleven", () => {
     expect(others).toHaveLength(11);

@@ -2402,6 +2402,66 @@ half-turned sumo rep (`sumo_squat_2b` at 7.7 s) knees drawn in just under what p
 briefly, so the camera says nothing there, and at 0.12 m it marks them. **Open:** the coach's line for each mistake, and how often a
 correction is spoken (53).
 
+**As built, a jump in a fast rhythm, and one side at a time (52c-i, 2026-11-23; `rulings/2026-11-23-52c-i.md`).** **The kinds
+of counting** (`counting` in a movement's file, `MOVEMENT_COUNTINGS`): "rep" (the squat), "fast rhythm", "jump" and "one side at a
+time"; holds, timed only and floor work are 52c-ii's. Two movements are built on them, each from Kd's own videos and research
+files, with no engine code naming either: the squat jump (`movements/squat-jump.json`, four people, `squat/Squat Jump`) and the
+lunge (`movements/lunge.json`, forward and reverse lunges of six people, `Kettlebell Forward Lunge`, `Barbell Forward Lunge`,
+`Weight-Plate Forward Lunge`, `Dumbbell Reverse Lunge`). **A standing read on the move** (fast rhythm, jump): squat jumpers never
+stand still (in all four videos the engine as it was never took a standing), so where a person stands is also read from the
+pictures of the last 2 s in which they stood upright on the floor (every condition of standing ready held, read on both sides, the
+feet on the floor line), the middle of them, with no stillness asked; the last one read is kept while none comes (at 8 pictures a
+second the one to five pictures a jumper is upright on the floor between two jumps are often never taken). **A jump** is a match
+rule, "feet leave the floor", at least 8 cm, the smallest jump the squat never counts (`NEVER_JUMP`), so no rep is both a squat and a
+squat jump (between the squat's 4 cm and 8 cm, neither); it is read only in pictures where both feet are read, heel and toes, and
+the whole body was carried up, the hips above where the person stands by more than the shake of standing (on the picture, or in
+3D where the picture gives none: in the air it often gives none for the first 0.1 s), each foot resting where it stood while the
+hips were down in the dip (the moments before and after a rep, which the squat uses, are in the air in a run of jumps: her jumps,
+the ankles 0.26 of a leg up, read 3 to 6 cm so); and its height is its highest picture held up by a picture beside it with both feet
+at least 4 cm up (`JUMP_SUPPORT`, half the 8 cm): a jump is in the air 2·√(2h/g), so at 8 pictures a second the pictures beside the top
+of a 12 cm jump, Kd's lowest, are at least 4.3 cm up, while both feet thrown up the picture for one frame as a squat filmed from the
+front stands up had each squat counted as a squat jump (`movementKinds.test.ts`; taken as the least of two pictures in a row instead,
+a woman's 15 cm jump read 7 cm at 8 a second). Nor is a man stepping out of a split squat with one foot read a jump. **One side at a time**: a rep's side
+(`RepResult.side`) is the leg whose shin stands the more upright over the rep's lower half (`side` in the file: "shins, left
+against right", the working side the "less"), in the frames whose picture and 3D readings agree on which side is larger, the side
+most of them say, never guessed on a tie; it is the pose model's own left and right, so the selfie camera's mirror swaps it, and
+the camera screen turns it back (53; tested on a mirrored video, every leg the other). **Two new ways a rule reads:** "lower half"
+(the frames at least half as deep as the deepest: a lunge's legs are split all through it, and at the very bottom its back knee is
+often hidden, so at 15 pictures a second "legs split" went unread on a reverse lunge); and `seen` "or another movement", a match
+rule the camera must see, unseen making the rep another movement with no word: side on, a lunge's far leg hides behind the near one
+only when the legs are together, and until then a squat filmed side on, done where a lunge was chosen, was told "Keep your whole
+body in view." on 12 dips of 6 videos as filmed, and a split squat done where a squat jump was chosen, "Jump higher to count.".
+**What kind of movement a dip is** (the chest, the stance, the hips alike) is set from the squat's nine people as well as the
+movement's own (`alsoFrom`): four squat-jump people alone set "chest up" from 45 to 62 degrees with one left out. **Found and
+mended in passing:** the plain break 0.1 s became 0.2 s (`MatchLimits.gap`; the phone's live mode leaves up to 133 ms between two
+pictures, and every movement without "feet stay down", the squat's 202 ms, lost its feet at such a gap); a rep's first picture
+step comes from the pictures just before it (at 8 a second a squat jump's feet were lost at its second picture); the measuring run
+never takes a dip short of three quarters of its measuring depth as a rep (a replay that lost a lunge took its 0.09 step in its
+place); and the plain sign of a changed body allows a trunk moving straight up or down (under 1 m/s across) up to 8 m/s, a jump's
+take-off or landing (5.1 to 7.1 m/s on the four squat-jump videos, at most 0.6 across), every real change of body on the files
+moving 2.2 m/s or more across, so all twelve swaps of the videos that set numbers and the bench file's six are still told. The
+squat's numbers and table are as before. **The numbers** (`movement-check`, each person left out in turn): the squat jump, depth at
+least 0.10 of a leg (the knees' own line, 128, by the hips' geometry, 1 − sin 64°), knees at most 128 degrees (the research file's
+"about 90 to 120", 120 plus the camera's room), chest up at most 65, the jump at least 0.08 m (its people's smallest, under every replay,
+0.12), stance holds 0.23 and hips alike 43 of a trunk and degrees; the lunge, depth at least 0.26, knees at most 120 (from its people's shallowest: no source gives the shallowest lunge that is one), legs split at
+least 25 degrees (its people's narrowest 45), chest up at most 57. **Measured:** the squat jump
+counts its four people's 16 jumps as filmed and under every held replay (12 of 16 where a passer-by hides one at a time, as it must;
+15 of 16 done twice as slowly, written: gravity sets a jump's time in the air); the lunge counts 26 of 26 lunges of eight people as
+filmed and under every held replay (the half-turned woman's first lunge, begun 0.2 s into her video at the very edge of standing
+tall, lost shaken or slowed: written), every counted lunge given the leg the pictures show in front (13 left, 13 right, by eye,
+and the phone's runs give each the same leg);
+every other movement Kd's folders hold (97 videos under the squat jump, 88 under the lunge, the squat's own among them) counts 0 and
+is told nothing, as filmed and under every held replay, with every person's numbers and with each left out, but Kd's two squat
+jacks under the squat jump (3 and 2: each of his wide squats ends with a jump up as his feet come in; written, 54); the phone's own
+runs count and speak as the laptop's on 101 of 101 videos under the lunge and 99 of 101 under the squat jump (the two squat jacks).
+**Each video, by eye:** a squat jump clip begins low, cut from a set; it is played from the first picture of the person upright on
+the floor, held a second as every first picture is, where a live set begins standing; a man's rooftop lunges are two takes joined by
+a fade, each a set of its own. **Open, each written on its video:** with her own videos left out, the woman who leans 51 to 54 degrees
+counts 1 of 4 squat jumps ("chest up" set at 51 from the others); with his left out, the side-on barbell man's shins read 46 apart
+and he counts 1 of 2 (the line set at 49); the Smith machine split squat, a twin of the lunge, stays split between reps and is seldom
+standing tall, 4 of 10 by eye (54); the squat jack as Kd's research file describes it stays low and never jumps up, and his two videos
+stand up between jacks, so it is not made here (54).
+
 An exercise that does not pass is published as "count by hand", never with a wrong camera
 count. Kd tries one exercise of each kind of movement on the phone, about a dozen, never
 each one. After launch the server sees, for each exercise, how often members changed the

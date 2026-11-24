@@ -52,8 +52,17 @@ export function followOne(frames: readonly MovementFrame[]): (SeenPerson | null)
  *  The fastest a person exercising in front of a phone moves their trunk is a jump's take-off: for a jump of 1.1 m,
  *  the highest the engine allows for (spec §12.2's floor), √(2 · 9.81 · 1.1) = 4.6 m/s. Measured on Kd's six videos,
  *  the full model asked for one person: at most 1.5 m/s. A woman put in the squatting woman's place, 0.38 m off, moves
- *  it 11.3 m/s; another body of the same size at the same place cannot be told by this sign (job 52d). */
+ *  it 11.3 m/s; another body of the same size at the same place cannot be told by this sign (job 52d). A trunk moving
+ *  straight up or down is a jump, and has its own limit (`JUMP_SPEED`). */
 export const CHANGED_SPEED = 5;
+/** A trunk moving straight up or down the picture, under `STRAIGHT` across "down", is another body only faster than this,
+ *  m/s: a jump's take-off or landing, where the trunk also rises from its lean or folds into it. Measured on Kd's four
+ *  squat-jump videos (52c-i), each frame drawn and the one person followed: 5.1 to 7.1 m/s along "down" from one frame to
+ *  the next, at most 0.6 across it. Every real change of body on the files here moves across: the twelve swaps of the
+ *  videos that set numbers 2.2 to 9.1 m/s across, the old six-person bench file's follower 2.7 to 3.4. */
+export const JUMP_SPEED = 8;
+/** Across "down", m/s: under this the trunk moved straight up or down (`JUMP_SPEED`). */
+export const STRAIGHT = 1;
 /** A body larger or smaller on the picture than this many times from one frame to the next is another body (a
  *  reflection further off, a passer-by nearer). Measured on the same six videos: at most 1.12 times; the stand-in
  *  follower changing bodies on the old six-person files: 2.8 to 4.5 times. */
@@ -69,7 +78,7 @@ export interface BodyChange {
 }
 
 /** Each frame where the body followed is not the body last seen, by the plain sign: its middle moving faster than a
- *  jump's take-off, or its size jumping. A frame with nobody followed, or whose body's size cannot be read, is a gap:
+ *  jump's take-off (straight up or down, faster than a jump's), or its size jumping. A frame with nobody followed, or whose body's size cannot be read, is a gap:
  *  the body after it is judged against the body before it, its speed over the whole time between (round one, H1:
  *  losing the body and finding another is how the model, asked for one person, changes bodies). After a long gap a
  *  body that came nearer or went further is told as a change: the sign never vouches for what it did not see. */
@@ -83,10 +92,18 @@ export function bodyChanges(frames: readonly MovementFrame[], followed: readonly
     if (size === null) return;
     const middle = trunkCentre(person, frame.aspect);
     if (last !== null && frame.t > last.t) {
-      const metres = Math.hypot(middle[0] - last.middle[0], middle[1] - last.middle[1]) / Math.max(size, last.size);
-      const speed = metres / ((frame.t - last.t) / 1000);
+      const scale = Math.max(size, last.size) * ((frame.t - last.t) / 1000);
+      const dx = (middle[0] - last.middle[0]) / scale;
+      const dy = (middle[1] - last.middle[1]) / scale;
+      const speed = Math.hypot(dx, dy);
+      // Along "down" as the picture shows it (a reference video's is straight down the picture), and across it.
+      const down = frame.down === null || !(Math.hypot(frame.down[0], frame.down[1]) > 0) ? [0, 1] : [frame.down[0], frame.down[1]];
+      const n = Math.hypot(down[0] ?? 0, down[1] ?? 1);
+      const along = (dx * (down[0] ?? 0) + dy * (down[1] ?? 1)) / n;
+      const across = Math.sqrt(Math.max(0, speed * speed - along * along));
+      const limit = across < STRAIGHT ? JUMP_SPEED : CHANGED_SPEED;
       const grew = Math.max(size, last.size) / Math.min(size, last.size);
-      if (speed > CHANGED_SPEED || grew > CHANGED_SIZE) changes.push({ index, t: frame.t, speed, size: grew });
+      if (speed > limit || grew > CHANGED_SIZE) changes.push({ index, t: frame.t, speed, size: grew });
     }
     last = { t: frame.t, middle, size };
   });
