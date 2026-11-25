@@ -1,0 +1,94 @@
+{
+  "format": 1,
+  "name": "sit-up",
+  "counting": "rep",
+  "phone": "On the floor or a low stand, 2 to 3 metres away, side-on, the whole body in the picture, lying along it.",
+  "lastRep": "may end at the far end",
+  "drive": {
+    "measure": "trunk lean",
+    "toward": "lower"
+  },
+  "ready": [
+    {
+      "read": {
+        "kind": "value",
+        "measures": [
+          "trunk lean"
+        ]
+      },
+      "atLeast": 60,
+      "from": "Lying back: the trunk within 30 degrees of lying flat, or further back on a decline bench (the usual definition; not fitted)."
+    },
+    {
+      "read": {
+        "kind": "value",
+        "measures": [
+          "left thigh lean",
+          "right thigh lean"
+        ]
+      },
+      "atLeast": 70,
+      "from": "Lying back, not bent forward on the feet (the trunk's lean is the same both ways): the thighs lie along the floor or are raised, within 20 degrees of level or above it (not fitted). Measured on Kd's videos (52c-ii): lying for a sit-up, the thighs read 83 to 176 degrees from hanging; bent forward in a deadlift, Romanian deadlift, good morning or swing, 10 to 44."
+    },
+    {
+      "read": {
+        "kind": "value",
+        "measures": [
+          "left shin lean",
+          "right shin lean"
+        ]
+      },
+      "atLeast": 20,
+      "from": "Lying down, not held up level on the shoulders and feet as at the top of a hip thrust (trunk and thighs read alike): the shins 20 degrees or more from hanging (not fitted). Kd's videos (52c-ii): lying for a sit-up 28 to 90; at the top of a hip thrust 0 to 11, where the phone's reading of a man sliding off the bench counted a sit-up."
+    }
+  ],
+  "rules": [
+    {
+      "name": "depth",
+      "role": "count",
+      "at": "bottom",
+      "read": {
+        "kind": "drop"
+      },
+      "atLeast": 45,
+      "seen": "always",
+      "standard": {
+        "at": 45,
+        "room": "none",
+        "source": "Kd's research file, \"Decline Sit-Up\": a decline crunch curls the trunk about 30 to 45 degrees, and a full sit-up comes up to about 80 to 90 degrees from the bench (\"Weight-Plate Weighted Sit-Up\": until the torso is near vertical). A sit-up is counted once the trunk has come up past the crunch's whole range."
+      },
+      "short": "Sit up higher to count.",
+      "unseen": "Keep your whole body in view.",
+      "from": "Set by movement-check from the form standard, 45 (its source beside it, which says why it takes no room of its own), used as it is; rounded the forgiving way. The people's shallowest rep reads 59.57."
+    },
+    {
+      "name": "thighs stay",
+      "role": "match",
+      "at": "rep",
+      "read": {
+        "kind": "change",
+        "measures": [
+          "left thigh lean",
+          "right thigh lean"
+        ]
+      },
+      "atMost": 55,
+      "seen": "when-seen",
+      "from": "Set by movement-check from 5 people's videos (scripts/movementVideos.ts), as filmed and as each replay that sets numbers (scripts/replays.ts), 118 reps: beyond the furthest rep by half its distance from the middle rep (39.66; standing 0)."
+    },
+    {
+      "name": "hips stay down",
+      "role": "match",
+      "at": "rep",
+      "read": {
+        "kind": "change",
+        "measures": [
+          "hips height"
+        ]
+      },
+      "atMost": 0.21,
+      "seen": "when-seen",
+      "from": "Set by movement-check from 5 people's videos (scripts/movementVideos.ts), as filmed and as each replay that sets numbers (scripts/replays.ts), 118 reps: beyond the furthest rep by half its distance from the middle rep (0.16; standing 0)."
+    }
+  ]
+}

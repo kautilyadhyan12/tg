@@ -81,8 +81,9 @@ export const movementRuleSchema = z
     seen: z.enum(["always", "when-seen", "or another movement"]),
     /** A count rule set from the exercise's form standard, never from how shallow its people went: `at` is the
      *  standard's own line; `room` "camera": the tool that sets the numbers moves it the forgiving way by the camera's
-     *  room on that reading, measured on the videos; "none": the line is already the least the body allows, and is used
-     *  as it is. `source` says where the line comes from. A match rule may be set so too, with no room (a squat jump's
+     *  room on that reading, measured on the videos; "none": the line is used as it is, its source saying why (the least
+     *  the body allows; the sit-up's, the end of a crunch's whole range, so no crunch is a sit-up). `source` says where the
+     *  line comes from. A match rule may be set so too, with no room (a squat jump's
      *  jump: the smallest the squat never counts). */
     standard: z.object({ at: z.number(), room: z.enum(["camera", "none"]), source: from }).strict().optional(),
     /** For a count rule: what the screen says when a rep that tried falls short of it. */
@@ -113,14 +114,18 @@ export const movementReadySchema = z
   .refine((r) => r.read.kind === "value" || r.read.kind === "gap" || r.read.kind === "apart", { message: "standing ready reads a body measure" })
   .refine((r) => (r.atLeast === undefined) !== (r.atMost === undefined), { message: "a condition has exactly one bound" });
 
-/** The kinds of counting (spec §12.3; ROADMAP 52c-i):
- *   - "rep": from standing still, down, and back up (the squat);
+/** The kinds of counting by reps (spec §12.3; ROADMAP 52c-i and 52c-ii):
+ *   - "rep": from the start position held still, along the drive, and back (the squat from standing; the sit-up from
+ *     lying, the hip thrust from its hips low: floor work, 52c-ii);
  *   - "fast rhythm": reps that follow each other with no still moment between them, so where the person stands is also
  *     read on the move, at the top between two reps (every condition of standing ready held, the feet on the floor);
  *   - "jump": a fast rhythm whose rep ends with the feet leaving the floor: the movement has a rule on the feet's lift
  *     with "at least" (a squat jump), and only a jump movement has one;
- *   - "one side at a time": each rep is one side's, told by `side` (a lunge's front leg). */
+ *   - "one side at a time": each rep is one side's, told by `side` (a lunge's front leg).
+ * A hold and timed only are files of their own kind (`holdMovementSchema`, `timedMovementSchema`). */
 export const MOVEMENT_COUNTINGS = ["rep", "fast rhythm", "jump", "one side at a time"] as const;
+/** Every kind of counting a movement file may say (spec §12.3). */
+export const COUNTING_KINDS = [...MOVEMENT_COUNTINGS, "hold", "timed only"] as const;
 
 export const movementSchema = z
   .object({
@@ -136,8 +141,14 @@ export const movementSchema = z
     alsoFrom: z.object({ movement: z.string().regex(/^[a-z0-9]+(-[a-z0-9]+)*$/).max(60), why: from }).strict().optional(),
     /** Where the phone stands, in a line for the person. */
     phone: z.string().min(1).max(400),
-    /** The measure whose fall from standing is the rep, read on the picture. */
-    drive: z.object({ measure: measureName, toward: z.literal("lower") }).strict(),
+    /** A set may end at the far end of its last rep (the sit-up's last sit-up, sat up): a rep held still out there when
+     *  the set ends is judged then, on what was seen of it. Without it such a rep is not judged: a squat whose set ends
+     *  low did not stand up. */
+    lastRep: z.literal("may end at the far end").optional(),
+    /** The measure whose move from the start position is the rep, read on the picture: a height (the squat's hips fall,
+     *  the hip thrust's rise) or an angle (the sit-up's trunk lean falls as the trunk comes up from lying), `toward` the
+     *  way the rep goes. Every rule that reads the drive ("drop") reads how far it went that way. */
+    drive: z.object({ measure: measureName, toward: z.enum(["lower", "higher"]) }).strict(),
     ready: z.array(movementReadySchema).min(1).max(8),
     rules: z.array(movementRuleSchema).min(1).max(24),
   })
@@ -157,10 +168,44 @@ export const movementSchema = z
     message: "how far the drive must go to count is a number above 0, at least",
   });
 
+/** A hold (spec §12.3, §11.8 step 6; ROADMAP 52c-ii): a clock that runs only while every condition of the position
+ *  holds, each measure it names read; the camera not reading one pauses the clock, with `unseen` for the screen. The
+ *  waits (how long the position must hold before the clock runs, the longest break bridged) are the engine's own, the
+ *  same for every hold (`HOLD_LIMITS`). A hold is built only where the camera can tell the position from rest: one it
+ *  cannot (a support hold on the bars reads as standing with the arms by the sides) is timed only. */
+export const holdMovementSchema = z
+  .object({
+    format: z.literal(MOVEMENT_FORMAT),
+    name: z.string().min(1).max(60),
+    counting: z.literal("hold"),
+    phone: z.string().min(1).max(400),
+    position: z.array(movementReadySchema).min(1).max(8),
+    unseen: words,
+  })
+  .strict();
+
+/** Timed only (spec §12.3, the level "count by hand or timer"): a plain timer, the camera judging nothing, with why in a
+ *  line (what the camera cannot see, measured where it can be). */
+export const timedMovementSchema = z
+  .object({
+    format: z.literal(MOVEMENT_FORMAT),
+    name: z.string().min(1).max(60),
+    counting: z.literal("timed only"),
+    phone: z.string().min(1).max(400),
+    why: from,
+  })
+  .strict();
+
+/** Any movement file, by its kind of counting. */
+export const movementFileSchema = z.union([movementSchema, holdMovementSchema, timedMovementSchema]);
+
 export type MovementRead = z.infer<typeof movementReadSchema>;
 export type MovementRule = z.infer<typeof movementRuleSchema>;
 export type MovementReady = z.infer<typeof movementReadySchema>;
 export type Movement = z.infer<typeof movementSchema>;
+export type HoldMovement = z.infer<typeof holdMovementSchema>;
+export type TimedMovement = z.infer<typeof timedMovementSchema>;
+export type MovementFile = z.infer<typeof movementFileSchema>;
 
 // ── An exercise's camera file (spec Part 2 §12.3): the movement it uses, and its mistakes ─────────────────────────────
 // Every common mistake of the exercise, from its research file and a proper source, is in the list, each marked one of:

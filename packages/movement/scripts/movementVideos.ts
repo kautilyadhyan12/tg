@@ -38,6 +38,9 @@ export interface MovementVideo {
   /** Reps counted by eye; null where a person could not be sure, or the camera itself moves (a phone stands still, so a
    *  moving camera makes still feet look as if they moved): the video is then reported, never judged. */
   readonly reps: number | null;
+  /** For a hold (52c-ii), when the pictures show it held, seconds of the video's own clock: from the first picture held to
+   *  the last, each hold a pair. Its clock must give that time, and every other video none. */
+  readonly held?: readonly (readonly [number, number])[];
   /** It may set the movement's numbers: its pictures were looked at, and `sha256` names that very file. */
   readonly sets: boolean;
   readonly sha256?: string;
@@ -76,6 +79,7 @@ export interface KnownCases {
   readonly open?: string;
   readonly leftOutOpen?: LeftOutOpen;
   readonly replayOpen?: { readonly replays: readonly string[]; readonly why: string };
+  readonly phoneOpen?: { readonly why: string; readonly differences: readonly string[] };
 }
 
 const other = (file: string, person: string, view: View, seen: string): MovementVideo => ({ file, movement: null, person, view, reps: 0, sets: false, seen });
@@ -528,6 +532,237 @@ export const MOVEMENT_VIDEOS: readonly MovementVideo[] = [
     sets: false,
     seen: "2026-11-23 (52c-i), judged, never setting a number: the one woman, half turned, facing left. In the first picture she has already stepped forward, upright, then goes down and back up (a lunge: first counted as begun low from pictures at 2 a second, put right from pictures drawn at 0, 0.1, 0.2, 0.3, 0.43 and 0.6 s), then two more, each with her left leg in front (the near leg, its foot lowest on the picture); she is stepping back up out of the last, her hips up, as the video ends.",
   },
+  // ── The sit-up (52c-ii), floor work: Kd's weighted sit-ups and decline sit-ups (Weight plates/Weight-Plate Weighted
+  //    Sit-Up, Parallel-Bar Dip/decline sit up), each a different person, counted by eye from 16 pictures drawn with the
+  //    model's points. A sit-up is from lying back, up, and back down; a video that starts sat up does not count its first
+  //    lying back, and a set may end sat up after its last sit-up (the movement's `lastRep`). ──────────────────────────
+  {
+    file: "movement-points/sit_up_plate_0",
+    movement: "sit-up",
+    person: "man, green turf, plate held up",
+    view: "side",
+    reps: 3,
+    sets: true,
+    sha256: "95f54ecf94327105d6b406b451129d874b84a2bd427ee6174d4702fa763db541",
+    seen: "2026-11-24 (52c-ii), 16 frames drawn with the model's points: the one man, side on, his legs straight, the plate held up over him in each. He starts lying, then three sit-ups (the tops at 1.6, 4.8 and 8.0 s), and is lying again as it ends; a play button over him in the first second.",
+  },
+  {
+    file: "movement-points/sit_up_plate_1",
+    movement: "sit-up",
+    person: "woman, blue gym, plate overhead",
+    view: "side",
+    reps: 2,
+    sets: true,
+    sha256: "f32b3183ef8ecad24d7cf413aa97ce815ac3a63e8fca4e562a1e8ef4c16a7807",
+    seen: "2026-11-24 (52c-ii), 16 frames drawn with the model's points: the one woman, side on, her knees bent, in each. She lies until 1.2 s, then two sit-ups (the tops at 2.1 and 4.0 s), and is lying back as it ends at 4.8 s; a play button over her from 1.3 to 1.6 s.",
+  },
+  {
+    file: "movement-points/sit_up_plate_2",
+    movement: "sit-up",
+    person: "man, grey top, GO ALL OUT",
+    view: "side",
+    reps: 3,
+    sets: true,
+    sha256: "c91fb9ce8435d1bb528251aa7beb4a528bdaf67ad0f40ca3e9489f6032cc32dd",
+    seen: "2026-11-24 (52c-ii), 16 frames drawn with the model's points: the one man, side on, his knees bent, a plate at his chest, in each. He starts sat up and lies back (not a rep), then three sit-ups (the tops at 3.4, 5.3 and 8.1 s), and is still sat up after the third as it ends.",
+  },
+  {
+    file: "movement-points/sit_up_plate_3",
+    movement: "sit-up",
+    person: "man, black top, mat on a wooden floor",
+    view: "between",
+    reps: 2,
+    under: {
+      "sit-up": {
+        leftOutOpen: {
+          count: 0,
+          fewer: true,
+          why:
+            "54, once more sit-up videos filmed from the feet come: the only one of the five people filmed from his feet and turned, the picture " +
+            "shortens his legs and his hips read 0.14 to 0.15 of a leg moved while he sits up, where the four filmed side on read at most 0.11, so " +
+            "with his own video left out \"hips stay down\" is set at 0.14 and his sit-ups read as another movement. With every person's numbers " +
+            "(0.21) he counts 2 of 2, and a hip thrust's lowering, its hips dropping 0.24 or more, is never a sit-up.",
+        },
+      },
+    },
+    sets: true,
+    sha256: "40a6a00d8713e6f02999ecadd65228dc55ec4c13e1c67429cddb9d413f18ba3c",
+    seen: "2026-11-24 (52c-ii), 16 frames drawn with the model's points: the one man, his feet towards the phone and turned to its left, in each. He starts sat up, the plate overhead, and lies back (not a rep), then two sit-ups (the tops at 3.6 and 6.2 s), and is lying as it ends.",
+  },
+  {
+    file: "movement-points/decline_sit_up_1",
+    cut: [2.9, 9.0],
+    movement: "sit-up",
+    person: "man, teal wall, decline bench",
+    view: "side",
+    reps: 2,
+    sets: true,
+    sha256: "f5efa03d0ea3ad562170ba8f422d4d8d9135b491f497843611d57ba79fb8d46b",
+    seen: "2026-11-24 (52c-ii), 16 frames drawn with the model's points, and 4 more from 0 to 0.4 s: the one man on a decline bench, side on, his hands at his head, in each. It starts with him half way up and rising (not a rep), then he lies back at 2.9 s and does two sit-ups (the tops at 4.2 and 7.3 s), lying back as it ends. Played from 2.9 s, the first picture of him lying back, as a live set begins: held a second as every first picture is, a picture half way up reads as lying back already (his trunk 60 degrees and more from upright), and a rep would be counted that began before the video.",
+  },
+  {
+    file: "movement-points/decline_sit_up_2",
+    movement: "sit-up",
+    person: "man, black cap, decline bench, muscle figure",
+    view: "side",
+    reps: null,
+    sets: false,
+    seen:
+      "2026-11-24 (52c-ii), 16 frames drawn with the model's points: the man on a decline bench in each, never the drawn muscle figure beside him; the video draws its own green arc and circles over his hips and shoulders. Reported, never judged: by the camera his trunk comes up 25 to 35 degrees from the bench in each, a decline crunch by Kd's research file's own measure (30 to 45 degrees of curl), and by eye his rises are hard to tell from one.",
+  },
+  // ── The hip thrust (52c-ii), floor work: Kd's dumbbell, barbell and Smith machine hip thrusts, counted by eye from 16
+  //    pictures drawn with the model's points. A hip thrust is from the hips low, up until the body is level, and back down.
+  {
+    file: "movement-points/hip_thrust_dumbbell",
+    movement: "hip-thrust",
+    person: "woman, white cap, dumbbell",
+    view: "side",
+    reps: 3,
+    under: {
+      "hip-thrust": {
+        leftOutOpen: {
+          count: 0,
+          fewer: true,
+          why:
+            "54, once more hip-thrust videos come: two people can be judged (the barbell and the second Smith machine videos are reported), " +
+            "she side on and the other woman facing the phone, so with her left out every line is set from one woman whose shoulders barely move " +
+            "on the picture from the front (0.04 to 0.06 of a leg), \"shoulders stay\" is set at 0.07, and her own shoulders, read side on, move " +
+            "0.12 to 0.14. With both women's numbers (0.15) she counts 3 of 3.",
+        },
+      },
+    },
+    sets: true,
+    sha256: "9c332ba365d67cb9acc604028a0357f56092831a88a32960aa4ff699b84b684e",
+    seen: "2026-11-24 (52c-ii), 16 frames drawn with the model's points: the one woman, side on, her upper back on the bench, a dumbbell at her hips, in each; people walk about far behind her. Low until 2.1 s, then three hip thrusts (the tops at 3.2, 7.2 and 11.0 s), and low again as it ends.",
+  },
+  {
+    file: "movement-points/hip_thrust_barbell",
+    movement: "hip-thrust",
+    person: "man, barbell, wooden platform",
+    view: "between",
+    reps: null,
+    sets: false,
+    seen:
+      "2026-11-24 (52c-ii), 16 frames drawn with the model's points: the one man in each, filmed from in front of his feet and above. He settles low, then three hip thrusts (the tops at 3.3, 6.0 and 8.9 s), and slides down off the bench to the floor as it ends. " +
+      "Reported, never judged: from there the picture shortens his thighs at the top of each thrust, and his hips' height on the picture is not given for longer than a break (3.4 to 4.2, 6.3 to 6.6 and 9.0 to 9.6 s), nor his feet on the floor line from 6.9 to 7.5 s; a hip thrust's phone stands side-on (movements/hip-thrust.json).",
+    under: {
+      "hip-thrust": {
+        phoneOpen: {
+          why:
+            "None: a video reported, never judged. From in front and above, the laptop's reading loses his hips' height at the top of his " +
+            "first thrust for longer than a break, the phone's does not, so the phone counts it where the laptop says it could not see it.",
+          differences: ["the laptop counts 0, the phone 1", "the laptop says 2.6 s unseen (depth), the phone 2.6 s counted"],
+        },
+      },
+    },
+  },
+  {
+    file: "movement-points/hip_thrust_smith_1",
+    movement: "hip-thrust",
+    person: "woman, Smith machine, blue top",
+    view: "front",
+    reps: 2,
+    under: {
+      "hip-thrust": {
+        leftOutOpen: {
+          count: 0,
+          fewer: true,
+          why:
+            "54, once more hip-thrust videos come: of the two people judged she alone faces the phone, so her trunk at the top, level and pointing " +
+            "at the camera, reads 57 degrees from upright on the picture, where the woman filmed side on reads 92; with her left out \"back on the bench\" " +
+            "is set at 92 from that one woman. With both women's numbers she counts 2 of 2.",
+        },
+        replayOpen: {
+          replays: ["slower", "twice as slow"],
+          why:
+            "54, once more hip-thrust videos come: facing the phone, her thighs point at the camera near the bottom of each thrust, and her " +
+            "hips' height on the picture is not given in stretches there (before her first thrust, and in her second); played 1.5 or 2 times as " +
+            "slowly those stretches pass the break, so her first thrust has no start position read and is not measured, and her second decides " +
+            "nothing (1.5 times) or is split in two, its last 0.9 s read as a short thrust (twice). A hip thrust's phone stands side-on: the " +
+            "woman filmed side on counts every thrust under every replay.",
+        },
+        phoneOpen: {
+          why:
+            "53 and 54: facing the phone, as she lowers after her second thrust the phone's reading puts her hips back up 0.17 of a leg before " +
+            "the video ends, so it would tell her \"Push your hips higher to count.\" for a thrust she never began (the laptop reads her down). " +
+            "A hip thrust's phone stands side-on; the side-on woman's thrusts read the same on both.",
+          differences: ["the phone also says 8.3 s short (hips open)"],
+        },
+      },
+    },
+    sets: true,
+    sha256: "e4b38c8f0604fe3fcb9ddf066485e870b253f776e8a7b245c8ee47fc47a4e716",
+    seen: "2026-11-24 (52c-ii), 16 frames drawn with the model's points: the one woman in each, facing the phone, the Smith machine's bar on her hips. Two hip thrusts (the tops at 2.1 and 6.5 s), low between them and as it ends.",
+  },
+  {
+    file: "movement-points/hip_thrust_smith_2",
+    movement: "hip-thrust",
+    person: "man, Smith machine, Legend rack",
+    view: "side",
+    reps: null,
+    sets: false,
+    seen:
+      "2026-11-24 (52c-ii), 16 frames drawn with the model's points: reported, never judged. The model loses the man in places (no body at 6.9 s, his legs alone at 2.3 s), a title runs over him from 2 s, and the video ends on a black card from 7.9 s: his thrusts cannot be told apart by eye in the pictures.",
+  },
+  // ── Holds (52c-ii): Kd's L-sits on the bars, timed by eye from 16 pictures drawn with the model's points (Parallel-Bar
+  //    Dip/Parallel-Bar Tuck L-Sit: both clips are of the full L-sit, the legs straight), and his support hold, which is
+  //    timed only (movements/support-hold.json says why). ──────────────────────────────────────────────────────────────
+  {
+    file: "movement-points/l_sit_bars_1",
+    movement: "l-sit",
+    person: "man, beanie, parallel bars",
+    view: "side",
+    reps: 0,
+    held: [[0, 7.87]],
+    under: {
+      "l-sit": {
+        leftOutOpen: {
+          count: 0,
+          fewer: true,
+          why:
+            "54, once more L-sit videos come: two people, so with him left out every line is set from the one man on the dip station, whose " +
+            "legs read 93 to 97 degrees from hanging; his own legs, a little below level all through, read 76 to 88, under the 93 then set. With " +
+            "both men's numbers (71) his whole hold is timed, 7.87 s.",
+        },
+      },
+    },
+    sets: true,
+    sha256: "00649cf9cd23c245ad4fa7fa421d1c6ef81cd8544fd4ce9ba7ce0ee7a3dd5666",
+    seen: "2026-11-24 (52c-ii), 16 frames drawn with the model's points: the one man, side on, in an L-sit on the bars in each, his legs straight out in front, from the first picture to the last (7.87 s); a play and pause button over him in places.",
+  },
+  {
+    file: "movement-points/l_sit_bars_2",
+    movement: "l-sit",
+    person: "man, dip station, TikTok",
+    view: "between",
+    reps: 0,
+    held: [[0, 3.1]],
+    under: {
+      "l-sit": {
+        leftOutOpen: {
+          count: 0,
+          fewer: true,
+          why:
+            "54, once more L-sit videos come: two people, so with him left out every line is set from the one man on the bars, whose trunk " +
+            "stands within 2 degrees of upright; his own trunk, leaning 6 to 8 degrees forward (his research file allows a slight forward lean), " +
+            "is past the 3 then set. With both men's numbers (9) his whole hold is timed, 3.10 s.",
+        },
+      },
+    },
+    sets: true,
+    sha256: "516d1a71c33de618423c339973044fd48cd315caf8faef905de930b11c0041fb",
+    seen: "2026-11-24 (52c-ii), 16 frames drawn with the model's points and 6 more from 3.07 to 3.23 s: the one man in an L-sit on a dip station, turned half way, from the first picture to 3.10 s; at 3.13 s the video cuts to him in a support with his knees bent and hanging (\"Bent leg sit\"), to its end at 3.83 s.",
+  },
+  {
+    file: "movement-points/support_hold_bars",
+    movement: "support-hold",
+    person: "man, parallel bars, text panel",
+    view: "front",
+    reps: 0,
+    held: [[0, 6.7]],
+    sets: false,
+    seen: "2026-11-24 (52c-ii), 16 frames drawn with the model's points: the one man facing the phone in a support hold on the bars in each, his arms straight and his legs hanging, until 6.7 s; then he bends his elbows and steps down. A text panel beside him. Timed only, so it sets no number.",
+  },
   // ── Every other movement: 0 and silence ──────────────────────────────────────────────────────────────
   {
     ...other("movement-points/squat_jack_1", "man, squat jack, turf", "front", "Squat jacks: the feet jumping out into a wide squat, then in as he jumps up."),
@@ -605,12 +840,27 @@ export const MOVEMENT_VIDEOS: readonly MovementVideo[] = [
   other("movement-points/fresh_curl_barbell", "fresh: barbell biceps curl, one", "front", "Fresh: a barbell biceps curl."),
   other("movement-points/fresh_rack_pull_barbell", "fresh: barbell rack pull, one", "between", "Fresh: a barbell rack pull."),
   other("movement-points/fresh_curl_ez_bar_1", "fresh: standing EZ-bar curl, 1", "front", "Fresh: a standing EZ-bar curl."),
+  // Lying, seated or held on the bars (52c-ii): the movements nearest floor work and holds, never counted or timed.
+  other("movement-points/floor_press_kettlebell_0", "kettlebell floor press, 0", "side", "A close-grip kettlebell floor press: lying, the knees bent and the feet flat, the arms pressing up."),
+  other("movement-points/floor_press_kettlebell_2", "kettlebell floor press, 2", "side", "A close-grip kettlebell floor press: lying, the knees bent and the feet flat, the arms pressing up, filmed from above."),
+  other("movement-points/reverse_crunch_decline_1", "decline reverse crunch, 1", "side", "A decline-bench reverse crunch: lying on a decline bench, the knees drawn up to the chest."),
+  other("movement-points/reverse_crunch_decline_2", "decline reverse crunch, 2", "side", "A decline-bench reverse crunch, a variation: lying on a decline bench, the knees drawn up to the chest."),
+  other("movement-points/triceps_extension_lying_ez", "lying EZ-bar triceps extension", "side", "A lying EZ-bar triceps extension on a bench, the forearms moving; no body in 108 of its frames."),
+  other("movement-points/leg_raise_bars", "leg raise on the bars", "front", "A leg raise on the parallel bars: held on straight arms, the straight legs raised to level and lowered."),
+  other("movement-points/knee_raise_bars", "knee raise on the bars", "side", "A knee raise on the parallel bars: held on straight arms, the knees raised and lowered."),
+  other("movement-points/straight_leg_raise_chair", "captain's chair straight-leg raise", "between", "A captain's chair straight-leg raise: the forearms on the pads, the straight legs raised and lowered."),
   // ── A phone on the floor or raised, the usual positions of other exercises (52a-ii-b-i): no squat in any ───────────
   floorOther("usual_v02", "floor", "front", "The phone on the floor, upright: he stands and turns round slowly."),
   floorOther("usual_v03", "floor", "front", "The phone on the floor, on its long side: he stands and turns round."),
   floorOther("usual_v05", "floor", "front", "The phone on the floor, upright: he sits cross-legged and turns round."),
   floorOther("usual_v06", "floor", "side", "The phone on the floor, on its long side: on all fours, he turns round."),
-  floorOther("usual_v07", "floor", "side", "The phone on the floor, on its long side: he lies on the floor, raises a leg, sits up."),
+  {
+    ...floorOther("usual_v07", "floor", "side", "The phone on the floor, on its long side: he lies on the floor, raises a leg, sits up."),
+    movement: "sit-up",
+    reps: 2,
+    seen:
+      "The phone on the floor, on its long side: he lies on the floor and raises a leg, bent and straight (8 to 21 s); then two sit-ups, his legs straight, lying flat, sitting up and lying back (the tops at 22.8 and 26.8 s, drawn 2026-11-24, 52c-ii); then, a knee bent, he rolls onto his side and crawls to the phone. Judged under the sit-up from a phone on the floor, never setting a number.",
+  },
   {
     ...floorOther("usual_v08", "floor", "side", "The phone on the floor, upright; barefoot: he sits on a chair side on, gets up, sits (a chair squat's movement: 54)."),
     replayOpen: {
@@ -624,6 +874,12 @@ export const MOVEMENT_VIDEOS: readonly MovementVideo[] = [
   floorOther("usual_v09", "floor", "side", "The phone on the floor, upright: he stands at a chair, one leg lifted and bent."),
   floorOther("usual_v10", "floor", "side", "The phone on the floor, on its long side: he sits on a chair, gets up, sits (54)."),
   floorOther("usual_v12", "raised", "between", "The phone raised, upright: he sits on a chair from the front and the side, stands, puts one knee on the chair."),
-  floorOther("usual_v13", "raised", "side", "The phone raised, on its long side: he lies on a bed, raises a leg, sits up."),
+  {
+    ...floorOther("usual_v13", "raised", "side", "The phone raised, on its long side: he lies on a bed, raises a leg, sits up."),
+    movement: "sit-up",
+    reps: 2,
+    seen:
+      "The phone raised, on its long side: he sits on the bed and lies down; two sit-ups, his legs straight, lying flat, sitting up and lying back (the tops at 9.2 and 13.5 s, drawn 2026-11-24, 52c-ii); he raises a leg, then both (16 to 20 s), sits up with his knees bent and gets off the bed. Judged under the sit-up, never setting a number.",
+  },
   floorOther("usual_v14", "raised", "front", "The phone raised, upright: he stands and turns round."),
 ];

@@ -173,8 +173,9 @@ describe("every proof video, as the phone's chosen set-up read it (51b-ii; kept 
     const open = rows.filter((r) => r.entry.phoneOpen !== undefined);
     expect(open.map((r) => r.label).sort()).toEqual(["floor_phone_test 0-12 s", "floor_phone_test 13.9-21.1 s", "usual_v04 9.8-17.5 s"]);
     for (const r of rows.filter((x) => x.entry.movement !== "squat")) expect([r.label, r.phone?.count]).toEqual([r.label, 0]);
-    // 98 of 101 since 52c-i: a man's rooftop lunges are two takes joined by a fade, each a set of its own (97 of 100 before).
-    expect(rows.filter((r) => r.verdict === "same").length).toBe(98);
+    // 119 of 122 since 52c-ii: its 21 videos of floor work and holds read the same on both (98 of 101 since 52c-i: a man's
+    // rooftop lunges are two takes joined by a fade, each a set of its own; 97 of 100 before).
+    expect(rows.filter((r) => r.verdict === "same").length).toBe(119);
   });
 
   it("the sumo squat nobody could count by eye now counts the same on both", () => {
