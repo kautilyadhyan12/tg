@@ -737,7 +737,7 @@ describe("the voice, through the whole app", () => {
     expect(voice.said).toEqual(["Auto-paused."]);
   });
 
-  it("a phone in a pram that felt still is paused for a few seconds at most, then keeps every metre with no pause left", async () => {
+  it("a phone in a pram that felt still is paused until it has gone 40 m, then keeps every metre with no pause left", async () => {
     motion.reset();
     const s = runServer();
     await openRunning(s);

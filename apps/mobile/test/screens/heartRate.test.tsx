@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react-native";
 import { AppState, Linking } from "react-native";
 import { heartSums, runSums, saveRunRequestSchema, type SaveRunRequest } from "@app/shared";
@@ -6,7 +7,7 @@ import { HeartMonitorSheet } from "../../src/heart/HeartMonitor";
 import { heartNative } from "../../src/heart/heartNative";
 import { forgetHeartMax } from "../../src/heart/heartMax";
 import { HEART_FRESH_MS, endTry, forgetMonitor, heartNow, heartQueue, holdHeart, loadMonitor, pairMonitor, pullHeart, resetHeart, saveMonitor, savedHeartNow, takeHeartReadings, tryMonitor } from "../../src/heart/monitor";
-import { closedPauses, pauseRun, phoneRunFiles, resetRecorder, runNow, takeLocations } from "../../src/screens/running/recorder";
+import { closedPauses, pauseRun, phoneRunFiles, resetRecorder, runNow, startRun, takeLocations } from "../../src/screens/running/recorder";
 import type { Ask, AskInit } from "../../src/session/calls";
 import { RAVI, fakeServer, kept, memoryStore, profile, tokens, type Reply } from "../kit";
 
@@ -705,5 +706,28 @@ describe("a workout's own queue of readings (64a-vi): only the person's saved mo
     expect(open.take()).toEqual([]);
     open.close();
     release();
+  });
+});
+
+// A pause Auto-pause undoes (a phone on wheels, 37j) gives its time back to the run: its heart readings too
+// (round one's review, L2: they were dropped while paused, leaving a gap in the run's heart line).
+describe("a pause that is undone keeps its heart readings", () => {
+  beforeEach(async () => {
+    await loadMonitor(RAVI.id);
+    await saveMonitor({ id: MINE, name: "Polar H10 9EF6E824" });
+  });
+
+  it("a pram whose phone felt still: every second's heart reading is the run's, the pause undone", async () => {
+    const motion = jest.requireMock<{ motion: { send: (at: number, sd: number) => void; reset: () => void } }>("../../src/screens/running/runMotionNative").motion;
+    motion.reset();
+    const run = await startRun(RAVI.id, randomUUID(), true, Date.now());
+    // Five seconds at a time, as Android hands points over: the pause is made in one batch, undone in a later one.
+    for (let from = 1; from <= 26; from += 5) {
+      for (let i = 0; i < 5; i++) motion.send(run.startedAt + (from + i) * 1000, 0.05);
+      await feed(from, 5, () => 120);
+    }
+    expect(runNow()?.phase).toBe("running");
+    expect(runNow()?.pauses).toEqual([]);
+    expect(runNow()?.heart.map(([ms]) => ms)).toEqual(Array.from({ length: 30 }, (_, i) => (i + 1) * 1000));
   });
 });

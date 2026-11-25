@@ -82,6 +82,13 @@ function changesOf(fixes: readonly Fix[], start: AutoPauseState = AUTO_START): A
   return out;
 }
 
+/** The rule's state after the last point. */
+function stateAfter(fixes: readonly Fix[], start: AutoPauseState = AUTO_START): AutoPauseState {
+  let state = start;
+  for (const fix of fixes) state = nextAutoPause(state, fix).state;
+  return state;
+}
+
 /** The pauses the recorder keeps from those changes: a resume dated to its pause's start leaves none. */
 function pausesOf(changes: readonly AutoPauseChange[], end: number): RunPause[] {
   const out: RunPause[] = [];
@@ -137,11 +144,13 @@ describe("the worst thing: real metres thrown away because the phone felt still 
   ])("a pram at %s m a second, the phone sure to %s m, keeps every metre the run kept without the motion but 6; its two stops pause by place", (speed, accuracyM) => {
     const go = (seconds: number): Stretch => ({ seconds, speed, accuracyM, feel: "still" });
     const stop: Stretch = { seconds: 30, speed: 0, accuracyM, feel: "still" };
-    const { fixes } = walk([go(200), stop, go(170), stop, go(170)], speed * 100 + accuracyM);
+    const { fixes, metres } = walk([go(200), stop, go(170), stop, go(170)], speed * 100 + accuracyM);
     const changes = changesOf(fixes);
     const { on, off } = counted(fixes, changes);
     expect(off).toBeGreaterThan(speed * 500);
     expect(counted(without(fixes)).on - on).toBeLessThanOrEqual(6);
+    // And against the metres truly walked: the two stops' own edges, as the rule without the motion loses them.
+    expect(metres - on).toBeLessThanOrEqual(25);
     // One stop by feel at most before the phone is known to be on wheels, undone at once (a pram at 1 m a
     // second passes back through the stop's 3 m for a few seconds); then only the two real stops pause.
     const kept = pausesOf(changes, endOf(fixes));
@@ -193,8 +202,9 @@ describe("Auto-pause by the phone's motion", () => {
   const standing = (accuracyM: number, seed: number) =>
     walk([{ seconds: 300, speed: 0, accuracyM, feel: "still", off: wander(300, accuracyM / 2, 30, seed * 7919 + accuracyM) }]).fixes;
 
-  it.each(accuracies)("a phone standing still, sure to %s m: paused within 6 s, never started again, at most 5 m counted (40 tries)", (accuracyM) => {
-    for (let seed = 1; seed <= 40; seed++) {
+  // 1,000 tries each: round one's review found 1 to 5 in 1,000 taken for wheels at 15 to 30 m, which 40 never met.
+  it.each(accuracies)("a phone standing still, sure to %s m: paused within 6 s, never started again, at most 5 m counted (1,000 tries)", (accuracyM) => {
+    for (let seed = 1; seed <= 1000; seed++) {
       const fixes = standing(accuracyM, seed);
       const changes = changesOf(fixes);
       expect(changes).toHaveLength(1);
@@ -246,22 +256,77 @@ describe("Auto-pause by the phone's motion", () => {
     expect(changes[1]?.at).toBe(81_000);
   });
 
-  it("standing still, then the phone in the hand feeling moving for 30 s: how often the clock starts wrongly", () => {
-    const wrong = (accuracyM: number): number => {
-      let starts = 0;
-      for (let seed = 1; seed <= 40; seed++) {
-        const off = wander(60, accuracyM / 2, 30, seed * 104_729 + accuracyM);
-        const { fixes } = walk([
-          { seconds: 30, speed: 0, accuracyM, feel: "still", off: off.slice(0, 30) },
-          { seconds: 30, speed: 0, accuracyM, feel: "moving", off: off.slice(30) },
-        ]);
-        if (changesOf(fixes).some((c) => c?.kind === "resume")) starts += 1;
-      }
-      return starts;
-    };
-    // Under 1 in 20 at 5 m; at 15 m the number is told to Kd, whatever it is (written in the handoff).
-    expect(wrong(5)).toBeLessThan(2);
-    expect(wrong(15)).toBeLessThanOrEqual(40);
+  /** Standing still 30 s, then the phone in the hand feeling moving for `seconds`: in how many of `tries` the
+   *  clock starts again, and the most metres any try counts. */
+  const inTheHand = (accuracyM: number, seconds: number, tries: number): { starts: number; mostM: number } => {
+    let starts = 0;
+    let mostM = 0;
+    for (let seed = 1; seed <= tries; seed++) {
+      const off = wander(30 + seconds, accuracyM / 2, 30, seed * 104_729 + accuracyM);
+      const { fixes } = walk([
+        { seconds: 30, speed: 0, accuracyM, feel: "still", off: off.slice(0, 30) },
+        { seconds, speed: 0, accuracyM, feel: "moving", off: off.slice(30) },
+      ]);
+      const changes = changesOf(fixes);
+      if (changes.some((c) => c?.kind === "resume")) starts += 1;
+      mostM = Math.max(mostM, counted(fixes, changes).on);
+    }
+    return { starts, mostM };
+  };
+
+  it("standing still, then the phone in the hand feeling moving: how often the clock starts wrongly", () => {
+    // The brief: under 1 in 20 at 5 m over 30 s. Round one (H3) found the old rule worse the longer it lasted
+    // (260 in 1,000 over 2 minutes at 5 m). The rest are the numbers as measured, told to Kd in the handoff:
+    // at 10 m and worse the place cannot tell 10 s of walking from a standing phone's drift.
+    expect(inTheHand(5, 30, 400)).toEqual({ starts: 0, mostM: 0 });
+    expect(inTheHand(5, 120, 400)).toEqual({ starts: 25, mostM: 11 });
+    expect(inTheHand(10, 30, 400)).toEqual({ starts: 64, mostM: 21 });
+    expect(inTheHand(15, 30, 400)).toEqual({ starts: 200, mostM: 50 });
+  });
+
+  // Round one (H1): a jump of the signal that stays where it landed is not a pram. A pram's distance from the stop
+  // grows steadily; a jump is one step, then still.
+  it.each([
+    [45, 5],
+    [60, 13],
+    [80, 20],
+  ])("a jump of the signal %s m away that stays a minute, the phone still and sure to %s m: the pause holds, never wheels", (jumpM, accuracyM) => {
+    const r = rng(jumpM);
+    const jumped = Array.from({ length: 60 }, (): [number, number] => [jumpM + 0.3 * gauss(r), 0.3 * gauss(r)]);
+    const fixes = walk([
+      { seconds: 30, speed: 0, accuracyM, feel: "still" },
+      { seconds: 60, speed: 0, accuracyM, feel: "still", off: jumped },
+      { seconds: 60, speed: 0, accuracyM, feel: "still" },
+    ]).fixes;
+    expect(changesOf(fixes)).toEqual([{ kind: "pause", at: 1000 }]);
+    expect(stateAfter(fixes).wheels).toBe(false);
+  });
+
+  // Round one (H2): Kd's room walk read between the limits much of the time (37i). A still second in a walk, then
+  // seconds the phone cannot read, must not date a later stop back across the walk.
+  it.each([10, 20, 25, 60])("a still second in a walk, then %s s the phone cannot read, then a stop: the pause is the stop's own", (gap) => {
+    const fixes = walk([
+      { seconds: 30, speed: 1.4, accuracyM: 5, feel: "moving" },
+      { seconds: 1, speed: 1.4, accuracyM: 5, feel: "still" },
+      { seconds: gap, speed: 1.4, accuracyM: 5, feel: null },
+      { seconds: 30, speed: 0, accuracyM: 5, feel: "still" },
+    ]).fixes;
+    const stopAt = (32 + gap) * 1000;
+    const changes = changesOf(fixes);
+    expect(changes.map((c) => c?.kind)).toEqual(["pause"]);
+    expect(changes[0]?.at ?? 0).toBeGreaterThanOrEqual(stopAt - 1000);
+    expect(counted(without(fixes)).on - counted(fixes, changes).on).toBeLessThanOrEqual(2);
+    expect(stateAfter(fixes).wheels).toBe(false);
+  });
+
+  it("one moving point with a place, then two minutes of walking with none: eight moving points start the clock (round one, L1)", () => {
+    const fixes = walk([
+      { seconds: 60, speed: 3, accuracyM: 5, feel: "moving" },
+      { seconds: 20, speed: 0, accuracyM: 5, feel: "still" },
+      { seconds: 1, speed: 1.4, accuracyM: 25, feel: "moving" },
+      { seconds: 120, speed: 1.4, accuracyM: 45, feel: "moving" },
+    ]).fixes;
+    expect(changesOf(fixes).map((c) => c?.kind)).toEqual(["pause", "resume"]);
   });
 
   it("a treadmill: the phone feels the running, its place still and sure: paused by place, never started by feel", () => {

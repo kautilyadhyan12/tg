@@ -359,3 +359,53 @@ async function startRunning() {
     expect(runNow()?.phase).toBe("running");
   });
 }
+
+// Auto-pause reads the motion (37j): the rule is tested in test/autoPauseMotion.test.ts; here, what the recorder
+// hands it across the person's own Pause and Resume and a reopened app (round one's review, H4 and its tests).
+describe("Auto-pause with the motion, through the recorder", () => {
+  const STILL_SD = 0.05;
+  const MOVING_SD = 4.5;
+  /** Points one a second from `fromS`, `north(s)` metres north of the start, each with the motion of its second. */
+  async function points(fromS: number, seconds: number, north: (s: number) => number, sd: number) {
+    const run = runNow();
+    if (run === null) throw new Error("no run going");
+    for (let i = 0; i < seconds; i++) motion.send(run.startedAt + (fromS + i) * 1000, sd);
+    const locations = Array.from({ length: seconds }, (_, i) => ({
+      timestamp: run.startedAt + (fromS + i) * 1000,
+      coords: { latitude: 26.1445 + north(fromS + i) / 111_132, longitude: 91.7362, accuracy: 5, speed: 0 },
+    }));
+    await act(() => takeLocations({ locations }));
+  }
+
+  it("a pram known to be on wheels stays so through the person's own Pause and Resume", async () => {
+    const run = await startRun(RAVI.id, randomUUID(), true, Date.now());
+    const pram = (s: number) => 3 * s;
+    await points(1, 30, pram, STILL_SD);
+    // Paused at its first point, undone once it had gone 40 m: no pause kept.
+    expect(runNow()?.phase).toBe("running");
+    expect(runNow()?.pauses).toEqual([]);
+    await act(() => pauseRun(run.startedAt + 31_000));
+    await act(() => resumeRun(run.startedAt + 40_000));
+    // On wheels still: four still points do not pause it again.
+    await points(41, 8, pram, STILL_SD);
+    expect(runNow()?.phase).toBe("running");
+    expect(runNow()?.pauses).toEqual([[31_000, 40_000]]);
+  });
+
+  it("a pause read back after the app was closed waits 10 s from its own start before the motion starts the clock", async () => {
+    const run = await startRun(RAVI.id, randomUUID(), true, Date.now());
+    await points(1, 5, () => 0, STILL_SD);
+    expect(runNow()?.pauses).toEqual([[1000, null]]);
+    // The app closed and opened again.
+    resetRecorder();
+    motion.reset();
+    await act(() => loadRun());
+    const walk = (s: number) => 3 * (s - 5);
+    await points(6, 4, walk, MOVING_SD);
+    expect(runNow()?.phase).toBe("paused");
+    await points(10, 3, walk, MOVING_SD);
+    expect(runNow()?.phase).toBe("running");
+    expect(runNow()?.pauses).toEqual([[1000, 6000]]);
+    expect(run.runId).toBe(runNow()?.runId);
+  });
+});
