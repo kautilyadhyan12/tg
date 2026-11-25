@@ -13,7 +13,7 @@ import { randomUUID } from "node:crypto";
 import { cpus } from "node:os";
 import { performance } from "node:perf_hooks";
 import postgres from "postgres";
-import { RECORD_DISTANCES_M, fastestStretch, runSums, type RunMark, type RunPoint } from "@app/shared";
+import { RECORD_DISTANCES_M, RUN_MAX_PAUSES, fastestStretch, runSums, type RunMark, type RunPoint } from "@app/shared";
 import * as geo from "../src/modules/geo/service.js";
 
 const url = process.env["DATABASE_URL"] ?? "";
@@ -93,6 +93,9 @@ async function main(): Promise<void> {
   const twelve = points(43_199, 2);
   await measure("save's maths, an hour's run (with best efforts)", () => runSums(hour, [], 3_600_000, 70));
   await measure("save's maths, twelve hours (with best efforts)", () => runSums(twelve, [], 43_199_000, 70));
+  // The most still stretches a run may send (37k), one every 21.6 s: each read once, never from the run's start.
+  const still = Array.from({ length: RUN_MAX_PAUSES }, (_, i): [number, number] => [i * 21_600, i * 21_600 + 21_000]);
+  await measure("save's maths, twelve hours with 2,000 still stretches", () => runSums(twelve, [], 43_199_000, 70, still));
   // The best efforts alone, over twelve hours' marks, all four distances.
   const marks: RunMark[] = twelve.map(([t], i) => ({ d: i * 3, t }));
   await measure("best efforts alone, twelve hours, four distances", () =>

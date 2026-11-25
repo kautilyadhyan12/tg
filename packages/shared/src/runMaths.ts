@@ -705,21 +705,39 @@ function standingSpans(path: Fix[]): [number, number][] {
   return spans;
 }
 
-/** Whether `from`..`to` lies wholly inside one standing span (in time order). */
-function standingThrough(spans: readonly [number, number][], from: number, to: number): boolean {
-  for (const [a, b] of spans) {
-    if (a > from) return false;
-    if (to <= b) return true;
+/** The standing spans of a run (in time order), read by steps that go forward in time: the spans ended before a
+ *  step's start are passed once and never read again, so a run of many stops costs no more than its points (37k:
+ *  a request may hold 2,000 still stretches). */
+interface Spans {
+  list: [number, number][];
+  /** The first span that may still end after a step's start. */
+  k: number;
+}
+
+/** Spans ended before `from` touch no step from `from` on. */
+function skipEnded(spans: Spans, from: number): void {
+  while (spans.k < spans.list.length && (spans.list[spans.k]?.[1] ?? Infinity) < from) spans.k++;
+}
+
+/** Whether `from`..`to` lies wholly inside one standing span. */
+function standingThrough(spans: Spans, from: number, to: number): boolean {
+  skipEnded(spans, from);
+  for (let i = spans.k; i < spans.list.length; i++) {
+    const span = spans.list[i];
+    if (span === undefined || span[0] > from) return false;
+    if (to <= span[1]) return true;
   }
   return false;
 }
 
-/** How much of `from`..`to` lies inside the standing spans (in time order). */
-function standingWithin(spans: readonly [number, number][], from: number, to: number): number {
+/** How much of `from`..`to` lies inside the standing spans. */
+function standingWithin(spans: Spans, from: number, to: number): number {
+  skipEnded(spans, from);
   let total = 0;
-  for (const [a, b] of spans) {
-    if (a >= to) break;
-    total += Math.max(0, Math.min(b, to) - Math.max(a, from));
+  for (let i = spans.k; i < spans.list.length; i++) {
+    const span = spans.list[i];
+    if (span === undefined || span[0] >= to) break;
+    total += Math.max(0, Math.min(span[1], to) - Math.max(span[0], from));
   }
   return total;
 }
@@ -730,15 +748,20 @@ function standingWithin(spans: readonly [number, number][], from: number, to: nu
  *  made never takes a run's metres away wholesale: the most it hides is a stand's own wander. */
 function stillHeld(piece: readonly Fix[], held: readonly [number, number][], from: number, to: number): [number, number][] {
   const out: [number, number][] = [];
-  for (const [a, b] of held) {
-    const start = Math.max(a, from);
-    const end = Math.min(b, to);
+  // The stretches are in order and apart (cleanPauses), as are the piece's points: the first stretch ending after
+  // the piece begins, and each stretch's first point, are found by halving.
+  let h = firstAfter(held.length, (i) => (held[i]?.[1] ?? Infinity) > from);
+  for (; h < held.length; h++) {
+    const stretch = held[h];
+    if (stretch === undefined || stretch[0] >= to) break;
+    const start = Math.max(stretch[0], from);
+    const end = Math.min(stretch[1], to);
     if (end <= start) continue;
     let first: Fix | null = null;
     let near = true;
-    for (const fix of piece) {
-      if (fix.at < start) continue;
-      if (fix.at > end) break;
+    for (let i = firstAfter(piece.length, (k) => (piece[k]?.at ?? Infinity) >= start); i < piece.length; i++) {
+      const fix = piece[i];
+      if (fix === undefined || fix.at > end) break;
       if (first === null) first = fix;
       else if (quickMetres(first, fix) > travelMetresAt(Math.max(first.acc, fix.acc))) {
         near = false;
@@ -748,6 +771,18 @@ function stillHeld(piece: readonly Fix[], held: readonly [number, number][], fro
     if (near) out.push([start, end]);
   }
   return out;
+}
+
+/** The first of `n` places in order at which `after` holds, found by halving (`n` if none). */
+function firstAfter(n: number, after: (i: number) => boolean): number {
+  let low = 0;
+  let high = n;
+  while (low < high) {
+    const mid = (low + high) >>> 1;
+    if (after(mid)) high = mid;
+    else low = mid + 1;
+  }
+  return low;
 }
 
 /** Everything a run's summary shows, from its points and pauses. `kg` is the person's weight. `still`: the
@@ -763,7 +798,7 @@ export function runSums(points: readonly RunPoint[], pauses: readonly RunPause[]
   let leftOutM = 0;
   let leftOutMs = 0;
   let stillMs = 0;
-  const still: [number, number][] = [];
+  const still: Spans = { list: [], k: 0 };
   // The marks for the best efforts: a pause does not cut a stretch (the clock runs on), a stretch
   // left out does.
   const segments: RunMark[][] = [];
@@ -781,7 +816,7 @@ export function runSums(points: readonly RunPoint[], pauses: readonly RunPause[]
     const spans = kept.length === 0 ? found : cleanPauses([...found, ...kept], elapsed);
     for (const span of spans) {
       stillMs += span[1] - span[0];
-      still.push(span);
+      still.list.push(span);
     }
     const flagged = tooFastSteps(piece);
     // The piece is cut where a too-fast stretch is left out; each part is smoothed on its own.
