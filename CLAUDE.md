@@ -430,7 +430,7 @@ corepack pnpm --filter web exec eslint <the folders you changed> --cache --cache
 docker compose -f infra/docker-compose.dev.yml up -d postgres redis
 corepack pnpm --filter api test:local            # or test:local -t "name" / a file path
 
-# root guards (what CI runs)
+# root guards (GitHub runs these as parts, each on its own machine: .github/workflows/ci.yml; on the laptop only typecheck and lint)
 corepack pnpm lint && corepack pnpm typecheck && corepack pnpm test
 
 # the phone app, on the phone on the USB cable (apps/mobile/.copy names this folder's copy)
@@ -455,7 +455,9 @@ checks pass. **After every push, read GitHub's checks and fix whatever is red be
 saying the job is ready**: a remembered lint does not re-read a file nobody touched, so a
 fault that a change elsewhere causes in it shows there first. Measured on 2026-10-12:
 three plain runs before three pushes cost one job 25 minutes on the laptop, GitHub's own
-run takes about 11, and it was GitHub that caught that job's failing database test. What
+run took about 11 then (11.2 minutes on 2026-11-25, its checks' parts each on a machine of its own, after 26 to 55 on
+one machine; a part past 25 minutes goes red and is split again), and it was GitHub that caught that job's failing
+database test. What
 the remembering ones keep is under each package's `node_modules/.cache`, which git
 ignores; delete that folder if a remembered result ever looks wrong.
 
