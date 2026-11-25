@@ -1697,6 +1697,62 @@
   .c-ask-a .c-btn { width: auto; }
 }
 
+/* A box in the middle with a title and a foot that stay while its words scroll (AskSheet; V3a-ii,
+   the Members bar's boxes): the title and its X at the top, the buttons at the foot. */
+.c-ask-head {
+  position: sticky;
+  top: -20px;
+  z-index: 1;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin: -20px -16px 0;
+  padding: 20px 8px 0 16px;
+  background: var(--sheet);
+}
+.c-ask-title { flex: 1 1 auto; min-width: 0; margin: 0; padding-top: 6px; }
+.c-ask:has(> .c-ask-head) > .c-grab { display: none; }
+.c-ask-foot {
+  position: sticky;
+  bottom: calc(-20px - env(safe-area-inset-bottom, 0px));
+  z-index: 1;
+  margin: 0 -16px calc(-20px - env(safe-area-inset-bottom, 0px));
+  padding: 12px 16px calc(20px + env(safe-area-inset-bottom, 0px));
+  border-top: 1px solid var(--line);
+  background: var(--sheet);
+}
+@media (min-width: 768px) {
+  .c-ask-head { top: -28px; margin: -28px -28px 0; padding: 28px 20px 0 28px; }
+  .c-ask-foot { bottom: -28px; margin: 0 -28px -28px; padding: 16px 28px 28px; }
+}
+/* A short window (a small phone, a phone turned sideways, a laptop at 200 %): the title scrolls away with the words,
+   leaving the room to the list and to the foot, which keeps what Send waits for beside it. */
+@media (max-height: 700px) {
+  .c-ask-head { position: static; }
+}
+/* Short and wide enough (a laptop at 200 %, a phone turned sideways): the foot's buttons side by side, so the list keeps
+   its room. */
+@media (max-height: 560px) and (min-width: 480px) and (max-width: 767px) {
+  .c-ask-foot { padding-top: 8px; padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px)); }
+  .c-ask-foot.c-ask-a,
+  .c-ask-foot .c-ask-a { flex-direction: row-reverse; flex-wrap: wrap; justify-content: flex-start; }
+  .c-ask-foot .c-ask-a .c-btn,
+  .c-ask-foot.c-ask-a > .c-btn { width: auto; }
+}
+/* Inside a box in the middle, on a touch screen or a narrow window, its X, choices and tabs are 44 px too. */
+@media (pointer: coarse), (max-width: 767px) {
+  .c-ask .c-icon-btn { width: 44px; height: 44px; }
+  .c-ask .c-chip,
+  .c-ask .c-utab { min-height: 44px; }
+}
+/* A box opened over one in the middle (a member's page from Invite to app): its dimmed cover goes over the box under
+   it too; the panel itself, drawn after the cover, stays on top. */
+.c-ask ~ .c-scrim { z-index: 61; }
+/* Invite to app: its people in columns, wider in the middle of a computer. */
+@media (min-width: 1024px) {
+  .c-ask-wide:has(.c-ask-head) { width: min(1120px, calc(100vw - 48px)); }
+}
+
 /* A question box a page draws (cancel, freeze, refund, void, waive): a raised box under what was
    pressed, or, inside the middle box (V2b-ii), the sheet itself, its question the box's title and
    its last row of buttons the box's foot. */

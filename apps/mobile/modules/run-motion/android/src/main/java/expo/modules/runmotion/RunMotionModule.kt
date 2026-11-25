@@ -18,7 +18,7 @@ import kotlin.math.sqrt
 //
 // Held by the app's process, not by its screen, as the heart rate monitor is (modules/heart-rate): the readings are
 // summed for as long as the app's process lives, the screen locked included only while Android keeps the app working
-// (keeping it so for a whole run is ROADMAP 37l: measured 2026-11-24, the run's service stopped itself). For each second
+// (a phone set to Restricted in its battery settings takes the run's service off foreground; Start says so, 37l). For each second
 // it keeps one number, the standard deviation over that second of the acceleration's size (gravity included, so
 // how the phone is held does not matter), and the app takes them when it next looks (`take`), with each batch of
 // location points. Nothing here decides what is still or moving: the app's own code does, where it is tested.
@@ -78,7 +78,7 @@ object Motion : SensorEventListener {
       val sensors = ctx.getSystemService(Context.SENSOR_SERVICE) as? SensorManager ?: return false
       // The ordinary one, which never wakes the phone by itself. The one that does (`getDefaultSensor(type, true)`)
       // wakes it every second for the whole run and did not bring the readings back with the screen off (37i);
-      // 37l measures whether it is needed once the run's service stays on.
+      // Whether it is needed with the screen off is not measured: Kd's phone closed the development copy within seconds (37l).
       val accelerometer = sensors.getDefaultSensor(Sensor.TYPE_ACCELEROMETER) ?: return false
       started = HandlerThread("run-motion").also { it.start() }
       if (!sensors.registerListener(this, accelerometer, SAMPLE_US, LATENCY_US, Handler(started.looper))) {

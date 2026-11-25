@@ -35,6 +35,11 @@ function useLookHost() {
   return { ready: host !== null, draw };
 }
 
+/** The boxes open now, the newest last: only the newest takes Escape and Tab (a member's page opened
+ *  from a box in the middle, over it). */
+const OPEN_BOXES = [];
+const isNewest = (boxRef) => OPEN_BOXES[OPEN_BOXES.length - 1] === boxRef;
+
 /** Keys while a box is open: focus moves into it, Tab stays inside it, Escape asks to close
  *  it, and focus goes back to what had it when the box closes. */
 /** `opener`: what had the keys when the box was first drawn, where that was read before the page changed under it. */
@@ -46,6 +51,8 @@ function useBoxKeys(boxRef, onEscape, ready, opener = null) {
   useEffect(() => {
     if (!ready) return undefined;
     const before = opener ?? document.activeElement;
+    const me = boxRef;
+    OPEN_BOXES.push(me);
     const box = boxRef.current;
     if (box !== null) {
       const first = box.querySelector('[data-autofocus]') ?? box.querySelector(FOCUSABLE);
@@ -53,7 +60,7 @@ function useBoxKeys(boxRef, onEscape, ready, opener = null) {
     }
     const onKey = (event) => {
       const el = boxRef.current;
-      if (el === null) return;
+      if (el === null || OPEN_BOXES[OPEN_BOXES.length - 1] !== me) return;
       if (event.key === 'Escape') {
         event.stopPropagation();
         escape.current?.();
@@ -79,6 +86,7 @@ function useBoxKeys(boxRef, onEscape, ready, opener = null) {
     document.addEventListener('keydown', onKey, true);
     return () => {
       document.removeEventListener('keydown', onKey, true);
+      OPEN_BOXES.splice(OPEN_BOXES.indexOf(me), 1);
       if (!(before instanceof HTMLElement)) return;
       if (before.isConnected) {
         before.focus();
@@ -283,24 +291,24 @@ const InMiddle = createContext(false);
  *  outside do what its own Keep it does (`onClose`), never while it is sending. `error` is said
  *  inside it, as the page behind is covered. A box inside one already in the middle is drawn
  *  where it is, so a question that turns into another stays one box. `wide`: for two records side by side (Merge duplicate). */
-export function MiddleBox({ label, onClose, busy = false, error = null, testId, role = 'alertdialog', wide = false, children }) {
+export function MiddleBox({ label, onClose, busy = false, error = null, testId, role = 'alertdialog', wide = false, opener = null, children }) {
   const inside = useContext(InMiddle);
   if (inside) return children;
   return (
-    <MiddleShell label={label} onClose={onClose} busy={busy} error={error} testId={testId} role={role} wide={wide}>
+    <MiddleShell label={label} onClose={onClose} busy={busy} error={error} testId={testId} role={role} wide={wide} opener={opener}>
       {children}
     </MiddleShell>
   );
 }
 
-function MiddleShell({ label, onClose, busy, error, testId, role, wide, children }) {
+function MiddleShell({ label, onClose, busy, error, testId, role, wide, opener: given, children }) {
   const boxRef = useRef(null);
   const cancel = () => {
     if (!busy) onClose();
   };
   const { ready, draw } = useLookHost();
   // What had the keys as the box is first drawn, before the page draws again under it: a ⋯ on a row is gone by then.
-  const [opener] = useState(() => document.activeElement);
+  const [opener] = useState(() => given ?? document.activeElement);
   useBoxKeys(boxRef, cancel, ready, opener);
   useStillPage();
   // The box is named by its question, the first `c-inbox-t` in it, read each time it is drawn; by `label` while it
@@ -328,7 +336,8 @@ function MiddleShell({ label, onClose, busy, error, testId, role, wide, children
       shown.current = true;
       return;
     }
-    if (box.contains(document.activeElement)) return;
+    // A box opened over this one (a member's page from Invite to app) keeps the keys.
+    if (box.contains(document.activeElement) || !isNewest(boxRef)) return;
     (box.querySelector('[data-autofocus]') ?? box).focus();
   });
   return draw(
@@ -344,6 +353,28 @@ function MiddleShell({ label, onClose, busy, error, testId, role, wide, children
         {children}
       </div>
     </InMiddle.Provider>,
+  );
+}
+
+/** 3b. In the middle, a box with a title, a close X and a foot that stays (V3a-ii, the Members
+ *  bar's boxes): its words scroll between them. `wide`: a list of people in columns (Invite to
+ *  app). Escape, pressing outside and the X do what `onClose` does, never while `busy`. `opener`: where the keys go
+ *  back to, when the box is drawn again after something opened in its place. */
+export function AskSheet({ title, testId, onClose, footer, busy = false, wide = false, opener = null, children }) {
+  const cancel = () => {
+    if (!busy) onClose();
+  };
+  return (
+    <MiddleBox label={title} onClose={onClose} busy={busy} testId={testId} role="dialog" wide={wide} opener={opener}>
+      <div className="c-ask-head">
+        <h2 className="c-h2 c-ask-title">{title}</h2>
+        <button type="button" aria-label="Close" onClick={cancel} disabled={busy} className="c-icon-btn">
+          <X aria-hidden="true" className="w-5 h-5" />
+        </button>
+      </div>
+      <div className="flex flex-col gap-5">{children}</div>
+      <div className="c-ask-a c-ask-foot">{footer}</div>
+    </MiddleBox>
   );
 }
 

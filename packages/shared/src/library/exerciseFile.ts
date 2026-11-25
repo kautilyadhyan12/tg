@@ -80,6 +80,38 @@ const sourceSchema = z
   })
   .strict();
 
+/** A picture's or a clip's file on the server: its own sha256, so the name can only ever fetch those bytes, and a
+ *  file swapped or broken on the way is refused by its name (job 62a). Nothing else may be asked for. */
+export const libraryMediaFileSchema = z.string().regex(/^[0-9a-f]{64}\.(?:webp|mp4)$/, { message: "a picture or clip is named by its sha256: 64 hex digits, then .webp or .mp4" });
+export type LibraryMediaFile = z.infer<typeof libraryMediaFileSchema>;
+
+const sideSchema = z.number().int().min(16).max(4096);
+
+/** The exercise's still picture, made small from Kd's `final.png` by `tools/library-media.ts` (job 62a). `ground` is
+ *  the colour round its edge, measured from the picture, so the phone runs it to the screen's edges. */
+export const exercisePictureSchema = z
+  .object({
+    file: z.string().regex(/^[0-9a-f]{64}\.webp$/, { message: "a picture is named by its sha256, then .webp" }),
+    width: sideSchema,
+    height: sideSchema,
+    bytes: z.number().int().min(1).max(2_000_000),
+    ground: z.string().regex(/^#[0-9A-F]{6}$/, { message: "a colour as #RRGGBB, capitals" }),
+  })
+  .strict();
+export type ExercisePicture = z.infer<typeof exercisePictureSchema>;
+
+/** The exercise's clip, made small from Kd's `final.mp4` by the same command: no sound, H.264 (job 62a). */
+export const exerciseClipSchema = z
+  .object({
+    file: z.string().regex(/^[0-9a-f]{64}\.mp4$/, { message: "a clip is named by its sha256, then .mp4" }),
+    width: sideSchema,
+    height: sideSchema,
+    bytes: z.number().int().min(1).max(20_000_000),
+    seconds: z.number().min(0.5).max(60),
+  })
+  .strict();
+export type ExerciseClip = z.infer<typeof exerciseClipSchema>;
+
 /** A Compendium activity code: five digits. */
 const compendiumCodeSchema = z.string().regex(/^\d{5}$/, { message: "a Compendium code is five digits, e.g. 02056" });
 
@@ -106,9 +138,9 @@ export const exerciseFileSchema = z
     text: z.object({ en: exerciseTextSchema }).strict(),
     /** The proper sources the words were checked against (§11.3 step 5). */
     sources: z.array(sourceSchema).min(1).max(6),
-    /** Empty until job 62 makes clips. */
-    clip: z.null(),
-    picture: z.null(),
+    /** Made by `tools/library-media.ts` from Kd's `final` folder (job 62a); null until it is. */
+    clip: exerciseClipSchema.nullable(),
+    picture: exercisePictureSchema.nullable(),
   })
   .strict();
 export type ExerciseFile = z.infer<typeof exerciseFileSchema>;

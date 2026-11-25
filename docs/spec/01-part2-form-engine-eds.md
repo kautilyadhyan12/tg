@@ -2690,7 +2690,7 @@ tests, so GitHub refuses a faulty file.
 | Starting numbers | the sets and target offered when it is added to a workout; the person changes them |
 | Energy (MET) | the file names a code of the 2024 Adult Compendium of Physical Activities; the MET is read from the Compendium table, copied from the Compendium's own pages, and is never typed in an exercise's file (60a) |
 | About, steps, mistakes, cautions | in proper wording, each from a named proper source (§11.3 step 5); a caution is its own fact, never a step, and as strong as its source says it (60a); text is kept by language, English first |
-| Clip, still picture | empty until job 62 |
+| Clip, still picture | each named by its own sha256, with its shape (and the clip's length, the picture's edge colour); made by job 62a's command from Kd's `final` folder; null until it is ("As built in 62a" below) |
 | Status | live · retired. Before launch a file may simply be deleted (Kd, 2026-11-17: no real members yet); after it, an exercise is retired |
 
 An exercise's page is written and checked for this file (job 65); the old text is never
@@ -2783,6 +2783,35 @@ the seed after the old rows. The download is `GET /v1/library` (`libraryDownload
 - **For job 63:** the phone reads `libraryDownloadSchema`, which refuses a word it does not know;
   principle 7 asks the phone to show such a word plainly and go on, so the phone's own reading of an
   entry is looser than the server's.
+
+**As built in 62a (2026-11-24; `rulings/2026-11-24-62a.md`).** It replaces §11.2 tool 6 but for its last part, which is 62c.
+- **Kd's `final` folder.** Each exercise's folder in `D:\vidoe referene` holds a `final` folder (`final_<x>` where one exercise has
+  two) with `final.mp4` and `final.png` of one shape, tall or wide. The picture is that `final.png`, never a frame of the clip. A
+  clip outside a `final` folder is not finished and is never read.
+- **The command.** `corepack pnpm --filter api exec tsx tools/library-media.ts "<exercise folder>" <id> [--write]` makes the clip
+  (H.264 main, yuv420p, no sound, none of the original's own details, CRF 28, slow, fast start) and the picture (WebP quality
+  90), each 1280 on its long side at most in its own shape, names each by its sha256 in `media/library/` (git ignores `media/`),
+  measures the colour round the picture's edge, and writes a sheet (the picture, then a frame of the clip a second) to
+  `media/sheets/<id>.png`. The terminal looks at the sheet; with `--write` the command names both in the exercise's file. An
+  automatic check of the clip against the picture was measured and does not work (62a's plan): the look is the check, and a real
+  person filmed in a real gym is never published.
+- **Measured** (2026-11-24, the three exercises): clips 3,048 to 5,243 KB → 144 to 186 KB, pictures 1,317 to 1,632 KB → 29 to
+  37 KB; 596 KB for the three. The server's check of a file before it sends it (its sha256): 0.28 to 0.34 ms a clip, 0.06 to
+  0.07 ms a picture, once for each phone, which keeps it.
+- **Where they are kept.** The server's own disk (`LIBRARY_MEDIA_DIR`, unset: `media/library/` at the repository's root) until
+  Cloudflare R2 (Stage 4 item 4). `GET /v1/library/media/<sha256>.<webp|mp4>`, signed in: 400 for any other name; 404 for a file no
+  live, retired or hidden exercise names, one the server does not hold, or one whose bytes are not its name's sha256 and what its
+  ending says (logged by its name alone); 304 to a phone that holds it; kept a year. A server without the files answers 404 and
+  the phone keeps the app's own picture.
+- **The check.** One exercise's picture or clip is never named by a second, and a clip and its picture are one shape; the phone's
+  reading takes a picture or clip it cannot read as none.
+- **The phone.** It fetches a picture with the person's token the first time its exercise is shown, keeps it only when its
+  sha256 is its name, in the documents folder under that name (the app's content, nobody's data, so it is kept for everybody on
+  the phone), and never asks again. Until then, and for an exercise with none, the app's picture of its kind is shown. The
+  exercise's page shows its picture whole under the top buttons, its own edge colour from the top of the phone and to both sides,
+  the name under it; the card fits it whole beside the small muscle box, the kind word on a dark backing; My Workout, Saved
+  workouts, the calendar's day and the workout's sets show it small. The workout screen's big picture changes in 62b, with the
+  clip.
 
 ### 13.5 What a workout keeps (job 61)
 
@@ -3291,9 +3320,10 @@ a workout that survives a dead phone; a summary set by set.
 ### 13.9 Not measured yet
 
 The download's size and the publish time at 200 exercises (measured in 60b, §13.4) · many saves arriving at
-once (measured in 61a, §13.5) · history and records for five years (measured in 61b, §13.5) · where clips are kept and what that
-costs each month (job 62, with Stage 4 item 4) · how long Kd's hand time for 200 generated
-clips is (job 62 says it before the first one).
+once (measured in 61a, §13.5) · history and records for five years (measured in 61b, §13.5) · what keeping clips costs each month
+(Stage 4 item 4: about 52 MB for 200 exercises, measured in 62a's plan; R2's free allowance not yet read). Where they are
+kept is the server's own disk (62a). Kd's hand time: about 30 minutes between his finished clips while he works (the middle of
+the gaps under 90 minutes between the saved times of his 45 `final` clips, 62a), so about 75 hours for the 150 still to make.
 
 ---
 

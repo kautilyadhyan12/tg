@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
-import { AlertTriangle, Check, Loader2, X } from 'lucide-react';
+import { AlertTriangle, Check, Loader2 } from 'lucide-react';
 import { MEMBER_LIST_SELECTION_CHANGED_WORDS } from '@app/shared';
 import { deleteRefused, errorText, selectionChanged } from '../../api/orgsApi';
 import PlaceLink from '../../components/console/PlaceLink';
+import { AskSheet } from '../../components/console/ConsoleBoxes';
 import { Names } from './MemberListRemove';
 import { DELETE_WHAT_HAPPENS, SQUARE_OWNER_ONLY, deleteAppGroups, deleteButton, deleteDoneLine, deleteKeptLine, deleteNobodyLine, deleteQuestion, deleteSquareGroups } from './memberListDeleteView';
 
@@ -172,14 +173,14 @@ export default function MemberListDelete({ words, load, press, onSelectionChange
             {error}
           </p>
         ) : null}
-        <div className="grid grid-cols-[1fr_auto] md:flex md:justify-end gap-2 md:gap-3">
+        <div className="c-ask-a">
           {question !== null ? (
             <button type="button" onClick={() => void remove()} disabled={deleting} data-testid="delete-confirm" className="c-btn c-btn-danger c-btn-lg md:order-2">
               {deleting ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : null}
               {deleteButton(preview)}
             </button>
           ) : null}
-          <button type="button" onClick={onClose} className="c-btn c-btn-s c-btn-lg md:order-1">
+          <button type="button" onClick={onClose} disabled={deleting} className="c-btn c-btn-s c-btn-lg md:order-1">
             {question !== null ? "Don't delete" : 'Close'}
           </button>
         </div>
@@ -188,30 +189,8 @@ export default function MemberListDelete({ words, load, press, onSelectionChange
   }
 
   return (
-    <div className="fixed inset-0 z-50" style={{ background: 'var(--scrim)' }}>
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-label="Delete permanently"
-        data-testid="delete-box"
-        className="c-sheet absolute inset-x-0 bottom-0 top-16 md:top-16 md:bottom-auto md:left-1/2 md:right-auto md:-translate-x-1/2 md:w-[600px] md:max-h-[calc(100%-96px)] flex flex-col rounded-t-[20px] md:rounded-[20px] border"
-        style={{ borderColor: 'var(--card-line)' }}
-      >
-        <div className="flex items-center gap-3 pl-4 pr-2 pt-3 md:px-7 md:pt-6 md:pb-2">
-          <h2 className="c-h2 flex-grow" style={{ fontSize: 22, lineHeight: '28px', fontWeight: 700 }}>
-            Delete permanently
-          </h2>
-          <button type="button" aria-label="Close" onClick={onClose} className="c-icon-btn">
-            <X aria-hidden="true" className="w-5 h-5" />
-          </button>
-        </div>
-        <div className="px-4 pt-2 pb-4 md:px-7 md:pt-3 md:pb-6 overflow-y-auto overscroll-contain flex-grow min-h-0">
-          <div className="flex flex-col gap-5">{body}</div>
-        </div>
-        <div className="flex px-4 pt-3 pb-5 md:px-7 md:py-4 border-t md:justify-end" style={{ borderColor: 'var(--line)', background: 'var(--card)' }}>
-          {footer}
-        </div>
-      </div>
-    </div>
+    <AskSheet title="Delete permanently" testId="delete-box" onClose={onClose} busy={deleting} footer={footer}>
+      {body}
+    </AskSheet>
   );
 }

@@ -124,3 +124,6 @@ reviews/
 
 # What the video tool writes: pictures of real people. Never in git.
 /measured/
+
+# An exercise's pictures and clips, made small on the laptop by apps/api/tools/library-media.ts (job 62a): never in git.
+/media/

@@ -221,6 +221,10 @@ const envSchema = z.object({
   // production, so a deploy never keeps them in a temporary folder; elsewhere unset
   // means one under the system's temporary folder.
   PHOTO_DIR: z.string().trim().min(1).max(500).optional(),
+  // Where an exercise's pictures and clips are kept (job 62a): our own content, made small on the laptop, each named
+  // by its sha256. Unset means `media/library/` at the repository's root; a server without them answers 404 and the
+  // phone shows the app's own picture, until Cloudflare R2 (Stage 4 item 4).
+  LIBRARY_MEDIA_DIR: z.string().trim().min(1).max(500).optional(),
   // The address members are told to write to for help, shown on a gym's Updates (ROADMAP
   // 19b-ii-b; Apple and Google ask it of any app where people post). Kd has not chosen it
   // yet (RULINGS 2026-10-05), so it is REQUIRED in production: the site cannot go online

@@ -37,6 +37,7 @@ import { registerPrivacyRoutes } from "./modules/privacy/routes.js";
 import { registerPushRoutes } from "./modules/push/routes.js";
 import { registerReminderRoutes } from "./modules/reminders/routes.js";
 import { registerExerciseRoutes } from "./modules/exercises/routes.js";
+import { createDiskMediaStore, MEDIA_FOLDER, type LibraryMediaStore } from "./modules/library/media.js";
 import { registerLibraryRoutes } from "./modules/library/routes.js";
 import { registerTrainingRoutes } from "./modules/training/routes.js";
 import { registerGamificationRoutes } from "./modules/gamification/routes.js";
@@ -121,6 +122,8 @@ export interface BuildAppOverrides {
   robotCheck?: RobotCheck;
   /** Tests keep a gym page's photos where they can look; unset is `PHOTO_DIR`. */
   photoStore?: PhotoStore;
+  /** Tests hold an exercise's pictures and clips in memory; unset is `LIBRARY_MEDIA_DIR`. */
+  libraryMedia?: LibraryMediaStore;
   /** Tests hold a password check open to race it against an address's first proof;
    *  unset is argon2id. */
   passwordHasher?: PasswordHasher;
@@ -407,7 +410,8 @@ export async function buildApp(
   registerPushRoutes(app, { sql, redis });
   registerReminderRoutes(app, { sql, redis, ...(overrides.reminders?.now === undefined ? {} : { now: overrides.reminders.now }) });
   registerExerciseRoutes(app, { sql });
-  registerLibraryRoutes(app, { sql });
+  // An exercise's picture and clip: the server's own disk until Cloudflare R2 (Stage 4 item 4).
+  registerLibraryRoutes(app, { sql, media: overrides.libraryMedia ?? createDiskMediaStore(config.LIBRARY_MEDIA_DIR ?? MEDIA_FOLDER) });
   registerTrainingRoutes(app, { sql, redis, news, ...(overrides.training?.now === undefined ? {} : { now: overrides.training.now }) });
   registerGamificationRoutes(app, { sql });
   registerGoalRoutes(app, { sql, ...(overrides.goals?.now === undefined ? {} : { now: overrides.goals.now }) });

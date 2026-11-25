@@ -88,6 +88,39 @@ function changed(path: string, value: unknown, base = squat()): Record<string, u
   return copy;
 }
 
+const HASH_A = "a".repeat(63) + "1";
+const HASH_B = "b".repeat(63) + "2";
+const PICTURE_A = { file: `${HASH_A}.webp`, width: 720, height: 1280, bytes: 30_412, ground: "#D5D5D5" };
+const CLIP_A = { file: `${HASH_A}.mp4`, width: 720, height: 1280, bytes: 188_211, seconds: 4 };
+
+describe("62a's worst thing: another exercise's picture or clip shown, so somebody copies the wrong movement", () => {
+  it("a second exercise naming another's picture is refused, in the file read second (files are read in name order)", () => {
+    const first = changed("picture", PICTURE_A);
+    const second = changed("picture", PICTURE_A, plank());
+    expect(faultsOf([file(first), file(second)])).toEqual([
+      { file: "squat.json", at: "picture.file", problem: `${HASH_A}.webp is already named by plank.json (picture.file); each exercise has its own picture and clip` },
+    ]);
+  });
+
+  it("a second exercise naming another's clip is refused", () => {
+    const first = changed("clip", CLIP_A);
+    const second = changed("clip", CLIP_A, plank());
+    expect(faultsOf([file(first), file(second)]).map(faultLine)).toEqual([`squat.json · clip.file: ${HASH_A}.mp4 is already named by plank.json (clip.file); each exercise has its own picture and clip`]);
+  });
+
+  it("each with its own picture and clip passes, and a clip and picture of different shapes are refused", () => {
+    const first = changed("clip", CLIP_A, changed("picture", PICTURE_A));
+    const second = changed("clip", { ...CLIP_A, file: `${HASH_B}.mp4` }, changed("picture", { ...PICTURE_A, file: `${HASH_B}.webp` }, plank()));
+    expect(faultsOf([file(first), file(second)])).toEqual([]);
+    const mixed = changed("clip", { ...CLIP_A, width: 1280, height: 720 }, changed("picture", PICTURE_A));
+    expect(faultsOf([file(mixed)]).map((f) => f.at)).toEqual(["clip"]);
+  });
+
+  it("an exercise with no picture or clip yet is still a whole file", () => {
+    expect(faultsOf([file(squat()), file(plank())])).toEqual([]);
+  });
+});
+
 describe("the calorie number cannot be typed wrong (the worst thing: ten times the calories shown)", () => {
   it.each([
     ["80 typed for 8.0", 80],
@@ -300,8 +333,13 @@ describe("the rest of one file's rules", () => {
     expect(faultsOf([file(changed("sources", []))]).map((f) => f.at)).toEqual(["sources"]);
   });
 
-  it("a clip is empty until the clip job", () => {
-    expect(faultsOf([file(changed("clip", "squat.mp4"))]).map((f) => f.at)).toEqual(["clip"]);
+  it("a picture or clip that is not named by its sha256 is refused: a name like squat.mp4 could be any file", () => {
+    for (const bad of ["squat.mp4", `${HASH_A.slice(0, 63)}.mp4`, `${HASH_A.toUpperCase()}.mp4`, `${HASH_A}.mov`, `../${HASH_A}.mp4`, `${HASH_A}.webp`]) {
+      expect(faultsOf([file(changed("clip", { ...CLIP_A, file: bad }))]).map((f) => f.at), bad).toEqual(["clip.file"]);
+    }
+    expect(faultsOf([file(changed("picture", { ...PICTURE_A, file: `${HASH_A}.png` }))]).map((f) => f.at)).toEqual(["picture.file"]);
+    expect(faultsOf([file(changed("picture", { ...PICTURE_A, ground: "#d5d5d5" }))]).map((f) => f.at)).toEqual(["picture.ground"]);
+    expect(faultsOf([file(changed("picture", { ...PICTURE_A, extra: 1 }))]).map((f) => f.at)).toEqual(["picture"]);
   });
 
   it("a file that is not JSON, and a file that is not an exercise's, are refused by name", () => {
