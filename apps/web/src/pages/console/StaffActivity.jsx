@@ -63,7 +63,7 @@ export default function StaffActivity({ gymId, timezone, clockFormat, filters, o
   const empty = emptyWords(filtered);
 
   return (
-    <section className="flex flex-col gap-4" aria-label="Staff activity">
+    <section className="c-staff flex flex-col gap-4" aria-label="Staff activity">
       {onBack !== null ? (
         <button type="button" onClick={onBack} className="c-btn c-btn-s c-btn-sm self-start">
           <ChevronLeft aria-hidden="true" className="w-4 h-4" />

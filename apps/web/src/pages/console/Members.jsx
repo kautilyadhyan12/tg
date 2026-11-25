@@ -72,7 +72,7 @@ function RosterRow({ member, words, onOpen, picked = null, onTick }) {
         style={{ gridTemplateColumns: 'minmax(0, 1fr) auto 18px' }}
       >
         <span className="flex items-center gap-3 min-w-0">
-          <span className="hidden md:inline-flex c-avatar c-avatar-sm flex-shrink-0" aria-hidden="true">
+          <span className="c-avatar c-avatar-sm c-avatar-md flex-shrink-0" aria-hidden="true">
             {initialsOf(member.displayName)}
           </span>
           <span className="flex flex-col gap-0.5 min-w-0">

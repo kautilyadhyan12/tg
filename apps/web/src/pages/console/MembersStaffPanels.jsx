@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { STAFF_ROLE_NAME_MAX } from '@app/shared';
 import { Check, Loader2, Plus, X } from 'lucide-react';
 import { ConfirmInline, ConsoleFailed } from '../../components/console/ConsoleStates';
+import { SidePanel } from '../../components/console/ConsoleBoxes';
 import { readOnlyNote } from './billingView';
 import { formatJoinedAt, orgWords, staffRoleText } from './consoleView';
 import {
@@ -9,6 +10,7 @@ import {
   carriedPrivileges,
   coOwnerView,
   effectivePrivileges,
+  groupedChoices,
   heldPrivileges,
   inviteTicks,
   ownerView,
@@ -23,7 +25,8 @@ import {
 import { Tick } from './MemberListPanel';
 
 // The two panels of Members → Staff (ROADMAP 23c-ii): Invite staff, and one person who
-// runs the gym. Both open over the page from the right, as a member's page does.
+// runs the gym. Both open from the right (`SidePanel`; the whole screen on a phone), their
+// buttons at the foot, which is always on screen.
 
 const TICK = { accentColor: 'var(--accent)' };
 const LINE = { borderColor: 'var(--line)' };
@@ -37,40 +40,6 @@ function useInView(open) {
   return ref;
 }
 
-// `foot`: what stays at the bottom of the panel however far it is scrolled (the form's
-// buttons, so Send is never below the fold).
-function Panel({ label, title, sub = null, foot = null, onClose, children }) {
-  return (
-    <div className="fixed inset-0 z-50" style={{ background: 'var(--scrim)' }}>
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-label={label}
-        className="c-sheet absolute inset-0 md:left-auto md:w-[520px] md:border-l flex flex-col overflow-y-auto"
-        style={{ borderColor: 'var(--card-line)' }}
-      >
-        <div className="flex items-start gap-3 px-4 pt-5 pb-4 md:px-7 md:pt-7 md:pb-5 border-b" style={LINE}>
-          <div className="flex flex-col gap-1 flex-grow min-w-0">
-            <h2 className="c-h1 break-words" style={{ fontSize: 28, lineHeight: '34px' }}>
-              {title}
-            </h2>
-            {sub}
-          </div>
-          <button type="button" aria-label="Close" onClick={onClose} className="c-icon-btn">
-            <X aria-hidden="true" className="w-5 h-5" />
-          </button>
-        </div>
-        <div className="flex flex-col gap-5 px-4 py-5 md:px-7">{children}</div>
-        {foot !== null ? (
-          <div className="sticky bottom-0 mt-auto flex flex-col gap-3 px-4 py-3 md:px-7 md:py-4 border-t" style={{ ...LINE, background: 'var(--sheet)' }}>
-            {foot}
-          </div>
-        ) : null}
-      </div>
-    </div>
-  );
-}
-
 /** A refusal, said under the button that was pressed and brought into view there. */
 function Refusal({ error, onRetry }) {
   const ref = useInView(error !== null);
@@ -82,29 +51,35 @@ function Refusal({ error, onRetry }) {
   );
 }
 
-/** The tick boxes: each permission in words, with what it lets the person do. */
-function TickList({ choices, ticked, disabled, onToggle, testId }) {
+/** The tick boxes under their headings (People, Front desk, …): each permission in words,
+ *  with what it lets the person do. */
+function TickList({ choices, orgType, ticked, disabled, onToggle, testId }) {
   return (
-    <div className="flex flex-col" data-testid={testId}>
-      {choices.map((choice) => {
-        const on = ticked.includes(choice.value);
-        return (
-          <label key={choice.value} className="flex items-start gap-3 min-h-11 py-1.5 c-s15 c-t1">
-            <input
-              type="checkbox"
-              className="w-[18px] h-[18px] mt-0.5 flex-shrink-0"
-              style={TICK}
-              checked={on}
-              disabled={disabled}
-              onChange={() => onToggle(choice.value)}
-            />
-            <span className="flex flex-col gap-0.5">
-              <span>{choice.label}</span>
-              <span className="c-s13 c-t2">{choice.hint}</span>
-            </span>
-          </label>
-        );
-      })}
+    <div className="flex flex-col gap-4" data-testid={testId}>
+      {groupedChoices(choices, orgType).map((group) => (
+        <div key={group.key} className="flex flex-col" role="group" aria-label={group.title}>
+          <span className="c-eyebrow pb-1">{group.title}</span>
+          {group.choices.map((choice) => {
+            const on = ticked.includes(choice.value);
+            return (
+              <label key={choice.value} className="flex items-start gap-3 min-h-11 py-1.5 c-s15 c-t1">
+                <input
+                  type="checkbox"
+                  className="w-[18px] h-[18px] mt-0.5 flex-shrink-0"
+                  style={TICK}
+                  checked={on}
+                  disabled={disabled}
+                  onChange={() => onToggle(choice.value)}
+                />
+                <span className="flex flex-col gap-0.5 min-w-0">
+                  <span>{choice.label}</span>
+                  <span className="c-s14 c-t2">{choice.hint}</span>
+                </span>
+              </label>
+            );
+          })}
+        </div>
+      ))}
     </div>
   );
 }
@@ -203,10 +178,13 @@ export function StaffInvitePanel({ orgType, words, roles, canInviteCoOwner = fal
 
   const deletingRole = deleting === null ? null : (roles.find((r) => r.id === deleting) ?? null);
   const refusal = error !== null ? <ConsoleFailed message={error.message} newLook /> : null;
+  // Typing not sent yet: closing asks first (the panel's own rule).
+  const unsaved = email.trim() !== '' || (newRole !== null && newRole.name.trim() !== '');
+  const closeRef = useRef(null);
 
   const foot =
     newRole !== null ? (
-      <>
+      <div className="flex flex-col gap-3 w-full">
         {refusal}
         <div className="flex flex-wrap items-center gap-2">
           <button type="button" onClick={() => void saveRole()} disabled={off} className="c-btn c-btn-p">
@@ -217,9 +195,9 @@ export function StaffInvitePanel({ orgType, words, roles, canInviteCoOwner = fal
             Cancel
           </button>
         </div>
-      </>
+      </div>
     ) : (
-      <>
+      <div className="flex flex-col gap-3 w-full">
         {fieldError !== null ? (
           <p className="c-s14 m-0" role="alert" style={{ color: 'var(--bad)' }}>
             {fieldError}
@@ -231,15 +209,15 @@ export function StaffInvitePanel({ orgType, words, roles, canInviteCoOwner = fal
             {busy ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : null}
             Send invitation
           </button>
-          <button type="button" onClick={onClose} disabled={busy} className="c-btn c-btn-s">
+          <button type="button" onClick={() => closeRef.current?.close()} disabled={busy} className="c-btn c-btn-s">
             Cancel
           </button>
         </div>
-      </>
+      </div>
     );
 
   return (
-    <Panel label="Invite staff" title="Invite staff" foot={foot} onClose={onClose}>
+    <SidePanel title="Invite staff" onClose={onClose} unsaved={unsaved} busy={busy} saveLabel={null} foot={foot} closeRef={closeRef} testId="staff-invite-panel">
       {/* The panel covers the page, so it says itself why its controls are grey. */}
       {readOnly ? <p className="c-s14 c-t2 m-0">{readOnlyNote(orgType)}</p> : null}
       <div className="c-field">
@@ -357,7 +335,7 @@ export function StaffInvitePanel({ orgType, words, roles, canInviteCoOwner = fal
       {coOwner ? null : (
         <fieldset className="flex flex-col gap-1 m-0 p-0 border-0 min-w-0">
           <legend className="c-label p-0">What they can do</legend>
-          <TickList choices={privilegeChoices(base, orgType)} ticked={ticks} disabled={off} onToggle={toggle} testId="invite-ticks" />
+          <TickList choices={privilegeChoices(base, orgType)} orgType={orgType} ticked={ticks} disabled={off} onToggle={toggle} testId="invite-ticks" />
         </fieldset>
       )}
 
@@ -374,7 +352,7 @@ export function StaffInvitePanel({ orgType, words, roles, canInviteCoOwner = fal
           straight away. You can change what they can do at any time. Managing staff stays with you.
         </p>
       ) : null}
-    </Panel>
+    </SidePanel>
   );
 }
 
@@ -439,7 +417,7 @@ function RoleSection({ person, roles, orgType, words, viewerIsOwner, off, error,
  *  An edit not yet saved belongs to the set it was made over: when the server's set for
  *  this person changes (a save, a role change), the edit is dropped and the boxes are the
  *  server's again. The owner's row is drawn and cannot be changed. */
-function PermissionsSection({ person, orgType, viewerIsOwner = false, busy, readOnly, error, onSave }) {
+function usePermissions(person, orgType, onSave) {
   const current = effectivePrivileges(person);
   // Who they are to the gym and what they hold, as one word: an edit, and what was said of
   // the last save, each belong to one of these.
@@ -451,7 +429,6 @@ function PermissionsSection({ person, orgType, viewerIsOwner = false, busy, read
   // set they hold, so a role change takes "Permissions saved." down with the set.
   const [lastSave, setLastSave] = useState(null);
   const outcome = lastSave !== null && lastSave.held === held ? lastSave.kind : null;
-  const said = useInView(outcome !== null);
   if (over !== held) {
     setOver(held);
     setDraft(null);
@@ -461,14 +438,12 @@ function PermissionsSection({ person, orgType, viewerIsOwner = false, busy, read
   }
 
   const ownerRow = person.role === 'owner';
-  const isSelf = person.isYou === true;
   const choices = privilegeChoices(person.role, orgType);
   const offered = choices.map((choice) => choice.value);
   const ticked = (draft ?? current).filter((value) => offered.includes(value));
   const whole = [...ticked, ...carriedPrivileges(person, orgType)];
   // Whether the set that would be sent differs from the one held.
   const dirty = !ownerRow && privilegesDiffer(heldPrivileges(person), whole);
-  const extraNote = carriedNote(person, orgType);
 
   const toggle = (value) => {
     if (ownerRow) return;
@@ -486,45 +461,60 @@ function PermissionsSection({ person, orgType, viewerIsOwner = false, busy, read
     setLastSave(answer.kind === 'unread' ? null : { kind: answer.kind, held: heldAs(answer.privileges) });
   };
 
+  return { ownerRow, choices, ticked, dirty, edited: dirty && draft !== null, outcome, toggle, save, cancel: () => setDraft(null) };
+}
+
+/** WHAT THIS PERSON CAN DO, drawn: the boxes under their headings. Save permissions and
+ *  what a save came to are at the panel's foot (`PermissionsFoot`). */
+function PermissionsSection({ person, orgType, viewerIsOwner = false, perms, busy, readOnly }) {
+  const isSelf = person.isYou === true;
+  const extraNote = carriedNote(person, orgType);
   return (
     <section className="flex flex-col gap-3 pt-5 border-t" style={LINE} data-testid={`privileges-${person.userId}`}>
       <h3 className="c-h3">{isSelf ? 'What you can do' : 'What they can do'}</h3>
-      <TickList choices={choices} ticked={ticked} disabled={busy || ownerRow || readOnly} onToggle={toggle} />
+      <TickList choices={perms.choices} orgType={orgType} ticked={perms.ticked} disabled={busy || perms.ownerRow || readOnly} onToggle={perms.toggle} />
       {extraNote !== null ? <p className="c-s14 c-t2 m-0">{extraNote}</p> : null}
-      {ownerRow ? (
+      {perms.ownerRow ? (
         <p className="c-s14 c-t2 m-0">
           {person.coOwner === true
             ? `A co-owner can do everything here, except add, change or remove co-owners.${isSelf || viewerIsOwner ? '' : ' Only the owner can change this.'}`
             : `${isSelf ? 'This is what you can do.' : 'This is what the owner can do.'} It can't be changed here: a ${orgWords(orgType).it} has to keep somebody who can manage its staff.`}
         </p>
-      ) : (
-        <>
-          <div className="flex flex-wrap items-center gap-2">
-            <button type="button" disabled={busy || readOnly || !dirty} onClick={() => void save()} className="c-btn c-btn-p">
-              {busy ? 'Saving…' : 'Save permissions'}
-            </button>
-            {dirty && draft !== null ? (
-              <button type="button" onClick={() => setDraft(null)} disabled={busy} className="c-btn c-btn-s">
-                Cancel
-              </button>
-            ) : null}
-          </div>
-          {outcome === 'saved' ? (
-            <p ref={said} className="c-s14 c-w5 m-0 flex items-center gap-2" style={{ color: 'var(--good)' }} role="status">
-              <Check aria-hidden="true" className="w-4 h-4" />
-              Permissions saved.
-            </p>
-          ) : null}
-          {/* The server answered yes and holds another set: the boxes are its, and it is said. */}
-          {outcome === 'differs' ? (
-            <p ref={said} className="c-s14 m-0" style={{ color: 'var(--warn)' }} role="alert">
-              Not everything was kept. The boxes show what they can do now.
-            </p>
-          ) : null}
-          <Refusal error={error} />
-        </>
-      )}
+      ) : null}
     </section>
+  );
+}
+
+/** The panel's foot for a row whose ticks can change: Save permissions, Cancel while a box is
+ *  changed, and what the save came to, said beside the button that was pressed. */
+function PermissionsFoot({ perms, busy, readOnly, error }) {
+  if (perms.ownerRow) return null;
+  return (
+    <div className="flex flex-col gap-3 w-full" data-testid="privileges-foot">
+      {perms.outcome === 'saved' ? (
+        <p className="c-s14 c-w5 m-0 flex items-center gap-2" style={{ color: 'var(--good)' }} role="status">
+          <Check aria-hidden="true" className="w-4 h-4" />
+          Permissions saved.
+        </p>
+      ) : null}
+      {/* The server answered yes and holds another set: the boxes are its, and it is said. */}
+      {perms.outcome === 'differs' ? (
+        <p className="c-s14 m-0" style={{ color: 'var(--warn)' }} role="alert">
+          Not everything was kept. The boxes show what they can do now.
+        </p>
+      ) : null}
+      <Refusal error={error} />
+      <div className="flex flex-wrap items-center gap-2">
+        <button type="button" disabled={busy || readOnly || !perms.dirty} onClick={() => void perms.save()} className="c-btn c-btn-p c-btn-lg">
+          {busy ? 'Saving…' : 'Save permissions'}
+        </button>
+        {perms.edited ? (
+          <button type="button" onClick={perms.cancel} disabled={busy} className="c-btn c-btn-s c-btn-lg">
+            Cancel
+          </button>
+        ) : null}
+      </div>
+    </div>
   );
 }
 
@@ -557,7 +547,7 @@ function RemoveSection({ person, words, viewerIsOwner, off, error, onRemove }) {
               <Tick state={alsoApp ? 'on' : 'off'} label={`Also remove ${name} from the app`} onClick={() => setAlsoApp((on) => !on)} />
               <span className="flex flex-col gap-0.5 cursor-pointer" onClick={() => setAlsoApp((on) => !on)}>
                 <span className="c-s14 c-w6 c-t1">Also remove {name} from the app</span>
-                <span className="c-s13 c-t2">
+                <span className="c-s14 c-t2">
                   {!alsoApp
                     ? `They keep using the app as a ${words.person}.`
                     : person.movesRecord
@@ -742,8 +732,22 @@ export function StaffPersonPanel({ person, roles, orgType, words, gymName = '', 
   const coOwner = coOwnerView(person, viewerIsOwner);
   const owner = ownerView(person, viewerIsOwner, staff, paidPlan);
   const off = busy || readOnly;
+  const perms = usePermissions(person, orgType, onSavePrivileges);
+  // A way out of the panel other than its X (See activity, Open another person) asks first too.
+  const closeRef = useRef(null);
+  const leave = (then) => (closeRef.current === null ? then() : closeRef.current.leave(then));
   return (
-    <Panel label={person.displayName} title={person.displayName} sub={person.email ? <span className="c-s14 c-t2 break-words">{person.email}</span> : null} onClose={onClose}>
+    <SidePanel
+      title={person.displayName}
+      sub={person.email || null}
+      onClose={onClose}
+      unsaved={perms.edited}
+      busy={busy}
+      saveLabel={null}
+      foot={<PermissionsFoot perms={perms} busy={busy} readOnly={readOnly} error={error?.at === 'ticks' ? error : null} />}
+      closeRef={closeRef}
+      testId="staff-person-panel"
+    >
       <div className="flex flex-col gap-3">
         <span className="flex flex-wrap gap-1.5">
           <span className="c-tag c-tag-soft">{staffRoleText(person.role, person.roleName ?? null, words, person.coOwner)}</span>
@@ -757,7 +761,7 @@ export function StaffPersonPanel({ person, roles, orgType, words, gymName = '', 
         <p className="c-s14 c-t2 m-0">On the staff since {formatJoinedAt(person.since)}</p>
         {/* What they did, on Staff activity, already showing them alone (4d). */}
         {onSeeActivity !== null ? (
-          <button type="button" onClick={onSeeActivity} className="c-btn c-btn-s c-btn-sm self-start">
+          <button type="button" onClick={() => leave(onSeeActivity)} className="c-btn c-btn-s c-btn-sm self-start">
             See activity
           </button>
         ) : null}
@@ -799,12 +803,12 @@ export function StaffPersonPanel({ person, roles, orgType, words, gymName = '', 
           error={error?.at === 'owner' ? error : null}
           onAsk={onAskOwner}
           onCancel={onCancelOwner}
-          onOpen={() => (owner.kind === 'other' ? onOpenPerson(owner.person.userId) : undefined)}
+          onOpen={() => (owner.kind === 'other' ? leave(() => onOpenPerson(owner.person.userId)) : undefined)}
         />
       ) : null}
       <RoleSection person={person} roles={roles} orgType={orgType} words={words} viewerIsOwner={viewerIsOwner} off={off} error={error?.at === 'role' ? error : null} onRetry={onRetry} onChange={onChangeRole} />
-      <PermissionsSection person={person} orgType={orgType} viewerIsOwner={viewerIsOwner} busy={busy} readOnly={readOnly} error={error?.at === 'ticks' ? error : null} onSave={onSavePrivileges} />
+      <PermissionsSection person={person} orgType={orgType} viewerIsOwner={viewerIsOwner} perms={perms} busy={busy} readOnly={readOnly} />
       <RemoveSection person={person} words={words} viewerIsOwner={viewerIsOwner} off={off} error={error?.at === 'remove' ? error : null} onRemove={onRemove} />
-    </Panel>
+    </SidePanel>
   );
 }
