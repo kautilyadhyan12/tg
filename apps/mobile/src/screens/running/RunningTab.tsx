@@ -20,6 +20,7 @@ import { autoPauseChoice, chooseAutoPause, chooseMapColours, chooseVoice, mapCol
 import { RefusedRuns } from "./RefusedRuns";
 import { RUN_BAR_ROOM, gpsLight, useRunLayer, type StartProblem } from "./RunLayer";
 import { StartProblemBox } from "./StartProblem";
+import { BATTERY_ON_WORDS, batteryLimited } from "./BatteryLimit";
 import { useRunOutbox } from "./RunOutbox";
 import { useLookOpen } from "../setupFirst";
 import { RunPage } from "./RunPage";
@@ -111,6 +112,8 @@ export function RunningTab({ units, parts }: { units: Units; parts: ReactNode })
   // No voice code of this app's on this phone (an iPhone, until Stage 5 item 21): the row stays.
   const noVoiceYet = runVoiceNative === null;
   const [problem, setProblem] = useState<StartProblem | null>(null);
+  // Back from the phone's battery settings with the limit lifted (37l): said where the box was, until the next Start.
+  const [batteryOn, setBatteryOn] = useState(false);
   // Start, or Start today's run (37d-ii): what stood in the way is said under the button that was
   // pressed. The plan box's is said under the box, and the page is moved to show it; START's, and
   // Today's run beside it, at the page's end above them.
@@ -153,7 +156,22 @@ export function RunningTab({ units, parts }: { units: Units; parts: ReactNode })
   useEffect(() => {
     if (!focused) clearStartFailed();
   }, [focused, clearStartFailed]);
-  const saidUnderStart = (said !== null && !pressedBox) || layer.done !== null || view.refused.length > 0;
+  useEffect(() => {
+    if (!focused) setBatteryOn(false);
+  }, [focused]);
+  // The box asked to change the battery setting: when the person comes back with it changed, the box goes and says so.
+  useEffect(() => {
+    if (problem !== "battery") return;
+    const heard = AppState.addEventListener("change", (next) => {
+      if (next !== "active" || batteryLimited()) return;
+      setProblem(null);
+      setBatteryOn(true);
+    });
+    return () => {
+      heard.remove();
+    };
+  }, [problem]);
+  const saidUnderStart = ((said !== null || batteryOn) && !pressedBox) || layer.done !== null || view.refused.length > 0;
   useEffect(() => {
     if (saidUnderStart) showEnd();
   }, [saidUnderStart, said, layer.done, showEnd]);
@@ -166,19 +184,29 @@ export function RunningTab({ units, parts }: { units: Units; parts: ReactNode })
     });
   }, [height]);
 
-  const start = async (guide: KeptRunGuide | null = null, inBox = false) => {
+  const start = async (guide: KeptRunGuide | null = null, inBox = false, anyway = false) => {
     if (look !== null) {
       look();
       return;
     }
     setProblem(null);
+    setBatteryOn(false);
     setFrom(guide);
     setPressedBox(inBox);
-    const said = await layer.start(autoPause, guide);
+    const said = await layer.start(autoPause, guide, anyway);
     setProblem(said);
     setAsked((n) => n + 1);
   };
-  const problemBox = said === null ? null : <StartProblemBox problem={said} onAgain={() => void start(from, pressedBox)} />;
+  const problemBox =
+    said !== null ? (
+      <StartProblemBox problem={said} onAgain={() => void start(from, pressedBox)} onAnyway={() => void start(from, pressedBox, true)} />
+    ) : batteryOn ? (
+      <View style={styles.problem}>
+        <Txt kind="small" colour="goodText">
+          {BATTERY_ON_WORDS}
+        </Txt>
+      </View>
+    ) : null;
 
   return (
     <View style={styles.grow}>
@@ -232,7 +260,7 @@ export function RunningTab({ units, parts }: { units: Units; parts: ReactNode })
             }}
             onStartToday={going ? null : (guide) => void start(guide, true)}
           />
-          {said !== null && pressedBox ? (
+          {problemBox !== null && pressedBox ? (
             <View ref={underBox} testID="problem-under-plan" onLayout={showUnderBox}>
               {problemBox}
             </View>
@@ -362,7 +390,7 @@ export function RunningTab({ units, parts }: { units: Units; parts: ReactNode })
               />
             </View>
           </View>
-          {said !== null && !pressedBox ? problemBox : null}
+          {!pressedBox ? problemBox : null}
           {layer.done === null ? null : (
             <Txt kind="small" colour={layer.done.waiting ? "textSoft" : "goodText"} style={styles.said}>
               {layer.done.waiting ? `${layer.done.name} is saved on this phone. It will be sent when you're online.` : `${layer.done.name} is saved.`}

@@ -437,6 +437,31 @@ jest.mock("../../src/screens/running/runMotionNative", () => {
     },
   };
 });
+// The phone's battery limit on this app (37l), modules/run-battery's Android code. `restricted` is what Android
+// answers, `opens` counts the presses that opened its battery page, `opened` is whether that page opened,
+// `missing` stands for a phone with no such code (an iPhone, a copy built before it), `fails` for one that throws.
+jest.mock("../../src/screens/running/runBatteryNative", () => {
+  const fresh = () => ({ restricted: false, opened: true, missing: false, fails: false, opens: 0 });
+  const battery = { ...fresh() };
+  battery.reset = () => Object.assign(battery, fresh());
+  const native = {
+    restricted: () => {
+      if (battery.fails) throw new Error("battery");
+      return battery.restricted;
+    },
+    open: () => {
+      if (battery.fails) throw new Error("battery");
+      battery.opens += 1;
+      return battery.opened;
+    },
+  };
+  return {
+    battery,
+    get runBatteryNative() {
+      return battery.missing ? null : native;
+    },
+  };
+});
 // The app's sound player (64a-vi), expo-audio's: `played` lists each sound handed to it, in order.
 jest.mock("../../src/sound/soundNative", () => {
   const sounds = { played: [] };
