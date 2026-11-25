@@ -39,6 +39,19 @@
       },
       "atMost": 65,
       "from": "The upper back on the bench, the trunk leaning back from upright and short of lying (not fitted): a body lying on the floor, as for a sit-up, reads 70 or more. Kd's videos (52c-ii): 24 to 58 degrees at the bottom."
+    },
+    {
+      "read": {
+        "kind": "gap",
+        "from": [
+          "shoulders height"
+        ],
+        "less": [
+          "hips height"
+        ]
+      },
+      "atLeast": 0.2,
+      "from": "The upper back on the bench, above the hips: the shoulders 0.2 of a leg or more higher than the hips (not fitted). Kd's videos (52c-ii): 0.33 to 0.5 at the start of a hip thrust; lying for a sit-up 0.13 at most, where a sit-up lying down read as a short hip thrust under uneven pictures."
     }
   ],
   "rules": [
