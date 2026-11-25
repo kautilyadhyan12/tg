@@ -4,14 +4,14 @@
 // instead (a passer-by nearer the phone, somebody further back, a neighbour beside, a reflection).
 import { describe, expect, it } from "vitest";
 import { KP, type HoldMovement, type Movement, type MovementFrame, type SeenPerson } from "@app/shared";
-import { BodyMeasures, CameraSet, OnePerson, PossibleBody, SteadyPoints, lookAt, type Look, type MeasuredBody, type RepResult } from "../src/index.js";
+import { BodyMeasures, CameraSet, OnePerson, PERSON_LIMITS, PossibleBody, SteadyPoints, fromPlace, lookAt, type Look, type MeasuredBody, type RepResult } from "../src/index.js";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { lockedOf, readKept, type Video } from "../scripts/bodyCheck.js";
 import { bodyChanges, followOne } from "../scripts/follow.js";
 import { readHold, runHold } from "../scripts/holdCheck.js";
 import { runOf } from "../scripts/measureCheck.js";
-import { LEAD_IN, proofVideos, readMovement, replayed, runMovement, withLeadIn } from "../scripts/movementCheck.js";
+import { LEAD_IN, cameraRun, proofVideos, readMovement, replayed, runMovement, withLeadIn } from "../scripts/movementCheck.js";
 import { REPLAYS } from "../scripts/replays.js";
 
 const VIDEOS = proofVideos();
@@ -187,6 +187,9 @@ describe("the worst thing: once a member's set has counted, a stranger the model
     });
     expect(given.length).toBe(strangerFrames.length);
     expect(given.every((p) => p === null)).toBe(true);
+    // The proof's own run (the stages once for a video, the set again whole where the lock told at its first count follows
+    // another body) is the camera's own set here too: the case the proof videos never meet.
+    expect(withStranger).toEqual(cameraRun(movement, withLeadIn(video)));
   });
 
   it("most cases have room: every pair is tried nearer and further from the phone, and the neighbours where the picture allows", () => {
@@ -196,37 +199,124 @@ describe("the worst thing: once a member's set has counted, a stranger the model
     expect(cases.length - NO_ROOM.length).toBeGreaterThanOrEqual(16);
   });
 
-  it("a stranger of the member's size who comes in all at once 1.5 m beside them, then walks into their place and squats there, is never taken", () => {
-    // The model changes bodies all at once; a body that came so from outside the member's place stays another while it
-    // goes on bit by bit, into the place too, until a picture with nobody (src/body/person.ts).
-    const movement = readMovement("squat");
-    const member = furtherBack(videoOf("sumo_squat_2a"));
+  // Pictures a phone loses while a body walks: every third of them read nobody, or read with no point the model is sure of.
+  const LOST: readonly (readonly [string, (f: MovementFrame) => MovementFrame])[] = [
+    ["every picture read", (f) => f],
+    ["every third picture of nobody", (f) => ({ ...f, people: [] })],
+    ["every third picture's size unreadable", (f) => ({ ...f, people: f.people.map((p) => ({ ...p, points: p.points.map(([x, y, z, , pr]) => [x, y, z, 0.1, pr] as SeenPerson["points"][number]) })) })],
+  ];
+  const crossCases = PAIRS.flatMap(([name, member, stranger]) => LOST.map(([how]) => [name, member, stranger, how] as const));
+
+  it.each(crossCases)("%s: a stranger of %s's size who comes in all at once 1.5 m beside them and walks through their place (%s, %s) is never taken", (name, memberLabel, strangerLabel, how) => {
+    // 1.2 m/s from 1.5 m on one side to 1.5 m on the other: 1.6 s within the lock's room of the member's place, under the
+    // 3 s after which a body that stays there is taken (below).
+    const movement = readMovement(name);
+    const member = furtherBack(videoOf(memberLabel));
     const aspect = member.frames[0]?.aspect ?? 1;
     const own = middleOf(member.frames);
     const towards = own.middle[0] < aspect / 2 ? 1 : -1;
-    const atPlace = placed(videoOf("prisoner_squat_2").frames, aspect, own.middle, own.size);
-    // 0.5 s standing 1.5 m beside, then 1 s walking in (1.5 m/s), then their squats at the member's place.
-    const walkIn = atPlace.map((f, n) => {
-      const away = n < 15 ? 1.5 : Math.max(0, 1.5 * (1 - (n - 15) / 30));
+    const lose = LOST.find(([h]) => h === how)?.[1] ?? ((f: MovementFrame) => f);
+    const atPlace = placed(videoOf(strangerLabel).frames.slice(0, 90), aspect, own.middle, own.size);
+    const crossing = atPlace.map((f, n) => {
+      const away = 1.5 - (1.2 * n) / 30;
       const dx = (towards * away * own.size) / aspect;
-      return { ...f, people: f.people.map((p) => ({ ...p, points: p.points.map(([x, y, z, v, pr]) => [x + dx, y, z, v, pr] as SeenPerson["points"][number]) })) };
+      const moved = { ...f, people: f.people.map((p) => ({ ...p, points: p.points.map(([x, y, z, v, pr]) => [x + dx, y, z, v, pr] as SeenPerson["points"][number]) })) };
+      return n > 0 && n % 3 === 0 ? lose(moved) : moved;
     });
-    expect(runMovement(movement, { ...member, frames: walkIn }).count).toBeGreaterThan(0);
     const cut = firstCounted(movement, member) + 700;
-    const video = spliced(member, walkIn, cut);
+    const video = spliced(member, crossing, cut);
     const a = runMovement(movement, video);
-    const b = runMovement(movement, spliced(member, walkIn, cut, true));
+    const b = runMovement(movement, spliced(member, crossing, cut, true));
     expect([a.count, said(a.reps)]).toEqual([b.count, said(b.reps)]);
-    // Picture by picture: the camera reads nobody in every one of theirs, those at the member's place included.
-    const theirs = new Set(walkIn.flatMap((f) => f.people));
+    const theirs = new Set(crossing.flatMap((f) => f.people));
     const set = new CameraSet({ movement, exercise: null });
     const given = withLeadIn(video).frames.flatMap((f) => {
       const p = set.next(f).person;
       return f.people.some((q) => theirs.has(q)) ? [p.person] : [];
     });
-    expect(given.length).toBe(walkIn.length);
+    expect(given.length).toBeGreaterThan(0);
     expect(given.filter((p) => p !== null).length).toBe(0);
   });
+
+  it.each(PAIRS.flatMap(([name, member, stranger]) => LOST.slice(1).map(([how]) => [name, member, stranger, how] as const)))(
+    "%s: the limit, in plain sight: a stranger who walks into %s's place and stays there (%s, %s) is taken only once they have stood there 3 s",
+    (name, memberLabel, strangerLabel, how) => {
+      // Two bodies at the member's place, at one size, cannot be told apart; a body that stays there is the member far more
+      // often than one crossing it, and holding it longer would refuse a member the model goes back to there (below).
+      const movement = readMovement(name);
+      const member = furtherBack(videoOf(memberLabel));
+      const aspect = member.frames[0]?.aspect ?? 1;
+      const own = middleOf(member.frames);
+      const towards = own.middle[0] < aspect / 2 ? 1 : -1;
+      const lose = LOST.find(([h]) => h === how)?.[1] ?? ((f: MovementFrame) => f);
+      // 0.5 s 1.5 m beside, 1 s walking in, then at the member's place: inside the lock's room from about 0.9 s.
+      const atPlace = placed(videoOf(strangerLabel).frames, aspect, own.middle, own.size);
+      const walkIn = atPlace.map((f, n) => {
+        const away = n < 15 ? 1.5 : Math.max(0, 1.5 * (1 - (n - 15) / 30));
+        const dx = (towards * away * own.size) / aspect;
+        const moved = { ...f, people: f.people.map((p) => ({ ...p, points: p.points.map(([x, y, z, v, pr]) => [x + dx, y, z, v, pr] as SeenPerson["points"][number]) })) };
+        return n > 0 && n % 3 === 0 ? lose(moved) : moved;
+      });
+      const cut = firstCounted(movement, member) + 700;
+      const video = withLeadIn(spliced(member, walkIn, cut));
+      const theirs = new Set(walkIn.flatMap((f) => f.people));
+      const set = new CameraSet({ movement, exercise: null });
+      let entered: number | null = null;
+      const first: number[] = [];
+      for (const f of video.frames) {
+        const out = set.next(f);
+        const place = set.place;
+        const look = f.people[0] === undefined ? null : lookAt(f.people[0], f.aspect, f.t);
+        if (entered === null && place !== null && look !== null && f.people.some((q) => theirs.has(q))) {
+          const d = fromPlace(look, place);
+          if (d.metres <= PERSON_LIMITS.room && d.size <= PERSON_LIMITS.sizeRoom) entered = f.t;
+        }
+        if (f.people.some((q) => theirs.has(q)) && out.person.person !== null) first.push(f.t);
+      }
+      expect(entered).not.toBeNull();
+      expect(first.length).toBeGreaterThan(0);
+      expect((first[0] ?? 0) - (entered ?? 0)).toBeGreaterThanOrEqual(PERSON_LIMITS.takeOver);
+    },
+  );
+
+  it.each(PAIRS.map(([name, member, stranger]) => [name, member, stranger] as const))(
+    "%s: a stranger who walks into %s's place, stays 1 s and is gone: the member there is the member again within 3 s of the stranger standing there",
+    (name, memberLabel, strangerLabel) => {
+      // Round one (H1): held as another body there, the member the model went back to was refused for the rest of the set.
+      const movement = readMovement(name);
+      const member = furtherBack(videoOf(memberLabel));
+      const aspect = member.frames[0]?.aspect ?? 1;
+      const own = middleOf(member.frames);
+      const towards = own.middle[0] < aspect / 2 ? 1 : -1;
+      const atPlace = placed(videoOf(strangerLabel).frames.slice(0, 75), aspect, own.middle, own.size);
+      const walkIn = atPlace.map((f, n) => {
+        const away = n < 15 ? 1.5 : Math.max(0, 1.5 * (1 - (n - 15) / 30));
+        const dx = (towards * away * own.size) / aspect;
+        return { ...f, people: f.people.map((p) => ({ ...p, points: p.points.map(([x, y, z, v, pr]) => [x + dx, y, z, v, pr] as SeenPerson["points"][number]) })) };
+      });
+      const cut = firstCounted(movement, member) + 700;
+      const video = withLeadIn(spliced(member, walkIn, cut));
+      const theirs = new Set(walkIn.flatMap((f) => f.people));
+      const set = new CameraSet({ movement, exercise: null });
+      let entered: number | null = null;
+      const after: { t: number; given: boolean }[] = [];
+      for (const f of video.frames) {
+        const out = set.next(f);
+        const stranger = f.people.some((q) => theirs.has(q));
+        const place = set.place;
+        const look = f.people[0] === undefined ? null : lookAt(f.people[0], f.aspect, f.t);
+        if (stranger && entered === null && place !== null && look !== null) {
+          const d = fromPlace(look, place);
+          if (d.metres <= PERSON_LIMITS.room && d.size <= PERSON_LIMITS.sizeRoom) entered = f.t;
+        }
+        if (!stranger && entered !== null && f.people.length > 0) after.push({ t: f.t, given: out.person.person !== null });
+      }
+      expect(entered).not.toBeNull();
+      const late = after.filter((x) => x.t - (entered ?? 0) >= PERSON_LIMITS.takeOver);
+      expect(late.length).toBeGreaterThan(30);
+      expect(late.filter((x) => !x.given).length).toBe(0);
+    },
+  );
 
   it.each(WHERE)("the L-sit: a stranger holding an L-sit %s adds no time to the member's hold", (how) => {
     const hold: HoldMovement = readHold("l-sit");
@@ -497,7 +587,37 @@ describe("the lock itself", () => {
     expect(lock.next(frame(966, [at(0)], aspect)).fresh).toBe(false);
   });
 
-  it("nothing to confirm from: no look of the person in the last second", () => {
+  it("before the set has counted, a body that came all at once is withheld, and taken afresh once followed 3 s with the person unseen", () => {
+    const lock = new OnePerson();
+    for (let t = 0; t <= 990; t += 33) lock.next(frame(t, [at(0)], aspect));
+    // A body 2 m away and half as large, with no picture of nobody between: withheld.
+    const away = at(2, 0.5);
+    const out: { t: number; status: string; fresh: boolean }[] = [];
+    for (let t = 1023; t <= 1023 + 3100; t += 33) {
+      const p = lock.next(frame(t, [away], aspect));
+      out.push({ t: t - 1023, status: p.status, fresh: p.fresh });
+    }
+    expect(out.filter((p) => p.t < 2900).every((p) => p.status === "other" && !p.fresh)).toBe(true);
+    const taken = out.find((p) => p.status === "person");
+    expect(taken?.fresh).toBe(true);
+    expect(taken?.t).toBeGreaterThanOrEqual(PERSON_LIMITS.takeOver);
+    expect(taken?.t).toBeLessThan(PERSON_LIMITS.takeOver + 34);
+    // The person back before then: the person, as they were, with no new start.
+    const back = new OnePerson();
+    for (let t = 0; t <= 990; t += 33) back.next(frame(t, [at(0)], aspect));
+    for (let t = 1023; t <= 2023; t += 33) back.next(frame(t, [away], aspect));
+    expect(back.next(frame(2056, [at(0)], aspect))).toMatchObject({ status: "person", fresh: false });
+  });
+
+  it("a set that has counted never starts afresh: told with no look in the last second, the lock takes the person's newest one", () => {
+    const lock = new OnePerson();
+    lock.next(frame(0, [at(0)], aspect));
+    for (let t = 33; t <= 2000; t += 33) lock.next(frame(t, [unsure], aspect));
+    expect(lock.confirm()).toBe(true);
+    expect(lock.next(frame(2033, [at(2)], aspect))).toMatchObject({ person: null, status: "other", fresh: false });
+  });
+
+  it("nothing to confirm from: nobody followed yet", () => {
     const lock = new OnePerson();
     expect(lock.confirm()).toBe(false);
     lock.next(frame(0, [unsure], aspect));
