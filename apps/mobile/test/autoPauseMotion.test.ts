@@ -172,6 +172,15 @@ describe("the worst thing: real metres thrown away because the phone felt still 
 });
 
 describe("Auto-pause by the phone's motion", () => {
+  it("Kd's phone on a table, its place sliding 11.5 m in 20 s with its own motion still: paused once, never taken for wheels", () => {
+    // The brief's 10 m took this drift for a pram on Kd's phone: paused at 2.7 s, started again, never paused by feel again.
+    const table = JSON.parse(readFileSync(new URL("./fixtures/table-drift.json", import.meta.url), "utf8")) as { points: [number, number, number, number][]; motion: [number, number][] };
+    const fixes = table.points.map(([at, lat, lng, accuracyM]): Fix => ({ at, lat, lng, accuracyM, speed: 0, feel: feelAt(table.motion, at) }));
+    expect(fixes.filter((f) => f.feel === "still").length).toBeGreaterThan(20);
+    const changes = changesOf(fixes);
+    expect(changes).toEqual([{ kind: "pause", at: 2657 }]);
+  });
+
   it("a slow walker at 0.6 m a second, the phone feeling the steps, is never paused in 10 minutes", () => {
     for (const accuracyM of [5, 15, 25]) {
       const { fixes } = walk([{ seconds: 600, speed: 0.6, accuracyM, feel: "moving" }], accuracyM);

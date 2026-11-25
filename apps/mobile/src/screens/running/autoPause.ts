@@ -151,8 +151,12 @@ const fast = (fix: Fix): boolean => fix.speed !== null && fix.speed >= GO_MPS;
 /** How far from where the person stopped this point must lie to count as moving: past what a phone
  *  this sure of itself wanders while it lies still. */
 export const goMetres = (fix: Fix): number => Math.max(GO_M, Math.min(2 * (fix.accuracyM ?? 0), GO_MOST_M));
-/** How far a phone that FEELS still must be from a place before it is believed to have travelled. */
-export const travelMetres = (fix: Fix): number => Math.max(10, 3 * (fix.accuracyM ?? 0));
+/** How far a phone that FEELS still must be from a place before it is believed to have travelled: three times
+ *  how sure the point is, and never under TRAVEL_LEAST_M. The brief's 10 m was passed by Kd's phone lying on
+ *  a table (2026-11-25, sure to 3 m): its place slid 11.5 m in 20 s, in a straight line, then stopped, and
+ *  the run was taken for one on wheels. A pram keeps going; a phone's drift does not. */
+export const TRAVEL_LEAST_M = 40;
+export const travelMetres = (fix: Fix): number => Math.max(TRAVEL_LEAST_M, 3 * (fix.accuracyM ?? 0));
 /** How much farther from the stop a phone that feels moving must have gone to be leaving it: half how sure
  *  the point is, and never under LEAVE_LEAST_M. The brief's 3 m started the clock for a phone sure to 5 m,
  *  standing and shaken, 133 times in 400 within 30 s (its place wanders that far); 6 m, 9 times. */

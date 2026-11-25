@@ -125,8 +125,9 @@ let writtenAt = 0;
 /** The monitor kept connected while a run is going (37f-i). */
 let heartHeld: (() => void) | null = null;
 /** The last points taken while paused, and how many are kept: Auto-pause starts the clock again from the
- *  last point near where the person stopped, which a slow walk leaves well over a minute behind at worst. */
-const PAUSED_TAIL = 120;
+ *  last point near where the person stopped, which a slow walk leaves well over a minute behind at worst, and
+ *  a phone on wheels from the pause's own start, once it has travelled 40 m or more (37j). */
+const PAUSED_TAIL = 300;
 let pausedTail: RunPoint[] = [];
 /** Raised at each Start and each Save or Discard: points handed over while one of those happened
  *  belong to no run, and never bring a saved or thrown-away run back. */
