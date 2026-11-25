@@ -12,7 +12,7 @@ function files(): string[] {
   // for every named part and one for "rest". Each machine's own part is checked below, so the matrix holds them all.
   const want = Object.keys(PROOF_PARTS).length + 1;
   if (Number(process.env.PROOF_LEGS) !== want) {
-    throw new Error(`the proof has ${want} parts (${Object.keys(PROOF_PARTS).join(", ")}, rest) and GitHub's matrix starts ${process.env.PROOF_LEGS ?? "none"}: add the part to the matrix of movement-proof in .github/workflows/ci.yml`);
+    throw new Error(`the proof has ${want} parts (${Object.keys(PROOF_PARTS).join(", ")}, rest) and GitHub's matrix starts ${process.env.PROOF_LEGS ?? "none"}: the matrix of movement-proof in .github/workflows/ci.yml and PROOF_PARTS in vitest.config.ts must name the same parts`);
   }
   if (part === "rest") return PROOF_FILES.filter((f) => !named.includes(f));
   const own = PROOF_PARTS[part];
