@@ -252,6 +252,10 @@ export const pictureFadeUnderWords =
  *  and running into the page's black at its foot; never over the person. */
 export const wholePictureFade =
   "linear-gradient(to bottom, rgba(10,9,8,0.55) 0%, rgba(10,9,8,0) 12%, rgba(10,9,8,0) 94%, rgba(10,9,8,1) 100%)";
+/** The same at the top of a workout (62b): darker and deeper at the top, where the workout's name, its time, Pause and End
+ *  sit over the exercise's own grey. */
+export const workoutPictureFade =
+  "linear-gradient(to bottom, rgba(10,9,8,0.72) 0%, rgba(10,9,8,0.4) 16%, rgba(10,9,8,0) 27%, rgba(10,9,8,0) 95%, rgba(10,9,8,1) 100%)";
 
 /** Under the Running page's START, over the page's foot: the page fading out as it scrolls under it. */
 export const dockShade = "linear-gradient(to bottom, rgba(10,9,8,0) 0%, rgba(10,9,8,0.9) 30%, rgba(10,9,8,1) 100%)";

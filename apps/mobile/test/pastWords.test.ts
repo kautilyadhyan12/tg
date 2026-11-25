@@ -24,7 +24,7 @@ describe("naming a workout's exercises", () => {
   });
 
   it("names every exercise by its id word until the Library is read", () => {
-    expect(namedFrom(null)("barbell_curl")).toEqual({ name: "Barbell curl", kind: "strength", picture: null });
+    expect(namedFrom(null)("barbell_curl")).toEqual({ name: "Barbell curl", kind: "strength", picture: null, clip: null });
   });
 
   it.each([

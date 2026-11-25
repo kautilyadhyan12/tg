@@ -28,6 +28,8 @@ import {
   splitMistake,
   targetLine,
 } from "../../library/words";
+import { useReducedMotion } from "../../look/Motion";
+import { ClipOver, useClipReady } from "./ExerciseClip";
 import { useOwnPicture } from "./ExerciseImage";
 import { Flames, KitMark, Plates } from "./Marks";
 import { MuscleFigure, MuscleLeader } from "./MuscleFigure";
@@ -75,6 +77,12 @@ export function ExercisePage({
   // the app's picture of its kind with the name over its foot, as before.
   const ownUri = useOwnPicture(entry.picture);
   const own = entry.picture !== null && ownUri !== null ? { ...entry.picture, uri: ownUri } : null;
+  // Its clip (62b), once it has come, plays over the picture, looping with no sound; the button at the band's corner
+  // stops and starts it. With the phone's Remove animations on it waits for that button.
+  const clipReady = useClipReady(entry.clip);
+  const reduced = useReducedMotion();
+  const [clipChoice, setClipChoice] = useState<boolean | null>(null);
+  const clipPlaying = clipChoice ?? !reduced;
   const tag = (
     <View style={styles.tagRow}>
       <View style={styles.tag}>
@@ -95,7 +103,32 @@ export function ExercisePage({
     own === null ? (
       <PictureTop picture={exercisePicture(entry.id, entry.kind)} tall={0.9} above={tag} eyebrow={kindWord(entry.kind)} foot={titles} />
     ) : (
-      <WholePictureTop testID={`page-picture-${entry.id}`} uri={own.uri} width={own.width} height={own.height} ground={own.ground} above={tag} />
+      <WholePictureTop
+        testID={`page-picture-${entry.id}`}
+        uri={own.uri}
+        width={own.width}
+        height={own.height}
+        ground={own.ground}
+        above={tag}
+        over={<ClipOver id={entry.id} clip={entry.clip} playing={clipPlaying} />}
+        {...(clipReady
+          ? {
+              corner: (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={clipPlaying ? "Pause the clip" : "Play the clip"}
+                  onPress={() => {
+                    setClipChoice(!clipPlaying);
+                  }}
+                  hitSlop={6}
+                  style={({ pressed }) => [styles.clipButton, pressed ? styles.clipPressed : null]}
+                >
+                  <Icon name={clipPlaying ? "pause" : "play"} size={18} colour="text" filled />
+                </Pressable>
+              ),
+            }
+          : {})}
+      />
     );
   return (
     <CoverPage open title={en.name} onClose={onClose} hero={hero} foot={mine === null ? undefined : <AddToWorkout id={entry.id} mine={mine} onOpenMine={onOpenMine} />}>
@@ -378,6 +411,9 @@ function Mistakes({ entry }: { entry: PhoneLibraryEntry }) {
 }
 
 const styles = StyleSheet.create({
+  // The clip's pause button, on its own see-through backing at the band's corner, as the page's top buttons are.
+  clipButton: { width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center", backgroundColor: colours.overWords, borderWidth: 1, borderColor: colours.lineStrong },
+  clipPressed: { opacity: 0.85 },
   grow: { flex: 1 },
   centre: { textAlign: "center" },
   kcal: { flexDirection: "row", alignItems: "center", gap: 10 },

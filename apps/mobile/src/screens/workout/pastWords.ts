@@ -2,11 +2,12 @@
 // workout's own page. Pure, so tested alone.
 import type { PhoneLibraryEntry } from "@app/shared";
 
-/** An exercise's own picture (62a), as the Library on the phone holds it. */
+/** An exercise's own picture (62a) and clip (62b), as the Library on the phone holds them. */
 type OwnPicture = PhoneLibraryEntry["picture"];
+type OwnClip = PhoneLibraryEntry["clip"];
 
-/** An exercise's name, kind and own picture (for its picture), from the Library kept on the phone. */
-export type Named = (exercise: string) => { name: string; kind: string; picture: OwnPicture };
+/** An exercise's name, kind, own picture and clip, from the Library kept on the phone. */
+export type Named = (exercise: string) => { name: string; kind: string; picture: OwnPicture; clip: OwnClip };
 
 /** An exercise the Library on the phone does not hold, by its id word made readable: "barbell_curl" → "Barbell curl". */
 export function idWords(id: string): string {
@@ -19,7 +20,7 @@ export function namedFrom(entries: readonly PhoneLibraryEntry[] | null): Named {
   const byId = new Map((entries ?? []).map((e) => [e.id, e]));
   return (exercise) => {
     const e = byId.get(exercise);
-    return e === undefined ? { name: idWords(exercise), kind: "strength", picture: null } : { name: e.text.en.name, kind: e.kind, picture: e.picture };
+    return e === undefined ? { name: idWords(exercise), kind: "strength", picture: null, clip: null } : { name: e.text.en.name, kind: e.kind, picture: e.picture, clip: e.clip };
   };
 }
 
@@ -37,6 +38,6 @@ export function exercisesLine(ids: readonly string[], named: Named): string {
 export function serverFirst(named: Named, serverNames: ReadonlyMap<string, string | null>): Named {
   return (exercise) => {
     const own = named(exercise);
-    return { name: serverNames.get(exercise) ?? own.name, kind: own.kind, picture: own.picture };
+    return { ...own, name: serverNames.get(exercise) ?? own.name };
   };
 }

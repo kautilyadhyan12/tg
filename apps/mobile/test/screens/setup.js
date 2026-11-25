@@ -462,6 +462,26 @@ jest.mock("../../src/screens/running/runBatteryNative", () => {
     },
   };
 });
+// The app's clip player (62b), expo-video's: drawn as a box carrying the clip it was given and whether it plays
+// (`clip-player`, its `uri` and `playing`); its first frame is drawn at once. A test stands for a copy of the app built
+// before it with `require(...clipNative).clipPlayer.missing = true`.
+jest.mock("../../src/library/clipNative", () => {
+  const React = require("react");
+  const { View } = require("react-native");
+  const clipPlayer = { missing: false };
+  function ClipStandIn({ uri, playing, onFirstFrame, style }) {
+    React.useEffect(() => {
+      onFirstFrame();
+    }, [onFirstFrame]);
+    return React.createElement(View, { testID: "clip-player", style, uri, playing });
+  }
+  return {
+    clipPlayer,
+    get ClipNative() {
+      return clipPlayer.missing ? null : ClipStandIn;
+    },
+  };
+});
 // The app's sound player (64a-vi), expo-audio's: `played` lists each sound handed to it, in order.
 jest.mock("../../src/sound/soundNative", () => {
   const sounds = { played: [] };

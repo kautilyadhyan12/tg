@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { pictureTopHeight, modalHeight, wholePictureHeight, WHOLE_PICTURE_LEAST } from "../src/look/sizing";
+import { pictureTopHeight, modalHeight, wholePictureHeight, WHOLE_PICTURE_LEAST, workoutPictureHeight } from "../src/look/sizing";
 
 // Screen shapes in the phone's own points (dp), width by height: shapes, not any one model's measured size.
 describe("a page over the app", () => {
@@ -51,5 +51,28 @@ describe("an exercise's own picture, whole, under the page's top buttons (62a)",
 
   it("a phone on its side still shows the person: never under the least", () => {
     expect(wholePictureHeight(915, 412, tall, 92)).toBe(WHOLE_PICTURE_LEAST);
+  });
+});
+
+// An exercise's own picture or clip at the top of a workout (62b): Kd's phone, a small phone, an opened fold, a phone on
+// its side; a tall clip (720 × 1280) and a wide one (1280 × 720).
+describe("an exercise's clip at the top of a workout", () => {
+  const tall = { width: 720, height: 1280 };
+  const wide = { width: 1280, height: 720 };
+  it.each([
+    ["Kd's phone, a tall clip: its share of the screen", 432, 960, tall, 278],
+    ["Kd's phone, a wide clip: its own shape, the whole width", 432, 960, wide, 243],
+    ["a small phone, a tall clip", 360, 760, tall, 220],
+    ["a small phone, a wide clip: its own shape", 360, 760, wide, 203],
+    ["an opened fold, a tall clip", 691, 830, tall, 241],
+    ["an opened fold, a wide clip: its share, fitted whole", 691, 830, wide, 241],
+    ["a phone on its side, a tall clip: never under the least", 915, 412, tall, 160],
+    ["a phone on its side, a wide clip: never under the least", 915, 412, wide, 160],
+  ])("%s", (_, width, height, picture, drawn) => {
+    expect(workoutPictureHeight(width, height, picture)).toBe(drawn);
+  });
+
+  it("a picture whose own shape is shorter than the least keeps its own shape", () => {
+    expect(workoutPictureHeight(360, 760, { width: 1280, height: 400 })).toBe(113);
   });
 });

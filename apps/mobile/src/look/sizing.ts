@@ -25,6 +25,17 @@ export function wholePictureHeight(width: number, screenHeight: number, picture:
   return Math.round(Math.max(WHOLE_PICTURE_LEAST, Math.min(own, room)));
 }
 
+/** The most of the screen's height an exercise's own picture or clip takes at the top of a workout (62b): measured on
+ *  Kd's phone (432 × 960), the count, its target and weight, Next up and Set done all stay in view under it. */
+export const WORKOUT_PICTURE_SHARE = 0.29;
+
+/** How tall an exercise's own picture or clip is drawn at the top of a workout: its own shape for the phone's width, but
+ *  never more than its share of the screen, and never under the least unless its own shape is smaller. Fitted whole. */
+export function workoutPictureHeight(width: number, screenHeight: number, picture: { width: number; height: number }): number {
+  const own = (width * picture.height) / picture.width;
+  return Math.round(Math.min(own, Math.max(WHOLE_PICTURE_LEAST, screenHeight * WORKOUT_PICTURE_SHARE)));
+}
+
 /** The tallest an event's poster is drawn, before the share of the screen it may take. */
 export const POSTER_TALLEST = 420;
 
