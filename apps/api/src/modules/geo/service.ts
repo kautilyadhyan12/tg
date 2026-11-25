@@ -363,7 +363,7 @@ export async function climbOfLine(heights: HeightMap, polyline: string, starts: 
 
 /** The summary's ask: the run's line worked out as saving it would, its climb read, nothing kept. */
 export async function askClimb(deps: { heights: HeightMap }, input: RunClimbRequest, userId: string): Promise<RunClimb> {
-  const sums = runSums(input.points, input.pauses, input.elapsedMs, 0);
+  const sums = runSums(input.points, input.pauses, input.elapsedMs, 0, input.still);
   return await climbOfLine(deps.heights, encodePolyline(sums.track), sums.trackStarts, ASK_CLIMB_WAIT_MS, userId, sums.paceLine.length);
 }
 
@@ -438,7 +438,7 @@ export async function saveRun(
 ): Promise<{ status: "created" | "duplicate"; run: SavedRun }> {
   const startedAt = startedAtKept(new Date(input.startedAt), input.elapsedMs, deps.now());
   const ctx = await getUserSyncContext(deps.sql, userId);
-  const sums = runSums(input.points, input.pauses, input.elapsedMs, ctx.weightKg ?? 0);
+  const sums = runSums(input.points, input.pauses, input.elapsedMs, ctx.weightKg ?? 0, input.still);
   const note = input.note === null || input.note === "" ? null : input.note;
   const polyline = encodePolyline(sums.track);
   // The heart rate chart and the zones (37f-ii-a), worked out here from the readings and the person's

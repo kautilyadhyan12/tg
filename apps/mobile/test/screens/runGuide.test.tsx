@@ -2,7 +2,7 @@ import { act, fireEvent, render, screen, waitFor, within } from "@testing-librar
 import { AppState } from "react-native";
 import { OPENFREEMAP, c25kParts, planWeekdayOf, runPlanOf, type RunPlanAnswers, type RunPlanResponse } from "@app/shared";
 import { App } from "../../src/App";
-import { chooseVoice, loadRun, movingMsOf, phoneRunFiles, resetRecorder, runNow, skipStep, startRun, takeLocations } from "../../src/screens/running/recorder";
+import { chooseVoice, guideMsOf, loadRun, phoneRunFiles, resetRecorder, runNow, skipStep, startRun, takeLocations } from "../../src/screens/running/recorder";
 import { guideOf, leftOf } from "../../src/screens/running/runGuide";
 import { phoneToday } from "../../src/screens/running/RunPlanBox";
 import { RAVI, fakeServer, kept, memoryStore, profile, tokens } from "../kit";
@@ -187,7 +187,8 @@ describe("the worst thing: a beginner told to keep running when the plan says wa
     if (run === null || run.guide === null) throw new Error("no guided run");
     expect(run.phase).toBe("paused");
     expect(run.guide.at.index).toBe(1);
-    const moving = movingMsOf(run, startedAt + 130_000);
+    // The guide's own clock, which leaves out the seconds an Auto-pause was dated back over (37k).
+    const moving = guideMsOf(run, startedAt + 130_000);
     expect(run.guide.at.fromMs).toBeLessThanOrEqual(moving);
     expect(leftOf(run.guide, moving, 0)).toEqual({ kind: "s", amount: 60 });
     // Moving again: what is left is the run's whole minute, never more.
@@ -211,7 +212,7 @@ describe("the worst thing: a beginner told to keep running when the plan says wa
     }
     const run = runNow();
     if (run === null) throw new Error("no run going");
-    const moving = movingMsOf(run, run.startedAt + (s - 1) * 1000);
+    const moving = guideMsOf(run, run.startedAt + (s - 1) * 1000);
     // The run begins at 300 s of the run's own time: handed over to be said then, or, where the clock reaches
     // it at the Resume itself (the Resume is dated back to the last step near where the person stood), begun
     // there and said with Run resumed.

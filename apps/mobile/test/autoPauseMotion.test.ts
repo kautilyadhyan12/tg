@@ -7,105 +7,11 @@
 // little jitter each second.
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { runSums, type RunPause, type RunPoint } from "@app/shared";
+import { runSums } from "@app/shared";
 import { AUTO_START, autoPausedFrom, feelAt, nextAutoPause, type AutoPauseChange, type AutoPauseState, type Feel, type Fix } from "../src/screens/running/autoPause";
 import { realRuns } from "./realRuns";
+import { changesOf, endOf, gauss, pausesOf, pointsOf, rng, stateAfter, walk, wander, type Stretch } from "./runWalks";
 
-const LAT = 26.1445;
-const LNG = 91.7362;
-const NORTH = 111_132;
-const EAST = 111_320 * Math.cos((LAT * Math.PI) / 180);
-
-/** A seeded generator, so every number below is the same on every run. */
-function rng(seed: number): () => number {
-  let a = seed >>> 0;
-  return () => {
-    a = (a + 0x6d2b79f5) >>> 0;
-    let t = a;
-    t = Math.imul(t ^ (t >>> 15), t | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
-const gauss = (r: () => number): number => Math.sqrt(-2 * Math.log(1 - r())) * Math.cos(2 * Math.PI * r());
-
-/** Where a phone lying still says it is, metres east and north of the truth, one a second. */
-function wander(seconds: number, sigma: number, tau: number, seed: number): [number, number][] {
-  const r = rng(seed);
-  const keep = Math.exp(-1 / tau);
-  const push = sigma * Math.sqrt(1 - keep * keep);
-  let x = sigma * gauss(r);
-  let y = sigma * gauss(r);
-  const out: [number, number][] = [];
-  for (let i = 0; i < seconds; i++) {
-    out.push([x + 0.3 * gauss(r), y + 0.3 * gauss(r)]);
-    x = keep * x + push * gauss(r);
-    y = keep * y + push * gauss(r);
-  }
-  return out;
-}
-
-/** One stretch of a walk: `seconds` points, one a second, going north at `speed`, the phone sure to
- *  `accuracyM` and feeling `feel`; its place off the truth by `off` (a wander) or by 0.3 m of jitter. */
-interface Stretch {
-  seconds: number;
-  speed: number;
-  accuracyM: number;
-  feel: Feel | null;
-  off?: [number, number][];
-}
-
-/** The points of the stretches, one after another from 1 s into the run, and the true metres walked. */
-function walk(stretches: readonly Stretch[], seed = 1): { fixes: Fix[]; metres: number } {
-  const r = rng(seed);
-  const fixes: Fix[] = [];
-  let north = 0;
-  let s = 1;
-  for (const part of stretches) {
-    for (let i = 0; i < part.seconds; i++, s++) {
-      north += part.speed;
-      const [dx, dy] = part.off?.[i] ?? [0.3 * gauss(r), 0.3 * gauss(r)];
-      fixes.push({ at: s * 1000, lat: LAT + (north + dy) / NORTH, lng: LNG + dx / EAST, accuracyM: part.accuracyM, speed: 0, feel: part.feel });
-    }
-  }
-  return { fixes, metres: north };
-}
-
-function changesOf(fixes: readonly Fix[], start: AutoPauseState = AUTO_START): AutoPauseChange[] {
-  let state = start;
-  const out: AutoPauseChange[] = [];
-  for (const fix of fixes) {
-    const next = nextAutoPause(state, fix);
-    state = next.state;
-    if (next.change !== null) out.push(next.change);
-  }
-  return out;
-}
-
-/** The rule's state after the last point. */
-function stateAfter(fixes: readonly Fix[], start: AutoPauseState = AUTO_START): AutoPauseState {
-  let state = start;
-  for (const fix of fixes) state = nextAutoPause(state, fix).state;
-  return state;
-}
-
-/** The pauses the recorder keeps from those changes: a resume dated to its pause's start leaves none. */
-function pausesOf(changes: readonly AutoPauseChange[], end: number): RunPause[] {
-  const out: RunPause[] = [];
-  let from: number | null = null;
-  for (const c of changes) {
-    if (c?.kind === "pause") from = c.at;
-    else if (c?.kind === "resume" && from !== null) {
-      if (c.at > from) out.push([from, c.at]);
-      from = null;
-    }
-  }
-  if (from !== null) out.push([from, end]);
-  return out;
-}
-
-const pointsOf = (fixes: readonly Fix[]): RunPoint[] => fixes.map((f): RunPoint => [f.at, f.lat, f.lng, f.accuracyM]);
-const endOf = (fixes: readonly Fix[]): number => fixes[fixes.length - 1]?.at ?? 0;
 /** Metres the run counts with Auto-pause on, and with it off. */
 function counted(fixes: readonly Fix[], changes: readonly AutoPauseChange[] = changesOf(fixes)): { on: number; off: number } {
   const end = endOf(fixes);
