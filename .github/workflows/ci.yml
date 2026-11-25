@@ -215,7 +215,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        part: [squat-jump, lunge, rest]
+        part: [squat-jump, lunge, floor-work, rest]
     steps:
       - uses: actions/checkout@v4
         with:

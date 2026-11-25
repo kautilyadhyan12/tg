@@ -1,0 +1,7 @@
+{
+  "format": 1,
+  "name": "support-hold",
+  "counting": "timed only",
+  "phone": "Anywhere the person can see the screen: the camera does not judge it.",
+  "why": "To the camera a support hold on the bars is a person standing with the arms by the sides: made as a hold from Kd's video (the trunk upright, the hips, knees and elbows straight, the arms down), it times people standing in his other videos (movementHolds.test.ts). The bars, and the feet off the floor, are not body points."
+}

@@ -1,0 +1,63 @@
+{
+  "format": 1,
+  "name": "l-sit",
+  "counting": "hold",
+  "phone": "On the floor or a low stand, 2 to 3 metres away, side-on or turned half way, the whole body and the bars in the picture.",
+  "position": [
+    {
+      "read": {
+        "kind": "value",
+        "measures": [
+          "left thigh lean",
+          "right thigh lean"
+        ]
+      },
+      "atLeast": 71,
+      "from": "Set by hold-check from 2 people's videos (scripts/movementVideos.ts), every picture held by eye, as filmed and as each replay that sets numbers (scripts/replays.ts), 2457 pictures: beyond the furthest picture by half its distance from the middle one (78.59)."
+    },
+    {
+      "read": {
+        "kind": "value",
+        "measures": [
+          "trunk lean"
+        ]
+      },
+      "atMost": 9,
+      "from": "Set by hold-check from 2 people's videos (scripts/movementVideos.ts), every picture held by eye, as filmed and as each replay that sets numbers (scripts/replays.ts), 2457 pictures: beyond the furthest picture by half its distance from the middle one (8.56)."
+    },
+    {
+      "read": {
+        "kind": "value",
+        "measures": [
+          "left knee",
+          "right knee"
+        ]
+      },
+      "atLeast": 155,
+      "from": "Set by hold-check from 2 people's videos (scripts/movementVideos.ts), every picture held by eye, as filmed and as each replay that sets numbers (scripts/replays.ts), 2457 pictures: beyond the furthest picture by half its distance from the middle one (158.40)."
+    },
+    {
+      "read": {
+        "kind": "value",
+        "measures": [
+          "left elbow",
+          "right elbow"
+        ]
+      },
+      "atLeast": 165,
+      "from": "Set by hold-check from 2 people's videos (scripts/movementVideos.ts), every picture held by eye, as filmed and as each replay that sets numbers (scripts/replays.ts), 2457 pictures: beyond the furthest picture by half its distance from the middle one (169.38)."
+    },
+    {
+      "read": {
+        "kind": "value",
+        "measures": [
+          "left shoulder",
+          "right shoulder"
+        ]
+      },
+      "atMost": 18,
+      "from": "Set by hold-check from 2 people's videos (scripts/movementVideos.ts), every picture held by eye, as filmed and as each replay that sets numbers (scripts/replays.ts), 2457 pictures: beyond the furthest picture by half its distance from the middle one (17.40)."
+    }
+  ],
+  "unseen": "Keep your whole body in view."
+}

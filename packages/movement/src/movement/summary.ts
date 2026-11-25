@@ -6,12 +6,15 @@
 // that were fine, out of 100. A mistake the camera could not see from where the phone stands counts neither way: it is
 // never taken as good form, and never as bad. A rep in which the camera could see none of them has no score, so the set's
 // scores hold only the reps that were judged; a set with none has no form score at all (null), never a good one.
-import type { EngineSetSummary, ExerciseCamera, Movement, View } from "@app/shared";
+import type { EngineSetSummary, ExerciseCamera, HoldMovement, Movement, View } from "@app/shared";
 import { SIDE_ON } from "./form.js";
+import type { HoldFrame } from "./hold.js";
 import { MATCH_LIMITS, type MatchFrame, type RepResult } from "./matcher.js";
 
-/** The movement engine's version, beside the old engine's 1.x (`packages/engine`): a set's summary names it. */
-export const MOVEMENT_ENGINE_VERSION = "2.0.0";
+/** The movement engine's version, beside the old engine's 1.x (`packages/engine`): a set's summary names it. 2.1.0
+ *  (52c-ii) reads floor work and holds, and gives a hold's set its time held; a set of a movement 2.0.0 had is counted
+ *  as 2.0.0 counted it. */
+export const MOVEMENT_ENGINE_VERSION = "2.1.0";
 
 /** The longest time between two pictures that counts as watched, ms: the matcher's own `lost`, half a second; a longer
  *  gap is the person gone from view, or the phone stopped. */
@@ -133,6 +136,67 @@ export class SetRecord {
       avgFormScore: avg === null ? null : Math.round(avg),
       repScores: scores,
       faultCounts: Object.fromEntries(faults),
+      engineVersion: MOVEMENT_ENGINE_VERSION,
+      definitionVersion: this.exercise.version,
+    };
+  }
+}
+
+/**
+ * One hold's set, as the camera saw it (ROADMAP 52c-ii): give it every frame the hold's clock returns (`HoldMatcher.next`,
+ * and `finish` at the end), then ask for its summary. `holdMs` is the time held (§2.4); a hold has no reps and, until its
+ * mistakes are checked (54), no form score. `watchedMs` is the time the camera read the position, each gap between
+ * pictures counted up to `WATCHED_GAP`, as for reps. A clock that went back is a new set.
+ */
+export class HoldRecord {
+  private first: number | null = null;
+  private last: number | null = null;
+  private lastSeen = false;
+  private watched = 0;
+  private held = 0;
+
+  constructor(
+    private readonly exercise: ExerciseCamera,
+    hold: HoldMovement,
+    private readonly setIndex: number,
+  ) {
+    if (exercise.movement !== hold.name) throw new Error(`${exercise.id} uses the movement ${exercise.movement}, not ${hold.name}.`);
+    if (!Number.isInteger(setIndex) || setIndex < 1) throw new Error(`A set's number is a whole number from 1, not ${String(setIndex)}.`);
+  }
+
+  add(frame: HoldFrame): void {
+    if (this.last !== null && frame.t < this.last) {
+      this.first = null;
+      this.last = null;
+      this.lastSeen = false;
+      this.watched = 0;
+      this.held = 0;
+    }
+    this.held = frame.heldMs;
+    if (this.last !== null && frame.t === this.last) return;
+    if (this.last !== null && this.lastSeen) this.watched += Math.min(frame.t - this.last, WATCHED_GAP);
+    this.first ??= frame.t;
+    this.last = frame.t;
+    this.lastSeen = !frame.unseen;
+  }
+
+  summary(): EngineSetSummary {
+    const durationMs = this.first === null || this.last === null ? 0 : Math.round(this.last - this.first);
+    return {
+      exercise: this.exercise.id,
+      setIndex: this.setIndex,
+      reps: 0,
+      durationMs,
+      tempoMsAvg: null,
+      romStats: null,
+      view: "unknown",
+      holdMs: Math.min(durationMs, Math.round(this.held)),
+      calibration: null,
+      mode: "engine",
+      watchedMs: Math.min(durationMs, Math.round(this.watched)),
+      avgFormScore: null,
+      repScores: [],
+      faultCounts: {},
       engineVersion: MOVEMENT_ENGINE_VERSION,
       definitionVersion: this.exercise.version,
     };
