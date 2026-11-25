@@ -853,7 +853,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
         - 52b-iii. Built with 52b-ii-b on 2026-11-23 (`handoff/2026-11-23-52b-ii-b.md`).
     - 52c. **The other kinds of counting** (split 2026-11-23 in two, the standing kinds first; `handoff/2026-11-23-52c-i.md` keeps its line as first written):
         - 52c-i. [x] **A jump in a fast rhythm, and one side at a time** — merged 2026-11-24 (PR #636).
-        - 52c-ii. [ ] **Floor work, holds and timed only**: a body read lying or held still (sit-ups, hip thrusts, the bar hold), their videos measured first.
+        - 52c-ii. [x] **Floor work, holds and timed only** — merged 2026-11-25 (PR #639).
     - 52d. [ ] **One person locked on**: a busy gym, a passer-by, a mirror (§11.8). Since 51c the phone asks the model for one
       person, so the model itself picks the body: the job is to notice when the body followed has changed (51c's plain sign,
       `bodyChanges`, misses a body of the same size in the same place) and to pause, never count, until it is the person again. Since 52a-ii-b-i: a body new within 3 s keeps the one before's leg and trunk for up to a minute; and a turn in a set, the camera left on, counts a man's own floor videos 8 of 9, 3 of 3 and 8 of 10.
