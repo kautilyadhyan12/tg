@@ -430,7 +430,7 @@ corepack pnpm --filter web exec eslint <the folders you changed> --cache --cache
 docker compose -f infra/docker-compose.dev.yml up -d postgres redis
 corepack pnpm --filter api test:local            # or test:local -t "name" / a file path
 
-# root guards (what CI runs)
+# root guards (GitHub runs these as parts, each on its own machine: .github/workflows/ci.yml; on the laptop only typecheck and lint)
 corepack pnpm lint && corepack pnpm typecheck && corepack pnpm test
 
 # the phone app, on the phone on the USB cable (apps/mobile/.copy names this folder's copy)

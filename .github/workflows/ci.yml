@@ -173,6 +173,14 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # The parts name each package by hand, so a package added to the workspace would be tested by nothing and no
+      # check would say so. This step is red until a new package with tests is given a part and added to this list.
+      - name: every package with tests has a part
+        run: |
+          have=$(pnpm m ls --json --depth -1 | jq -r '.[].path' | while read -r d; do jq -r 'select(.scripts.test != null) | .name' "$d/package.json"; done | sort | xargs)
+          want="@app/config @app/engine @app/movement @app/shared api mobile web"
+          echo "packages with tests: $have"
+          if [ "$have" != "$want" ]; then echo "::error::the packages with tests are not the ones the parts run ($want)"; exit 1; fi
       - run: pnpm --filter @app/config test
       - run: pnpm --filter @app/shared test
       - run: pnpm --filter @app/engine test
@@ -222,6 +230,9 @@ jobs:
       - run: pnpm --filter @app/movement test:proof
         env:
           PROOF_PART: ${{ matrix.part }}
+          # The matrix above, less "rest". The proof's settings refuse to run when this is not every part they name,
+          # so a part named there and not here is red, never left out.
+          PROOF_PARTS_RUN: squat-jump,lunge
   # The check master requires. A part that failed, was cancelled or timed out is red here; a part that did not run is
   # green ONLY when `changes` said this push holds no code. `always()`, never `!cancelled()`: a required check that
   # is skipped counts as passed, so this one is never skipped.
@@ -233,19 +244,23 @@ jobs:
     timeout-minutes: 5
     steps:
       - env:
-          CODE: ${{ needs.changes.outputs.code }}
-          CHANGES: ${{ needs.changes.result }}
-          PARTS: ${{ needs.static.result }} ${{ needs.web-tests.result }} ${{ needs.phone-tests.result }} ${{ needs.small-tests.result }} ${{ needs.movement-tests.result }} ${{ needs.movement-proof.result }}
+          NEEDS: ${{ toJSON(needs) }}
         run: |
-          echo "what changed: $CHANGES (code: $CODE) · parts: $PARTS"
+          changes=$(jq -r '.changes.result' <<<"$NEEDS")
+          code=$(jq -r '.changes.outputs.code // ""' <<<"$NEEDS")
+          parts=$(jq -r 'to_entries[] | select(.key != "changes") | "\(.key)=\(.value.result)"' <<<"$NEEDS")
+          echo "what changed: $changes (code: $code)"
+          echo "$parts"
           want=success
-          if [ "$CHANGES" = success ] && [ "$CODE" = false ]; then want=skipped; fi
-          n=0
-          for r in $PARTS; do
-            n=$((n + 1))
-            if [ "$r" != "$want" ]; then echo "::error::a part ended $r, not $want"; exit 1; fi
+          if [ "$changes" = success ] && [ "$code" = false ]; then want=skipped; fi
+          if [ -z "$parts" ]; then echo "::error::no part reported"; exit 1; fi
+          bad=0
+          for p in $parts; do
+            r=${p#*=}
+            if [ "$r" = cancelled ]; then echo "::error::${p%%=*} was cancelled, by a newer push or by hand: nothing is wrong with the code, run it again"; bad=1
+            elif [ "$r" != "$want" ]; then echo "::error::${p%%=*} ended $r, not $want"; bad=1; fi
           done
-          if [ "$n" -ne 6 ]; then echo "::error::$n parts reported, not 6"; exit 1; fi
+          exit $bad
 
   engine-purity:
     name: engine banned-token grep (R5.1)
@@ -329,11 +344,9 @@ jobs:
           api_key: ${{ secrets.NEON_API_KEY }}
           branch: ci-${{ github.run_id }}
 
-  # The database-backed api suites — every describe.skipIf(DATABASE_URL) suite,
-  # which the `gate` job (no DATABASE_URL) SKIPS. Measured 2026-07-23: gate runs
-  # 153 passed / 188 skipped, with 16 of apps/api's 36 test files never running,
-  # including the whole Day-14 purge suite (the only code in the repo that
-  # irreversibly destroys user data) — OWED "CI runs none of the database tests".
+  # The api's tests, every one: the suites that need a database (describe.skipIf(no DATABASE_URL)) and the ones that
+  # do not. They run only here. Among them is the Day-14 purge suite, the only code in the repo that irreversibly
+  # destroys user data.
   #
   # Runs against a Postgres started ON THE RUNNER, not Neon: co-located means
   # near-zero per-query latency (the full suite is ~38 min against remote Neon
@@ -419,11 +432,20 @@ jobs:
     timeout-minutes: 5
     steps:
       - env:
-          CODE: ${{ needs.changes.outputs.code }}
-          CHANGES: ${{ needs.changes.result }}
-          PART: ${{ needs.api-tests.result }}
+          NEEDS: ${{ toJSON(needs) }}
         run: |
-          echo "what changed: $CHANGES (code: $CODE) · api tests: $PART"
+          changes=$(jq -r '.changes.result' <<<"$NEEDS")
+          code=$(jq -r '.changes.outputs.code // ""' <<<"$NEEDS")
+          parts=$(jq -r 'to_entries[] | select(.key != "changes") | "\(.key)=\(.value.result)"' <<<"$NEEDS")
+          echo "what changed: $changes (code: $code)"
+          echo "$parts"
           want=success
-          if [ "$CHANGES" = success ] && [ "$CODE" = false ]; then want=skipped; fi
-          if [ "$PART" != "$want" ]; then echo "::error::the api tests ended $PART, not $want"; exit 1; fi
+          if [ "$changes" = success ] && [ "$code" = false ]; then want=skipped; fi
+          if [ -z "$parts" ]; then echo "::error::no part reported"; exit 1; fi
+          bad=0
+          for p in $parts; do
+            r=${p#*=}
+            if [ "$r" = cancelled ]; then echo "::error::${p%%=*} was cancelled, by a newer push or by hand: nothing is wrong with the code, run it again"; bad=1
+            elif [ "$r" != "$want" ]; then echo "::error::${p%%=*} ended $r, not $want"; bad=1; fi
+          done
+          exit $bad
