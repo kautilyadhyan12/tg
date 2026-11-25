@@ -19,18 +19,19 @@ export const PROOF_FILES = [
   "test/movementFloorWorkReplaysHipThrust.test.ts",
   "test/movementHoldReplays.test.ts",
   "test/onePersonProof.test.ts",
+  "test/movementCamera.test.ts",
 ];
 
 /** GitHub runs the proof on five machines at once (.github/workflows/ci.yml, PROOF_PART): the squat jump's and the lunge's
  *  eight-minute tables each alone, the sit-up's and the hip thrust's side by side ("floor-work", 52c-ii), the lock's numbers
- *  set from every counted set and its replays ("person", 52d-i; about 4 minutes on the laptop, "rest" already 18 on
- *  GitHub, where a part past 25 is red), and "rest", every other proof file. "rest" is whatever the named parts leave, and a part named here has
+ *  set from every counted set and its replays, and the proof's run against the camera's own ("person", 52d-i; about 4
+ *  and 3.5 minutes on the laptop, "rest" already 18 on GitHub, where a part past 25 is red), and "rest", every other proof file. "rest" is whatever the named parts leave, and a part named here has
  *  to be in ci.yml's matrix, or the proof refuses to start (vitest.proof.config.ts). */
 export const PROOF_PARTS: Record<string, string[]> = {
   "squat-jump": ["test/movementKindsReplaysSquatJump.test.ts"],
   lunge: ["test/movementKindsReplaysLunge.test.ts"],
   "floor-work": ["test/movementFloorWorkReplaysSitUp.test.ts", "test/movementFloorWorkReplaysHipThrust.test.ts"],
-  person: ["test/onePersonProof.test.ts"],
+  person: ["test/onePersonProof.test.ts", "test/movementCamera.test.ts"],
 };
 
 export default defineConfig({
