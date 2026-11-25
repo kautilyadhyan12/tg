@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Loader2 } from 'lucide-react';
+import { initialsOf } from './memberListPeople';
 import { ConsoleFailed, ConsoleLoading } from '../../components/console/ConsoleStates';
 import { codesRetired, orgService, errorText, errorStatus } from '../../api/orgsApi';
 import { readOnlyQueueNote } from './billingView';
@@ -78,22 +79,19 @@ function ApplicantRow({ applicant, busy, readOnly, onConfirm, onReject }) {
   const flagged = typeof applicant.gymNotifiedAt === 'string';
 
   return (
-    <div
-      className="rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center gap-3"
-      style={{ background: '#121110', border: '1px solid rgba(255,138,31,0.22)' }}
+    <li
+      className="flex flex-col sm:flex-row sm:items-center gap-3 px-4 py-3.5 md:px-5 border-t first:border-t-0"
+      style={{ borderColor: 'var(--line)' }}
+      data-testid="applicant-row"
     >
-      <div className="flex-1 min-w-0">
-        <div className="font-semibold truncate flex items-center gap-2" style={{ color: '#fff' }}>
-          <span className="truncate">{applicant.displayName}</span>
-          {flagged ? (
-            <span
-              className="text-[10px] font-semibold rounded-full px-2 py-0.5 flex-shrink-0"
-              style={{ background: 'rgba(255,138,31,0.15)', color: '#FF8A1F' }}
-            >
-              Needs a decision
-            </span>
-          ) : null}
-        </div>
+      <div className="flex items-start gap-3 flex-1 min-w-0">
+      <span className="hidden md:inline-flex c-avatar c-avatar-sm flex-shrink-0" aria-hidden="true">
+        {initialsOf(applicant.displayName)}
+      </span>
+      <div className="flex flex-col gap-0.5 flex-1 min-w-0">
+        <span className="c-s15 c-w6 c-t1 c-ell">{applicant.displayName}</span>
+        {/* Under the name and never beside it, so the tag never cuts a name short. */}
+        {flagged ? <span className="c-tag c-tag-warn self-start">Needs a decision</span> : null}
         {/* KD RULING 2026-08-21 — THE CODE'S LABEL IS OFF THIS ROW.
             He raised it during the clock smoke ("Front Desk" on every row) and
             was told what it is for: Part 3 §2.1's group mechanism, the thing
@@ -106,22 +104,20 @@ function ApplicantRow({ applicant, busy, readOnly, onConfirm, onReject }) {
             **The no-removal rule's AUTHORISED path**: an explicit ruling against
             a cited cost. `groupLabelText` and the roster's own column are
             UNTOUCHED (R1.1) — this is the row he named. */}
-        <div className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.45)' }}>
-          {[waiting, expiring].filter(Boolean).join(' · ')}
-        </div>
+        <span className="c-s14 c-t2">{[waiting, expiring].filter(Boolean).join(' · ')}</span>
         {nudged !== null ? (
-          <div className="text-xs mt-0.5" style={{ color: '#FF8A1F' }}>
+          <span className="c-s14 c-w6" style={{ color: 'var(--warn)' }}>
             {nudged}
-          </div>
+          </span>
         ) : null}
       </div>
-      <div className="flex items-center gap-2 flex-shrink-0">
+      </div>
+      <div className="flex flex-wrap items-center gap-2 flex-shrink-0">
         <button
           type="button"
           onClick={onConfirm}
           disabled={busy || readOnly}
-          className="rounded-xl px-4 py-2.5 text-sm font-semibold flex items-center gap-2 disabled:opacity-40"
-          style={{ background: '#FF8A1F', color: '#0A0908' }}
+          className="c-btn c-btn-soft"
         >
           {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
           Confirm
@@ -137,13 +133,12 @@ function ApplicantRow({ applicant, busy, readOnly, onConfirm, onReject }) {
           type="button"
           onClick={onReject}
           disabled={busy || readOnly}
-          className="rounded-xl px-4 py-2.5 text-sm font-medium disabled:opacity-40"
-          style={{ background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.75)' }}
+          className="c-btn c-btn-s"
         >
           Not this person
         </button>
       </div>
-    </div>
+    </li>
   );
 }
 
@@ -273,14 +268,14 @@ export default function ApplicationsQueue({
   // trainer "Your role doesn't allow that" over a roster they are perfectly
   // entitled to read — which is what mutant J11 measures.
   if (state.forbidden) return null;
-  if (state.loading) return <ConsoleLoading label="Checking who's waiting…" />;
-  if (state.error !== null) return <ConsoleFailed message={state.error} onRetry={refresh} />;
+  if (state.loading) return <ConsoleLoading label="Checking who's waiting…" newLook />;
+  if (state.error !== null) return <ConsoleFailed message={state.error} onRetry={refresh} newLook />;
   if (state.items.length === 0 && state.pendingCount === 0) return null;
 
   return (
-    <section className="flex flex-col gap-3">
-      <div>
-        <h2 className="text-sm font-semibold" style={{ color: '#fff' }}>
+    <section className="c-card c-waiting overflow-hidden" aria-labelledby="waiting-title" data-testid="waiting-to-join">
+      <div className="flex flex-col gap-1 px-4 pt-4 pb-3 md:px-5">
+        <h2 id="waiting-title" className="c-h3">
           Waiting to join
         </h2>
         {/* THE INSTRUCTION IS WHAT GOES, and the COUNT is what stays. "Confirm
@@ -288,7 +283,7 @@ export default function ApplicationsQueue({
             console telling somebody to press a dead button — so on a lapsed gym
             the count is stated plainly and the reason takes the next line, as
             its own sentence rather than spliced into this one. */}
-        <p className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.45)' }}>
+        <p className="c-s14 c-t2">
           {waitingCountLabel(state.pendingCount)}
           {readOnly ? null : ' — confirm the ones you recognise.'}
         </p>
@@ -299,14 +294,19 @@ export default function ApplicationsQueue({
             is nobody for the sentence to be about and §4.2's strip overhead
             already says the gym has no plan. */}
         {readOnly ? (
-          <p className="text-xs mt-1" style={{ color: '#ef4444' }}>
+          <p className="c-s14 c-w6" style={{ color: 'var(--bad)' }}>
             {readOnlyQueueNote(orgType)}
           </p>
         ) : null}
       </div>
 
-      {actionError !== null ? <ConsoleFailed message={actionError} onRetry={refresh} /> : null}
+      {actionError !== null ? (
+        <div className="px-4 pb-3 md:px-5">
+          <ConsoleFailed message={actionError} onRetry={refresh} newLook />
+        </div>
+      ) : null}
 
+      <ul className="border-t" style={{ borderColor: 'var(--line)' }}>
       {state.items.map((a) => (
         <ApplicantRow
           key={a.id}
@@ -317,18 +317,20 @@ export default function ApplicationsQueue({
           onReject={() => decide(a.id, () => orgService.rejectApplication(gymId, a.id), false)}
         />
       ))}
+      </ul>
 
       {state.nextCursor !== null ? (
+        <div className="px-4 py-3 md:px-5 border-t" style={{ borderColor: 'var(--line)' }}>
         <button
           type="button"
           onClick={loadMore}
           disabled={loadingMore}
-          className="self-start rounded-xl px-4 py-2.5 text-sm font-medium flex items-center gap-2"
-          style={{ background: 'rgba(255,138,31,0.15)', color: '#FF8A1F' }}
+          className="c-btn c-btn-s"
         >
           {loadingMore ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
           {loadingMore ? 'Loading…' : 'Show more'}
         </button>
+        </div>
       ) : null}
     </section>
   );

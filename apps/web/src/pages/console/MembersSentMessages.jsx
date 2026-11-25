@@ -290,7 +290,7 @@ export default function MembersSentMessages() {
                     </span>
                     <p className="m-0 flex flex-col flex-1 min-w-0" data-testid="sent-message-by">
                       <span className="c-s15 c-w6 c-t1 c-ell">{one.sentByName ?? MEMBER_NOTE_NO_AUTHOR_WORDS}</span>
-                      <span className="c-s13 c-t2 c-num">{sentTime(one.sentAt, org?.timezone, org?.clockFormat)}</span>
+                      <span className="c-s14 c-t2 c-num">{sentTime(one.sentAt, org?.timezone, org?.clockFormat)}</span>
                     </p>
                   </div>
                   <button
