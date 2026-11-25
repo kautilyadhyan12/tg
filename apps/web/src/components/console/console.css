@@ -1199,10 +1199,12 @@
   border-bottom: 0;
 }
 /* On a touch screen wider than a phone (a tablet, an opened folding phone), the list's tools, its
-   quick filters, the bar and the Filter's choices are 44 px to touch too (V3a-i). */
+   quick filters, the bar and the Filter's choices are 44 px to touch too (V3a-i), and so are
+   Waiting to join's Confirm and Not this person (V3b-i). */
 @media (pointer: coarse) {
   .c-sticky-tools .c-btn,
-  .c-selbar .c-btn {
+  .c-selbar .c-btn,
+  .c-waiting .c-btn {
     height: auto;
     min-height: 44px;
   }
@@ -1638,6 +1640,8 @@
   border-top: 1px solid var(--line);
   background: var(--sheet);
 }
+/* A panel with nothing to save and no buttons at its foot (a person opened from In the app). */
+.c-panel-f:empty { display: none; }
 @media (min-width: 768px) {
   .c-panel { width: min(600px, 100%); border-left: 1px solid var(--raise-line); }
   .c-panel-h { padding: 28px 28px 4px; }

@@ -228,6 +228,11 @@ describe("the second look's building blocks (V1-b)", () => {
     expect(declarations('.c-snav a')['min-height']).toBe('44px');
     expect(declarations('.c-snav a', '(pointer: coarse)')['min-height']).toBe('44px');
   });
+
+  // V3b-i: on a touch tablet or an opened folding phone, Waiting to join's buttons are 44 px too.
+  it("Waiting to join's buttons are 44 px on a touch screen", () => {
+    expect(declarations('.c-waiting .c-btn', '(pointer: coarse)')['min-height']).toBe('44px');
+  });
 });
 
 // The third look (V1-c; spec Part 3 §17.11): one family with the member app, flat colour.
@@ -354,6 +359,10 @@ describe('read without leaning in (Kd, 2026-11-19, V1-f): no words under 14 px',
     '../../pages/console/MemberListMessage.jsx',
     '../../pages/console/MemberListCardAsk.jsx',
     '../../pages/console/MemberListInvite.jsx',
+    // V3b-i: In the app, a person opened from it, Waiting to join, and Sent messages' own page.
+    '../../pages/console/Members.jsx',
+    '../../pages/console/ApplicationsQueue.jsx',
+    '../../pages/console/MembersSentMessages.jsx',
   ];
   // V3a-ii: a member's page opened from Invite to app dims the box in the middle under it too.
   it("a cover drawn after a box in the middle is over that box, and a panel after it is over the cover", () => {
