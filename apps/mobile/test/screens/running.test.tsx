@@ -731,7 +731,7 @@ describe("the voice, through the whole app", () => {
     expect(runNow()?.pauses).toEqual([[1000, 41_000]]);
     expect(voice.said).toEqual([]);
     // A stop a minute and a half in is said, once.
-    const stopped = (_: number) => walking(100);
+    const stopped = () => walking(100);
     await send(101, 20, stopped, 0.04, 12);
     expect(await screen.findByText("Auto-paused")).toBeTruthy();
     expect(voice.said).toEqual(["Auto-paused."]);
