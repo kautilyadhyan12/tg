@@ -1,0 +1,108 @@
+{
+  "id": "standing_dumbbell_calf_raise",
+  "status": "live",
+  "kind": "strength",
+  "level": "beginner",
+  "muscles": {
+    "main": [
+      "calves",
+      "soleus"
+    ],
+    "also": [],
+    "steady": [
+      "tibialis",
+      "peroneals"
+    ]
+  },
+  "equipment": [
+    "dumbbell"
+  ],
+  "set": {
+    "measuredIn": "reps",
+    "weight": "usually",
+    "eachSide": false,
+    "start": {
+      "sets": 2,
+      "reps": 12
+    }
+  },
+  "energy": {
+    "compendium": "02054"
+  },
+  "text": {
+    "en": {
+      "name": "Standing Dumbbell Calf Raise",
+      "otherNames": [
+        "Calf raise",
+        "Heel raise",
+        "Standing calf raise"
+      ],
+      "about": "A standing lower-leg exercise holding a dumbbell in each hand: you rise onto the balls of your feet, then lower your heels with control. It builds strength in the calves.",
+      "steps": [
+        "Stand on a flat floor with your feet hip-width apart and pointing forward, holding a dumbbell in each hand at your sides.",
+        "Stand tall with your knees straight and your core braced.",
+        "Lift your heels slowly and rise as high as you can onto the balls of your feet, without letting your feet turn in or out.",
+        "Hold the top position briefly and squeeze your calves.",
+        "Lower your heels slowly back to the floor, taking two to three seconds.",
+        "Pause briefly with your heels down before the next rep, so that you do not bounce."
+      ],
+      "mistakes": [
+        {
+          "id": "bouncing_reps",
+          "says": "Reps are fast and bouncy. Lower your heels slowly and pause briefly at the bottom before you rise again."
+        },
+        {
+          "id": "heels_barely_lift",
+          "says": "Heels lift only a little. Rise as high as you can onto the balls of your feet on every rep."
+        },
+        {
+          "id": "knees_bend",
+          "says": "Knees bend as you rise. Keep your knees straight so that your calves do the work."
+        },
+        {
+          "id": "too_heavy",
+          "says": "Dumbbells are too heavy to control. Choose a weight that lets you rise and lower slowly on every rep."
+        }
+      ],
+      "cautions": [
+        "Stop if you feel sharp pain, lasting Achilles or heel pain, or numbness, and see a qualified healthcare professional before you train again."
+      ]
+    }
+  },
+  "sources": [
+    {
+      "name": "American Council on Exercise (ACE), Exercise Library: Standing Calf Raises - Wall",
+      "url": "https://www.acefitness.org/resources/everyone/exercise-library/73/standing-calf-raises-wall/"
+    },
+    {
+      "name": "American Council on Exercise (ACE), Get Stronger Calves With These 5 Exercises",
+      "url": "https://www.acefitness.org/resources/pros/expert-articles/5771/get-stronger-calves-with-these-5-exercises/"
+    },
+    {
+      "name": "National Academy of Sports Medicine (NASM), Calf Training: How to Program This Stubborn Muscle Group",
+      "url": "https://www.nasm.org/resource-center/blog/training/calf-training-how-to-program-this-stubborn-muscle-group-for-clients"
+    },
+    {
+      "name": "National Academy of Sports Medicine (NASM), Exercise Library: Leg Press Calf Raise (muscles worked)",
+      "url": "https://www.nasm.org/resource-center/exercise-library/leg-press-calf-raise"
+    },
+    {
+      "name": "Ugbolue et al. (2021), Electromyographic Assessment of the Lower Leg Muscles during Standing Heel Raise",
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC8070905/"
+    }
+  ],
+  "clip": {
+    "file": "0903f1e87a9d3a1ecee772179028fb3ea0c6618e25892072acea14d49b31fe6f.mp4",
+    "width": 720,
+    "height": 1280,
+    "bytes": 146949,
+    "seconds": 4
+  },
+  "picture": {
+    "file": "324d8f114fc3eb1855a86b9ae8bdfd2b4e61bcdcbaa74b6f0e3169f071a6c9bd.webp",
+    "width": 720,
+    "height": 1280,
+    "bytes": 37632,
+    "ground": "#B8B6B7"
+  }
+}

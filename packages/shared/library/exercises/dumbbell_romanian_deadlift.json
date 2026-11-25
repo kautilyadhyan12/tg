@@ -1,0 +1,115 @@
+{
+  "id": "dumbbell_romanian_deadlift",
+  "status": "live",
+  "kind": "strength",
+  "level": "intermediate",
+  "muscles": {
+    "main": [
+      "biceps_femoris",
+      "inner_hamstrings",
+      "glute_max"
+    ],
+    "also": [
+      "lower_back",
+      "adductor_magnus",
+      "upper_traps",
+      "middle_traps",
+      "lower_traps",
+      "calves",
+      "forearm_flexors"
+    ],
+    "steady": [
+      "transverse_abdominis"
+    ]
+  },
+  "equipment": [
+    "dumbbell"
+  ],
+  "set": {
+    "measuredIn": "reps",
+    "weight": "usually",
+    "eachSide": false,
+    "start": {
+      "sets": 3,
+      "reps": 10
+    }
+  },
+  "energy": {
+    "compendium": "02052"
+  },
+  "text": {
+    "en": {
+      "name": "Dumbbell Romanian Deadlift",
+      "otherNames": [
+        "Dumbbell RDL",
+        "Romanian deadlift"
+      ],
+      "about": "A standing hip hinge with a dumbbell in each hand: you push your hips back to lower the weights with a flat back and soft knees, then stand tall. It builds strength in the hamstrings, glutes and lower back.",
+      "steps": [
+        "Stand with your feet hip-width apart, holding a dumbbell in each hand with your arms straight and your palms facing your body.",
+        "Bend your knees slightly, brace your core and draw your shoulders back and down.",
+        "Push your hips back to hinge forward, keeping your back flat and your knees softly bent.",
+        "Lower the dumbbells close to your legs until you feel a stretch in your hamstrings, usually around knee to mid-shin height.",
+        "Keep your neck in line with your back by looking at the floor, not ahead or into a mirror.",
+        "Push your heels into the floor and drive your hips forward to stand tall, keeping your back flat."
+      ],
+      "mistakes": [
+        {
+          "id": "back_rounds",
+          "says": "Lower back rounds as you lower. Keep your back flat and go only as low as you can without it rounding."
+        },
+        {
+          "id": "knees_bend_too_much",
+          "says": "Knees bend too much and it turns into a squat. Keep a slight bend and move by pushing your hips back."
+        },
+        {
+          "id": "weights_drift_away",
+          "says": "Dumbbells drift away from your legs. Keep them close to your thighs and shins on the way down and up."
+        },
+        {
+          "id": "too_heavy",
+          "says": "Dumbbells are too heavy to keep your back flat. Choose a weight you can lower with a flat back on every rep."
+        },
+        {
+          "id": "looking_up",
+          "says": "You look up or into the mirror. Keep your neck in line with your back and look at the floor as you hinge."
+        }
+      ],
+      "cautions": [
+        "Bending from a rounded lower back instead of your hips can seriously injure the low-back muscles. Hinge from your hips and keep your back flat."
+      ]
+    }
+  },
+  "sources": [
+    {
+      "name": "National Academy of Sports Medicine (NASM), Exercise Library: Dumbbell Romanian Deadlift",
+      "url": "https://www.nasm.org/resource-center/exercise-library/dumbbell-romanian-deadlift"
+    },
+    {
+      "name": "American Council on Exercise (ACE), The ACE Do it Better Series: The Romanian Deadlift",
+      "url": "https://www.acefitness.org/continuing-education/certified/may-2025/8865/the-ace-do-it-better-series-the-romanian-deadlift/"
+    },
+    {
+      "name": "American Council on Exercise (ACE), Exercise Library: Romanian Deadlift",
+      "url": "https://www.acefitness.org/resources/everyone/exercise-library/317/romanian-deadlift/"
+    },
+    {
+      "name": "American College of Sports Medicine (ACSM), Progression Models in Resistance Training for Healthy Adults (2009)",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/19204579/"
+    }
+  ],
+  "clip": {
+    "file": "b76b5f725b16a14ca7ed6aa17f1900293d164313bd2433f8f31865177e5a3d9e.mp4",
+    "width": 720,
+    "height": 1280,
+    "bytes": 172419,
+    "seconds": 4
+  },
+  "picture": {
+    "file": "f70318dbe6a91634f7ea2dc51c800b949920e507b9dbaf501de290361a239af4.webp",
+    "width": 720,
+    "height": 1280,
+    "bytes": 33318,
+    "ground": "#D1D1D1"
+  }
+}

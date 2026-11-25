@@ -13,6 +13,18 @@ export function pictureTopHeight(width: number, screenHeight: number, tall: numb
   return Math.round(Math.min(width * tall, screenHeight * PICTURE_TOP_MOST));
 }
 
+/** The least height a whole picture is drawn at, however little room is left: a wide screen still shows the person. */
+export const WHOLE_PICTURE_LEAST = 160;
+
+/** How tall a whole picture is drawn under a page's top buttons (an exercise's own picture, 62a): its own shape for the
+ *  phone's width, but the picture and the space above it never more than a page picture's share of the screen, and
+ *  never under the least. The picture is fitted whole inside it, never cut. */
+export function wholePictureHeight(width: number, screenHeight: number, picture: { width: number; height: number }, above: number): number {
+  const own = (width * picture.height) / picture.width;
+  const room = screenHeight * PICTURE_TOP_MOST - above;
+  return Math.round(Math.max(WHOLE_PICTURE_LEAST, Math.min(own, room)));
+}
+
 /** The tallest an event's poster is drawn, before the share of the screen it may take. */
 export const POSTER_TALLEST = 420;
 

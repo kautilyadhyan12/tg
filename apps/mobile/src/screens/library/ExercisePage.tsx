@@ -7,6 +7,7 @@ import { colours, shadows, sizes, stageGlow } from "../../look/colours";
 import { CoverPage } from "../../look/CoverPage";
 import { Icon } from "../../look/Icon";
 import { PictureTop } from "../../look/PictureTop";
+import { WholePictureTop } from "../../look/WholePictureTop";
 import { Sheet } from "../../look/Sheet";
 import { fonts, Txt } from "../../look/Txt";
 import { DEEP_UNDER, litMuscles, sideFor, type Sex, type Side } from "../../library/figure";
@@ -27,6 +28,7 @@ import {
   splitMistake,
   targetLine,
 } from "../../library/words";
+import { useOwnPicture } from "./ExerciseImage";
 import { Flames, KitMark, Plates } from "./Marks";
 import { MuscleFigure, MuscleLeader } from "./MuscleFigure";
 import { Records } from "./Records";
@@ -69,32 +71,41 @@ export function ExercisePage({
   const en = entry.text.en;
   const counted = COUNTED_WORDS[COUNTED_TODAY];
 
-  const hero = (
-    <PictureTop
-      picture={exercisePicture(entry.id, entry.kind)}
-      tall={0.9}
-      above={
-        <View style={styles.tagRow}>
-          <View style={styles.tag}>
-            <Icon name="timer" size={13} colour="textSoft" />
-            <Txt kind="tiny" colour="textSoft">
-              {counted}
-            </Txt>
-          </View>
-        </View>
-      }
-      eyebrow={kindWord(entry.kind)}
-      foot={
-        <View style={styles.titles}>
-          <Txt kind="hero">{en.name}</Txt>
-          {en.otherNames.length === 0 ? null : <Txt kind="small">{en.otherNames.join(" · ")}</Txt>}
-        </View>
-      }
-    />
+  // Its own picture (62a), once it has come: shown whole, the name under it. Until then, and for an exercise with none,
+  // the app's picture of its kind with the name over its foot, as before.
+  const ownUri = useOwnPicture(entry.picture);
+  const own = entry.picture !== null && ownUri !== null ? { ...entry.picture, uri: ownUri } : null;
+  const tag = (
+    <View style={styles.tagRow}>
+      <View style={styles.tag}>
+        <Icon name="timer" size={13} colour="textSoft" />
+        <Txt kind="tiny" colour="textSoft">
+          {counted}
+        </Txt>
+      </View>
+    </View>
   );
+  const titles = (
+    <View style={[styles.titles, own === null ? styles.titlesOver : null]}>
+      <Txt kind="hero">{en.name}</Txt>
+      {en.otherNames.length === 0 ? null : <Txt kind="small">{en.otherNames.join(" · ")}</Txt>}
+    </View>
+  );
+  const hero =
+    own === null ? (
+      <PictureTop picture={exercisePicture(entry.id, entry.kind)} tall={0.9} above={tag} eyebrow={kindWord(entry.kind)} foot={titles} />
+    ) : (
+      <WholePictureTop testID={`page-picture-${entry.id}`} uri={own.uri} width={own.width} height={own.height} ground={own.ground} above={tag} />
+    );
   return (
     <CoverPage open title={en.name} onClose={onClose} hero={hero} foot={mine === null ? undefined : <AddToWorkout id={entry.id} mine={mine} onOpenMine={onOpenMine} />}>
-      <Strip entry={entry} />
+      {own === null ? null : (
+        <View style={styles.under}>
+          <Txt kind="eyebrow">{kindWord(entry.kind)}</Txt>
+          {titles}
+        </View>
+      )}
+      <Strip entry={entry} over={own === null} />
       {en.cautions.map((c, i) => (
         <View key={`${String(i)}-${c}`} style={styles.caution} accessible accessibilityRole="alert" accessibilityLabel={`Caution: ${c}`}>
           <Icon name="warn" size={16} colour="badText" />
@@ -194,14 +205,14 @@ function AddToWorkout({ id, mine, onOpenMine }: { id: string; mine: { list: read
   );
 }
 
-/** The facts strip over the picture's foot: target, level, effort, equipment. */
-function Strip({ entry }: { entry: PhoneLibraryEntry }) {
+/** The facts strip: target, level, effort, equipment. Over the foot of the app's picture; under an own picture's name. */
+function Strip({ entry, over }: { entry: PhoneLibraryEntry; over: boolean }) {
   const target = targetLine(entry);
   const effort = effortOf(entry.met);
   const level = levelWord(entry.level);
   const kit = equipmentLine(entry);
   return (
-    <View style={styles.strip}>
+    <View style={[styles.strip, over ? styles.stripOver : null]}>
       {target === null ? null : (
         <View style={styles.fact} accessible accessibilityLabel={`To start, ${targetLine(entry, false) ?? target}`}>
           <Txt style={styles.factBig} numberOfLines={1} fit>
@@ -375,10 +386,13 @@ const styles = StyleSheet.create({
   footLine: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6 },
   tagRow: { alignItems: "flex-end" },
   tag: { flexDirection: "row", alignItems: "center", gap: 6, minHeight: 30, paddingHorizontal: 12, borderRadius: sizes.round, borderWidth: 1, borderColor: colours.lineStrong, backgroundColor: colours.overPicture },
-  titles: { gap: 4, paddingBottom: 44 },
+  titles: { gap: 4 },
+  // Over the app's picture the strip comes up over the picture's foot, under the name.
+  titlesOver: { paddingBottom: 44 },
+  stripOver: { marginTop: -44 },
+  under: { gap: 8 },
   strip: {
     flexDirection: "row",
-    marginTop: -44,
     borderRadius: 20,
     borderWidth: 1,
     borderColor: colours.lineStrong,
