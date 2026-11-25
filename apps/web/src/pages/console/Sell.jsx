@@ -293,6 +293,43 @@ function ProductSale({ gymId, org, page: gymPage, locked, firstPerson, addMember
   const shownLines = gift !== null && !friendGiftRemoved ? withFriendGift(lines, page, gift.discount.id) : lines;
   const codeId = useId();
   const terminalPickId = useId();
+  const saleBox = useRef(null);
+  const noProducts = gymPage.products.length === 0;
+  const saleOpen = state.done === null;
+  // From 1101 px the sale is no taller than the screen left under it, so Take payment is on the
+  // first screen however many lines it holds, and stays on screen once the page is scrolled.
+  useEffect(() => {
+    const el = saleBox.current;
+    if (el === null || typeof window.matchMedia !== 'function') return undefined;
+    const wide = window.matchMedia('(min-width: 1101px)');
+    let frame = 0;
+    const fit = () => {
+      frame = 0;
+      if (!wide.matches) {
+        el.style.maxHeight = '';
+        return;
+      }
+      const top = Math.max(16, el.getBoundingClientRect().top);
+      el.style.maxHeight = `${String(Math.max(320, Math.floor(window.innerHeight - top - 16)))}px`;
+    };
+    const ask = () => {
+      if (frame === 0) frame = window.requestAnimationFrame(fit);
+    };
+    fit();
+    // What is drawn above it can still grow (a banner, the products loading): measured again then.
+    const grows = typeof ResizeObserver === 'function' ? new ResizeObserver(ask) : null;
+    grows?.observe(document.body);
+    window.addEventListener('scroll', ask, { passive: true });
+    window.addEventListener('resize', ask);
+    wide.addEventListener('change', ask);
+    return () => {
+      if (frame !== 0) window.cancelAnimationFrame(frame);
+      grows?.disconnect();
+      window.removeEventListener('scroll', ask);
+      window.removeEventListener('resize', ask);
+      wide.removeEventListener('change', ask);
+    };
+  }, [noProducts, saleOpen]);
 
   useEffect(() => {
     let live = true;
@@ -511,7 +548,7 @@ function ProductSale({ gymId, org, page: gymPage, locked, firstPerson, addMember
         {oldMoney !== null ? <p className="c-s14 c-t2 m-0">{oldMoney}</p> : null}
       </section>
 
-      <section className="c-card c-till-sale" aria-label="New sale">
+      <section ref={saleBox} className="c-card c-till-sale" aria-label="New sale">
         {recorded !== null ? (
           <div className="c-sale-b">
             <h2 className="c-h2">New sale</h2>
@@ -681,10 +718,13 @@ function ProductSale({ gymId, org, page: gymPage, locked, firstPerson, addMember
                 </dl>
               ) : null}
 
-              <button type="button" className="c-btn c-btn-p c-btn-lg c-btn-take" disabled={still || view.problem !== null || view.summary === null} onClick={() => void sell()}>
-                {state.busy ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : null}
-                {state.busy ? (onTerminal ? 'Sending…' : 'Recording…') : `${onTerminal ? 'Take payment on Terminal' : 'Take payment'}${view.summary !== null ? ` · ${view.summary.total}` : ''}`}
-              </button>
+              {/* Under 1100 px this alone stays at the bottom of the screen while the sale is in view. */}
+              <div className="c-sale-take">
+                <button type="button" className="c-btn c-btn-p c-btn-lg c-btn-take" disabled={still || view.problem !== null || view.summary === null} onClick={() => void sell()}>
+                  {state.busy ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : null}
+                  {state.busy ? (onTerminal ? 'Sending…' : 'Recording…') : `${onTerminal ? 'Take payment on Terminal' : 'Take payment'}${view.summary !== null ? ` · ${view.summary.total}` : ''}`}
+                </button>
+              </div>
               {view.problem !== null && lines.length > 0 && view.rows.every((r) => r.problem === null) ? <p className="c-s14 c-t2 m-0">{view.problem}</p> : null}
               <p className="c-s14 c-t3 m-0">{onTerminal ? TERMINAL_SALE_HINT : SALE_HINT}</p>
               {lostKey !== null ? (
@@ -1005,7 +1045,7 @@ function Takings({ gymId, org, page, locked, canOpenPeople, onOpenPerson, onPage
             const said = state.done !== null && state.done.key === row.key ? saleSaidNow(state.done, row.basket, state.done.read !== shownPage) : null;
             return (
               <li key={row.key} className="flex flex-col gap-2 p-4" style={LINE} data-testid="takings-row" data-sale-row={row.key}>
-                <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                <div className={phone ? "flex items-start justify-between gap-3" : "flex flex-col gap-2 md:flex-row md:items-center md:justify-between"}>
                   <div className="flex flex-col min-w-0">
                     <p className="c-s15 c-w6 c-t1 m-0">
                       <span style={row.undone ? { textDecoration: 'line-through' } : undefined}>{`${row.title} · ${row.amount}`}</span>
