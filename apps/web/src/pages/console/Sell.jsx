@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { Link, useLocation, useParams } from 'react-router-dom';
-import { CheckCircle2, Loader2 } from 'lucide-react';
+import { CheckCircle2, ChevronDown, Loader2 } from 'lucide-react';
 import { registerService } from '../../api/registerApi';
 import { orgService, errorStatus, errorText } from '../../api/orgsApi';
 import { ConsoleFailed, ConsoleLoading } from '../../components/console/ConsoleStates';
@@ -294,6 +294,17 @@ function ProductSale({ gymId, org, page: gymPage, locked, firstPerson, addMember
   const codeId = useId();
   const terminalPickId = useId();
   const saleBox = useRef(null);
+  const saleBody = useRef(null);
+  const moreButton = useRef(null);
+  /** More below shows while the sale's box has more under what is in view. */
+  const showMore = useCallback(() => {
+    const body = saleBody.current;
+    const button = moreButton.current;
+    if (body === null || button === null) return;
+    button.hidden = body.scrollHeight - body.scrollTop - body.clientHeight <= 8;
+  }, []);
+  // After every change to the sale, and as the box is fitted to the screen.
+  useEffect(showMore);
   const noProducts = gymPage.products.length === 0;
   const saleOpen = state.done === null;
   // From 1101 px the sale is no taller than the screen left under it, so Take payment is on the
@@ -311,6 +322,7 @@ function ProductSale({ gymId, org, page: gymPage, locked, firstPerson, addMember
       }
       const top = Math.max(16, el.getBoundingClientRect().top);
       el.style.maxHeight = `${String(Math.max(320, Math.floor(window.innerHeight - top - 16)))}px`;
+      showMore();
     };
     const ask = () => {
       if (frame === 0) frame = window.requestAnimationFrame(fit);
@@ -329,7 +341,7 @@ function ProductSale({ gymId, org, page: gymPage, locked, firstPerson, addMember
       window.removeEventListener('resize', ask);
       wide.removeEventListener('change', ask);
     };
-  }, [noProducts, saleOpen]);
+  }, [noProducts, saleOpen, showMore]);
 
   useEffect(() => {
     let live = true;
@@ -556,8 +568,24 @@ function ProductSale({ gymId, org, page: gymPage, locked, firstPerson, addMember
           </div>
         ) : (
           <>
-            <div className="c-sale-b">
+            <div className="c-sale-b" ref={saleBody} onScroll={showMore}>
               <h2 className="c-h2">New sale</h2>
+              <WhoPicker
+                gymId={gymId}
+                who={who}
+                setWho={(next) => {
+                  setWho(next);
+                  touched();
+                }}
+                person={person}
+                setPerson={(next) => {
+                  setPerson(next);
+                  touched();
+                }}
+                mustPick={false}
+                disabled={still}
+                addMemberTo={addMemberTo}
+              />
               {resumed.map((payment) => (
                 <ResumedSale key={payment.id} gymId={gymId} payment={payment} showName onPaid={() => registerService.get(gymId).then(onPage, () => undefined)} onClose={() => setResumed((was) => was.filter((w) => w.id !== payment.id))} />
               ))}
@@ -586,22 +614,6 @@ function ProductSale({ gymId, org, page: gymPage, locked, firstPerson, addMember
                 <p className="c-s14 c-t2 m-0">Nothing in this sale yet. Press a product to add it.</p>
               )}
 
-              <WhoPicker
-                gymId={gymId}
-                who={who}
-                setWho={(next) => {
-                  setWho(next);
-                  touched();
-                }}
-                person={person}
-                setPerson={(next) => {
-                  setPerson(next);
-                  touched();
-                }}
-                mustPick={false}
-                disabled={still}
-                addMemberTo={addMemberTo}
-              />
               {view.rows.length > 0 && gift !== null ? (
                 <FriendGiftNote
                   gift={gift}
@@ -668,6 +680,17 @@ function ProductSale({ gymId, org, page: gymPage, locked, firstPerson, addMember
                   )}
                 </div>
               ) : null}
+              {/* Kd's click-through: a sale longer than its box says so, and one press goes down it. */}
+              <button
+                type="button"
+                ref={moreButton}
+                hidden
+                className="c-btn c-btn-s c-sale-more"
+                onClick={() => saleBody.current?.scrollBy?.({ top: Math.round(saleBody.current.clientHeight * 0.8), behavior: 'smooth' })}
+              >
+                More below
+                <ChevronDown aria-hidden="true" className="w-4 h-4" />
+              </button>
             </div>
 
             <div className="c-sale-f" data-testid="sale-foot">

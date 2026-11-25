@@ -2579,6 +2579,15 @@
   border-radius: 0 0 18px 18px;
 }
 .c-sale-f .c-btn-take { width: 100%; height: auto; min-height: 48px; white-space: normal; }
+/* More below: at the bottom edge of the sale's box while there is more under it. */
+.c-sale-more {
+  position: sticky;
+  bottom: 0;
+  align-self: center;
+  flex: none;
+  box-shadow: var(--pop);
+}
+.c-sale-more[hidden] { display: none; }
 .c-till-head { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 12px; }
 .c-tiles {
   display: grid;

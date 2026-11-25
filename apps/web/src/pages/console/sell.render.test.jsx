@@ -201,6 +201,9 @@ describe('the till (V4a-i)', () => {
     open();
     await screen.findByRole('region', { name: 'New sale' });
     expect(within(newSale()).getByText('Nothing in this sale yet. Press a product to add it.')).toBeTruthy();
+    // Who is buying comes first, so a long sale never pushes it down (Kd's click-through); More below shows only for more than fits.
+    expect(within(newSale()).getByText('Who is buying?').compareDocumentPosition(within(newSale()).getByText('Nothing in this sale yet. Press a product to add it.')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(within(newSale()).queryByRole('button', { name: 'More below' })).toBeNull();
     pick('Add a product', 'p-water');
     expect(screen.getByLabelText('How many').value).toBe('1');
     expect(tile('p-water').getAttribute('aria-label')).toBe('Add Water · $1.99 · 8 left, 1 in sale');
