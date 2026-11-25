@@ -202,14 +202,23 @@ describe("a still stretch the phone never made cannot take a run's metres away",
     expect(plain.distanceM).toBeGreaterThanOrEqual(350);
   });
 
-  it("one slipped between two of a slow walker's points 40 m apart and more is not honoured", () => {
-    // Sure to 15 m, 4 × 15 = 60 m: a walk at 1 m/s over 90 s goes 90 m from the stretch's first point.
-    const { fixes } = walk([{ seconds: 300, speed: 1, accuracyM: 15, feel: "moving" }]);
+  it("one over an out-and-back walk that goes farther than a phone wanders is not honoured: every metre there and back is counted", () => {
+    // Sure to 15 m, 4 x 15 = 60 m. Along a straight line a stretch hides nothing (the step out of it is measured
+    // from its first point), so the walk turns back: 90 s out at 1 m/s and 90 s back, 90 m from the first point.
+    const { fixes } = walk([
+      { seconds: 100, speed: 1, accuracyM: 15, feel: "moving" },
+      { seconds: 90, speed: 1, accuracyM: 15, feel: "moving" },
+      { seconds: 90, speed: -1, accuracyM: 15, feel: "moving" },
+      { seconds: 100, speed: 1, accuracyM: 15, feel: "moving" },
+    ]);
     const end = endOf(fixes);
     const plain = runSums(pointsOf(fixes), [], end, 70).distanceM;
-    expect(runSums(pointsOf(fixes), [], end, 70, [[100_000, 190_000]]).distanceM).toBe(plain);
-    // 30 s of it is within 60 m: honoured, the most it hides is those 30 m.
-    expect(plain - runSums(pointsOf(fixes), [], end, 70, [[100_000, 130_000]]).distanceM).toBeLessThanOrEqual(31);
+    expect(plain).toBeGreaterThanOrEqual(350);
+    expect(runSums(pointsOf(fixes), [], end, 70, [[101_000, 281_000]]).distanceM).toBe(plain);
+    // 15 s out and 15 s back stays within 60 m: honoured, and the most it hides is those 30 m, a stand's wander.
+    const near = runSums(pointsOf(fixes), [], end, 70, [[176_000, 206_000]]).distanceM;
+    expect(plain - near).toBeGreaterThan(0);
+    expect(plain - near).toBeLessThanOrEqual(31);
   });
 
   it("a stretch over a pause, or past the run's end, counts nothing twice", () => {
