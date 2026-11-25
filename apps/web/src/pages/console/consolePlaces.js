@@ -80,6 +80,7 @@ const PLACES = {
   paymentDue: { path: '/members?show=payment-due', may: (privileges) => has(privileges, 'billing.members') },
   noCardOnFile: { path: '/members?show=no-card', may: (privileges) => has(privileges, 'billing.members') },
   sell: { path: '/sell', may: canOpenSell },
+  sellDiscounts: { path: '/sell#discounts', may: canOpenSell },
   failedPayments: { path: '/failed-payments', may: canSeeFailedPayments },
   members: { path: '/members', may: onStaff },
   // Possible duplicates (5b-iv-a): two records of one person, joined there.

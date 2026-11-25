@@ -126,7 +126,7 @@ function DiscountForm({ page, draft, setDraft, busy, error, membershipsTo, onSav
               <input type="radio" name={`${id}-scope`} checked={draft.scope === 'some'} disabled={busy || page.products.length === 0} onChange={() => set({ scope: 'some' })} />
               Selected products
             </label>
-            {page.products.length === 0 ? <p className="c-s13 c-t3 m-0">You have no products yet. Add one under Products above to choose it here.</p> : null}
+            {page.products.length === 0 ? <p className="c-s13 c-t3 m-0">You have no products yet. Add one under Products to choose it here.</p> : null}
             {draft.scope === 'some' ? (
               <div className="flex flex-col pl-7" role="group" aria-label="Products this discount applies to">
                 {page.products.map((product) => (
@@ -305,7 +305,7 @@ export default function SellDiscounts({ gymId, page, locked, lockedNote, use = '
     const where = body.forProducts && body.forMemberships ? 'when they sell a product or add a membership' : body.forMemberships ? "when they add a membership on a member's page" : 'when they sell a product';
     // One that no longer applies here is listed on the other page: said, with its button.
     const elsewhere = use === 'products' ? !body.forProducts : !body.forMemberships;
-    const away = elsewhere ? (use === 'products' ? ' It is for memberships only, so it is listed on the Memberships page.' : ' It is for products only, so it is listed on the Sell page.') : '';
+    const away = elsewhere ? (use === 'products' ? ' It is for memberships only, so it is listed on the Memberships page.' : ' It is for products only, so it is listed under Discounts on the Sell page.') : '';
     const ok = await run(
       () => (draft.id === null ? registerService.addDiscount(gymId, body) : registerService.changeDiscount(gymId, draft.id, body)),
       (draft.id === null ? `${body.name} added. Staff can now choose it ${where}.` : `${body.name} saved. Sales and memberships already made keep the discount they were made with.`) + away,
