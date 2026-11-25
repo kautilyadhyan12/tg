@@ -128,3 +128,5 @@ export function heartLine(bpm: number | null, max: number | null): string | null
 }
 
 export const PAUSE_WORDS = { auto: "Auto-paused.", person: "Run paused.", resumed: "Run resumed." } as const;
+/** A pause that begins this soon after Go is not spoken of, nor its end (37j). */
+export const START_HUSH_MS = 15_000;
