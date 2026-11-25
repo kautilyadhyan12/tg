@@ -16,7 +16,7 @@ import { weightParts, type Units } from "../../library/records";
 import { leftOf, setOf, setsInAll, type Press } from "../../library/workoutRun";
 import type { Finished } from "../../library/workoutRunStore";
 import type { WaitingView } from "../../session/waitingList";
-import { ClipOver, useClipReady } from "../library/ExerciseClip";
+import { ClipOver } from "../library/ExerciseClip";
 import { useKeepMedia, useOwnPicture, type OwnClip, type OwnPicture } from "../library/ExerciseImage";
 import { Led } from "../library/Records";
 import { useNamed } from "../library/useLibrary";
@@ -109,7 +109,6 @@ function Doing({ run, units, sound, press, onPutAway, onDiscard }: { run: Workou
   );
   useKeepMedia(files);
   const ownUri = useOwnPicture(own.picture);
-  const clipReady = useClipReady(own.clip);
   const reduced = useReducedMotion();
   const top = (
     <View style={styles.tops}>
@@ -168,9 +167,10 @@ function Doing({ run, units, sound, press, onPutAway, onDiscard }: { run: Workou
   return (
     <View style={styles.page}>
       <ScrollView contentContainerStyle={styles.scroll} bounces={false}>
-        {own.picture !== null && (ownUri !== null || clipReady) ? (
+        {/* The page's rule too: its own picture whole once it has come (small, it comes first), the clip over it. */}
+        {own.picture !== null && ownUri !== null ? (
           <>
-            <OwnTop id={exercise.exercise} uri={ownUri} picture={own.picture} clip={reduced ? null : own.clip} playing={!run.paused} above={top} />
+            <OwnTop id={exercise.exercise} uri={ownUri} picture={own.picture} clip={reduced === false ? own.clip : null} playing={!run.paused} above={top} />
             <View style={styles.ownWords}>
               <Txt kind="eyebrow">{eyebrowWords(run)}</Txt>
               <Txt kind="h2">{exercise.name}</Txt>

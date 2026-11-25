@@ -82,7 +82,8 @@ export function ExercisePage({
   const clipReady = useClipReady(entry.clip);
   const reduced = useReducedMotion();
   const [clipChoice, setClipChoice] = useState<boolean | null>(null);
-  const clipPlaying = clipChoice ?? !reduced;
+  // Not moving until the phone has said whether Remove animations is on.
+  const clipPlaying = clipChoice ?? reduced === false;
   const tag = (
     <View style={styles.tagRow}>
       <View style={styles.tag}>
@@ -111,6 +112,8 @@ export function ExercisePage({
         ground={own.ground}
         above={tag}
         over={<ClipOver id={entry.id} clip={entry.clip} playing={clipPlaying} ground={own.ground} />}
+        // The button keeps to the side away from KWAZO.
+        cornerSide={entry.clip?.mark === "right" ? "left" : "right"}
         {...(clipReady
           ? {
               corner: (

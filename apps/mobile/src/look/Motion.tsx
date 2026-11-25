@@ -11,10 +11,11 @@ export function setMotionAllowed(on: boolean) {
   allowed = on;
 }
 
-/** Whether the phone's own "Remove animations" (Reduce motion) is on, followed while it changes. Unlike `useMotion`, the
- *  screen tests' switch does not touch it: an exercise's clip (62b) plays in the tests as on a phone with it off. */
-export function useReducedMotion(): boolean {
-  const [reduced, setReduced] = useState(false);
+/** Whether the phone's own "Remove animations" (Reduce motion) is on, followed while it changes; null until the phone has
+ *  said, which a screen reads as "do not move yet". Unlike `useMotion`, the screen tests' switch does not touch it: an
+ *  exercise's clip (62b) plays in the tests as on a phone with it off. */
+export function useReducedMotion(): boolean | null {
+  const [reduced, setReduced] = useState<boolean | null>(null);
   useEffect(() => {
     let alive = true;
     void AccessibilityInfo.isReduceMotionEnabled().then((on) => {

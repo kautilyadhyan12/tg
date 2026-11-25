@@ -108,6 +108,8 @@ export const exerciseClipSchema = z
     height: sideSchema,
     bytes: z.number().int().min(1).max(20_000_000),
     seconds: z.number().min(0.5).max(60),
+    /** The bottom corner KWAZO is in (62b): left unless the person reaches it, then right. A clip made before says none. */
+    mark: z.enum(["left", "right"]).default("left"),
   })
   .strict();
 export type ExerciseClip = z.infer<typeof exerciseClipSchema>;

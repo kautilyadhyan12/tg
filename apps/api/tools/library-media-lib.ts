@@ -80,7 +80,8 @@ export const GREY_SHIFT_MOST = 24;
 
 /** How far to move each of a clip's red, green and blue so its grey round the edge meets its picture's (62b): on the
  *  phone the clip lies over the picture, its grey running to the screen's edges, and Kd's clips are a few shades off
- *  their pictures (measured 2026-11-25: #D4D6D3 and #CFCFCF on #D1D1D1 and #D5D5D5), which showed as a box. The shift is
+ *  their pictures (printed by the command 2026-11-25: #D5D9D4 on #D1D1D1, #CDCDCD on #D5D5D5, #B2B2B0 on #B8B6B7), which showed
+ *  as a box. The shift is
  *  that small, so the person's own colours move by no more than the eye can tell. */
 export function greyShift(clipEdge: string, pictureEdge: string): { r: number; g: number; b: number } {
   const parts = (c: string) => {

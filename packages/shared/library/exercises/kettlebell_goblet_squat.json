@@ -101,7 +101,8 @@
     "width": 720,
     "height": 1280,
     "bytes": 207617,
-    "seconds": 4
+    "seconds": 4,
+    "mark": "left"
   },
   "picture": {
     "file": "a06ecbc9700efabc5f97a7c7d64eaab096d3553a7a6b34bd3bf39222598d8022.webp",

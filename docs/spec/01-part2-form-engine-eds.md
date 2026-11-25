@@ -2817,9 +2817,10 @@ the seed after the old rows. The download is `GET /v1/library` (`libraryDownload
 - **KWAZO in every clip.** The command lays the app's wordmark (`apps/api/tools/library-mark.png`, its white pill, made by
   `library-mark.py` from `look/Wordmark.tsx`'s font and colours) into the clip itself, bottom-left, the pill 9.5 % of the clip's
   short side tall and 4 % in (`markPlace`); `--mark-right` puts it bottom-right for a clip whose person reaches that corner, which
-  the terminal decides from the sheet. Still pictures carry no mark.
-- **A clip's grey meets its picture's.** On the walk Kd's clips were 3 to 8 shades off their pictures' grey (#CDCDCD on #D5D5D5,
-  #D5D9D4 on #D1D1D1), which showed as a box round the clip. The command measures the clip's grey round its edge (a frame each
+  the terminal decides from the sheet, and the clip's file says which (`mark`, left where a file made before says none). Still
+  pictures carry no mark.
+- **A clip's grey meets its picture's.** On the walk Kd's clips were 2 to 8 shades off their pictures' grey (#CDCDCD on #D5D5D5,
+  #D5D9D4 on #D1D1D1, #B2B2B0 on #B8B6B7, as the command printed them), which showed as a box round the clip. The command measures the clip's grey round its edge (a frame each
   second) and moves its colours by the difference before the mark is laid (`greyShift`, refused past 24 shades as not from one
   final folder); the phone melts only the clip's last few per cent into the grey, short of the mark. The three clips were made
   again (141 to 203 KB) and meet their pictures' grey within 2 shades.
@@ -2830,8 +2831,9 @@ the seed after the old rows. The download is `GET /v1/library` (`libraryDownload
 - **One clip, one player.** Each exercise's clip has a player of its own and shows only from its own first frame, over its
   picture; the kept-file hook never gives the last file's address for a new one (`useKeptFile`), so moving on in a workout shows
   the new exercise's clip, its picture while the clip is still coming, and never the last one's.
-- **The page:** the clip over the picture, the same box; a pause button at the band's foot on the right ("Pause the clip" / "Play
-  the clip"). With the phone's Remove animations on it waits for Play.
+- **The page:** the clip over the picture, the same box; a pause button at the band's foot on the side away from KWAZO ("Pause the
+  clip" / "Play the clip"). With the phone's Remove animations on it waits for Play, and nothing moves before that setting is read.
+  The page and a workout show the clip by one rule: once the exercise's own picture has come (it is small and comes first).
 - **A workout:** the exercise's own picture whole at the top on its own grey, the top's buttons above it, the clip over it, the
   line above the name and the name under it (`workoutPictureHeight`: its shape at the phone's width, at most 29 % of the screen's
   height, never under 160); an exercise with no picture of its own keeps the band of 64a-ii. In a rest it is the exercise coming up

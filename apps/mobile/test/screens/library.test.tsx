@@ -5,7 +5,7 @@ import { createHash } from "node:crypto";
 import { readdirSync, readFileSync } from "node:fs";
 import { heartSums, type OnboardingAnswers } from "@app/shared";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react-native";
-import { AccessibilityInfo, AppState, TextInput, type AppStateStatus } from "react-native";
+import { AccessibilityInfo, AppState, StyleSheet, TextInput, type AppStateStatus, type StyleProp, type ViewStyle } from "react-native";
 import { File, Paths } from "expo-file-system";
 import { App } from "../../src/App";
 import { Gesture, State } from "react-native-gesture-handler";
@@ -300,7 +300,10 @@ describe("62b: each exercise's clip plays", () => {
   const fileOf = (uri: unknown) => String(uri).slice(String(uri).lastIndexOf("/") + 1);
   /** The clip players on the screen: each with the clip it plays and whether it is playing. */
   const players = () => screen.queryAllByTestId("clip-player").map((p) => ({ file: fileOf(p.props.uri), playing: p.props.playing as boolean }));
-  const clipMock = () => jest.requireMock<{ clipPlayer: { missing: boolean } }>("../../src/library/clipNative").clipPlayer;
+  type ClipMock = { missing: boolean; firstFrame: "now" | "held"; release: (uri: string) => void; reset: () => void };
+  const clipMock = () => jest.requireMock<{ clipPlayer: ClipMock }>("../../src/library/clipNative").clipPlayer;
+  /** Whether a clip's box shows: it stays unseen (opacity 0) until its own first frame is drawn. */
+  const clipShows = (id: string) => StyleSheet.flatten(screen.getByTestId(`clip-${id}`).props.style as StyleProp<ViewStyle>).opacity !== 0;
   /** Goblet squat (one set, then a rest), the Romanian deadlift (one set), then Squat, which has no clip. */
   const keptWorkout = () => {
     const file = new File(Paths.document, `my-workout-${RAVI.id}.json`);
@@ -331,7 +334,7 @@ describe("62b: each exercise's clip plays", () => {
   });
   afterEach(() => {
     if (landed !== undefined) jest.mocked(File.downloadFileAsync).mockImplementation(landed);
-    clipMock().missing = false;
+    clipMock().reset();
   });
 
   it("the worst thing: a workout shows the clip of the exercise being done, the next one's in a rest, and never the last one's", async () => {
@@ -381,6 +384,41 @@ describe("62b: each exercise's clip plays", () => {
     // Its own picture shows, and no clip at all.
     expect(await screen.findByTestId("workout-picture-dumbbell_romanian_deadlift")).toBeTruthy();
     expect(players()).toEqual([]);
+  });
+
+  it("the worst thing, a clip still loading: the next exercise's own picture shows until its own clip's first frame, never the last clip", async () => {
+    clipMock().firstFrame = "held";
+    serveAll();
+    keptWorkout();
+    await open();
+    await startWorkout();
+    await waitFor(() => {
+      expect(players()).toEqual([{ file: name("gobletClip"), playing: true }]);
+    });
+    const gobletUri = String(screen.getByTestId("clip-player").props.uri);
+    // Until its first frame is drawn the clip is unseen, and the picture under it is what shows.
+    expect(clipShows("kettlebell_goblet_squat")).toBe(false);
+    expect(screen.getByTestId("workout-picture-kettlebell_goblet_squat")).toBeTruthy();
+    await act(() => {
+      clipMock().release(gobletUri);
+    });
+    expect(clipShows("kettlebell_goblet_squat")).toBe(true);
+    // The rest: a player of the deadlift's own, unseen while it loads, over the deadlift's picture; the goblet squat's is gone.
+    await fireEvent.press(screen.getByRole("button", { name: "Set done · 2 reps" }));
+    expect(await screen.findByText("Coming up next")).toBeTruthy();
+    expect(players()).toEqual([{ file: name("rdlClip"), playing: true }]);
+    expect(clipShows("dumbbell_romanian_deadlift")).toBe(false);
+    expect(screen.getByTestId("workout-picture-dumbbell_romanian_deadlift")).toBeTruthy();
+    expect(screen.queryByTestId("clip-kettlebell_goblet_squat")).toBeNull();
+    // Releasing the old clip's frame again changes nothing; the new one's own frame shows it.
+    await act(() => {
+      clipMock().release(gobletUri);
+    });
+    expect(clipShows("dumbbell_romanian_deadlift")).toBe(false);
+    await act(() => {
+      clipMock().release(String(screen.getByTestId("clip-player").props.uri));
+    });
+    expect(clipShows("dumbbell_romanian_deadlift")).toBe(true);
   });
 
   it("every exercise's picture and clip is asked for as the workout opens, so none is missing later with no internet", async () => {

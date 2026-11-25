@@ -21,6 +21,9 @@ import { edgeColour, finalFiles, greyShift, greyShiftFilter, isMp4, isPng, LONG_
 const EXERCISES = fileURLToPath(new URL("../../../packages/shared/library/exercises/", import.meta.url));
 const SHEETS = join(MEDIA_FOLDER, "..", "sheets");
 const MARK = fileURLToPath(new URL("./library-mark.png", import.meta.url));
+/** The mark's own sha256: a changed mark is made on purpose (library-mark.py), and this line changed with it. */
+const MARK_SHA256 = "e33ad223888fe1ece018d951917b00b22f052ae64a4cfde7a117cc8550460498";
+if (createHash("sha256").update(readFileSync(MARK)).digest("hex") !== MARK_SHA256) throw new Error(`${MARK} is not the KWAZO mark this command names`);
 
 const args = process.argv.slice(2);
 const write = args.includes("--write");
@@ -94,7 +97,7 @@ const clipMade = made("mp4", [
 const clipOut = probe(join(MEDIA_FOLDER, clipMade.file));
 
 const picture: ExercisePicture = { file: pictureMade.file, width: pictureOut.width, height: pictureOut.height, bytes: pictureMade.bytes, ground };
-const clip: ExerciseClip = { file: clipMade.file, width: clipOut.width, height: clipOut.height, bytes: clipMade.bytes, seconds: Math.round(clipOut.seconds * 100) / 100 };
+const clip: ExerciseClip = { file: clipMade.file, width: clipOut.width, height: clipOut.height, bytes: clipMade.bytes, seconds: Math.round(clipOut.seconds * 100) / 100, mark: corner };
 
 // The sheet: the picture, then one frame of the clip a second, side by side, to be looked at before --write.
 mkdirSync(SHEETS, { recursive: true });

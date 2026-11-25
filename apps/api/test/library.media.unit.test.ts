@@ -10,7 +10,7 @@ import { edgeColour, finalFiles, greyShift, greyShiftFilter, GREY_SHIFT_MOST, is
 const SQUAT = readFileSync(new URL("../../../packages/shared/library/exercises/squat.json", import.meta.url), "utf8");
 const hash = "d".repeat(64);
 const picture = { file: `${hash}.webp`, width: 720, height: 1280, bytes: 30_000, ground: "#D5D5D5" };
-const clip = { file: `${hash}.mp4`, width: 720, height: 1280, bytes: 188_000, seconds: 4 };
+const clip = { file: `${hash}.mp4`, width: 720, height: 1280, bytes: 188_000, seconds: 4, mark: "left" as const };
 
 describe("the worst thing: one exercise's clip or picture written into another's file", () => {
   it("writes into the file whose id it is given, and refuses another's", () => {
@@ -128,9 +128,10 @@ describe("KWAZO's place in a clip", () => {
 // Kd's clips a few shades off theirs, which showed as a box.
 describe("a clip's grey meets its picture's", () => {
   it.each([
-    // measured on the walk, 2026-11-25: the deadlift's clip, lighter and greener; the goblet squat's, darker
-    ["#D4D6D3", "#D1D1D1", { r: -3, g: -5, b: -2 }],
-    ["#CFCFCF", "#D5D5D5", { r: 6, g: 6, b: 6 }],
+    // as the command printed them, 2026-11-25: the deadlift's clip, lighter and greener; the goblet squat's and the calf raise's, darker
+    ["#D5D9D4", "#D1D1D1", { r: -4, g: -8, b: -3 }],
+    ["#CDCDCD", "#D5D5D5", { r: 8, g: 8, b: 8 }],
+    ["#B2B2B0", "#B8B6B7", { r: 6, g: 4, b: 7 }],
     ["#D5D5D5", "#D5D5D5", { r: 0, g: 0, b: 0 }],
   ])("%s to %s", (clipEdge, pictureEdge, shift) => {
     expect(greyShift(clipEdge, pictureEdge)).toEqual(shift);
