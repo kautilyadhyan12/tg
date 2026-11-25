@@ -136,7 +136,7 @@ function frame(t: number, world: readonly P[], look: Look = {}): SteadyBody {
     const y = size * (ay + w[1] - up(i));
     return { x, y, world: w, raw: { x, y } };
   });
-  return { t, aspect, down: look.down === undefined ? [0, 1, 0] : look.down, size, points, refused: points.map((p) => (p === null ? "hidden" : null)) };
+  return { t, aspect, down: look.down === undefined ? [0, 1, 0] : look.down, size, points, refused: points.map((p) => (p === null ? "hidden" : null)), fresh: false };
 }
 
 /** `frames` of one body through one BodyMeasures, in order; the last one's measures. */
@@ -613,15 +613,26 @@ describe("the body's own leg and trunk do not change while it is followed (52a-i
     expect(once(seated()).leg).toBeCloseTo(0.84, 9);
   });
 
-  it("the known limit, in plain sight (52d): a body new within 3 s keeps the one before's leg and trunk", () => {
+  it("alone, the measures keep the one before's leg and trunk for a body new within 3 s: the lock tells them a new person begins (52d-i)", () => {
     // An adult seen for a second, then nobody for 1.9 s, then a child: the middle is still the adult's, until the child's
-    // readings are the most.
+    // readings are the most. In every run of the engine the lock (`OnePerson`) comes first and marks a body that came all
+    // at once as a new person (`fresh`), and the measures start afresh with it (below; onePerson.test.ts on real videos).
     const m = new BodyMeasures();
     for (let n = 0; n <= 30; n++) m.next(frame(Math.round((n * 1000) / 30), standingSide()));
     m.next(frame(2000, standingSide(), { hidden: Array.from({ length: 33 }, (_, i) => i) }));
     const child = m.next(frame(2900, standingSide().map((p): P => [p[0] * 0.6, p[1] * 0.6, p[2] * 0.6])));
     expect(child.leg).toBeCloseTo(0.84, 9);
     expect(child.trunk).toBeCloseTo(0.5, 9);
+  });
+
+  it("a new person (fresh) is measured afresh at once: a child after an adult has the child's own leg and trunk", () => {
+    const m = new BodyMeasures();
+    for (let n = 0; n <= 30; n++) m.next(frame(Math.round((n * 1000) / 30), standingSide()));
+    const fresh = { ...frame(1100, standingSide().map((p): P => [p[0] * 0.6, p[1] * 0.6, p[2] * 0.6])), fresh: true };
+    const child = m.next(fresh);
+    expect(child.leg).toBeCloseTo(0.84 * 0.6, 9);
+    expect(child.trunk).toBeCloseTo(0.5 * 0.6, 9);
+    expect(child.fresh).toBe(true);
   });
 
   it("a body unseen for longer than 3 s is taken afresh: a child after an adult has the child's own leg and trunk", () => {

@@ -6,6 +6,19 @@
 export type { Down, MovementFrame, SeenPerson, SeenPoint, WorldPoint } from "@app/shared";
 export { BONES, LIMB_PAIRS, MAIN_JOINTS, PARENT, POINTS, POINT_NAMES, TRUNK, TRUNK_SIDES } from "./body/points.js";
 export { bodySize } from "./body/size.js";
+export {
+  OnePerson,
+  PERSON_LIMITS,
+  bodyChange,
+  fromPlace,
+  lookAt,
+  trunkMiddle,
+  type BodyChange,
+  type Look,
+  type PersonFrame,
+  type PersonLimits,
+  type PersonStatus,
+} from "./body/person.js";
 export { LIMITS, PossibleBody, type CheckedBody, type Limits, type Refusal } from "./body/possible.js";
 export { STEADY, SteadyPoints, type SteadyBody, type SteadyPoint, type SteadySettings, type Smoothing } from "./body/steady.js";
 export {
@@ -40,4 +53,5 @@ export {
 export { FORM_SEEN, FORM_SEEN_FOR, OUT_OF_BOTTOM, SIDE_ON, checkExercise, checkedOf, formOf, mistakeReading, sideOn, turnOf, type FormCheck, type FormFrame, type FormStatus } from "./movement/form.js";
 export { HOLD_LIMITS, HoldMatcher, checkHold, heldNow, heldOf, type HeldPicture, type HoldFrame, type HoldLimits, type HoldResult } from "./movement/hold.js";
 export { parseExercise, parseHold, parseMovement, parseMovementFile } from "./movement/load.js";
+export { CAMERA_SETTINGS, CameraSet, type CameraCounts, type CameraFrame, type CameraSettings } from "./movement/camera.js";
 export { HoldRecord, MOVEMENT_ENGINE_VERSION, SetRecord, WATCHED_GAP, repScore } from "./movement/summary.js";

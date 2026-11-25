@@ -107,10 +107,10 @@ class HoldClock {
   constructor(private readonly limits: HoldLimits) {}
 
   /** A clock that went back starts afresh, whether a hold was going on or had ended: nothing of the old set is carried, its
-   *  time held included (round one: a 5 s hold let go before the time went back was still counted in the next set). Returns a
-   *  hold that ended here. */
-  next(t: number, holds: boolean | null): HoldResult | null {
-    if (this.lastT !== null && t < this.lastT) {
+   *  time held included (round one: a 5 s hold let go before the time went back was still counted in the next set); so does
+   *  a new person (`fresh`, `MeasuredBody.fresh`). Returns a hold that ended here. */
+  next(t: number, holds: boolean | null, fresh = false): HoldResult | null {
+    if (fresh || (this.lastT !== null && t < this.lastT)) {
       this.run = null;
       this.done = 0;
     }
@@ -177,7 +177,7 @@ export class HoldMatcher {
     const before = this.lastFrame;
     if (before !== null && t === before.t) return { ...before, hold: null };
     const held = heldNow(this.hold, measured);
-    const hold = this.clock.next(t, held);
+    const hold = this.clock.next(t, held, measured.fresh);
     const frame: HoldFrame = { t, holding: held === true && this.clock.holding(), heldMs: this.clock.heldMs(), unseen: held === null, reason: held === null ? this.hold.unseen : null, hold };
     this.lastFrame = frame;
     return frame;

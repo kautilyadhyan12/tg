@@ -16,6 +16,7 @@ import type { MovementFrame, SeenPerson } from "@app/shared";
 import {
   LIMITS,
   MAIN_JOINTS,
+  OnePerson,
   POINT_NAMES,
   PossibleBody,
   STEADY,
@@ -23,13 +24,14 @@ import {
   bodySize,
   type CheckedBody,
   type Limits,
+  type PersonFrame,
   type Refusal,
   type Smoothing,
   type SteadyBody,
   type SteadySettings,
 } from "../src/index.js";
 import { decodeBodyPoints, type BodyPoints } from "./bodyPoints.js";
-import { bodyChanges, followOne } from "./follow.js";
+import { bodyChanges } from "./follow.js";
 import { KEPT_MODEL, KEPT_VIDEOS, type KeptVideo } from "./keptVideos.js";
 
 export interface Video {
@@ -82,10 +84,44 @@ export function videoOf(file: KeptFile, kept: Readonly<Record<string, KeptVideo>
   return { label, frames, sets: true, why: seen.seen };
 }
 
+/** Who the lock (52d-i, `OnePerson`) gives in each frame. Told nothing of a set counting (`confirmAt` null), it is the
+ *  lock before a set has counted: whoever the model follows, a body that came all at once withheld, and a new person
+ *  learned where such a body stays. `confirmAt`: the frame after which the set had counted. */
+const lockedOnce = new WeakMap<readonly MovementFrame[], readonly PersonFrame[]>();
+export function lockedOf(frames: readonly MovementFrame[], confirmAt: number | null = null): readonly PersonFrame[] {
+  const known = confirmAt === null ? lockedOnce.get(frames) : undefined;
+  if (known !== undefined) return known;
+  const lock = new OnePerson();
+  const out = frames.map((f, i) => {
+    const p = lock.next(f);
+    if (i === confirmAt) lock.confirm();
+    return p;
+  });
+  if (confirmAt === null) lockedOnce.set(frames, out);
+  return out;
+}
+
+/** Whether the lock told after frame `at` that the set had counted gives every later frame the very body, and the same
+ *  new person, as the lock told nothing: then a run made once with the lock told nothing (`runOf`) is the set's own run,
+ *  and only a set where it is not (a stranger the confirmed lock refuses) is run again whole (`CameraSet`). False too when
+ *  the lock could not be told (no look of the person in the second before). */
+export function lockAgrees(frames: readonly MovementFrame[], at: number): boolean {
+  const lock = new OnePerson();
+  const told = lockedOf(frames);
+  for (let i = 0; i < frames.length; i++) {
+    const f = frames[i];
+    if (f === undefined) continue;
+    const p = lock.next(f);
+    if (i === at && !lock.confirm()) return false;
+    if (i > at && (p.person !== told[i]?.person || p.fresh !== told[i]?.fresh)) return false;
+  }
+  return true;
+}
+
 export function runChecks(frames: readonly MovementFrame[], limits: Limits = LIMITS): CheckedBody[] {
-  const followed: (SeenPerson | null)[] = followOne(frames);
+  const locked = lockedOf(frames);
   const check = new PossibleBody(limits);
-  return frames.map((f, i) => check.check(f.t, f.aspect, f.down, followed[i] ?? null));
+  return frames.map((f, i) => check.check(f.t, f.aspect, f.down, locked[i]?.person ?? null, locked[i]?.fresh ?? false));
 }
 
 export function runSteady(checked: readonly CheckedBody[], settings: SteadySettings = STEADY): SteadyBody[] {
