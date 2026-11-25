@@ -2584,7 +2584,9 @@ lies within 0.95 m of their place when the model changes to them is taken for th
 neighbour lunging 1.1 m beside, 0.95 m away mid-lunge), so a neighbour doing a moving exercise is never taken only beyond about
 1.7 m; a body of the member's size that walks into their place and stays there 3 s is taken (the walk-in that squats there
 for 9 s counts 1 or 2 of their reps on four pairs); a member who steps out of their place and walks back is counted again 3 s
-after being back in it, and one found again within about 1 m of where a held body was last seen waits as long; a member
+after being back in it, and one found again within about 1 m of where a held body was last seen waits as long (a stranger
+1.0 m beside, just outside the room, then a moment of nobody: the member refused 3 s, 2 of 3 squats counted on two squat sets;
+from 1.1 m nothing is lost); a member
 who comes back to another place, more than 0.95 m from it, is not counted again in that set (52d-ii); before the set has counted, whoever the model follows is the person (a stranger who squats first is counted, and the
 member after them is not): job 53's screen shows whose body the camera follows and, with two people there, asks one to raise
 a hand (§11.8); a step to another place in the middle of a set leaves the place (52d-ii); walking to a machine, and a

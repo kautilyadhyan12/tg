@@ -21,9 +21,9 @@
 //     or whose size cannot be read, until it has stood in the place for `takeOver` (two bodies there at one size cannot
 //     be told apart, and one that stays there is the person far more often than one crossing it) or has not been seen for
 //     as long. Every body seen outside the place is held so, the person who stepped out of it too, who back in their
-//     place waits as long; a body found in the place straight after a picture with nobody is the person at once, unless
-//     it lies nearer the held body's newest look. Nothing in this is any exercise's own: every movement gets it, with the
-//     same numbers.
+//     place waits as long. A body found in the place after a moment of nobody is the person at once unless it lies within
+//     the held body's reach, a jump's speed over at most one picture at 8 a second (about 1 m). Nothing in this is any
+//     exercise's own: every movement gets it, with the same numbers.
 //
 // What it uses, measured on the proof videos (lock-check): where the trunk's middle lies on the picture and how large the
 // body is (`bodySize`, picture heights for each metre of body). Not the body's own proportions: in 3D the model reads one
@@ -321,7 +321,8 @@ export class OnePerson {
       if (readable.length === 0) return none("unsure");
       // Another body, the person walked out of their place included: followed, and held from its first picture outside the
       // place, so that back in the place it is the person only after `takeOver` there (a person who steps out and walks back
-      // waits as long; one found in the place straight after a picture with nobody is the person at once).
+      // waits as long; one found in the place after a moment of nobody is the person at once unless it lies within the held
+      // body's reach, `stillHeld`).
       const s = other !== null && held.length > 0 ? nearest(held, other.look.middle) : largest(readable);
       const goingOn = other !== null && held.includes(s);
       const inPlace = atPlace(s) ? (goingOn ? (other.inPlace ?? t) : t) : null;
