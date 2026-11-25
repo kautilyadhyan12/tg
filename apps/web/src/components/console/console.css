@@ -1200,11 +1200,13 @@
 }
 /* On a touch screen wider than a phone (a tablet, an opened folding phone), the list's tools, its
    quick filters, the bar and the Filter's choices are 44 px to touch too (V3a-i), and so are
-   Waiting to join's Confirm and Not this person (V3b-i). */
+   Waiting to join's Confirm and Not this person (V3b-i), and every button on Staff and Staff
+   activity (V3b-ii). */
 @media (pointer: coarse) {
   .c-sticky-tools .c-btn,
   .c-selbar .c-btn,
-  .c-waiting .c-btn {
+  .c-waiting .c-btn,
+  .c-staff .c-btn {
     height: auto;
     min-height: 44px;
   }

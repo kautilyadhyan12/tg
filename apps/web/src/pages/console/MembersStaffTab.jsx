@@ -6,6 +6,7 @@ import { ConfirmInline, ConsoleFailed, ConsoleLoading } from '../../components/c
 import { PtSessionsEndDialog } from '../../components/console/PtSessionsEnding';
 import SentencePlace from '../../components/console/SentencePlace';
 import { ptSessionsAsked } from './ptSessionsEndView';
+import { initialsOf } from './memberListPeople';
 import { staffRoleText } from './consoleView';
 import { StaffInvitePanel, StaffPersonPanel } from './MembersStaffPanels';
 import { handOverNote, privilegesDiffer, sentAgainNotice, staffCountLabel, staffInviteView, staffSeatsNote, viewerIsGymOwner } from './staffView';
@@ -21,6 +22,15 @@ import { handOverNote, privilegesDiffer, sentAgainNotice, staffCountLabel, staff
 // Every change reads the lists again from the server and never patches its own copy, and
 // its control stays busy until that read is back, so a row is never pressed twice over an
 // answer the screen has not shown yet.
+
+/** Initials beside a row, from 768 px (as on In the app); an invitation's from its address. */
+function RowInitials({ name }) {
+  return (
+    <span className="hidden md:inline-flex c-avatar c-avatar-sm flex-shrink-0" aria-hidden="true">
+      {initialsOf(name)}
+    </span>
+  );
+}
 
 /** What Send again or Cancel did to one invitation: brought into view where it is drawn. */
 function RowNote({ note, onRetry }) {
@@ -65,19 +75,22 @@ function InvitedList({ invites, gym, orgType, viewerIsOwner, busyId, readOnly, n
               style={{ borderColor: 'var(--line)' }}
             >
               <div className="flex flex-col gap-3 md:flex-row md:items-center">
-                <div className="flex flex-col gap-0.5 flex-grow min-w-0">
-                  <span className="c-s15 c-w6 c-t1 break-words">{view.title}</span>
-                  <span className="c-s13 c-t2">{view.meta}</span>
-                  {view.email !== null ? (
-                    <span className="c-s13" style={{ color: view.emailProblem ? 'var(--warn)' : 'var(--t2)' }}>
-                      {view.email}
-                    </span>
-                  ) : null}
-                  <SentencePlace kind={view.emailPlace} gym={gym} />
-                  {view.sendAgainNote !== null ? <span className="c-s13 c-t2">{view.sendAgainNote}</span> : null}
+                <div className="flex items-start gap-3 flex-grow min-w-0">
+                  <RowInitials name={invite.email.split('@')[0].replace(/[._+-]+/g, ' ')} />
+                  <div className="flex flex-col gap-0.5 flex-grow min-w-0">
+                    <span className="c-s15 c-w6 c-t1 break-words">{view.title}</span>
+                    <span className="c-s14 c-t2">{view.meta}</span>
+                    {view.email !== null ? (
+                      <span className="c-s14" style={{ color: view.emailProblem ? 'var(--warn)' : 'var(--t2)' }}>
+                        {view.email}
+                      </span>
+                    ) : null}
+                    <SentencePlace kind={view.emailPlace} gym={gym} />
+                    {view.sendAgainNote !== null ? <span className="c-s14 c-t2">{view.sendAgainNote}</span> : null}
+                  </div>
                 </div>
                 {invite.role === 'owner' && !viewerIsOwner ? (
-                  <span className="c-s13 c-t2 md:max-w-[240px]">Only the owner can send this again or cancel it.</span>
+                  <span className="c-s14 c-t2 md:max-w-[240px]">Only the owner can send this again or cancel it.</span>
                 ) : asking === invite.id ? (
                   <div className="md:max-w-[320px]">
                     <ConfirmInline
@@ -270,7 +283,16 @@ export default function MembersStaffTab({ gymId, gym = null, orgType, words, rea
       // removed, and the box names the sessions and waits for its own button.
       const sessions = ptSessionsAsked(err);
       if (sessions !== null) {
-        setPtEnding({ person, sessions, alsoApp, moved: named !== null });
+        // Their panel closes, or it would cover the box (the panel is drawn over the page).
+        setOpenId(null);
+        setPtEnding({ person, sessions, alsoApp, moved: named !== null, error: null });
+        setBusyId(null);
+        return;
+      }
+      // Refused from the box naming the sessions: said there, as their panel is closed.
+      if (named !== null) {
+        const message = errorText(err, "We couldn't remove them. Please try again.");
+        setPtEnding((was) => (was === null ? was : { ...was, error: message }));
         setBusyId(null);
         return;
       }
@@ -454,7 +476,7 @@ export default function MembersStaffTab({ gymId, gym = null, orgType, words, rea
   const strayNote = rowNote !== null && !invites.list.some((invitation) => invitation.id === rowNote.id) ? rowNote : null;
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="c-staff flex flex-col gap-4">
       <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between md:gap-6">
         <p className="c-s14 c-t2 m-0" style={{ maxWidth: 640 }}>
           The people who run your {words.it}. {staffSeatsNote()} Those who also train here are on In the app too.
@@ -526,13 +548,14 @@ export default function MembersStaffTab({ gymId, gym = null, orgType, words, rea
                     }}
                     className="w-full text-left flex items-center gap-3 min-h-11 px-5 py-3.5"
                   >
+                    <RowInitials name={person.displayName} />
                     <span className="flex flex-col gap-2 flex-grow min-w-0 md:flex-row md:items-center md:gap-3">
                       <span className="flex flex-col gap-0.5 min-w-0 md:flex-grow">
                         <span className="c-s15 c-w6 c-t1 break-words">
                           {person.displayName}
                           {person.isYou ? <span className="c-t2"> (you)</span> : null}
                         </span>
-                        {person.email ? <span className="c-s13 c-t2 c-ell">{person.email}</span> : null}
+                        {person.email ? <span className="c-s14 c-t2 c-ell">{person.email}</span> : null}
                       </span>
                       <span className="flex flex-wrap gap-1.5 md:justify-end md:flex-shrink-0">
                         <span className="c-tag c-tag-soft">{staffRoleText(person.role, person.roleName ?? null, words, person.coOwner)}</span>
@@ -559,6 +582,7 @@ export default function MembersStaffTab({ gymId, gym = null, orgType, words, rea
           from={ptEnding.alsoApp ? 'both' : 'staff'}
           moved={ptEnding.moved}
           busy={busyId !== null}
+          error={ptEnding.error ?? null}
           onConfirm={() => void remove(ptEnding.person, { alsoApp: ptEnding.alsoApp }, ptEnding.sessions)}
           onClose={() => setPtEnding(null)}
         />

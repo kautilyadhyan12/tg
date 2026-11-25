@@ -278,11 +278,11 @@ describe('what is sent is exactly what is ticked', () => {
     const panel = await drawPerson();
     fireEvent.click(panel.getByLabelText(/^Remove members/));
     fireEvent.click(panel.getByRole('button', { name: 'Save permissions' }));
-    // Said under Save permissions, where it was pressed, not at the top of a long panel.
-    expect(await within(panel.getByTestId('privileges-u2')).findByText(/Managing staff stays with the owner/)).toBeTruthy();
+    // Said beside Save permissions at the panel's foot, where it was pressed.
+    expect(await within(panel.getByTestId('privileges-foot')).findByText(/Managing staff stays with the owner/)).toBeTruthy();
     expect(panel.getByLabelText(/^Remove members/).checked).toBe(true);
     expect(panel.getByRole('button', { name: 'Save permissions' }).disabled).toBe(false);
-    expect(screen.queryByRole('status')).toBeNull();
+    expect(screen.queryByText('Permissions saved.')).toBeNull();
     expect(orgService.getStaff).toHaveBeenCalledTimes(1);
   });
 
@@ -683,18 +683,21 @@ describe('what was found by the review', () => {
     const rita = await drawPerson();
     fireEvent.click(rita.getByLabelText(/^Remove members/));
     fireEvent.click(rita.getByRole('button', { name: 'Save permissions' }));
+    // Her panel does not close while her save is on its way (the panel's own rule, V3b-ii).
     fireEvent.click(rita.getByRole('button', { name: 'Close' }));
-    const anil = await openPerson('u3', 'Anil Bora');
-    // Her save is still on its way: nothing of his can be pressed over it.
-    expect(anil.getByLabelText(/^See who came in/).disabled).toBe(true);
-    expect(anil.getByRole('button', { name: 'Make manager' }).disabled).toBe(true);
+    expect(screen.getByRole('dialog', { name: 'Rita Sen' })).toBeTruthy();
     refuse();
-    await waitFor(() => expect(anil.getByLabelText(/^See who came in/).disabled).toBe(false));
+        expect(await within(rita.getByTestId('privileges-foot')).findByText('ZZ-MARKER refused for Rita.')).toBeTruthy();
+    // Closed (her edit thrown away, as she is asked), the next person's panel says nothing of it.
+    fireEvent.click(rita.getByRole('button', { name: 'Close' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Close without saving' }));
+    const anil = await openPerson('u3', 'Anil Bora');
+    expect(anil.getByLabelText(/^See who came in/).disabled).toBe(false);
     expect(screen.queryByText(/ZZ-MARKER/)).toBeNull();
-    // It is not lost either: opened again, her own panel says it, under Save permissions.
+    // Read in her own panel before it closed, it does not come back there either.
     fireEvent.click(anil.getByRole('button', { name: 'Close' }));
     const again = await openPerson('u2', 'Rita Sen');
-    expect(within(again.getByTestId('privileges-u2')).getByText('ZZ-MARKER refused for Rita.')).toBeTruthy();
+    expect(again.queryByText('ZZ-MARKER refused for Rita.')).toBeNull();
   });
 
   /** L7: the form belongs to the Staff tab. */
@@ -852,18 +855,19 @@ describe('Invite staff', () => {
     expect(form.getByText(/We'll email them an invitation/i)).toBeTruthy();
     expect(ticked(form)).toEqual(["See who's in the app", 'See who came in']);
     fireEvent.click(form.getByRole('radio', { name: 'Manager' }));
+    // Under their headings (V3b-ii): Members, Front desk, Classes and plans, Money, Community, Reports.
     expect(ticked(form)).toEqual([
       "See who's in the app",
-      'See who came in',
-      'Check people in',
-      'Run the leaderboard',
-      'Post updates',
-      "Record members' payments",
-      'See reports',
-      'Run classes and personal training',
       'Keep the member list and invite',
       'Remove members',
+      'See who came in',
+      'Check people in',
+      'Run classes and personal training',
+      "Record members' payments",
       'Change membership types and prices',
+      'Run the leaderboard',
+      'Post updates',
+      'See reports',
     ]);
     // Join codes are switched off (3c), and managing staff is never offered.
     expect(within(form.getByTestId('invite-ticks')).queryByText(/join code/i)).toBeNull();
@@ -912,6 +916,11 @@ describe('Invite staff', () => {
     const form = await openInvite();
     type(form, 'anil@example.com');
     fireEvent.click(form.getByRole('button', { name: 'Cancel' }));
+    // An address typed and not sent: it asks first, and keeps it on Keep editing.
+    fireEvent.click(form.getByRole('button', { name: 'Keep editing' }));
+    expect(form.getByLabelText('Their email address').value).toBe('anil@example.com');
+    fireEvent.click(form.getByRole('button', { name: 'Cancel' }));
+    fireEvent.click(form.getByRole('button', { name: 'Close without saving' }));
     expect(screen.queryByRole('dialog')).toBeNull();
     expect(orgService.inviteStaff).not.toHaveBeenCalled();
   });
@@ -1157,7 +1166,7 @@ describe('what one person is allowed to do', () => {
   it('Cancel throws the edit away, asks the server nothing, and shows the server\'s set again', async () => {
     orgService.getStaff.mockResolvedValue({ data: { staff: [OWNER, MANAGER_TICKED] } });
     const panel = await drawPerson();
-    const ticks = within(panel.getByTestId('privileges-u2'));
+    const ticks = within(panel.getByTestId('privileges-foot'));
     expect(ticks.queryByRole('button', { name: 'Cancel' })).toBeNull();
     fireEvent.click(panel.getByLabelText(/^Remove members/));
     fireEvent.click(ticks.getByRole('button', { name: 'Cancel' }));
