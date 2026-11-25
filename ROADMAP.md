@@ -871,7 +871,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
     - 61b. [x] **History and records for each exercise** — merged 2026-11-18 (PR #586).
     - 61c. [x] **Saved workouts** — merged 2026-11-19 (PR #591).
 62. **The clip line** (after 60; split 2026-11-24 by its terminal in three, `handoff/2026-11-24-62a.md` keeps its line as first written).
-    - 62a. [ ] **Each exercise's own picture, and the clip line**: the laptop command, where clips and pictures are kept, each exercise's file naming its own, the phone showing the picture.
+    - 62a. [x] **Each exercise's own picture, and the clip line** — merged 2026-11-25 (PR #640).
     - 62b. [ ] **The clip plays**: looping on the exercise's page and beside the timer in a workout, kept for no signal (`expo-video`, Kd's yes asked in its plan).
     - 62c. [ ] **Each clip checked against its exercise's camera rules**: once exercise folder 1 has that exercise's rules (job 54).
 63. **The Exercise Library on the phone** (§13.6; after 60). Split 2026-11-19 by its terminal, after Kd's drawings, in three.
