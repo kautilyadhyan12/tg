@@ -99,11 +99,12 @@
     }
   ],
   "clip": {
-    "file": "b76b5f725b16a14ca7ed6aa17f1900293d164313bd2433f8f31865177e5a3d9e.mp4",
+    "file": "822e79721fceee7ca53a892eadc6dba4f9693382599a1fb915e212c80c160c66.mp4",
     "width": 720,
     "height": 1280,
-    "bytes": 172419,
-    "seconds": 4
+    "bytes": 178738,
+    "seconds": 4,
+    "mark": "left"
   },
   "picture": {
     "file": "f70318dbe6a91634f7ea2dc51c800b949920e507b9dbaf501de290361a239af4.webp",

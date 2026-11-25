@@ -1,12 +1,14 @@
 import type { RefusedWorkout, WorkoutRun, WorkoutSave } from "@app/shared";
-import { useState, type ReactNode } from "react";
-import { Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { useMemo, useState, type ReactNode } from "react";
+import { Image, Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Circle } from "react-native-svg";
 import { Button } from "../../look/Button";
-import { colours, raisedOrangeGradient, shadows, sizes, type ColourName } from "../../look/colours";
+import { colours, raisedOrangeGradient, shadows, sizes, workoutPictureFade, type ColourName } from "../../look/colours";
 import { Icon } from "../../look/Icon";
+import { useReducedMotion } from "../../look/Motion";
 import { PictureTop } from "../../look/PictureTop";
+import { workoutPictureHeight } from "../../look/sizing";
 import { Sheet } from "../../look/Sheet";
 import { fonts, Txt } from "../../look/Txt";
 import { exercisePicture } from "../../library/pictures";
@@ -14,7 +16,10 @@ import { weightParts, type Units } from "../../library/records";
 import { leftOf, setOf, setsInAll, type Press } from "../../library/workoutRun";
 import type { Finished } from "../../library/workoutRunStore";
 import type { WaitingView } from "../../session/waitingList";
+import { ClipOver } from "../library/ExerciseClip";
+import { useKeepMedia, useOwnPicture, type OwnClip, type OwnPicture } from "../library/ExerciseImage";
 import { Led } from "../library/Records";
+import { useNamed } from "../library/useLibrary";
 import { PlateFace } from "../library/WeightPlate";
 import { HeartPill } from "../../heart/HeartPill";
 import { useHeartMax } from "../../heart/heartMax";
@@ -94,6 +99,17 @@ function Doing({ run, units, sound, press, onPutAway, onDiscard }: { run: Workou
   const name = run.name.trim() === "" ? "Workout" : run.name.trim();
   const last = run.done[run.done.length - 1];
   const done = run.done.length;
+  // The exercise's own picture and clip (62b), from the Library kept on the phone: in a rest, the exercise coming up next.
+  // Every exercise's are asked for as the workout opens, so none is missing later with no internet.
+  const named = useNamed();
+  const own = named(exercise.exercise);
+  const files = useMemo(
+    () => run.exercises.flatMap((e) => { const n = named(e.exercise); return [n.picture?.file, n.clip?.file].filter((f): f is string => f !== undefined); }),
+    [run.exercises, named],
+  );
+  useKeepMedia(files);
+  const ownUri = useOwnPicture(own.picture);
+  const reduced = useReducedMotion();
   const top = (
     <View style={styles.tops}>
     <View style={styles.topBar}>
@@ -151,14 +167,26 @@ function Doing({ run, units, sound, press, onPutAway, onDiscard }: { run: Workou
   return (
     <View style={styles.page}>
       <ScrollView contentContainerStyle={styles.scroll} bounces={false}>
-        <PictureTop
-          picture={exercisePicture(exercise.exercise, exercise.kind)}
-          tall={0.62}
-          above={top}
-          eyebrow={eyebrowWords(run)}
-          title={exercise.name}
-          {...(run.phase === "rest" ? { foot: <Txt kind="body" colour="text">{setLine(run, units)}</Txt> } : {})}
-        />
+        {/* The page's rule too: its own picture whole once it has come (small, it comes first), the clip over it. */}
+        {own.picture !== null && ownUri !== null ? (
+          <>
+            <OwnTop id={exercise.exercise} uri={ownUri} picture={own.picture} clip={reduced === false ? own.clip : null} playing={!run.paused} above={top} />
+            <View style={styles.ownWords}>
+              <Txt kind="eyebrow">{eyebrowWords(run)}</Txt>
+              <Txt kind="h2">{exercise.name}</Txt>
+              {run.phase === "rest" ? <Txt kind="body" colour="text">{setLine(run, units)}</Txt> : null}
+            </View>
+          </>
+        ) : (
+          <PictureTop
+            picture={exercisePicture(exercise.exercise, exercise.kind)}
+            tall={0.62}
+            above={top}
+            eyebrow={eyebrowWords(run)}
+            title={exercise.name}
+            {...(run.phase === "rest" ? { foot: <Txt kind="body" colour="text">{setLine(run, units)}</Txt> } : {})}
+          />
+        )}
         <View style={styles.body}>
           {pills}
           <View style={styles.wall}>
@@ -316,6 +344,26 @@ function Doing({ run, units, sound, press, onPutAway, onDiscard }: { run: Workou
   );
 }
 
+/** The exercise's own picture whole at the top of the workout, its clip playing over it (62b, as drawn): its own grey from
+ *  the top of the phone and to both sides, the top's buttons above it, nothing over the person; the name comes under it.
+ *  The clip stops on its frame while the workout is paused. */
+function OwnTop({ id, uri, picture, clip, playing, above }: { id: string; uri: string | null; picture: OwnPicture; clip: OwnClip | null; playing: boolean; above: ReactNode }) {
+  const insets = useSafeAreaInsets();
+  const screen = useWindowDimensions();
+  const height = workoutPictureHeight(screen.width, screen.height, picture);
+  return (
+    // The picture's own colour, read from the picture: the one colour a screen takes from data.
+    <View style={[styles.ownBand, { backgroundColor: picture.ground, paddingTop: insets.top + 12 + TOP + 10 }]}>
+      <View style={{ height }}>
+        {uri === null ? null : <Image testID={`workout-picture-${id}`} source={{ uri }} resizeMode="contain" style={styles.ownFill} accessible={false} />}
+        <ClipOver id={id} clip={clip} playing={playing} ground={picture.ground} />
+      </View>
+      <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.ownFade]} />
+      <View style={[styles.ownAbove, { top: insets.top + 12 }]}>{above}</View>
+    </View>
+  );
+}
+
 /** The number of the set just done, within its exercise. */
 function lastSetNumber(r: WorkoutRun): number {
   const last = r.done[r.done.length - 1];
@@ -441,6 +489,11 @@ const styles = StyleSheet.create({
   topMiddle: { flex: 1 },
   topEnd: { minHeight: TOP, paddingHorizontal: 18, borderRadius: TOP / 2, alignItems: "center", justifyContent: "center", backgroundColor: colours.overWords, borderWidth: 1, borderColor: colours.lineStrong },
   body: { paddingHorizontal: 16, paddingTop: 6, gap: 12 },
+  ownBand: { paddingBottom: 8 },
+  ownFill: { width: "100%", height: "100%" },
+  ownFade: { experimental_backgroundImage: workoutPictureFade },
+  ownAbove: { position: "absolute", left: sizes.edge, right: sizes.edge },
+  ownWords: { paddingHorizontal: sizes.edge, paddingTop: 6, gap: 8 },
   wall: { paddingHorizontal: 14, paddingVertical: 4, borderRadius: 22, borderWidth: 1, borderColor: colours.timerEdge, backgroundColor: colours.timerFace },
   label: { fontFamily: fonts.bold, letterSpacing: 1.1, color: colours.timerWords },
   countRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingTop: 12, paddingBottom: 10 },
@@ -450,7 +503,8 @@ const styles = StyleSheet.create({
   plusBig: { width: 64, height: 64, borderRadius: 32, alignItems: "center", justifyContent: "center", experimental_backgroundImage: raisedOrangeGradient, boxShadow: shadows.button },
   plusMark: { lineHeight: 38 },
   row: { flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 10, borderTopWidth: 1, borderTopColor: colours.timerSplit },
-  rowName: { width: 66 },
+  // As wide as its word needs at the largest text ("WEIGHT" broke in two at a fixed 66, seen on the 62b walk).
+  rowName: { minWidth: 66 },
   rowValue: { flex: 1, flexDirection: "row", alignItems: "flex-end", justifyContent: "center", gap: 6 },
   round: { width: sizes.press, height: sizes.press, borderRadius: sizes.press / 2, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: colours.lineStrong, backgroundColor: colours.raised },
   // −15 and +15: as wide and as tall as their words need, never cut at the largest text.
