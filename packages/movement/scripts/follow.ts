@@ -6,7 +6,7 @@
 // for one person, as the phone asks, so the model itself follows one body and this picks the
 // only one; whether that body stays the same is `bodyChanges`'s plain sign, below.
 import type { MovementFrame, SeenPerson } from "@app/shared";
-import { LIMITS, PERSON_LIMITS, bodyChange, lookAt, trunkMiddle, type Look } from "../src/index.js";
+import { LIMITS, PERSON_LIMITS, bodyChange, bodySize, trunkMiddle, type Look } from "../src/index.js";
 
 /** A point the model is less sure of than the possible-body check trusts gives the size nothing. */
 const SURE = LIMITS.sure;
@@ -70,8 +70,14 @@ export function bodyChanges(frames: readonly MovementFrame[], followed: readonly
   frames.forEach((frame, index) => {
     const person = followed[index] ?? null;
     if (person === null) return;
-    const look = lookAt(person, frame.aspect, frame.t, SURE);
-    if (look === null) return;
+    // The size as 51c read it, from every sure main joint (the lock reads it from the trunk and legs first: `lookAt`).
+    const size = bodySize(
+      person,
+      frame.aspect,
+      person.points.map((p) => p[3] >= SURE),
+    );
+    if (size === null) return;
+    const look: Look = { t: frame.t, middle: trunkMiddle(person, frame.aspect), size };
     const change = last === null ? null : bodyChange(last, look, frame.down);
     if (change?.changed === true) changes.push({ index, t: frame.t, speed: change.speed, size: change.size });
     last = look;

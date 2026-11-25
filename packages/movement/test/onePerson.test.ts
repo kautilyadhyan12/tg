@@ -94,7 +94,7 @@ function firstCounted(movement: Movement, member: Video): number {
   return rep.end - LEAD_IN - (member.frames[0]?.t ?? 0);
 }
 
-type Where = "nearer the phone, 1.45 times the member's size, at their place" | "further back, 0.6 of the member's size, at their place" | "a neighbour 1.8 m beside, the member's size" | "a neighbour 1.8 m beside and a little further back, 0.8 of the member's size";
+type Where = "nearer the phone, 1.6 times the member's size, at their place" | "further back, 0.6 of the member's size, at their place" | "a neighbour 1.8 m beside, the member's size" | "a neighbour 1.8 m beside and a little further back, 0.8 of the member's size";
 
 /** Where the stranger is put, from the member's place (`place`, `size`) in a picture `aspect` wide; a neighbour goes the
  *  way the picture has more room, 1.8 m: further than the lock's room (0.95 m) and the furthest a person's trunk went from
@@ -102,8 +102,8 @@ type Where = "nearer the phone, 1.45 times the member's size, at their place" | 
 function where(how: Where, place: readonly [number, number], size: number, aspect: number): { at: [number, number]; size: number } {
   const towards = place[0] < aspect / 2 ? 1 : -1;
   switch (how) {
-    case "nearer the phone, 1.45 times the member's size, at their place":
-      return { at: [place[0], place[1]], size: 1.45 * size };
+    case "nearer the phone, 1.6 times the member's size, at their place":
+      return { at: [place[0], place[1]], size: 1.6 * size };
     case "further back, 0.6 of the member's size, at their place":
       return { at: [place[0], place[1]], size: 0.6 * size };
     case "a neighbour 1.8 m beside, the member's size":
@@ -114,7 +114,7 @@ function where(how: Where, place: readonly [number, number], size: number, aspec
 }
 
 const WHERE: readonly Where[] = [
-  "nearer the phone, 1.45 times the member's size, at their place",
+  "nearer the phone, 1.6 times the member's size, at their place",
   "further back, 0.6 of the member's size, at their place",
   "a neighbour 1.8 m beside, the member's size",
   "a neighbour 1.8 m beside and a little further back, 0.8 of the member's size",
@@ -148,7 +148,7 @@ const NO_ROOM: readonly string[] = [
   "hip_thrust_dumbbell, a neighbour 1.8 m beside and a little further back, 0.8 of the member's size",
   // On the bars, the second man put nearer the phone or beside the first is not timed alone there (measured): the L-sit is
   // not passing yet (52c-ii), its numbers set from these two men alone.
-  "l_sit_bars_1, nearer the phone, 1.45 times the member's size, at their place",
+  "l_sit_bars_1, nearer the phone, 1.6 times the member's size, at their place",
   "l_sit_bars_1, a neighbour 1.8 m beside, the member's size",
   "l_sit_bars_1, a neighbour 1.8 m beside and a little further back, 0.8 of the member's size",
 ];
@@ -286,19 +286,25 @@ describe("the worst thing: once a member's set has counted, a stranger the model
 });
 
 describe("the limit, in plain sight: a body of the member's size within a stride of their place is taken for them", () => {
-  it("a stranger squatting 0.5 m beside the member, the same size, is counted after the set has counted", () => {
+  it("a stranger squatting 0.5 m beside the member, the same size, is followed as the member after the set has counted", () => {
     // Measured (lock-check): once a set has counted, a person's trunk goes up to 0.72 m from where they stood, so the lock
     // takes a body up to 0.95 m from there. In 3D the model reads one man's thigh 0.75 to 0.98 of his trunk across his own
-    // videos: the body's own proportions cannot tell this stranger from the member.
+    // sets: the body's own proportions cannot tell this stranger from the member. Here the stages after refuse his reps by
+    // themselves; the lunging neighbour below is counted.
     const movement = readMovement("squat");
-    const member = videoOf("sumo_squat_2a");
+    const member = furtherBack(videoOf("sumo_squat_2a"));
     const aspect = member.frames[0]?.aspect ?? 1;
     const own = middleOf(member.frames);
     const near = placed(videoOf("prisoner_squat_2").frames, aspect, [own.middle[0] + 0.5 * own.size, own.middle[1]], own.size);
     const cut = firstCounted(movement, member) + 700;
-    const a = runMovement(movement, spliced(member, near, cut)).count;
-    const b = runMovement(movement, spliced(member, near, cut, true)).count;
-    expect(a).toBeGreaterThan(b);
+    const theirs = new Set(near.flatMap((f) => f.people));
+    const set = new CameraSet({ movement, exercise: null });
+    const given = withLeadIn(spliced(member, near, cut)).frames.flatMap((f) => {
+      const p = set.next(f).person;
+      return f.people.some((q) => theirs.has(q)) ? [p.person] : [];
+    });
+    expect(given.length).toBe(near.length);
+    expect(given.every((p) => p !== null)).toBe(true);
   });
 
   it("a neighbour lunging 1.1 m beside the member, 0.95 m from their place when the model changes to them, is taken for them", () => {
@@ -434,9 +440,10 @@ describe("what the lock changed on the proof, every case written", () => {
 
 describe("several people in one picture: the lock follows one body", () => {
   it("on the old six-person barbell file (heavy model, asked for six: the man, his reflection, the man found twice), the lock keeps the man where the stand-in follower jumped between bodies", () => {
-    // Measured: the follower changes body 6 times in this 1.4 s; 3 of them (1.60, 1.63, 1.80 s) are the model's one body
-    // jumping in frames with nobody else to choose, which the lock cannot help either; the 3 where several bodies were found
-    // (2.17, 2.33, 2.40 s) the lock does not make. Its one more, at 2.67 s, comes after only another body was found (2.47
+    // Measured: the follower changes body 6 times in this 1.4 s. At 1.60 s the model's one body jumps (6.5 m/s): the lock
+    // withholds it for that picture and takes it back at 1.63 s, at the man's place; at 1.80 s the one body jumps within his
+    // place and size (1.23 times) and is taken, with nothing else to choose. The 3 where several bodies were found (2.17,
+    // 2.33, 2.40 s) the lock does not make. Its one more, at 2.67 s, comes after only another body was found (2.40 to 2.47
     // s), before anything was counted.
     const cut = readKept(new Uint8Array(readFileSync(join(import.meta.dirname, "outside", "barbell_bench_press_reference.heavy-cut.bodypoints"))));
     expect(cut.frames.some((f) => f.people.length > 1)).toBe(true);
@@ -444,7 +451,8 @@ describe("several people in one picture: the lock follows one body", () => {
     const chosen = cut.frames.map((f) => lock.next(f));
     const at = (changes: readonly { readonly t: number }[]): string[] => changes.map((c) => (c.t / 1000).toFixed(2));
     expect(at(bodyChanges(cut.frames, followOne(cut.frames)))).toEqual(["1.60", "1.63", "1.80", "2.17", "2.33", "2.40"]);
-    expect(at(bodyChanges(cut.frames, chosen.map((c) => c.person)))).toEqual(["1.60", "1.63", "1.80", "2.67"]);
+    expect(at(bodyChanges(cut.frames, chosen.map((c) => c.person)))).toEqual(["1.80", "2.67"]);
+    expect(chosen.filter((c) => c.status === "other").map((c) => (c.t / 1000).toFixed(2))).toEqual(["1.60", "2.40", "2.43", "2.47"]);
     expect(chosen.filter((c) => c.fresh).length).toBe(0);
   });
 });

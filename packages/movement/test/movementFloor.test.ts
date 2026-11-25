@@ -46,7 +46,11 @@ describe("his eleven videos of other positions, from the floor and raised", () =
     expect(others).toHaveLength(11);
   });
 
-  it.each(others.map((v) => [v.video.label, v] as const))("%s counts 0 and calls nothing short", (_label, v) => {
+  it("one is open: his sit-and-stand on a chair, a chair squat, counts its one as filmed since 52d-i (onePerson.test.ts pins it)", () => {
+    expect(others.filter((v) => v.entry.open !== undefined).map((v) => v.video.label)).toEqual(["usual_v08"]);
+  });
+
+  it.each(others.filter((v) => v.entry.open === undefined).map((v) => [v.video.label, v] as const))("%s counts 0 and calls nothing short", (_label, v) => {
     const run = runMovement(SQUAT, v.video);
     expect(run.count).toBe(0);
     expect(run.reps.filter((r) => r.verdict === "short")).toEqual([]);

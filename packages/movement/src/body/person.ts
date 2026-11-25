@@ -26,7 +26,7 @@
 // man's thigh 0.75 to 0.98 of his trunk across his own sets and every proof set's 0.74 to 0.90, so they cannot tell two
 // people apart. So what it cannot do: a body of the person's size standing within `room` of their place (a
 // neighbour less than about a stride away, a passer-by crossing at their distance) is taken for them.
-import type { Down, MovementFrame, SeenPerson } from "@app/shared";
+import { KP, type Down, type MovementFrame, type SeenPerson } from "@app/shared";
 import { LIMITS } from "./possible.js";
 import { TRUNK } from "./points.js";
 import { bodySize } from "./size.js";
@@ -107,13 +107,17 @@ export function trunkMiddle(person: SeenPerson, aspect: number): [number, number
   return [x / TRUNK.length, y / TRUNK.length];
 }
 
+/** The joints a body's size is read from first: the trunk and the legs. The arms only where fewer than four of these are
+ *  sure (filmed from the feet of a bench, the legs are off the picture): the model guesses the arms most often (the far
+ *  arm, hidden behind the body) and they swing far from the trunk, and one arm guessed in a new place every picture, read
+ *  too, made the size jump past the plain sign on Kd's reference videos (possibleBody.test.ts). */
+export const SIZE_JOINTS: readonly number[] = [KP.left_shoulder, KP.right_shoulder, KP.left_hip, KP.right_hip, KP.left_knee, KP.right_knee, KP.left_ankle, KP.right_ankle];
+
 /** A look at the body, or null when its size cannot be read (the points the model is sure of do not fix one). */
 export function lookAt(person: SeenPerson, aspect: number, t: number, sure: number = LIMITS.sure): Look | null {
-  const size = bodySize(
-    person,
-    aspect,
-    person.points.map((p) => p[3] >= sure),
-  );
+  const seen = person.points.map((p) => p[3] >= sure);
+  const trunkAndLegs = seen.map((s, i) => s && SIZE_JOINTS.includes(i));
+  const size = bodySize(person, aspect, trunkAndLegs.filter(Boolean).length >= 4 ? trunkAndLegs : seen);
   return size === null ? null : { t, middle: trunkMiddle(person, aspect), size };
 }
 
