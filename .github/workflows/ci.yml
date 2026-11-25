@@ -20,7 +20,7 @@ jobs:
   # A push that changes ONLY record files — the rulings, the roadmap, a
   # handoff, a spec page: every path ending in .md — cannot change what the
   # code checks read (no source or test file reads a .md file), so the
-  # typecheck/lint/test, purity, database-test and migration jobs skip it.
+  # code checks' parts, purity, database-test and migration jobs skip it.
   # gitleaks is not tied to this: it scans every push, records included.
   # The Neon migration job runs only when a migration file changed; db-tests
   # applies every migration on a fresh Postgres in every code run anyway.
@@ -85,11 +85,19 @@ jobs:
           echo "migrations=$migrations" >> "$GITHUB_OUTPUT"
           echo "::notice::code checks: $code · migration check: $migrations"
 
-  gate:
-    name: typecheck / lint / test
+  # The code checks, each on a machine of its own, all at once (2026-11-25). Until then ONE machine of 4 cores did
+  # typecheck, lint, seven packages' tests at the same time and the movement proof, one after another: 51 minutes on
+  # 2026-11-24, and tests that timed out only because the machine was busy (20 failed test steps in 100 runs).
+  # EVERY test still runs on every code push: nothing here is skipped by what a push touched, and nothing is
+  # remembered from an earlier run, because tests in one package read files in another.
+  # Each part has a time limit of 25 minutes: a part that grows past it goes red and is split again.
+  # `gate` below is the check master requires; it is green only when every part is.
+  static:
+    name: typecheck and lint
     needs: changes
     if: ${{ !cancelled() && needs.changes.outputs.code != 'false' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
         with:
@@ -100,17 +108,144 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - name: this machine
+        run: echo "cores $(nproc)" && free -g
       - run: pnpm typecheck
       - run: pnpm lint
-      - run: pnpm test
-      # After every package's tests, never beside them: each file holds every kept video and its runs (up to 2.7 GB),
-      # and beside the other packages it starved the machine and their timed tests (52a-ii-a's merge, 2026-11-19).
-      - name: the movement proof (Part 2 §12.5)
-        run: pnpm --filter @app/movement test:proof
+  web-tests:
+    name: web tests (${{ matrix.part }} of 2)
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.code != 'false' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        part: [1, 2]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter web exec vitest run --shard=${{ matrix.part }}/2
+  phone-tests:
+    name: phone tests (${{ matrix.part }} of 2)
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.code != 'false' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        part: [1, 2]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # The rules that need no screen (vitest), once; the screen tests (jest), half on each machine.
+      - if: matrix.part == 1
+        run: pnpm --filter mobile exec vitest run
+      - run: pnpm --filter mobile exec jest --shard=${{ matrix.part }}/2
+  small-tests:
+    name: shared, engine and config tests
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.code != 'false' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @app/config test
+      - run: pnpm --filter @app/shared test
+      - run: pnpm --filter @app/engine test
       - name: golden traces (Part 2 §7.6)
         run: pnpm --filter @app/engine test:traces
       - name: definition linter (Part 2 §9.2)
         run: pnpm --filter @app/engine lint:defs
+  movement-tests:
+    name: movement tests
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.code != 'false' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @app/movement test
+  movement-proof:
+    name: the movement proof, ${{ matrix.part }} (Part 2 §12.5)
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.code != 'false' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        part: [squat-jump, lunge, rest]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # Each proof file holds every kept video and its runs (up to 2.7 GB), two files at a time. The parts are named in
+      # packages/movement/vitest.config.ts; "rest" is every proof file the other two leave.
+      - run: pnpm --filter @app/movement test:proof
+        env:
+          PROOF_PART: ${{ matrix.part }}
+  # The check master requires. A part that failed, was cancelled or timed out is red here; a part that did not run is
+  # green ONLY when `changes` said this push holds no code. `always()`, never `!cancelled()`: a required check that
+  # is skipped counts as passed, so this one is never skipped.
+  gate:
+    name: typecheck / lint / test
+    needs: [changes, static, web-tests, phone-tests, small-tests, movement-tests, movement-proof]
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - env:
+          CODE: ${{ needs.changes.outputs.code }}
+          CHANGES: ${{ needs.changes.result }}
+          PARTS: ${{ needs.static.result }} ${{ needs.web-tests.result }} ${{ needs.phone-tests.result }} ${{ needs.small-tests.result }} ${{ needs.movement-tests.result }} ${{ needs.movement-proof.result }}
+        run: |
+          echo "what changed: $CHANGES (code: $CODE) · parts: $PARTS"
+          want=success
+          if [ "$CHANGES" = success ] && [ "$CODE" = false ]; then want=skipped; fi
+          n=0
+          for r in $PARTS; do
+            n=$((n + 1))
+            if [ "$r" != "$want" ]; then echo "::error::a part ended $r, not $want"; exit 1; fi
+          done
+          if [ "$n" -ne 6 ]; then echo "::error::$n parts reported, not 6"; exit 1; fi
 
   engine-purity:
     name: engine banned-token grep (R5.1)
@@ -209,13 +344,21 @@ jobs:
   # (§3.7) plus contrib citext/pgcrypto, all present in that image (it is the
   # same image used for the local PROVE box). Only apps/api needs a DB (verified:
   # DATABASE_URL appears nowhere in packages/ or apps/web), hence --filter api.
-  db-tests:
-    name: api tests on local Postgres
+  #
+  # On three machines at once since 2026-11-25, a third of the test files on each (vitest's --shard, so no file is in
+  # none), each machine with a Postgres and a Redis of its own: one machine took 25.6 minutes on 2026-11-24. These
+  # runs hold EVERY api test (9,371 of 9,371 that day), so the api's tests no longer run a second time without a
+  # database. `db-tests` below is the check master requires.
+  api-tests:
+    name: api tests (${{ matrix.part }} of 3)
     needs: changes
     if: ${{ !cancelled() && needs.changes.outputs.code != 'false' }}
     runs-on: ubuntu-latest
-    # 30, not 20: the suite took 18.8 to 19.6 minutes on 2026-11-02 and a slow runner crossed 20 on a green run.
-    timeout-minutes: 30
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        part: [1, 2, 3]
     services:
       postgres:
         image: pgvector/pgvector:pg16
@@ -265,4 +408,22 @@ jobs:
       - name: seed reference data
         run: pnpm --filter api seed
       - name: api test suite
-        run: pnpm --filter api test
+        run: pnpm --filter api exec vitest run --shard=${{ matrix.part }}/3
+
+  # The check master requires: see `gate`.
+  db-tests:
+    name: api tests on local Postgres
+    needs: [changes, api-tests]
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - env:
+          CODE: ${{ needs.changes.outputs.code }}
+          CHANGES: ${{ needs.changes.result }}
+          PART: ${{ needs.api-tests.result }}
+        run: |
+          echo "what changed: $CHANGES (code: $CODE) · api tests: $PART"
+          want=success
+          if [ "$CHANGES" = success ] && [ "$CODE" = false ]; then want=skipped; fi
+          if [ "$PART" != "$want" ]; then echo "::error::the api tests ended $PART, not $want"; exit 1; fi

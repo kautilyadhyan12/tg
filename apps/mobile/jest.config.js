@@ -9,9 +9,10 @@ module.exports = {
   testTimeout: 20000,
   // On the laptop, five copies of Node at a time, each started again past 1 GB: two folders share
   // its 16 GB and the default is one copy for each of its 12 cores but one (Kd, 2026-11-08).
-  // GitHub (CI set): two copies, each started again past 1 GB. With the default, the 1,504 tests of 2026-11-24 ran
-  // its machine out of memory: tests timed out, then "the hosted runner lost communication with the server" (37l).
-  ...(process.env.CI ? { maxWorkers: 2, workerIdleMemoryLimit: "1GB" } : { maxWorkers: 5, workerIdleMemoryLimit: "1GB" }),
+  // GitHub (CI set): three copies, each started again past 1 GB; the screen tests have a machine of 4 cores and 16 GB to
+  // themselves there (.github/workflows/ci.yml). With no limit and six other packages beside them, the 1,504 tests of
+  // 2026-11-24 ran that machine out of memory (37l).
+  ...(process.env.CI ? { maxWorkers: 3, workerIdleMemoryLimit: "1GB" } : { maxWorkers: 5, workerIdleMemoryLimit: "1GB" }),
   // @app/shared is TypeScript whose imports end in ".js" (the api's module rules).
   moduleNameMapper: { "^([.]{1,2}/.*)[.]js$": "$1" },
 };
