@@ -597,7 +597,14 @@ export async function loadRun(): Promise<LiveRun | null> {
       holdMonitor(current.userId);
       startMotion();
     }
-    auto = state.phase === "paused" ? autoPausedFrom(current.pausedByPerson ? openPauseFrom(current) : stopFrom(current)) : AUTO_START;
+    // A still stretch Auto-pause off had open (37k) is judged as the stop it is: moving on closes it.
+    const stillOpen = current.still[current.still.length - 1];
+    auto =
+      state.phase === "paused"
+        ? autoPausedFrom(current.pausedByPerson ? openPauseFrom(current) : stopFrom(current))
+        : !current.autoPause && stillOpen !== undefined && stillOpen[1] === null
+          ? autoPausedFrom(stillOpen[0])
+          : AUTO_START;
     wheelsAtPause = false;
     primeVoice(current);
     // The app was closed mid-run: a step begun since was said by nobody, so what is left of the step

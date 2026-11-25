@@ -532,18 +532,27 @@ describe("still stretches, through the recorder", () => {
     await act(() => resumeRun(run.startedAt + 20_000));
     await live(21, 6, () => 30, STILL_SD);
     expect(runNow()?.still).toEqual([[11_000, 17_000], [21_000, null]]);
-    // The app closed and opened again: the open stretch is read back open.
+    // The app closed and opened again: the open stretch is read back open, and walking on closes it.
     resetRecorder();
     motion.reset();
     await act(() => loadRun());
     expect(runNow()?.still).toEqual([[11_000, 17_000], [21_000, null]]);
-    await act(() => setAutoPause(true, run.startedAt + 28_000));
-    expect(runNow()?.still).toEqual([[11_000, 17_000], [21_000, 28_000]]);
-    await act(() => setAutoPause(false, run.startedAt + 29_000));
-    await live(30, 6, () => 30, STILL_SD);
-    expect(runNow()?.still.at(-1)).toEqual([30_000, null]);
-    await act(() => finishRun(run.startedAt + 40_000));
-    expect(runNow()?.still.at(-1)).toEqual([30_000, 40_000]);
+    await live(27, 12, (t) => 30 + 3 * (t - 26), MOVING_SD);
+    const walkedOn = runNow()?.still[1];
+    expect(walkedOn?.[0]).toBe(21_000);
+    expect(walkedOn?.[1]).toBeGreaterThanOrEqual(27_000);
+    expect(walkedOn?.[1]).toBeLessThanOrEqual(38_000);
+    const walked = 30 + 3 * 12;
+    await live(39, 6, () => walked, STILL_SD);
+    expect(runNow()?.still.at(-1)).toEqual([39_000, null]);
+    await act(() => setAutoPause(true, run.startedAt + 46_000));
+    expect(runNow()?.still.at(-1)).toEqual([39_000, 46_000]);
+    await act(() => setAutoPause(false, run.startedAt + 47_000));
+    await live(48, 6, () => walked, STILL_SD);
+    expect(runNow()?.still.at(-1)).toEqual([48_000, null]);
+    await act(() => finishRun(run.startedAt + 60_000));
+    expect(runNow()?.still.at(-1)).toEqual([48_000, 60_000]);
+    expect(runNow()?.still).toHaveLength(4);
   });
 
   it("Auto-pause on, a stop the place dates 8 s back: the screen's clock never goes back, and Moving time is what it was", async () => {
