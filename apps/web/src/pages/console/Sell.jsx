@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { Link, useLocation, useParams } from 'react-router-dom';
-import { CheckCircle2, Loader2 } from 'lucide-react';
+import { CheckCircle2, ChevronDown, Loader2 } from 'lucide-react';
 import { registerService } from '../../api/registerApi';
 import { orgService, errorStatus, errorText } from '../../api/orgsApi';
 import { ConsoleFailed, ConsoleLoading } from '../../components/console/ConsoleStates';
@@ -18,6 +18,7 @@ import TaxRates from './TaxRates';
 import ReceiptBox from '../../components/console/ReceiptBox';
 import DatePick from '../../components/console/DatePick';
 import MoreMenu from '../../components/console/MoreMenu';
+import { usePhone } from '../../components/console/usePhone';
 import { BasketRefundBox, SaleRefundLines, SquareRefundsToPlace } from './SaleRefunds';
 import { saleBasketMenu, saleRefundPick } from './saleRefundMenu';
 import { SALE_MENU_WORDS, saleSaidNow, salesWaitOnSquare } from './saleRefundView';
@@ -38,7 +39,8 @@ import {
   canOpenSell,
   canSellMemberships,
   personOption,
-  productOption,
+  productTileFacts,
+  tileInSale,
   quantityMax,
   soldWords,
   rowsOfKind,
@@ -50,6 +52,9 @@ import {
   takingsWords,
   TAKINGS_TABS,
   SALE_VOID_CHOICES,
+  SELL_TABS,
+  sellTabFor,
+  sellTabNamed,
   saleVoidedWords,
   voidSaleQuestion,
 } from './sellView';
@@ -159,14 +164,31 @@ function PayPicker({ method, setMethod, choices, disabled }) {
 
 /** One product in the basket: how many, its discount if the gym has any, what it comes to, and
  *  Remove. */
-function BasketLine({ row, offered, disabled, onQuantity, onDiscount, onRemove }) {
+/** A line that names one of Sell's tabs, with the button that opens it (§4: never "under …" alone). */
+function TabLine({ text, onOpenTab, role }) {
+  const tab = sellTabNamed(text);
+  return (
+    <div className="flex flex-col gap-2">
+      <p className="c-s14 c-t2 m-0" role={role}>
+        {text}
+      </p>
+      {tab !== null && onOpenTab !== null ? (
+        <button type="button" className="c-btn c-btn-s c-btn-sm self-start" onClick={() => onOpenTab(tab.key)}>
+          {`Open ${tab.label}`}
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
+function BasketLine({ row, offered, disabled, onQuantity, onDiscount, onRemove, onOpenTab }) {
   const quantityId = useId();
   const discountId = useId();
   const { product } = row;
   if (product === null) {
     return (
       <li className="flex flex-wrap items-center justify-between gap-3 py-3" style={LINE} data-testid="basket-line">
-        <p className="c-s14 c-t2 m-0">{row.problem}</p>
+        <TabLine text={row.problem} onOpenTab={onOpenTab} />
         <button type="button" className="c-btn c-btn-s c-btn-sm" disabled={disabled} aria-label="Remove the product no longer on sale" onClick={onRemove}>
           Remove
         </button>
@@ -179,7 +201,7 @@ function BasketLine({ row, offered, disabled, onQuantity, onDiscount, onRemove }
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex flex-col min-w-0">
           <p className="c-s15 c-w6 c-t1 m-0">{product.name}</p>
-          <p className="c-s13 c-t2 m-0">{`${each} each`}</p>
+          <p className="c-s14 c-t2 m-0">{`${each} each`}</p>
         </div>
         <div className="flex items-center gap-3">
           {row.amount !== null ? <span className="c-s15 c-w6 c-t1 c-num">{row.amount}</span> : null}
@@ -229,14 +251,14 @@ function BasketLine({ row, offered, disabled, onQuantity, onDiscount, onRemove }
         ) : null}
       </div>
       {row.offWords !== null ? <p className="c-s14 c-t2 m-0">{row.offWords}</p> : null}
-      {row.problem !== null ? <p className="c-s14 c-t2 m-0">{row.problem}</p> : null}
+      {row.problem !== null ? <TabLine text={row.problem} onOpenTab={onOpenTab} /> : null}
     </li>
   );
 }
 
 /** A BASKET (18q): products added one by one, each its own line with how many and its own
  *  discount, then who is buying and how they paid, and one press records the whole sale. */
-function ProductSale({ gymId, org, page: gymPage, locked, firstPerson, addMemberTo, paymentsTo, canAdd, onAddProduct, onPage }) {
+function ProductSale({ gymId, org, page: gymPage, locked, firstPerson, addMemberTo, paymentsTo, canAdd, onAddProduct, onPage, below = null, onOpenTab = null }) {
   const [lines, setLines] = useState([]);
   const [who, setWho] = useState(firstPerson === null ? 'walkin' : 'member');
   const [person, setPerson] = useState(firstPerson);
@@ -286,9 +308,57 @@ function ProductSale({ gymId, org, page: gymPage, locked, firstPerson, addMember
   // Refer a friend's gift goes on the dearest product it fits, never over a discount staff
   // picked, until staff press Remove.
   const shownLines = gift !== null && !friendGiftRemoved ? withFriendGift(lines, page, gift.discount.id) : lines;
-  const pickerId = useId();
   const codeId = useId();
   const terminalPickId = useId();
+  const saleBox = useRef(null);
+  const saleBody = useRef(null);
+  const moreButton = useRef(null);
+  /** More below shows while the sale's box has more under what is in view. */
+  const showMore = useCallback(() => {
+    const body = saleBody.current;
+    const button = moreButton.current;
+    if (body === null || button === null) return;
+    button.hidden = body.scrollHeight - body.scrollTop - body.clientHeight <= 8;
+  }, []);
+  // After every change to the sale, and as the box is fitted to the screen.
+  useEffect(showMore);
+  const noProducts = gymPage.products.length === 0;
+  const saleOpen = state.done === null;
+  // From 1101 px the sale is no taller than the screen left under it, so Take payment is on the
+  // first screen however many lines it holds, and stays on screen once the page is scrolled.
+  useEffect(() => {
+    const el = saleBox.current;
+    if (el === null || typeof window.matchMedia !== 'function') return undefined;
+    const wide = window.matchMedia('(min-width: 1101px)');
+    let frame = 0;
+    const fit = () => {
+      frame = 0;
+      if (!wide.matches) {
+        el.style.maxHeight = '';
+        return;
+      }
+      const top = Math.max(16, el.getBoundingClientRect().top);
+      el.style.maxHeight = `${String(Math.max(320, Math.floor(window.innerHeight - top - 16)))}px`;
+      showMore();
+    };
+    const ask = () => {
+      if (frame === 0) frame = window.requestAnimationFrame(fit);
+    };
+    fit();
+    // What is drawn above it can still grow (a banner, the products loading): measured again then.
+    const grows = typeof ResizeObserver === 'function' ? new ResizeObserver(ask) : null;
+    grows?.observe(document.body);
+    window.addEventListener('scroll', ask, { passive: true });
+    window.addEventListener('resize', ask);
+    wide.addEventListener('change', ask);
+    return () => {
+      if (frame !== 0) window.cancelAnimationFrame(frame);
+      grows?.disconnect();
+      window.removeEventListener('scroll', ask);
+      window.removeEventListener('resize', ask);
+      wide.removeEventListener('change', ask);
+    };
+  }, [noProducts, saleOpen, showMore]);
 
   useEffect(() => {
     let live = true;
@@ -420,9 +490,9 @@ function ProductSale({ gymId, org, page: gymPage, locked, firstPerson, addMember
     }
   };
 
-  if (state.done !== null) {
-    const number = state.receiptNumber ?? null;
-    return (
+  const number = state.done === null ? null : (state.receiptNumber ?? null);
+  const recorded =
+    state.done === null ? null : (
       <SaleRecorded
         words={state.done}
         note={
@@ -446,277 +516,332 @@ function ProductSale({ gymId, org, page: gymPage, locked, firstPerson, addMember
         ) : null}
       </SaleRecorded>
     );
-  }
 
-  if (page.products.length === 0) {
-    return (
-      <div className="flex flex-col gap-3">
-        <p className="c-s15 c-t2 m-0">You have no products yet. Add what you sell at the desk, such as water or a towel, and it appears here.</p>
-        {canAdd ? (
-          <button type="button" className="c-btn c-btn-p c-btn-lg self-start" disabled={locked} onClick={onAddProduct}>
-            Add your first product
-          </button>
-        ) : (
-          <p className="c-s14 c-t3 m-0">The owner, or staff who can change membership types and prices, can add products.</p>
-        )}
-      </div>
-    );
-  }
-
+  // No products yet: the same till with no sale in it, so what is under it is never drawn afresh.
+  const empty = page.products.length === 0 && recorded === null;
   const full = lines.length >= SALE_LINES_MAX;
   const still = locked || state.busy || waiting || lostKey !== null;
   return (
-    <div className="flex flex-col gap-4">
-      {resumed.map((payment) => (
-        <ResumedSale key={payment.id} gymId={gymId} payment={payment} showName onPaid={() => registerService.get(gymId).then(onPage, () => undefined)} onClose={() => setResumed((was) => was.filter((w) => w.id !== payment.id))} />
-      ))}
-      <div className="c-field">
-        <label className="c-label" htmlFor={pickerId}>
-          Add a product
-        </label>
-        <select
-          id={pickerId}
-          className="c-input"
-          value=""
-          disabled={still || full}
-          onChange={(e) => {
-            const product = page.products.find((p) => p.id === e.target.value);
-            if (product !== undefined) change(addToBasket(shownLines, product));
-          }}
-        >
-          <option value="">{lines.length === 0 ? 'Pick a product' : 'Pick another product'}</option>
-          {page.products.map((p) => (
-            <option key={p.id} value={p.id}>
-              {productOption(p)}
-            </option>
-          ))}
-        </select>
-        {full ? <p className="c-s14 c-t2 m-0">{`One sale can hold up to ${String(SALE_LINES_MAX)} products. Take payment for these, then start a new sale.`}</p> : null}
-        {oldMoney !== null ? <p className="c-s14 c-t2 m-0">{oldMoney}</p> : null}
-      </div>
-
-      {view.rows.length > 0 ? (
-        <ul className="list-none m-0 p-0 flex flex-col" aria-label="In this sale">
-          {view.rows.map((row) => (
-            <BasketLine
-              key={row.key}
-              row={row}
-              offered={offered}
-              disabled={still}
-              onQuantity={(text) => change(shownLines.map((l, i) => (i === row.index ? { ...l, quantityText: text } : l)))}
-              onDiscount={(id) => {
-                if (gift !== null && row.discount !== null && row.discount.id === gift.discount.id) setFriendGiftRemoved(true);
-                change(withLineDiscount(shownLines, row.index, id, page));
-                setCode((was) => ({ ...was, note: null, appliedId: null }));
-              }}
-              onRemove={() => change(shownLines.filter((_, i) => i !== row.index))}
-            />
-          ))}
-        </ul>
-      ) : null}
-
-      <WhoPicker
-        gymId={gymId}
-        who={who}
-        setWho={(next) => {
-          setWho(next);
-          touched();
-        }}
-        person={person}
-        setPerson={(next) => {
-          setPerson(next);
-          touched();
-        }}
-        mustPick={false}
-        disabled={still}
-        addMemberTo={addMemberTo}
-      />
-      {view.rows.length > 0 && gift !== null ? (
-        <FriendGiftNote
-          gift={gift}
-          applied={giftOn !== -1}
-          fits={giftFits}
-          what={view.rows.length === 1 ? (view.rows[0]?.product?.name ?? null) : 'these products'}
-          onRemove={() => {
-            setFriendGiftRemoved(true);
-            change(withoutDiscount(shownLines, gift.discount.id));
-          }}
-          onPutBack={() => {
-            setFriendGiftRemoved(false);
-            change(withFriendGift(shownLines, page, gift.discount.id));
-          }}
-          disabled={still}
-        />
-      ) : null}
-      {view.rows.length > 0 && memberGift !== null ? (
-        <MemberGiftNote
-          gift={memberGift}
-          applied={giftLine !== null}
-          fits={view.giftFits}
-          what={view.rows.length === 1 ? (view.rows[0]?.product?.name ?? null) : 'these products'}
-          onRemove={() => {
-            setGiftRemoved(true);
-            touched();
-          }}
-          onPutBack={() => {
-            setGiftRemoved(false);
-            touched();
-          }}
-          disabled={still}
-        />
-      ) : null}
-      {view.rows.length > 0 && hasCodes ? (
-        <div className="c-field">
-          <label className="c-label" htmlFor={codeId}>
-            Promo code
-          </label>
-          <div className="flex flex-wrap gap-2">
-            <input
-              id={codeId}
-              className="c-input"
-              style={{ maxWidth: 220, textTransform: 'uppercase' }}
-              value={code.text}
-              maxLength={40}
-              autoComplete="off"
-              disabled={still}
-              onChange={(e) => setCode({ text: e.target.value, note: null, appliedId: null })}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') applyCode();
-              }}
-            />
-            <button type="button" className="c-btn c-btn-s c-btn-lg" disabled={still} onClick={applyCode}>
-              Apply
-            </button>
+    <div className={empty ? 'c-till c-till-empty' : 'c-till'}>
+      <section className="c-card p-4 md:p-5 flex flex-col gap-4 c-till-pick" aria-label="Pick a product">
+        {empty ? (
+          <>
+            <h2 className="c-h2">Products</h2>
+            <p className="c-s15 c-t2 m-0">You have no products yet. Add what you sell at the desk, such as water or a towel, and it appears here.</p>
+            {canAdd ? (
+              <button type="button" className="c-btn c-btn-p c-btn-lg self-start" disabled={locked} onClick={onAddProduct}>
+                Add your first product
+              </button>
+            ) : (
+              <p className="c-s14 c-t3 m-0">The owner, or staff who can change membership types and prices, can add products.</p>
+            )}
+          </>
+        ) : (
+          <>
+        <div className="c-till-head">
+          <div className="flex flex-col gap-1 min-w-0">
+            <h2 className="c-h2">Products</h2>
+            <p className="c-s14 c-t2 m-0">Press a product to add it to the sale.</p>
           </div>
-          {codeNote !== null ? (
-            <p className="c-s14 c-t2 m-0" role="status">
-              {codeNote}
-            </p>
-          ) : (
-            <p className="c-s13 c-t3 m-0">If the customer gives a code, type it here and press Apply.</p>
-          )}
-        </div>
-      ) : null}
-      <PayPicker
-        method={chosen}
-        setMethod={(next) => {
-          setMethod(next);
-          setMethodPicked(true);
-          touched();
-        }}
-        choices={methodChoices}
-        disabled={still}
-      />
-      {onTerminal && terminals.length > 1 ? (
-        <div className="c-field">
-          <label className="c-label" htmlFor={terminalPickId}>
-            Terminal
-          </label>
-          <select id={terminalPickId} className="c-input" style={{ maxWidth: 280 }} value={terminalId ?? ''} disabled={still} onChange={(e) => setTerminalId(e.target.value === '' ? null : e.target.value)}>
-            <option value="">Choose a Terminal</option>
-            {terminals.map((t) => (
-              <option key={t.id} value={t.id}>
-                {cardTerminalSerial(t) === null ? payTerminalName(t) : `${payTerminalName(t)} · ${cardTerminalSerial(t)}`}
-              </option>
-            ))}
-          </select>
-        </div>
-      ) : null}
-      {setup !== null ? (
-        <div className="flex flex-wrap items-center gap-2" data-testid="sell-terminal-setup">
-          <p className="c-s14 c-t2 m-0">{setup.line}</p>
-          {setup.button !== null && paymentsTo !== null ? (
-            <Link to={paymentsTo} className="c-btn c-btn-s">
-              {setup.button}
-            </Link>
+          {canAdd ? (
+            <button type="button" className="c-btn c-btn-s" disabled={locked} onClick={onAddProduct}>
+              Add a product
+            </button>
           ) : null}
         </div>
-      ) : null}
+        <ul className="c-tiles" aria-label="Products to add">
+          {page.products.map((p) => {
+            const inSale = tileInSale(shownLines, p.id);
+            return (
+              <li key={p.id}>
+                <button
+                  type="button"
+                  className={inSale === null ? 'c-tile' : 'c-tile c-tile-on'}
+                  data-product={p.id}
+                  disabled={still || (full && inSale === null)}
+                  aria-label={`Add ${p.name} · ${productTileFacts(p, page.tax)}${inSale === null ? '' : `, ${inSale}`}`}
+                  onClick={() => change(addToBasket(shownLines, p))}
+                >
+                  <span className="c-s15 c-w6 c-t1">{p.name}</span>
+                  <span className="c-s14 c-t2 c-num">{productTileFacts(p, page.tax)}</span>
+                  {inSale !== null ? <span className="c-tag c-tag-soft">{inSale}</span> : null}
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+        {full ? <p className="c-s14 c-t2 m-0">{`One sale can hold up to ${String(SALE_LINES_MAX)} products. Take payment for these, then start a new sale.`}</p> : null}
+        {oldMoney !== null ? <TabLine text={oldMoney} onOpenTab={onOpenTab} /> : null}
+          </>
+        )}
+      </section>
 
-      {view.summary !== null ? (
-        <dl className="flex flex-col gap-1 m-0 pt-3" style={LINE} data-testid="sale-summary">
-          {view.summary.lines.map((line) => (
-            <div key={line.label} className="flex justify-between gap-4" style={{ maxWidth: 360 }}>
-              <dt className={line.strong ? 'c-s16 c-w7 c-t1' : 'c-s14 c-t2'}>{line.label}</dt>
-              <dd className={`m-0 c-num ${line.strong ? 'c-s16 c-w7 c-t1' : 'c-s14 c-t2'}`}>{line.value}</dd>
-            </div>
-          ))}
-        </dl>
-      ) : null}
+      {empty ? null : (
 
-      <div className="flex flex-col gap-2">
-        <button type="button" className="c-btn c-btn-p c-btn-lg self-start" disabled={still || view.problem !== null || view.summary === null} onClick={() => void sell()}>
-          {state.busy ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : null}
-          {state.busy ? (onTerminal ? 'Sending…' : 'Recording…') : `${onTerminal ? 'Take payment on Terminal' : 'Take payment'}${view.summary !== null ? ` · ${view.summary.total}` : ''}`}
-        </button>
-        {view.problem !== null && lines.length > 0 && view.rows.every((r) => r.problem === null) ? <p className="c-s14 c-t2 m-0">{view.problem}</p> : null}
-        <p className="c-s13 c-t3 m-0">{onTerminal ? TERMINAL_SALE_HINT : SALE_HINT}</p>
-      </div>
-      {lostKey !== null ? (
-        <div className="rounded-[14px] p-3 flex flex-col gap-3" style={{ background: 'var(--raise)' }} data-testid="terminal-pay-lost">
-          <p className="c-s14 c-t1 m-0" role="alert">
-            {TERMINAL_SALE_LOST}
-          </p>
-          <div>
-            <button
-              type="button"
-              className="c-btn c-btn-p"
-              disabled={state.busy}
-              onClick={() => {
-                const again = lostKey;
-                setLostKey(null);
-                void sendToTerminal(again);
-              }}
-            >
-              {state.busy ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : null}
-              Check again
-            </button>
+      <section ref={saleBox} className="c-card c-till-sale" aria-label="New sale">
+        {recorded !== null ? (
+          <div className="c-sale-b">
+            <h2 className="c-h2">New sale</h2>
+            {recorded}
           </div>
-        </div>
-      ) : null}
-      {onTill !== null && onTill.payment.step !== 'done' ? (
-        <TerminalPayBox gymId={gymId} entryId={null} payment={onTill.payment} name={buyerName} showName={terminals.length > 1} onAnswer={onTillAnswer} onEnded={(why) => setState({ busy: false, error: why, done: null })} />
-      ) : null}
-      {onTill !== null && onTill.payment.step === 'done' && onTill.payment.outcome !== 'paid' ? (
-        <div className="rounded-[14px] p-3 flex flex-col gap-3" style={{ background: 'var(--raise)' }} data-testid="terminal-pay-ended">
-          <p className="c-s14 m-0" style={{ color: mayHavePaid(onTill.payment) ? 'var(--t1)' : 'var(--bad)' }} role="alert">
-            {terminalPayOutcomeLine(onTill.payment, buyerName, onTill.payment.amountMinor)}
-          </p>
-          <div className="flex flex-wrap gap-2">
-            {!mayHavePaid(onTill.payment) && pickedTerminal !== undefined ? (
-              <button
-                type="button"
-                className="c-btn c-btn-p"
-                disabled={state.busy}
-                onClick={() => {
-                  const next = newKey();
-                  setKey(next);
-                  void sendToTerminal(next);
+        ) : (
+          <>
+            <div className="c-sale-b" ref={saleBody} onScroll={showMore}>
+              <h2 className="c-h2">New sale</h2>
+              <WhoPicker
+                gymId={gymId}
+                who={who}
+                setWho={(next) => {
+                  setWho(next);
+                  touched();
                 }}
-              >
-                {state.busy ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : null}
-                Try again
-              </button>
-            ) : null}
-            <button
-              type="button"
-              className="c-btn c-btn-s"
-              disabled={state.busy}
-              onClick={() => {
-                setOnTill(null);
-                setKey(newKey());
-                if (!mayHavePaid(onTill.payment)) {
-                  setMethod('cash');
+                person={person}
+                setPerson={(next) => {
+                  setPerson(next);
+                  touched();
+                }}
+                mustPick={false}
+                disabled={still}
+                addMemberTo={addMemberTo}
+              />
+              {resumed.map((payment) => (
+                <ResumedSale key={payment.id} gymId={gymId} payment={payment} showName onPaid={() => registerService.get(gymId).then(onPage, () => undefined)} onClose={() => setResumed((was) => was.filter((w) => w.id !== payment.id))} />
+              ))}
+              {view.rows.length > 0 ? (
+                <div className="flex flex-col">
+                  <h3 className="c-label m-0">In this sale</h3>
+                  <ul className="list-none m-0 p-0 flex flex-col" aria-label="In this sale">
+                    {view.rows.map((row) => (
+                      <BasketLine
+                        key={row.key}
+                        row={row}
+                        offered={offered}
+                        onOpenTab={onOpenTab}
+                        disabled={still}
+                        onQuantity={(text) => change(shownLines.map((l, i) => (i === row.index ? { ...l, quantityText: text } : l)))}
+                        onDiscount={(id) => {
+                          if (gift !== null && row.discount !== null && row.discount.id === gift.discount.id) setFriendGiftRemoved(true);
+                          change(withLineDiscount(shownLines, row.index, id, page));
+                          setCode((was) => ({ ...was, note: null, appliedId: null }));
+                        }}
+                        onRemove={() => change(shownLines.filter((_, i) => i !== row.index))}
+                      />
+                    ))}
+                  </ul>
+                </div>
+              ) : (
+                <p className="c-s14 c-t2 m-0">Nothing in this sale yet. Press a product to add it.</p>
+              )}
+
+              {view.rows.length > 0 && gift !== null ? (
+                <FriendGiftNote
+                  gift={gift}
+                  applied={giftOn !== -1}
+                  fits={giftFits}
+                  what={view.rows.length === 1 ? (view.rows[0]?.product?.name ?? null) : 'these products'}
+                  onRemove={() => {
+                    setFriendGiftRemoved(true);
+                    change(withoutDiscount(shownLines, gift.discount.id));
+                  }}
+                  onPutBack={() => {
+                    setFriendGiftRemoved(false);
+                    change(withFriendGift(shownLines, page, gift.discount.id));
+                  }}
+                  disabled={still}
+                />
+              ) : null}
+              {view.rows.length > 0 && memberGift !== null ? (
+                <MemberGiftNote
+                  gift={memberGift}
+                  applied={giftLine !== null}
+                  fits={view.giftFits}
+                  what={view.rows.length === 1 ? (view.rows[0]?.product?.name ?? null) : 'these products'}
+                  onRemove={() => {
+                    setGiftRemoved(true);
+                    touched();
+                  }}
+                  onPutBack={() => {
+                    setGiftRemoved(false);
+                    touched();
+                  }}
+                  disabled={still}
+                />
+              ) : null}
+              {view.rows.length > 0 && hasCodes ? (
+                <div className="c-field">
+                  <label className="c-label" htmlFor={codeId}>
+                    Promo code
+                  </label>
+                  <div className="flex flex-wrap gap-2">
+                    <input
+                      id={codeId}
+                      className="c-input"
+                      style={{ maxWidth: 220, textTransform: 'uppercase' }}
+                      value={code.text}
+                      maxLength={40}
+                      autoComplete="off"
+                      disabled={still}
+                      onChange={(e) => setCode({ text: e.target.value, note: null, appliedId: null })}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') applyCode();
+                      }}
+                    />
+                    <button type="button" className="c-btn c-btn-s c-btn-lg" disabled={still} onClick={applyCode}>
+                      Apply
+                    </button>
+                  </div>
+                  {codeNote !== null ? (
+                    <TabLine text={codeNote} onOpenTab={onOpenTab} role="status" />
+                  ) : (
+                    <p className="c-s14 c-t3 m-0">If the customer gives a code, type it here and press Apply.</p>
+                  )}
+                </div>
+              ) : null}
+              {/* Kd's click-through: a sale longer than its box says so, and one press goes down it. */}
+              <div className="c-sale-more-at">
+                <button
+                  type="button"
+                  ref={moreButton}
+                  hidden
+                  className="c-btn c-btn-s c-sale-more"
+                  onClick={() => saleBody.current?.scrollBy?.({ top: Math.round(saleBody.current.clientHeight * 0.8), behavior: 'smooth' })}
+                >
+                  More below
+                  <ChevronDown aria-hidden="true" className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+
+            <div className="c-sale-f" data-testid="sale-foot">
+              <PayPicker
+                method={chosen}
+                setMethod={(next) => {
+                  setMethod(next);
                   setMethodPicked(true);
-                }
-              }}
-            >
-              {mayHavePaid(onTill.payment) ? 'Close' : 'Record another way'}
-            </button>
-          </div>
-        </div>
-      ) : null}
-      {state.error !== null ? <Refusal>{state.error}</Refusal> : null}
+                  touched();
+                }}
+                choices={methodChoices}
+                disabled={still}
+              />
+              {onTerminal && terminals.length > 1 ? (
+                <div className="c-field">
+                  <label className="c-label" htmlFor={terminalPickId}>
+                    Terminal
+                  </label>
+                  <select id={terminalPickId} className="c-input" value={terminalId ?? ''} disabled={still} onChange={(e) => setTerminalId(e.target.value === '' ? null : e.target.value)}>
+                    <option value="">Choose a Terminal</option>
+                    {terminals.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {cardTerminalSerial(t) === null ? payTerminalName(t) : `${payTerminalName(t)} · ${cardTerminalSerial(t)}`}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              ) : null}
+              {setup !== null ? (
+                <div className="flex flex-wrap items-center gap-2" data-testid="sell-terminal-setup">
+                  <p className="c-s14 c-t2 m-0">{setup.line}</p>
+                  {setup.button !== null && paymentsTo !== null ? (
+                    <Link to={paymentsTo} className="c-btn c-btn-s">
+                      {setup.button}
+                    </Link>
+                  ) : null}
+                </div>
+              ) : null}
+
+              {view.summary !== null ? (
+                <dl className="flex flex-col gap-1 m-0" data-testid="sale-summary">
+                  {view.summary.lines.map((line) => (
+                    <div key={line.label} className="flex justify-between gap-4">
+                      <dt className={line.strong ? 'c-s16 c-w7 c-t1' : 'c-s14 c-t2'}>{line.label}</dt>
+                      <dd className={`m-0 c-num ${line.strong ? 'c-s16 c-w7 c-t1' : 'c-s14 c-t2'}`}>{line.value}</dd>
+                    </div>
+                  ))}
+                </dl>
+              ) : null}
+
+              {/* Under 1100 px this alone stays at the bottom of the screen while the sale is in view. */}
+              <div className="c-sale-take">
+                <button type="button" className="c-btn c-btn-p c-btn-lg c-btn-take" disabled={still || view.problem !== null || view.summary === null} onClick={() => void sell()}>
+                  {state.busy ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : null}
+                  {state.busy ? (onTerminal ? 'Sending…' : 'Recording…') : `${onTerminal ? 'Take payment on Terminal' : 'Take payment'}${view.summary !== null ? ` · ${view.summary.total}` : ''}`}
+                </button>
+              </div>
+              {view.problem !== null && lines.length > 0 && view.rows.every((r) => r.problem === null) ? <TabLine text={view.problem} onOpenTab={onOpenTab} /> : null}
+              <p className="c-s14 c-t3 m-0">{onTerminal ? TERMINAL_SALE_HINT : SALE_HINT}</p>
+              {lostKey !== null ? (
+                <div className="rounded-[14px] p-3 flex flex-col gap-3" style={{ background: 'var(--raise)' }} data-testid="terminal-pay-lost">
+                  <p className="c-s14 c-t1 m-0" role="alert">
+                    {TERMINAL_SALE_LOST}
+                  </p>
+                  <div>
+                    <button
+                      type="button"
+                      className="c-btn c-btn-p"
+                      disabled={state.busy}
+                      onClick={() => {
+                        const again = lostKey;
+                        setLostKey(null);
+                        void sendToTerminal(again);
+                      }}
+                    >
+                      {state.busy ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : null}
+                      Check again
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+              {onTill !== null && onTill.payment.step !== 'done' ? (
+                <TerminalPayBox gymId={gymId} entryId={null} payment={onTill.payment} name={buyerName} showName={terminals.length > 1} onAnswer={onTillAnswer} onEnded={(why) => setState({ busy: false, error: why, done: null })} />
+              ) : null}
+              {onTill !== null && onTill.payment.step === 'done' && onTill.payment.outcome !== 'paid' ? (
+                <div className="rounded-[14px] p-3 flex flex-col gap-3" style={{ background: 'var(--raise)' }} data-testid="terminal-pay-ended">
+                  <p className="c-s14 m-0" style={{ color: mayHavePaid(onTill.payment) ? 'var(--t1)' : 'var(--bad)' }} role="alert">
+                    {terminalPayOutcomeLine(onTill.payment, buyerName, onTill.payment.amountMinor)}
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {!mayHavePaid(onTill.payment) && pickedTerminal !== undefined ? (
+                      <button
+                        type="button"
+                        className="c-btn c-btn-p"
+                        disabled={state.busy}
+                        onClick={() => {
+                          const next = newKey();
+                          setKey(next);
+                          void sendToTerminal(next);
+                        }}
+                      >
+                        {state.busy ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : null}
+                        Try again
+                      </button>
+                    ) : null}
+                    <button
+                      type="button"
+                      className="c-btn c-btn-s"
+                      disabled={state.busy}
+                      onClick={() => {
+                        setOnTill(null);
+                        setKey(newKey());
+                        if (!mayHavePaid(onTill.payment)) {
+                          setMethod('cash');
+                          setMethodPicked(true);
+                        }
+                      }}
+                    >
+                      {mayHavePaid(onTill.payment) ? 'Close' : 'Record another way'}
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+              {state.error !== null ? <Refusal>{state.error}</Refusal> : null}
+            </div>
+          </>
+        )}
+      </section>
+
+      )}
+
+      <div className="c-till-below">{below}</div>
     </div>
   );
 }
@@ -808,6 +933,7 @@ function Takings({ gymId, org, page, locked, canOpenPeople, onOpenPerson, onPage
   const [all, setAll] = useState(false);
   /** Which kind of the day's takings is shown (18q-ii): all, products, memberships or fees. */
   const [tab, setTab] = useState('all');
+  const phone = usePhone();
 
   const loadOther = useCallback(
     (day) =>
@@ -931,7 +1057,7 @@ function Takings({ gymId, org, page, locked, canOpenPeople, onOpenPerson, onPage
               {takingsWords(shownPage, tab)}
             </p>
             {takingsNotes(shownPage, tab).map((note) => (
-              <p key={note} className="c-s13 c-t3 m-0">
+              <p key={note} className="c-s14 c-t3 m-0">
                 {note}
               </p>
             ))}
@@ -951,12 +1077,19 @@ function Takings({ gymId, org, page, locked, canOpenPeople, onOpenPerson, onPage
               setAsking(null);
               setRefunding({ saleId: row.key, toCard });
             });
-            const items = [...menu.items];
-            if (row.canUndo) items.push({ ...SALE_MENU_WORDS.voidSale, danger: true, onPick: () => askVoid(row.key) });
+            const items = locked ? [] : [...menu.items];
+            if (row.canUndo && !locked) items.push({ ...SALE_MENU_WORDS.voidSale, danger: true, onPick: () => askVoid(row.key) });
+            const opensPerson = row.person !== null && canOpenPeople;
+            // On a phone the row's ⋯ holds every one of its buttons (the PhoneSell board).
+            const phoneItems = [
+              { label: RECEIPT_BUTTON, onPick: () => setReceiptFor((was) => (was === row.key ? null : row.key)) },
+              ...(opensPerson ? [{ label: 'Open their page', onPick: () => onOpenPerson(row.person.entryId) }] : []),
+              ...items,
+            ];
             const said = state.done !== null && state.done.key === row.key ? saleSaidNow(state.done, row.basket, state.done.read !== shownPage) : null;
             return (
               <li key={row.key} className="flex flex-col gap-2 p-4" style={LINE} data-testid="takings-row" data-sale-row={row.key}>
-                <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                <div className={phone ? "flex items-start justify-between gap-3" : "flex flex-col gap-2 md:flex-row md:items-center md:justify-between"}>
                   <div className="flex flex-col min-w-0">
                     <p className="c-s15 c-w6 c-t1 m-0">
                       <span style={row.undone ? { textDecoration: 'line-through' } : undefined}>{`${row.title} · ${row.amount}`}</span>
@@ -964,10 +1097,15 @@ function Takings({ gymId, org, page, locked, canOpenPeople, onOpenPerson, onPage
                       {row.refundTag !== null ? <span className="c-tag c-tag-warn ml-2">{row.refundTag}</span> : null}
                     </p>
                     <p className="c-s14 c-t2 m-0">{row.facts}</p>
-                    {row.voided !== null ? <p className="c-s13 c-t3 m-0">{row.voided}</p> : null}
+                    {row.voided !== null ? <p className="c-s14 c-t3 m-0">{row.voided}</p> : null}
                   </div>
+                  {phone ? (
+                    <div className="flex flex-shrink-0">
+                      <MoreMenu label={null} alignRight ariaLabel={`More for the sale of ${row.title}`} items={phoneItems} disabled={state.busy} />
+                    </div>
+                  ) : (
                   <div className="flex flex-wrap items-center gap-2 flex-shrink-0">
-                    {row.person !== null && canOpenPeople ? (
+                    {opensPerson ? (
                       <button type="button" className="c-btn c-btn-s c-btn-sm" onClick={() => onOpenPerson(row.person.entryId)} aria-label={`Open ${row.person.name}'s page`}>
                         Open their page
                       </button>
@@ -981,8 +1119,9 @@ function Takings({ gymId, org, page, locked, canOpenPeople, onOpenPerson, onPage
                     >
                       {RECEIPT_BUTTON}
                     </button>
-                    {items.length > 0 && !locked ? <MoreMenu label={menu.label} compact={menu.label !== null} alignRight ariaLabel={menu.ariaLabel} items={items} disabled={state.busy} /> : null}
+                    {items.length > 0 ? <MoreMenu label={menu.label} compact={menu.label !== null} alignRight ariaLabel={menu.ariaLabel} items={items} disabled={state.busy} /> : null}
                   </div>
+                  )}
                 </div>
                 {said !== null ? (
                   <p className="c-s14 c-t1 c-w6 m-0" role="status">
@@ -1062,7 +1201,7 @@ function Takings({ gymId, org, page, locked, canOpenPeople, onOpenPerson, onPage
         </div>
       ) : null}
       {paymentsNote !== null ? (
-        <p className="px-4 py-3 c-s13 c-t3 m-0" style={LINE}>
+        <p className="px-4 py-3 c-s14 c-t3 m-0" style={LINE}>
           {paymentsNote}
         </p>
       ) : null}
@@ -1080,12 +1219,23 @@ export default function Sell() {
   const [state, setState] = useState({ gymId: null, error: null, refused: false, page: null });
   // Search's Products line opens Sell at its Products box ("/sell#products").
   useSectionLink(state.page !== null);
+  // Register, Products, Tax and Discounts (V4a-i): an address or a press elsewhere can open any of them.
+  const [opened, setOpened] = useState(() => ({ key: location.key, tab: sellTabFor(location.hash, location.state) }));
+  if (opened.key !== location.key) setOpened({ key: location.key, tab: sellTabFor(location.hash, location.state) });
+  const tab = opened.key === location.key ? opened.tab : sellTabFor(location.hash, location.state);
+  const setTab = (next) => setOpened({ key: location.key, tab: next });
+  const tabsId = useId();
   const [addAsk, setAddAsk] = useState(0);
   const [personId, setPersonId] = useState(null);
   /** Their page opens with Add membership open: it was opened to sell one. */
   const [personAdds, setPersonAdds] = useState(false);
   const [columns, setColumns] = useState(null);
   const productsRef = useRef(null);
+  // Scrolled to once the Products tab is drawn, never in the press that opens it (round one, L1).
+  const [toProducts, setToProducts] = useState(0);
+  useEffect(() => {
+    if (toProducts > 0) productsRef.current?.scrollIntoView?.({ block: 'start' });
+  }, [toProducts]);
   // Change stock count: that product's Change, opened from a sale or a person's page.
   const [changeAsk, setChangeAsk] = useState({ productId: location.state?.productId ?? null, n: location.state?.productId ? 1 : 0 });
   // A person's page can lead here with them already picked.
@@ -1161,12 +1311,13 @@ export default function Sell() {
   const setPage = (next) => setState({ gymId, error: null, refused: false, page: next });
   const sellsMemberships = canSellMemberships(privileges);
   const addProduct = () => {
+    setTab('products');
     setAddAsk((n) => n + 1);
-    productsRef.current?.scrollIntoView?.({ block: 'start' });
+    setToProducts((n) => n + 1);
   };
 
   return (
-    <div className="c-page">
+    <div className="c-page c-sell">
       <header className="flex flex-col gap-1.5 min-w-0">
         <h1 className="c-h1">Sell</h1>
         <p className="c-sub">{`Record what ${org.name} sells at the desk.`}</p>
@@ -1187,52 +1338,98 @@ export default function Sell() {
           {mine.error !== null ? <ConsoleFailed message={mine.error} onRetry={load} newLook /> : null}
           {readOnly ? <p className="c-s14 c-t3">{readOnlyNote(org.orgType)}</p> : null}
 
-          {page.canSell ? (
-            <section className="c-card p-4 md:p-5 flex flex-col gap-4" aria-label="New sale">
-              <h2 className="c-h2">New sale</h2>
-                <ProductSale
-                  key={`product-${gymId}`}
-                  gymId={gymId}
-                  org={org}
-                  page={page}
-                  locked={readOnly}
-                  firstPerson={firstPerson}
-                  addMemberTo={placeFor(orgSlug, privileges, 'addMember')}
-                  paymentsTo={placeFor(orgSlug, privileges, 'payments')}
-                  canAdd={page.canManage}
-                  onAddProduct={addProduct}
-                  onPage={setPage}
-                />
-            </section>
-          ) : (
-            <section className="c-card p-5 md:p-6">
-              <p className="c-s15 c-t2">{NO_SELLING_LINE}</p>
-            </section>
-          )}
+          <div className="c-utabs" role="tablist" aria-label="Sell">
+            {SELL_TABS.map(({ key, label }) => (
+              <button
+                key={key}
+                id={`${tabsId}-${key}`}
+                type="button"
+                role="tab"
+                aria-selected={tab === key}
+                aria-controls={`${tabsId}-${key}-panel`}
+                onClick={() => setTab(key)}
+                className={tab === key ? 'c-utab c-utab-on' : 'c-utab'}
+              >
+                {label}
+                {key === 'products' ? (
+                  <>
+                    {' '}
+                    <span className="c-n">{String(page.products.length)}</span>
+                  </>
+                ) : null}
+              </button>
+            ))}
+          </div>
 
-          {page.canSell && sellsMemberships ? <MembershipFinder gymId={gymId} words={words} locked={readOnly} addMemberTo={placeFor(orgSlug, privileges, 'addMember')} onOpen={(entryId) => openPerson(entryId, true)} /> : null}
+          {/* Every tab stays drawn, hidden while another is open, so what was typed in one is still there. */}
+          <div role="tabpanel" id={`${tabsId}-register-panel`} aria-labelledby={`${tabsId}-register`} hidden={tab !== 'register'}>
+            {page.canSell ? (
+              <ProductSale
+                key={`product-${gymId}`}
+                gymId={gymId}
+                org={org}
+                page={page}
+                locked={readOnly}
+                firstPerson={firstPerson}
+                addMemberTo={placeFor(orgSlug, privileges, 'addMember')}
+                paymentsTo={placeFor(orgSlug, privileges, 'payments')}
+                canAdd={page.canManage}
+                onAddProduct={addProduct}
+                onOpenTab={setTab}
+                onPage={setPage}
+                below={
+                  <>
+                    {sellsMemberships ? <MembershipFinder gymId={gymId} words={words} locked={readOnly} addMemberTo={placeFor(orgSlug, privileges, 'addMember')} onOpen={(entryId) => openPerson(entryId, true)} /> : null}
+                    <Takings
+                      gymId={gymId}
+                      org={org}
+                      page={page}
+                      locked={readOnly}
+                      canOpenPeople={sellsMemberships}
+                      onOpenPerson={openPerson}
+                      onPage={setPage}
+                      onReload={load}
+                      refundSale={location.state?.refundSale ?? null}
+                      onStock={
+                        page.canManage && !readOnly
+                          ? (productId) => {
+                              setTab('products');
+                              setChangeAsk((was) => ({ productId, n: was.n + 1 }));
+                              setToProducts((n) => n + 1);
+                            }
+                          : null
+                      }
+                    />
+                  </>
+                }
+              />
+            ) : (
+              <section className="c-card p-5 md:p-6">
+                <p className="c-s15 c-t2">{NO_SELLING_LINE}</p>
+              </section>
+            )}
+          </div>
 
-          {page.canSell ? <Takings gymId={gymId} org={org} page={page} locked={readOnly} canOpenPeople={sellsMemberships} onOpenPerson={openPerson} onPage={setPage} onReload={load} refundSale={location.state?.refundSale ?? null} onStock={page.canManage && !readOnly ? (productId) => {
-                setChangeAsk((was) => ({ productId, n: was.n + 1 }));
-                productsRef.current?.scrollIntoView?.({ block: 'start' });
-              } : null} /> : null}
-
-          <div ref={productsRef}>
+          <div role="tabpanel" id={`${tabsId}-products-panel`} aria-labelledby={`${tabsId}-products`} hidden={tab !== 'products'} ref={productsRef}>
             {location.state?.showProducts === true ? <ScrollHere target={productsRef} /> : null}
             <SellProducts key={`products-${gymId}`} gymId={gymId} country={org.country ?? null} page={page} locked={readOnly} lockedNote={readOnlyNote(org.orgType)} countryTo={placeFor(orgSlug, privileges, 'country')} addAsk={addAsk} changeAsk={changeAsk} onPage={setPage} />
           </div>
-          <TaxRates key={`tax-${gymId}`} gymId={gymId} country={org.country ?? null} page={page} locked={readOnly} lockedNote={readOnlyNote(org.orgType)} onPage={setPage} />
-          <SellDiscounts
-            key={`discounts-${gymId}`}
-            gymId={gymId}
-            page={page}
-            locked={readOnly}
-            lockedNote={readOnlyNote(org.orgType)}
-            membershipsTo={placeFor(orgSlug, privileges, 'memberships')}
-            otherTo={placeFor(orgSlug, privileges, 'memberships')}
-            referralTo={placeFor(orgSlug, privileges, 'referrals')}
-            onPage={setPage}
-          />
+          <div role="tabpanel" id={`${tabsId}-tax-panel`} aria-labelledby={`${tabsId}-tax`} hidden={tab !== 'tax'}>
+            <TaxRates key={`tax-${gymId}`} gymId={gymId} country={org.country ?? null} page={page} locked={readOnly} lockedNote={readOnlyNote(org.orgType)} onPage={setPage} />
+          </div>
+          <div role="tabpanel" id={`${tabsId}-discounts-panel`} aria-labelledby={`${tabsId}-discounts`} hidden={tab !== 'discounts'}>
+            <SellDiscounts
+              key={`discounts-${gymId}`}
+              gymId={gymId}
+              page={page}
+              locked={readOnly}
+              lockedNote={readOnlyNote(org.orgType)}
+              membershipsTo={placeFor(orgSlug, privileges, 'memberships')}
+              otherTo={placeFor(orgSlug, privileges, 'memberships')}
+              referralTo={placeFor(orgSlug, privileges, 'referrals')}
+              onPage={setPage}
+            />
+          </div>
         </>
       )}
 

@@ -379,6 +379,8 @@ describe('read without leaning in (Kd, 2026-11-19, V1-f): no words under 14 px',
     '../../pages/console/MembersStaffTab.jsx',
     '../../pages/console/MembersStaffPanels.jsx',
     '../../pages/console/StaffActivity.jsx',
+    // V4a-i: Sell's tabs, the Register's till, Sell a membership and Today's sales.
+    '../../pages/console/Sell.jsx',
   ];
   // V3a-ii: a member's page opened from Invite to app dims the box in the middle under it too.
   it("a cover drawn after a box in the middle is over that box, and a panel after it is over the cover", () => {

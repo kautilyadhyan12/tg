@@ -67,7 +67,7 @@ export function oldMoneySaleLine(page, use = 'product') {
   if (old.length === 0) return null;
   const names = old.length === 1 ? old[0].name : old.length === 2 ? `${old[0].name} and ${old[1].name}` : `${old[0].name} and ${String(old.length - 1)} more`;
   return `${names} cannot be used until ${old.length === 1 ? 'its amount is' : 'their amounts are'} saved again in ${page.currency}. ${
-    page.canManage === false ? 'The owner, or staff who can change membership types and prices, can save it again under Discounts.' : `Open ${old.length === 1 ? 'it' : 'them'} under Discounts below and press Change.`
+    page.canManage === false ? 'The owner, or staff who can change membership types and prices, can save it again under Discounts.' : `Open ${old.length === 1 ? 'it' : 'them'} under Discounts and press Change.`
   }`;
 }
 

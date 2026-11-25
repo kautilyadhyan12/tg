@@ -107,6 +107,50 @@ export function productOption(product) {
   return product.stock === 0 ? `${product.name} · ${price} · out of stock` : `${product.name} · ${price} · ${String(product.stock)} left`;
 }
 
+/** Sell's four tabs (V4a-i; the Sell board). */
+export const SELL_TABS = [
+  { key: 'register', label: 'Register' },
+  { key: 'products', label: 'Products' },
+  { key: 'tax', label: 'Tax' },
+  { key: 'discounts', label: 'Discounts' },
+];
+
+/** The tab an address opens: "#products", "#tax" or "#discounts" (Search, Payments overview), or
+ *  Products where a person's page or a sale sent staff to a product; Register otherwise. */
+export function sellTabFor(hash, state) {
+  const section = typeof hash === 'string' && hash.startsWith('#') ? hash.slice(1) : '';
+  if (section === 'products' || section === 'tax' || section === 'discounts') return section;
+  if (state?.showProducts === true || (typeof state?.productId === 'string' && state.productId !== '')) return 'products';
+  return 'register';
+}
+
+/** The tab a line on the Register names ("… under Products …", "… under Discounts …"), so a button
+ *  beside it opens that tab; null for a line that names none. */
+export function sellTabNamed(line) {
+  if (typeof line !== 'string') return null;
+  if (/ under Products[ .,]/.test(line)) return SELL_TABS[1];
+  if (/ under Discounts[ .,]/.test(line)) return SELL_TABS[3];
+  return null;
+}
+
+/** A product's tile on Sell's till (V4a-i): its price, how many are left where it is counted, and
+ *  "plus tax" where a tax the gym has is added on top of the price. */
+export function productTileFacts(product, tax) {
+  const parts = [formatMinor(product.priceMinor, product.currency)];
+  if (product.stock !== null) parts.push(product.stock === 0 ? 'out of stock' : `${String(product.stock)} left`);
+  const rates = new Set((tax?.rates ?? []).map((r) => r.id));
+  if (tax !== null && tax !== undefined && !tax.included && (product.taxRateIds ?? []).some((id) => rates.has(id))) parts.push('plus tax');
+  return parts.join(' · ');
+}
+
+/** "2 in sale" on a product's tile, as the sale's line has it; null when it is not in the sale. */
+export function tileInSale(lines, productId) {
+  const line = lines.find((l) => l.productId === productId);
+  if (line === undefined) return null;
+  const text = line.quantityText.trim();
+  return /^\d{1,2}$/.test(text) && Number(text) > 0 ? `${text} in sale` : 'In the sale';
+}
+
 /** How many of a product one sale can hold: the stock count where there is one. */
 export function quantityMax(product) {
   if (product === null || product === undefined || product.stock === null) return SALE_QUANTITY_MAX;
