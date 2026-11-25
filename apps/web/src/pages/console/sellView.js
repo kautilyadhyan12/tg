@@ -124,6 +124,15 @@ export function sellTabFor(hash, state) {
   return 'register';
 }
 
+/** The tab a line on the Register names ("… under Products …", "… under Discounts …"), so a button
+ *  beside it opens that tab; null for a line that names none. */
+export function sellTabNamed(line) {
+  if (typeof line !== 'string') return null;
+  if (/ under Products[ .,]/.test(line)) return SELL_TABS[1];
+  if (/ under Discounts[ .,]/.test(line)) return SELL_TABS[3];
+  return null;
+}
+
 /** A product's tile on Sell's till (V4a-i): its price, how many are left where it is counted, and
  *  "plus tax" where a tax the gym has is added on top of the price. */
 export function productTileFacts(product, tax) {

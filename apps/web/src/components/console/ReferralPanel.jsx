@@ -280,7 +280,7 @@ export default function ReferralPanel({ org, readOnly, startOpen = false }) {
   const countryTo = placeFor(org.slug, privileges, 'country');
   // The friend's code is listed with the business's other discounts: on Sell for products,
   // on Memberships for a membership.
-  const discountsTo = placeFor(org.slug, privileges, settings?.friend?.on === 'products' ? 'sell' : 'membershipDiscounts');
+  const discountsTo = placeFor(org.slug, privileges, settings?.friend?.on === 'products' ? 'sellDiscounts' : 'membershipDiscounts');
 
   const edit = (next) => {
     setDraft(next);

@@ -206,7 +206,7 @@ describe('the till (V4a-i)', () => {
     expect(within(newSale()).queryByRole('button', { name: 'More below' })).toBeNull();
     pick('Add a product', 'p-water');
     expect(screen.getByLabelText('How many').value).toBe('1');
-    expect(tile('p-water').getAttribute('aria-label')).toBe('Add Water · $1.99 · 8 left, 1 in sale');
+    expect(tile('p-water').getAttribute('aria-label')).toBe('Add Water · $1.99 · 8 left · plus tax, 1 in sale');
     pick('Add a product', 'p-water');
     expect(screen.getByLabelText('How many').value).toBe('2');
     expect(tile('p-water').textContent).toBe('Water$1.99 · 8 left · plus tax2 in sale');
@@ -270,6 +270,38 @@ describe('the till (V4a-i)', () => {
     expect(screen.queryByRole('region', { name: 'New sale' })).toBeNull();
   });
 
+  it("a sale's Change stock count and a person's page open the Products tab, at that product (round one, T1)", async () => {
+    const back = { id: 'rf1', amountMinor: 431, method: 'cash', reason: 'faulty', restocked: 0, refundedOn: '2026-10-12', by: 'Priya Desk', receiptNumber: 43, voided: null, square: { inSquare: true, shelfAsked: false, state: 'completed', card: null } };
+    svc.get.mockResolvedValue(withSale(sale({ productId: 'p-water', canRefund: false, canUndo: false, stockCounted: true, refundedMinor: 431, refunds: [back] })));
+    open();
+    const row = (await within(await screen.findByRole('region', { name: "Today's takings" })).findAllByTestId('takings-row'))[0];
+    fireEvent.click(within(row).getByRole('button', { name: 'Change stock count' }));
+    expect(screen.getByRole('tab', { name: /^Products/ }).getAttribute('aria-selected')).toBe('true');
+    expect(screen.queryByRole('region', { name: 'New sale' })).toBeNull();
+    expect(within(screen.getByRole('region', { name: 'Products' })).getByRole('form', { name: 'Change product' })).toBeTruthy();
+    cleanup();
+    resetConsoleOrgs();
+    open(ORG, { showProducts: true, productId: 'p-water' });
+    expect((await screen.findByRole('tab', { name: /^Products/ })).getAttribute('aria-selected')).toBe('true');
+    expect(screen.queryByRole('region', { name: 'New sale' })).toBeNull();
+  });
+
+  it("on a phone a product sale's ⋯ holds Void sale with its receipt (round one, T2)", async () => {
+    const had = window.matchMedia;
+    window.matchMedia = (query) => ({ matches: query === '(max-width: 767px)', addEventListener: () => undefined, removeEventListener: () => undefined });
+    svc.get.mockResolvedValue(withSale());
+    try {
+      open();
+      const row = (await within(await screen.findByRole('region', { name: "Today's takings" })).findAllByTestId('takings-row'))[0];
+      fireEvent.click(within(row).getByRole('button', { name: 'More for the sale of 2 × Water' }));
+      expect(within(row).getAllByRole('menuitem').map((m) => m.textContent.split('.')[0])).toEqual(['View receipt', expect.stringMatching(/^Void sale/)]);
+      fireEvent.click(within(row).getByRole('menuitem', { name: /^Void sale/ }));
+      expect(within(row).getByTestId('void-sale')).toBeTruthy();
+    } finally {
+      window.matchMedia = had;
+    }
+  });
+
   it("on a phone a row's ⋯ holds every one of its buttons, and Open their page opens the right person", async () => {
     const had = window.matchMedia;
     window.matchMedia = (query) => ({ matches: query === '(max-width: 767px)', addEventListener: () => undefined, removeEventListener: () => undefined });
@@ -322,7 +354,7 @@ describe('a product sale', () => {
     expect(svc.get).toHaveBeenCalledWith('g1');
     expect(takeButton().disabled).toBe(true);
     expect(within(newSale()).queryByTestId('sale-summary')).toBeNull();
-    expect(tiles().map((b) => b.getAttribute('aria-label'))).toEqual(['Add Towel · $5.00', 'Add Water · $1.99 · 8 left']);
+    expect(tiles().map((b) => b.getAttribute('aria-label'))).toEqual(['Add Towel · $5.00 · plus tax', 'Add Water · $1.99 · 8 left · plus tax']);
     expect(tiles().map((b) => b.textContent)).toEqual(['Towel$5.00 · plus tax', 'Water$1.99 · 8 left · plus tax']);
 
     pick('Add a product', 'p-water');
@@ -359,7 +391,7 @@ describe('a product sale', () => {
     // New sale brings back an empty form: no product picked, so nothing can be sold yet.
     fireEvent.click(within(newSale()).getByRole('button', { name: 'New sale' }));
     expect(within(newSale()).queryByTestId('sale-done')).toBeNull();
-    expect(tile('p-water').getAttribute('aria-label')).toBe('Add Water · $1.99 · 8 left');
+    expect(tile('p-water').getAttribute('aria-label')).toBe('Add Water · $1.99 · 8 left · plus tax');
     expect(screen.queryByLabelText('How many')).toBeNull();
     expect(takeButton().disabled).toBe(true);
     fireEvent.click(takeButton());
@@ -507,6 +539,9 @@ describe('a product sale', () => {
     pick('Add a product', 'p-water');
     expect(takeButton().disabled).toBe(true);
     expect(within(newSale()).getByText('Water is out of stock. Change its stock count under Products if you have more.')).toBeTruthy();
+    // The line names a tab, and its button opens it; the sale is still there on the way back.
+    fireEvent.click(within(newSale()).getByRole('button', { name: 'Open Products' }));
+    expect(screen.getByRole('tab', { name: /^Products/ }).getAttribute('aria-selected')).toBe('true');
     pick('Add a product', 'p-bar');
     // Each product is a line of its own, with its own How many.
     fireEvent.change(screen.getAllByLabelText('How many')[1], { target: { value: '3' } });
@@ -738,6 +773,7 @@ describe('products and tax', () => {
     open();
     await screen.findByRole('region', { name: 'Pick a product' });
     expect(within(pickBox()).getByText('You have no products yet. Add what you sell at the desk, such as water or a towel, and it appears here.')).toBeTruthy();
+    const finder = screen.getByRole('region', { name: 'Sell a membership' });
     fireEvent.click(within(pickBox()).getByRole('button', { name: 'Add your first product' }));
     // It opens the Products tab, at its form.
     expect(screen.getByRole('tab', { name: /^Products/ }).getAttribute('aria-selected')).toBe('true');
@@ -755,6 +791,8 @@ describe('products and tax', () => {
     expect(await within(products()).findByText('Water added. It is now on the Register.')).toBeTruthy();
     expect(within(products()).queryByRole('form')).toBeNull();
     expect(tiles().map((b) => b.getAttribute('aria-label'))).toEqual(['Add Water · $1.99']);
+    // What is under the till was kept, not drawn afresh, when the first product came (round one, L4).
+    expect(screen.getByRole('region', { name: 'Sell a membership' })).toBe(finder);
   });
 
   it('a product is changed with the time its form read it, and archived only after the box is answered', async () => {

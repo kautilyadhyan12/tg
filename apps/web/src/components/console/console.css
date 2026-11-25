@@ -2546,6 +2546,7 @@
   align-items: start;
 }
 .c-till-pick { grid-area: pick; min-width: 0; }
+.c-till.c-till-empty { grid-template-columns: minmax(0, 1fr); grid-template-areas: "pick" "below"; }
 .c-till-below { grid-area: below; min-width: 0; display: flex; flex-direction: column; gap: 24px; }
 .c-till-sale {
   grid-area: sale;

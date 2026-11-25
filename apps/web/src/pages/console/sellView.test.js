@@ -17,6 +17,7 @@ import {
   productOption,
   productTileFacts,
   sellTabFor,
+  sellTabNamed,
   tileInSale,
   productProblems,
   productRow,
@@ -181,6 +182,15 @@ describe('the sale as it is shown', () => {
     expect(productOption(water({ stock: 8 }))).toBe('Water · $1.99 · 8 left');
     expect(productOption(water({ stock: 0 }))).toBe('Water · $1.99 · out of stock');
     expect(productOption(water({ currency: 'GBP' }))).toBe('Water · £1.99');
+  });
+  it('a line on the Register that names a tab gets that tab; any other line none', () => {
+    expect(sellTabNamed('Water is out of stock. Change its stock count under Products if you have more.')?.key).toBe('products');
+    expect(sellTabNamed('Staff cannot be used until its amount is saved again in GBP. Open it under Discounts and press Change.')?.key).toBe('discounts');
+    expect(sellTabNamed('Five off is a fixed amount in GBP. Open it under Discounts and save its amount again.')?.key).toBe('discounts');
+    expect(sellTabNamed('The taxes on Water come to more than 30% together. Press Change on Water under Products and untick one.')?.key).toBe('products');
+    expect(sellTabNamed('Enter how many, 1 or more.')).toBeNull();
+    expect(sellTabNamed('Find and pick the member, or choose Walk-in.')).toBeNull();
+    expect(sellTabNamed(null)).toBeNull();
   });
   it('an address opens the tab it names; Register otherwise', () => {
     expect(sellTabFor('#products', null)).toBe('products');

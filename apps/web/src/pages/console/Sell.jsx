@@ -39,7 +39,6 @@ import {
   canOpenSell,
   canSellMemberships,
   personOption,
-  productOption,
   productTileFacts,
   tileInSale,
   quantityMax,
@@ -55,6 +54,7 @@ import {
   SALE_VOID_CHOICES,
   SELL_TABS,
   sellTabFor,
+  sellTabNamed,
   saleVoidedWords,
   voidSaleQuestion,
 } from './sellView';
@@ -164,14 +164,31 @@ function PayPicker({ method, setMethod, choices, disabled }) {
 
 /** One product in the basket: how many, its discount if the gym has any, what it comes to, and
  *  Remove. */
-function BasketLine({ row, offered, disabled, onQuantity, onDiscount, onRemove }) {
+/** A line that names one of Sell's tabs, with the button that opens it (§4: never "under …" alone). */
+function TabLine({ text, onOpenTab, role }) {
+  const tab = sellTabNamed(text);
+  return (
+    <div className="flex flex-col gap-2">
+      <p className="c-s14 c-t2 m-0" role={role}>
+        {text}
+      </p>
+      {tab !== null && onOpenTab !== null ? (
+        <button type="button" className="c-btn c-btn-s c-btn-sm self-start" onClick={() => onOpenTab(tab.key)}>
+          {`Open ${tab.label}`}
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
+function BasketLine({ row, offered, disabled, onQuantity, onDiscount, onRemove, onOpenTab }) {
   const quantityId = useId();
   const discountId = useId();
   const { product } = row;
   if (product === null) {
     return (
       <li className="flex flex-wrap items-center justify-between gap-3 py-3" style={LINE} data-testid="basket-line">
-        <p className="c-s14 c-t2 m-0">{row.problem}</p>
+        <TabLine text={row.problem} onOpenTab={onOpenTab} />
         <button type="button" className="c-btn c-btn-s c-btn-sm" disabled={disabled} aria-label="Remove the product no longer on sale" onClick={onRemove}>
           Remove
         </button>
@@ -234,14 +251,14 @@ function BasketLine({ row, offered, disabled, onQuantity, onDiscount, onRemove }
         ) : null}
       </div>
       {row.offWords !== null ? <p className="c-s14 c-t2 m-0">{row.offWords}</p> : null}
-      {row.problem !== null ? <p className="c-s14 c-t2 m-0">{row.problem}</p> : null}
+      {row.problem !== null ? <TabLine text={row.problem} onOpenTab={onOpenTab} /> : null}
     </li>
   );
 }
 
 /** A BASKET (18q): products added one by one, each its own line with how many and its own
  *  discount, then who is buying and how they paid, and one press records the whole sale. */
-function ProductSale({ gymId, org, page: gymPage, locked, firstPerson, addMemberTo, paymentsTo, canAdd, onAddProduct, onPage, below = null }) {
+function ProductSale({ gymId, org, page: gymPage, locked, firstPerson, addMemberTo, paymentsTo, canAdd, onAddProduct, onPage, below = null, onOpenTab = null }) {
   const [lines, setLines] = useState([]);
   const [who, setWho] = useState(firstPerson === null ? 'walkin' : 'member');
   const [person, setPerson] = useState(firstPerson);
@@ -500,30 +517,27 @@ function ProductSale({ gymId, org, page: gymPage, locked, firstPerson, addMember
       </SaleRecorded>
     );
 
-  if (page.products.length === 0 && recorded === null) {
-    return (
-      <div className="flex flex-col gap-6">
-        <section className="c-card p-4 md:p-5 flex flex-col gap-3" aria-label="Pick a product">
-          <h2 className="c-h2">Products</h2>
-          <p className="c-s15 c-t2 m-0">You have no products yet. Add what you sell at the desk, such as water or a towel, and it appears here.</p>
-          {canAdd ? (
-            <button type="button" className="c-btn c-btn-p c-btn-lg self-start" disabled={locked} onClick={onAddProduct}>
-              Add your first product
-            </button>
-          ) : (
-            <p className="c-s14 c-t3 m-0">The owner, or staff who can change membership types and prices, can add products.</p>
-          )}
-        </section>
-        {below}
-      </div>
-    );
-  }
-
+  // No products yet: the same till with no sale in it, so what is under it is never drawn afresh.
+  const empty = page.products.length === 0 && recorded === null;
   const full = lines.length >= SALE_LINES_MAX;
   const still = locked || state.busy || waiting || lostKey !== null;
   return (
-    <div className="c-till">
+    <div className={empty ? 'c-till c-till-empty' : 'c-till'}>
       <section className="c-card p-4 md:p-5 flex flex-col gap-4 c-till-pick" aria-label="Pick a product">
+        {empty ? (
+          <>
+            <h2 className="c-h2">Products</h2>
+            <p className="c-s15 c-t2 m-0">You have no products yet. Add what you sell at the desk, such as water or a towel, and it appears here.</p>
+            {canAdd ? (
+              <button type="button" className="c-btn c-btn-p c-btn-lg self-start" disabled={locked} onClick={onAddProduct}>
+                Add your first product
+              </button>
+            ) : (
+              <p className="c-s14 c-t3 m-0">The owner, or staff who can change membership types and prices, can add products.</p>
+            )}
+          </>
+        ) : (
+          <>
         <div className="c-till-head">
           <div className="flex flex-col gap-1 min-w-0">
             <h2 className="c-h2">Products</h2>
@@ -545,7 +559,7 @@ function ProductSale({ gymId, org, page: gymPage, locked, firstPerson, addMember
                   className={inSale === null ? 'c-tile' : 'c-tile c-tile-on'}
                   data-product={p.id}
                   disabled={still || (full && inSale === null)}
-                  aria-label={`Add ${productOption(p)}${inSale === null ? '' : `, ${inSale}`}`}
+                  aria-label={`Add ${p.name} · ${productTileFacts(p, page.tax)}${inSale === null ? '' : `, ${inSale}`}`}
                   onClick={() => change(addToBasket(shownLines, p))}
                 >
                   <span className="c-s15 c-w6 c-t1">{p.name}</span>
@@ -557,8 +571,12 @@ function ProductSale({ gymId, org, page: gymPage, locked, firstPerson, addMember
           })}
         </ul>
         {full ? <p className="c-s14 c-t2 m-0">{`One sale can hold up to ${String(SALE_LINES_MAX)} products. Take payment for these, then start a new sale.`}</p> : null}
-        {oldMoney !== null ? <p className="c-s14 c-t2 m-0">{oldMoney}</p> : null}
+        {oldMoney !== null ? <TabLine text={oldMoney} onOpenTab={onOpenTab} /> : null}
+          </>
+        )}
       </section>
+
+      {empty ? null : (
 
       <section ref={saleBox} className="c-card c-till-sale" aria-label="New sale">
         {recorded !== null ? (
@@ -598,6 +616,7 @@ function ProductSale({ gymId, org, page: gymPage, locked, firstPerson, addMember
                         key={row.key}
                         row={row}
                         offered={offered}
+                        onOpenTab={onOpenTab}
                         disabled={still}
                         onQuantity={(text) => change(shownLines.map((l, i) => (i === row.index ? { ...l, quantityText: text } : l)))}
                         onDiscount={(id) => {
@@ -672,9 +691,7 @@ function ProductSale({ gymId, org, page: gymPage, locked, firstPerson, addMember
                     </button>
                   </div>
                   {codeNote !== null ? (
-                    <p className="c-s14 c-t2 m-0" role="status">
-                      {codeNote}
-                    </p>
+                    <TabLine text={codeNote} onOpenTab={onOpenTab} role="status" />
                   ) : (
                     <p className="c-s14 c-t3 m-0">If the customer gives a code, type it here and press Apply.</p>
                   )}
@@ -750,7 +767,7 @@ function ProductSale({ gymId, org, page: gymPage, locked, firstPerson, addMember
                   {state.busy ? (onTerminal ? 'Sending…' : 'Recording…') : `${onTerminal ? 'Take payment on Terminal' : 'Take payment'}${view.summary !== null ? ` · ${view.summary.total}` : ''}`}
                 </button>
               </div>
-              {view.problem !== null && lines.length > 0 && view.rows.every((r) => r.problem === null) ? <p className="c-s14 c-t2 m-0">{view.problem}</p> : null}
+              {view.problem !== null && lines.length > 0 && view.rows.every((r) => r.problem === null) ? <TabLine text={view.problem} onOpenTab={onOpenTab} /> : null}
               <p className="c-s14 c-t3 m-0">{onTerminal ? TERMINAL_SALE_HINT : SALE_HINT}</p>
               {lostKey !== null ? (
                 <div className="rounded-[14px] p-3 flex flex-col gap-3" style={{ background: 'var(--raise)' }} data-testid="terminal-pay-lost">
@@ -821,6 +838,8 @@ function ProductSale({ gymId, org, page: gymPage, locked, firstPerson, addMember
           </>
         )}
       </section>
+
+      )}
 
       <div className="c-till-below">{below}</div>
     </div>
@@ -1212,6 +1231,11 @@ export default function Sell() {
   const [personAdds, setPersonAdds] = useState(false);
   const [columns, setColumns] = useState(null);
   const productsRef = useRef(null);
+  // Scrolled to once the Products tab is drawn, never in the press that opens it (round one, L1).
+  const [toProducts, setToProducts] = useState(0);
+  useEffect(() => {
+    if (toProducts > 0) productsRef.current?.scrollIntoView?.({ block: 'start' });
+  }, [toProducts]);
   // Change stock count: that product's Change, opened from a sale or a person's page.
   const [changeAsk, setChangeAsk] = useState({ productId: location.state?.productId ?? null, n: location.state?.productId ? 1 : 0 });
   // A person's page can lead here with them already picked.
@@ -1289,7 +1313,7 @@ export default function Sell() {
   const addProduct = () => {
     setTab('products');
     setAddAsk((n) => n + 1);
-    productsRef.current?.scrollIntoView?.({ block: 'start' });
+    setToProducts((n) => n + 1);
   };
 
   return (
@@ -1351,6 +1375,7 @@ export default function Sell() {
                 paymentsTo={placeFor(orgSlug, privileges, 'payments')}
                 canAdd={page.canManage}
                 onAddProduct={addProduct}
+                onOpenTab={setTab}
                 onPage={setPage}
                 below={
                   <>
@@ -1370,7 +1395,7 @@ export default function Sell() {
                           ? (productId) => {
                               setTab('products');
                               setChangeAsk((was) => ({ productId, n: was.n + 1 }));
-                              productsRef.current?.scrollIntoView?.({ block: 'start' });
+                              setToProducts((n) => n + 1);
                             }
                           : null
                       }

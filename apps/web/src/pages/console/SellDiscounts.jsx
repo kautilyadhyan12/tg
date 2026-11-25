@@ -305,7 +305,7 @@ export default function SellDiscounts({ gymId, page, locked, lockedNote, use = '
     const where = body.forProducts && body.forMemberships ? 'when they sell a product or add a membership' : body.forMemberships ? "when they add a membership on a member's page" : 'when they sell a product';
     // One that no longer applies here is listed on the other page: said, with its button.
     const elsewhere = use === 'products' ? !body.forProducts : !body.forMemberships;
-    const away = elsewhere ? (use === 'products' ? ' It is for memberships only, so it is listed on the Memberships page.' : ' It is for products only, so it is listed on the Sell page.') : '';
+    const away = elsewhere ? (use === 'products' ? ' It is for memberships only, so it is listed on the Memberships page.' : ' It is for products only, so it is listed under Discounts on the Sell page.') : '';
     const ok = await run(
       () => (draft.id === null ? registerService.addDiscount(gymId, body) : registerService.changeDiscount(gymId, draft.id, body)),
       (draft.id === null ? `${body.name} added. Staff can now choose it ${where}.` : `${body.name} saved. Sales and memberships already made keep the discount they were made with.`) + away,
