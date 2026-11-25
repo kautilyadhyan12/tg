@@ -20,8 +20,10 @@
 //     passer-by) stays another while it goes on bit by bit from there, into the place too, across pictures with nobody
 //     or whose size cannot be read, until it has stood in the place for `takeOver` (two bodies there at one size cannot
 //     be told apart, and one that stays there is the person far more often than one crossing it) or has not been seen for
-//     as long. A person who walked out of their place bit by bit is not held to it. Nothing in this is any exercise's
-//     own: every movement gets it, with the same numbers.
+//     as long. Every body seen outside the place is held so, the person who stepped out of it too, who back in their
+//     place waits as long; a body found in the place straight after a picture with nobody is the person at once, unless
+//     it lies nearer the held body's newest look. Nothing in this is any exercise's own: every movement gets it, with the
+//     same numbers.
 //
 // What it uses, measured on the proof videos (lock-check): where the trunk's middle lies on the picture and how large the
 // body is (`bodySize`, picture heights for each metre of body). Not the body's own proportions: in 3D the model reads one
@@ -48,6 +50,9 @@ export interface PersonLimits {
   readonly takeOver: number;
   /** Once the set has counted: the person's place and size are the middle of where they were over this last, ms. */
   readonly place: number;
+  /** The longest step between two pictures the engine takes, ms: a body held as another reaches no further than a jump's
+   *  speed over this, however long it was unseen. */
+  readonly pictureStep: number;
   /** Once the set has counted: further than this from the person's place, metres at their size, a body is another. */
   readonly room: number;
   /** Once the set has counted: larger or smaller than this many times the person's size, a body is another. */
@@ -58,7 +63,8 @@ export interface PersonLimits {
  * Where each number comes from. The plain sign of a changed body (51c, `scripts/follow.ts`): the fastest a person moves
  * their trunk is a jump's take-off, for a jump of 1.1 m √(2 · 9.81 · 1.1) = 4.6 m/s, so 5; straight up or down a jump's
  * take-off or landing reached 5.1 to 7.1 m/s on Kd's four squat-jump videos (52c-i), so 8 under 1 m/s across; on Kd's
- * six reference videos the size changed at most 1.12 times from one picture to the next, so 1.25. `takeOver`: the
+ * six reference videos the size changed at most 1.12 times from one picture to the next, so 1.25. `pictureStep`: a picture
+ * at the slowest rate the engine takes, 8 a second (the matcher's `SLOWEST_RATE`; the phone's slowest second, 51b-ii). `takeOver`: the
  * possible-body check's memory of bones (`LIMITS.boneMemory`): a person gone longer is a new body to it. `place`, `room`
  * and `sizeRoom` are set by `lock-check` from every proof set the camera counts or times, as filmed and under each replay that must hold: from
  * the moment the set first counted to the last rep or second it reported, how far the trunk's middle went from the
@@ -72,6 +78,7 @@ export const PERSON_LIMITS: PersonLimits = {
   changedSize: 1.25,
   takeOver: LIMITS.boneMemory,
   place: 1000,
+  pictureStep: 125,
   room: 0.95,
   sizeRoom: 1.35,
 };
@@ -282,23 +289,28 @@ export class OnePerson {
     // nobody else.
     const placed = this.placed;
     if (placed !== null) {
-      const goesOn = (from: Look, x: Seen & { readonly look: Look }): boolean => bodyChange(from, x.look, frame.down, this.limits)?.changed !== true;
       const atPlace = (x: Seen & { readonly look: Look }): boolean => {
         const d = fromPlace(x.look, placed);
         return d.metres <= this.limits.room && d.size <= this.limits.sizeRoom;
       };
-      // The hold on a body that came all at once from outside the place: kept across pictures with nobody or whose size
-      // cannot be read (a phone loses a walking body for a picture), ended once it has stood in the place for `takeOver`
-      // or has not been seen for as long.
+      // The hold on a body seen outside the place: kept across pictures with nobody or whose size cannot be read (a phone
+      // loses a walking body for a picture), ended once it has stood in the place for `takeOver` or has not been seen for as
+      // long.
       const other = this.other;
       const holding =
         other !== null && other.jumped && t - other.look.t <= this.limits.takeOver && (other.inPlace === null || t - other.inPlace < this.limits.takeOver);
       // Followed more loosely than the plain sign, a jump's speed in any direction: a body crossing the place while it jumps
       // moves across and up at once (a squat jumper walked across a member's place, 1.2 m/s across, broke the plain sign
-      // and was taken), and a looser follow only keeps a body refused longer, which the 3 s in the place still ends.
+      // and was taken), and a looser follow only keeps a body refused longer, which the 3 s in the place still ends. Its
+      // reach is one picture's at most, however long the held body was unseen: judged over the whole time, it grew to 2.6 m
+      // after a third of a second of nobody, and the person found again in their place after a passer-by went on from the
+      // passer-by and was refused 3 s (round one's re-check, N1).
       const stillHeld = (x: Seen & { readonly look: Look }): boolean => {
-        const c = bodyChange(other?.look ?? x.look, x.look, frame.down, this.limits);
-        return c === null || (c.speed <= this.limits.jumpSpeed && c.size <= this.limits.changedSize);
+        if (other === null) return false;
+        const c = bodyChange(other.look, x.look, frame.down, this.limits);
+        if (c === null) return true;
+        const seconds = (t - other.look.t) / 1000;
+        return c.speed * seconds <= this.limits.jumpSpeed * Math.min(seconds, this.limits.pictureStep / 1000) && c.size <= this.limits.changedSize;
       };
       const held = holding ? readable.filter(stillHeld) : [];
       const there = readable.filter((x) => !held.includes(x) && atPlace(x));
@@ -307,14 +319,13 @@ export class OnePerson {
         return this.given(s.person, s.look, t, false);
       }
       if (readable.length === 0) return none("unsure");
-      // Another body: followed, and held as another for as long as it goes on, when it came all at once (not walked out of
-      // the person given just before, and not found after a picture with nobody).
+      // Another body, the person walked out of their place included: followed, and held from its first picture outside the
+      // place, so that back in the place it is the person only after `takeOver` there (a person who steps out and walks back
+      // waits as long; one found in the place straight after a picture with nobody is the person at once).
       const s = other !== null && held.length > 0 ? nearest(held, other.look.middle) : largest(readable);
       const goingOn = other !== null && held.includes(s);
-      const walked = this.lastFrame?.status === "person" && this.person !== null && goesOn(this.person, s);
-      const gap = this.lastFrame === null || this.lastFrame.status === "nobody" || this.lastFrame.status === "unsure";
       const inPlace = atPlace(s) ? (goingOn ? (other.inPlace ?? t) : t) : null;
-      this.other = { look: s.look, since: goingOn ? other.since : t, jumped: goingOn || (!walked && !gap), inPlace };
+      this.other = { look: s.look, since: goingOn ? other.since : t, jumped: true, inPlace };
       return none("other");
     }
 

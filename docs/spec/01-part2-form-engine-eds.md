@@ -2543,8 +2543,11 @@ all at once from outside that place (the model changes bodies all at once) stays
 too, followed up to a jump's 8 m/s in any direction and across pictures with nobody or whose size cannot be read, until it
 has stood in the place for 3 s or has not been seen for 3 s: two bodies at the place at one size cannot be told apart, one
 that stays there is the person far more often than one crossing it, and held longer a member the model goes back to there
-would be refused for the rest of the set (round one). A person who walked out of their place bit by bit is not held to it;
-a body whose size cannot be read decides nothing; a set that has counted never starts afresh. **The two numbers** are set by `lock-check` from every proof set the camera
+would be refused for the rest of the set (round one). Every body seen outside the place is held so, the person who stepped
+out of it too, who back in their place waits 3 s. A held body reaches no further than a jump's speed over one picture at
+the slowest rate the engine takes (125 ms, about 1 m), however long it was unseen: judged over the whole time, after a third
+of a second of nobody it reached 2.6 m, and the person found again in their place after a passer-by beside them was refused
+3 s (round one's re-check). A body whose size cannot be read decides nothing; a set that has counted never starts afresh. **The two numbers** are set by `lock-check` from every proof set the camera
 counts or times (778, as filmed and under the 14 replays that must hold), from the moment it counted to the last rep it told
 the person about: the furthest anybody's trunk went from their place 0.72 m (a squat jump done 1.5 times as slowly), the
 middle set's 0.33; the most their size changed 1.25 times, the middle set's 1.08; each bound beyond the furthest set by half
@@ -2557,8 +2560,9 @@ and the camera reads nobody in each of their pictures, the proof's own run the c
 reflection behind them (0.55 of their size) and beside them (1.2 m, 0.8); a stranger of each member's size who comes in all
 at once 1.5 m beside and walks through their place (1.6 s within the room), with every picture read, every third of nobody,
 or every third's size unreadable; a stranger who walks in and stays is taken only once 3 s in the place, never before; the
-member back where a stranger stood is the member again within 3 s, on all six; a passer-by nearer the phone just before the
-first squat is withheld and the set counts as with nobody passing. Lying side on, a body fills the picture's width, and a neighbour 1.8 m along it is off the picture (three
+member back where a stranger stood is the member again within 3 s, on all six; a stranger 1.2, 1.5 or 2 m beside the member
+for 0.5 s, then nobody for 3 or 10 pictures, then the member in their place, counts as with nobody there, on all six; a
+passer-by nearer the phone just before the first squat is withheld and the set counts as with nobody passing. Lying side on, a body fills the picture's width, and a neighbour 1.8 m along it is off the picture (three
 cases, listed); on the bars the second man is not timed alone put nearer or beside (three). **Deliberate breaks**, each
 run red and put back, after round one: the set never telling the lock it counted (56 of the worst-thing tests red); no place,
 size alone (39 red); no hold on a body that came all at once (30 red). **The whole proof before and after** (every video under every movement the camera
@@ -2579,7 +2583,9 @@ bodies. **Limits, in plain sight:** a body of the member's size whose trunk
 lies within 0.95 m of their place when the model changes to them is taken for them (a stranger squatting 0.5 m beside; a
 neighbour lunging 1.1 m beside, 0.95 m away mid-lunge), so a neighbour doing a moving exercise is never taken only beyond about
 1.7 m; a body of the member's size that walks into their place and stays there 3 s is taken (the walk-in that squats there
-for 9 s counts 1 or 2 of their reps on four pairs); before the set has counted, whoever the model follows is the person (a stranger who squats first is counted, and the
+for 9 s counts 1 or 2 of their reps on four pairs); a member who steps out of their place and walks back is counted again 3 s
+after being back in it, and one found again within about 1 m of where a held body was last seen waits as long; a member
+who comes back to another place, more than 0.95 m from it, is not counted again in that set (52d-ii); before the set has counted, whoever the model follows is the person (a stranger who squats first is counted, and the
 member after them is not): job 53's screen shows whose body the camera follows and, with two people there, asks one to raise
 a hand (§11.8); a step to another place in the middle of a set leaves the place (52d-ii); walking to a machine, and a
 neighbour already in view while the member is at the phone, are tried on the phone at job 53.

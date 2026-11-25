@@ -318,6 +318,74 @@ describe("the worst thing: once a member's set has counted, a stranger the model
     },
   );
 
+  const gapCases = PAIRS.flatMap(([name, member, stranger]) =>
+    [
+      [1.2, 10],
+      [1.5, 3],
+      [1.5, 10],
+      [2, 10],
+    ].map(([beside, lost]) => [name, member, stranger, beside ?? 0, lost ?? 0] as const),
+  );
+  it.each(gapCases)(
+    "%s: the model goes to a stranger standing beside %s (%s, %s m) for 0.5 s, finds nobody for %s pictures, then the member in their place: counted as with nobody there",
+    (name, memberLabel, strangerLabel, beside, lost) => {
+      // Round one's re-check (N1): held across the pictures of nobody, the stranger's reach had grown to 2.6 m, the member
+      // back in their own place went on from it and was refused 3 s, and a proper rep or two went uncounted.
+      const movement = readMovement(name);
+      const member = furtherBack(videoOf(memberLabel));
+      const aspect = member.frames[0]?.aspect ?? 1;
+      const own = middleOf(member.frames);
+      const towards = own.middle[0] < aspect / 2 ? 1 : -1;
+      const standing = placed(videoOf(strangerLabel).frames.slice(0, 15), aspect, [own.middle[0] + towards * beside * own.size, own.middle[1]], own.size);
+      const away = [...standing, ...standing.slice(0, lost).map((f) => ({ ...f, people: [] }))];
+      const cut = firstCounted(movement, member) + 700;
+      const a = runMovement(movement, spliced(member, away, cut));
+      const b = runMovement(movement, spliced(member, away, cut, true));
+      expect([a.count, said(a.reps)]).toEqual([b.count, said(b.reps)]);
+    },
+  );
+
+  it.each(PAIRS.slice(0, 3).map(([name, member]) => [name, member] as const))(
+    "%s: the limit, in plain sight: %s, walked 1.5 m out of their place and back, is followed again 3 s after being back in it",
+    (name, memberLabel) => {
+      // Every body seen outside the place is held, the member too: back in their place they wait as long as a stranger who
+      // walks in would, which is what keeps a stranger crossing the place from being counted.
+      const movement = readMovement(name);
+      const member = furtherBack(videoOf(memberLabel));
+      const aspect = member.frames[0]?.aspect ?? 1;
+      const own = middleOf(member.frames);
+      const towards = own.middle[0] < aspect / 2 ? 1 : -1;
+      const cut = firstCounted(movement, member) + 700;
+      const t0 = member.frames[0]?.t ?? 0;
+      const still = member.frames.find((f) => f.t - t0 >= cut);
+      if (still === undefined) throw new Error("no picture at the cut");
+      const out = (n: number): number => (n < 30 ? (1.5 * n) / 30 : n < 60 ? 1.5 : Math.max(0, 1.5 * (1 - (n - 60) / 30)));
+      const walk = Array.from({ length: 90 }, (_, n) => ({
+        ...still,
+        people: still.people.map((p) => ({ ...p, points: p.points.map(([x, y, z, v, pr]) => [x + (towards * out(n) * own.size) / aspect, y, z, v, pr] as SeenPerson["points"][number]) })),
+      }));
+      const video = withLeadIn(spliced(member, walk, cut));
+      const set = new CameraSet({ movement, exercise: null });
+      let wentOut = false;
+      let backIn: number | null = null;
+      let followed: number | null = null;
+      for (const f of video.frames) {
+        const o = set.next(f);
+        const place = set.place;
+        const look = f.people[0] === undefined ? null : lookAt(f.people[0], f.aspect, f.t);
+        const d = place === null || look === null ? null : fromPlace(look, place);
+        const inside = d !== null && d.metres <= PERSON_LIMITS.room && d.size <= PERSON_LIMITS.sizeRoom;
+        if (d !== null && !inside) wentOut = true;
+        if (wentOut && inside && backIn === null) backIn = f.t;
+        if (backIn !== null && followed === null && o.person.person !== null) followed = f.t;
+      }
+      expect(backIn).not.toBeNull();
+      const waited = (followed ?? Number.POSITIVE_INFINITY) - (backIn ?? 0);
+      expect(waited).toBeGreaterThanOrEqual(PERSON_LIMITS.takeOver);
+      expect(waited).toBeLessThan(PERSON_LIMITS.takeOver + 100);
+    },
+  );
+
   it.each(WHERE)("the L-sit: a stranger holding an L-sit %s adds no time to the member's hold", (how) => {
     const hold: HoldMovement = readHold("l-sit");
     const member = furtherBack(videoOf("l_sit_bars_1"));
