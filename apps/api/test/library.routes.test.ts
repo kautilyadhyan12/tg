@@ -232,11 +232,15 @@ d("the Exercise Library on the server (real Postgres)", () => {
       const rows = await sql<{ slug: string; status: string; met: string; old_status: string; old_met: string; family: string | null }[]>`
         SELECT e.slug, l.status, l.met::text AS met, e.status AS old_status, e.met::text AS old_met, e.family
         FROM library_exercises l JOIN exercises e ON e.id = l.exercise_id ORDER BY e.slug`;
-      expect(rows).toEqual([
-        { slug: "barbell_curl", status: "live", met: "3.5", old_status: "hidden", old_met: "3.5", family: null },
-        { slug: "plank", status: "live", met: "2.8", old_status: "live", old_met: "3.0", family: "F10" },
-        { slug: "squat", status: "live", met: "3.0", old_status: "live", old_met: "6.0", family: "F1" },
-      ]);
+      // Every file in the folder has its row (the Library grows file by file, job 65).
+      expect(rows.map((r) => r.slug)).toEqual(real.exerciseFiles.map((f) => f.name.replace(/\.json$/, "")).sort());
+      const of = (slug: string) => rows.find((r) => r.slug === slug);
+      expect(of("barbell_curl")).toEqual({ slug: "barbell_curl", status: "live", met: "3.5", old_status: "hidden", old_met: "3.5", family: null });
+      expect(of("plank")).toEqual({ slug: "plank", status: "live", met: "2.8", old_status: "live", old_met: "3.0", family: "F10" });
+      expect(of("squat")).toEqual({ slug: "squat", status: "live", met: "3.0", old_status: "live", old_met: "6.0", family: "F1" });
+      // Each exercise that is not one of the old 58 is hidden to the old routes, its MET the Library's.
+      for (const r of rows.filter((x) => x.family === null)) expect([r.slug, r.status, r.old_status, r.old_met]).toEqual([r.slug, "live", "hidden", r.met]);
+      expect(of("kettlebell_goblet_squat")?.met).toBe("5.0");
     });
 
     it("run again with nothing changed, it writes nothing and makes no copy", async () => {
@@ -418,11 +422,11 @@ d("the Exercise Library on the server (real Postgres)", () => {
       const body = libraryDownloadSchema.parse(JSON.parse(res.body));
       expect(res.headers["etag"]).toBe(`"${body.fingerprint}"`);
       expect(res.headers["cache-control"]).toBe("private, no-cache");
-      expect(body.list.exercises.map((e) => [e.id, e.status, e.met])).toEqual([
-        ["barbell_curl", "live", 3.5],
-        ["plank", "live", 2.8],
-        ["squat", "live", 3],
-      ]);
+      // The whole folder, in id order; three of them with the MET each one's Compendium code names.
+      expect(body.list.exercises.map((e) => e.id)).toEqual(real.exerciseFiles.map((f) => f.name.replace(/\.json$/, "")).sort());
+      expect(body.list.exercises.every((e) => e.status === "live")).toBe(true);
+      const met = (id: string) => body.list.exercises.find((e) => e.id === id)?.met;
+      expect([met("barbell_curl"), met("plank"), met("squat"), met("standing_dumbbell_calf_raise")]).toEqual([3.5, 2.8, 3, 3.5]);
       expect(body.list.camera).toEqual([]);
     });
 
