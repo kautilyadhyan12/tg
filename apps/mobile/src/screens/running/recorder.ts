@@ -378,6 +378,7 @@ export function resetRecorder(withFiles: RunFiles = phoneRunFiles): void {
   files = withFiles;
   current = null;
   auto = AUTO_START;
+  wheelsAtPause = false;
   pausedTail = [];
   pausedHeart = [];
   loaded = false;
@@ -591,6 +592,7 @@ export async function loadRun(): Promise<LiveRun | null> {
       startMotion();
     }
     auto = state.phase === "paused" ? autoPausedFrom(openPauseFrom(current)) : AUTO_START;
+    wheelsAtPause = false;
     primeVoice(current);
     // The app was closed mid-run: a step begun since was said by nobody, so what is left of the step
     // it is on is said now, and the steps ahead are handed over again.
@@ -820,6 +822,7 @@ export async function startRun(userId: string, runId: string, autoPause: boolean
   generation += 1;
   current = run;
   auto = AUTO_START;
+  wheelsAtPause = false;
   voice = VOICE_START;
   pausedTail = [];
   pausedHeart = [];
@@ -874,9 +877,10 @@ export async function resumeRun(now: number = Date.now()): Promise<void> {
   // What the monitor sent while paused is not the run's.
   takeHeartReadings();
   closePause(run, elapsedMs(run, now));
+  const byPerson = run.pausedByPerson;
   run.phase = "running";
   run.pausedByPerson = false;
-  auto = autoRunning(wheelsAtPause);
+  auto = autoRunning(byPerson ? wheelsAtPause : auto.wheels);
   pausedTail = [];
   pausedHeart = [];
   current = { ...run };
@@ -996,6 +1000,7 @@ export async function forgetRun(): Promise<void> {
   stopMotion();
   current = null;
   auto = AUTO_START;
+  wheelsAtPause = false;
   pausedTail = [];
   pausedHeart = [];
   tell();

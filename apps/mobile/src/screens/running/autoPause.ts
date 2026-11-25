@@ -299,6 +299,9 @@ function goByTravel(state: AutoPauseState, fix: Fix): Step {
     was === null || !steady ? { fromAt: fix.at, fromM: m, lastAt: fix.at, lastM: m } : step < RISE_STEP_MS ? was : { ...was, lastAt: fix.at, lastM: m };
   // Judged only where the rise is judged, so a jump inside a step is seen as one before it counts.
   const judged = was !== null && steady && step >= RISE_STEP_MS;
+  // From the last point near the stop. Under a weak signal that is seldom met, so a pram that stood first may be
+  // dated back into its standing (as before 37j); dating it from its rise instead lost a pushed pram's metres
+  // when its own wander restarted the rise (the second re-check: up to 72 m), which is the worse fault.
   if (judged && m - rise.fromM >= travelMetres(fix)) return resumedAt(state, fix, stillNearAt ?? state.pausedAt ?? fix.at, true);
   // As near the stop as the phone's wander, the point is one more of the person standing there.
   const n = state.anchor === null ? 0 : state.anchorN;

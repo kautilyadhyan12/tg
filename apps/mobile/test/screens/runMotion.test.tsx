@@ -406,6 +406,32 @@ describe("Auto-pause with the motion, through the recorder", () => {
     expect(runNow()?.phase).toBe("paused");
   });
 
+  it("Resume pressed on an Auto-pause keeps a pram on wheels, and a new run never starts on wheels (the second re-check, H6)", async () => {
+    const run = await startRun(RAVI.id, randomUUID(), true, Date.now());
+    const pram = (s: number) => 3 * s;
+    await points(1, 30, pram, STILL_SD);
+    expect(runNow()?.pauses).toEqual([]);
+    // A real stop, the pram standing: paused by the place (8 s), the person presses Resume.
+    await points(31, 12, () => pram(30), STILL_SD);
+    expect(runNow()?.phase).toBe("paused");
+    await act(() => resumeRun(run.startedAt + 43_000));
+    // Pushed on: still on wheels, so four still points do not pause it.
+    await points(44, 6, (s) => pram(30) + 3 * (s - 43), STILL_SD);
+    expect(runNow()?.phase).toBe("running");
+    // The person's own Pause, Finish and Discard; then a new run on foot: standing pauses it by the motion again.
+    await act(() => pauseRun(run.startedAt + 50_000));
+    await act(() => forgetRun());
+    await startRun(RAVI.id, randomUUID(), true, Date.now());
+    await points(1, 20, (s) => 1.4 * s, MOVING_SD);
+    await points(21, 5, () => 1.4 * 20, STILL_SD);
+    expect(runNow()?.phase).toBe("paused");
+    const next = runNow();
+    if (next === null) throw new Error("no run");
+    await act(() => resumeRun(next.startedAt + 27_000));
+    await points(28, 5, () => 1.4 * 20, STILL_SD);
+    expect(runNow()?.phase).toBe("paused");
+  });
+
   it("a pause read back after the app was closed waits 10 s from its own start before the motion starts the clock", async () => {
     const run = await startRun(RAVI.id, randomUUID(), true, Date.now());
     await points(1, 5, () => 0, STILL_SD);
