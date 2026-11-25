@@ -196,6 +196,28 @@ describe("the worst thing: once a member's set has counted, a stranger the model
     expect(cases.length - NO_ROOM.length).toBeGreaterThanOrEqual(16);
   });
 
+  it("a stranger of the member's size who comes in all at once 1.5 m beside them, then walks into their place and squats there, is never taken", () => {
+    // The model changes bodies all at once; a body that came so from outside the member's place stays another while it
+    // goes on bit by bit, into the place too, until a picture with nobody (src/body/person.ts).
+    const movement = readMovement("squat");
+    const member = furtherBack(videoOf("sumo_squat_2a"));
+    const aspect = member.frames[0]?.aspect ?? 1;
+    const own = middleOf(member.frames);
+    const towards = own.middle[0] < aspect / 2 ? 1 : -1;
+    const atPlace = placed(videoOf("prisoner_squat_2").frames, aspect, own.middle, own.size);
+    // 0.5 s standing 1.5 m beside, then 1 s walking in (1.5 m/s), then their squats at the member's place.
+    const walkIn = atPlace.map((f, n) => {
+      const away = n < 15 ? 1.5 : Math.max(0, 1.5 * (1 - (n - 15) / 30));
+      const dx = (towards * away * own.size) / aspect;
+      return { ...f, people: f.people.map((p) => ({ ...p, points: p.points.map(([x, y, z, v, pr]) => [x + dx, y, z, v, pr] as SeenPerson["points"][number]) })) };
+    });
+    expect(runMovement(movement, { ...member, frames: walkIn }).count).toBeGreaterThan(0);
+    const cut = firstCounted(movement, member) + 700;
+    const a = runMovement(movement, spliced(member, walkIn, cut));
+    const b = runMovement(movement, spliced(member, walkIn, cut, true));
+    expect([a.count, said(a.reps)]).toEqual([b.count, said(b.reps)]);
+  });
+
   it.each(WHERE)("the L-sit: a stranger holding an L-sit %s adds no time to the member's hold", (how) => {
     const hold: HoldMovement = readHold("l-sit");
     const member = furtherBack(videoOf("l_sit_bars_1"));
