@@ -455,7 +455,9 @@ checks pass. **After every push, read GitHub's checks and fix whatever is red be
 saying the job is ready**: a remembered lint does not re-read a file nobody touched, so a
 fault that a change elsewhere causes in it shows there first. Measured on 2026-10-12:
 three plain runs before three pushes cost one job 25 minutes on the laptop, GitHub's own
-run takes about 11, and it was GitHub that caught that job's failing database test. What
+run took about 11 then (11.2 minutes on 2026-11-25, its checks' parts each on a machine of its own, after 26 to 55 on
+one machine; a part past 25 minutes goes red and is split again), and it was GitHub that caught that job's failing
+database test. What
 the remembering ones keep is under each package's `node_modules/.cache`, which git
 ignores; delete that folder if a remembered result ever looks wrong.
 
