@@ -681,16 +681,18 @@ function ProductSale({ gymId, org, page: gymPage, locked, firstPerson, addMember
                 </div>
               ) : null}
               {/* Kd's click-through: a sale longer than its box says so, and one press goes down it. */}
-              <button
-                type="button"
-                ref={moreButton}
-                hidden
-                className="c-btn c-btn-s c-sale-more"
-                onClick={() => saleBody.current?.scrollBy?.({ top: Math.round(saleBody.current.clientHeight * 0.8), behavior: 'smooth' })}
-              >
-                More below
-                <ChevronDown aria-hidden="true" className="w-4 h-4" />
-              </button>
+              <div className="c-sale-more-at">
+                <button
+                  type="button"
+                  ref={moreButton}
+                  hidden
+                  className="c-btn c-btn-s c-sale-more"
+                  onClick={() => saleBody.current?.scrollBy?.({ top: Math.round(saleBody.current.clientHeight * 0.8), behavior: 'smooth' })}
+                >
+                  More below
+                  <ChevronDown aria-hidden="true" className="w-4 h-4" />
+                </button>
+              </div>
             </div>
 
             <div className="c-sale-f" data-testid="sale-foot">
