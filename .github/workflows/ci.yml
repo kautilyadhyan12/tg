@@ -231,9 +231,9 @@ jobs:
       - run: pnpm --filter @app/movement test:proof
         env:
           PROOF_PART: ${{ matrix.part }}
-          # The matrix above, less "rest". The proof's settings refuse to run when this is not every part they name,
-          # so a part named there and not here is red, never left out.
-          PROOF_PARTS_RUN: squat-jump,lunge
+          # How many machines the matrix above starts, counted by GitHub, never typed. The proof's settings refuse to
+          # run unless that is every part they name and "rest", so a part named there and not in the matrix is red.
+          PROOF_LEGS: ${{ strategy.job-total }}
   # The check master requires. A part that failed, was cancelled or timed out is red here; a part that did not run is
   # green ONLY when `changes` said this push holds no code. `always()`, never `!cancelled()`: a required check that
   # is skipped counts as passed, so this one is never skipped.
@@ -258,7 +258,7 @@ jobs:
           bad=0
           for p in $parts; do
             r=${p#*=}
-            if [ "$r" = cancelled ]; then echo "::error::${p%%=*} was cancelled, by a newer push or by hand: nothing is wrong with the code, run it again"; bad=1
+            if [ "$r" = cancelled ]; then echo "::error::${p%%=*} was cancelled: a newer push, a stop by hand, or past its 25-minute limit (see that part's log). Run it again; if it hit the limit, split it"; bad=1
             elif [ "$r" != "$want" ]; then echo "::error::${p%%=*} ended $r, not $want"; bad=1; fi
           done
           exit $bad
@@ -446,7 +446,7 @@ jobs:
           bad=0
           for p in $parts; do
             r=${p#*=}
-            if [ "$r" = cancelled ]; then echo "::error::${p%%=*} was cancelled, by a newer push or by hand: nothing is wrong with the code, run it again"; bad=1
+            if [ "$r" = cancelled ]; then echo "::error::${p%%=*} was cancelled: a newer push, a stop by hand, or past its 25-minute limit (see that part's log). Run it again; if it hit the limit, split it"; bad=1
             elif [ "$r" != "$want" ]; then echo "::error::${p%%=*} ended $r, not $want"; bad=1; fi
           done
           exit $bad
