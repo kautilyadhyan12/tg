@@ -183,7 +183,7 @@ export default function SellProducts({ gymId, country = null, page, locked, lock
     const body = productBody(draft, page.currency);
     const ok = await run(
       () => (draft.id === null ? registerService.addProduct(gymId, body) : registerService.changeProduct(gymId, draft.id, body)),
-      draft.id === null ? `${body.name} added. It is now on the Sell form above.` : `${body.name} saved.`,
+      draft.id === null ? `${body.name} added. It is now on the Register.` : `${body.name} saved.`,
     );
     if (ok) setDraft(null);
   };
@@ -244,7 +244,7 @@ export default function SellProducts({ gymId, country = null, page, locked, lock
               {asking === product.id ? (
                 <ConfirmInline
                   newLook
-                  question={`Archive ${product.name}? It leaves the Sell form. Its past sales are kept, and you can put it back.`}
+                  question={`Archive ${product.name}? It leaves the Register. Its past sales are kept, and you can put it back.`}
                   confirmLabel="Archive"
                   busy={state.busy}
                   onConfirm={() => {

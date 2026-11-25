@@ -126,10 +126,10 @@ const MAYA = { entryId: 'e-maya', name: 'Maya Patel', email: null, memberNumber:
 const MONTH = { id: 't-month', name: '1 Month', kind: 'one_time', priceMinor: 4999, currency: 'USD', termCount: 1, termUnit: 'month', packClasses: null, packDays: null };
 const refusal = (status, message) => Object.assign(new Error(message), { response: { status, data: { message } } });
 
-const open = (org = ORG, state = undefined) => {
+const open = (org = ORG, state = undefined, hash = '') => {
   orgApi.getMine.mockResolvedValue({ data: { orgs: [org], formerOrgs: [] } });
   render(
-    <MemoryRouter initialEntries={[{ pathname: '/console/iron-house/sell', state }]}>
+    <MemoryRouter initialEntries={[{ pathname: '/console/iron-house/sell', state, hash }]}>
       <Routes>
         <Route path="/console/:orgSlug/sell" element={<Sell />} />
         <Route path="/console/:orgSlug/members" element={<p>The Members page</p>} />
@@ -139,11 +139,38 @@ const open = (org = ORG, state = undefined) => {
     </MemoryRouter>,
   );
 };
-const newSale = () => screen.getByRole('region', { name: 'New sale' });
-const today = () => screen.getByRole('region', { name: "Today's takings" });
-const products = () => screen.getByRole('region', { name: 'Products' });
-const taxBox = () => screen.getByRole('region', { name: 'Tax' });
-const pick = (label, value) => fireEvent.change(screen.getByLabelText(label), { target: { value } });
+/** Opens one of Sell's tabs (V4a-i) where it is not open already: every tab stays drawn, the others hidden. */
+const showTab = (name) => {
+  const tab = screen.queryByRole('tab', { name: new RegExp(`^${name}`) });
+  if (tab !== null && tab.getAttribute('aria-selected') !== 'true') fireEvent.click(tab);
+};
+const newSale = () => {
+  showTab('Register');
+  return screen.getByRole('region', { name: 'New sale' });
+};
+const today = () => {
+  showTab('Register');
+  return screen.getByRole('region', { name: "Today's takings" });
+};
+const products = () => {
+  showTab('Products');
+  return screen.getByRole('region', { name: 'Products' });
+};
+const taxBox = () => {
+  showTab('Tax');
+  return screen.getByRole('region', { name: 'Tax' });
+};
+/** The till's products, pressed to add one to the sale. */
+const tiles = () => {
+  showTab('Register');
+  return within(screen.getByRole('list', { name: 'Products to add' })).getAllByRole('button');
+};
+const tile = (id) => tiles().find((b) => b.dataset.product === id);
+const pickBox = () => {
+  showTab('Register');
+  return screen.getByRole('region', { name: 'Pick a product' });
+};
+const pick = (label, value) => (label === 'Add a product' ? fireEvent.click(tile(value)) : fireEvent.change(screen.getByLabelText(label), { target: { value } }));
 const takeButton = () => within(newSale()).getByRole('button', { name: /^Take payment/ });
 /** A sale's ⋯, then Void sale in its list. */
 const openVoid = (row) => {
@@ -166,6 +193,102 @@ afterEach(() => {
   cleanup();
   vi.clearAllMocks();
   vi.restoreAllMocks();
+});
+
+describe('the till (V4a-i)', () => {
+  it('the worst thing first: one press of a tile adds one, and Take payment sends exactly the sale on screen, for the member picked and never one of a near name', async () => {
+    svc.findPeople.mockResolvedValue([{ entryId: 'e-patil', name: 'Maya Patil', email: null, memberNumber: '1043', past: false }, MAYA]);
+    open();
+    await screen.findByRole('region', { name: 'New sale' });
+    expect(within(newSale()).getByText('Nothing in this sale yet. Press a product to add it.')).toBeTruthy();
+    pick('Add a product', 'p-water');
+    expect(screen.getByLabelText('How many').value).toBe('1');
+    expect(tile('p-water').getAttribute('aria-label')).toBe('Add Water · $1.99 · 8 left, 1 in sale');
+    pick('Add a product', 'p-water');
+    expect(screen.getByLabelText('How many').value).toBe('2');
+    expect(tile('p-water').textContent).toBe('Water$1.99 · 8 left · plus tax2 in sale');
+    pick('Add a product', 'p-towel');
+    expect(within(newSale()).getAllByTestId('basket-line')).toHaveLength(2);
+
+    fireEvent.click(screen.getByLabelText('A member'));
+    fireEvent.change(within(newSale()).getByLabelText('Find them by name or member number'), { target: { value: 'maya' } });
+    fireEvent.click(await within(newSale()).findByRole('button', { name: 'Maya Patel · No. 1042' }));
+    expect(within(newSale()).getByTestId('sell-person').textContent).toBe('Maya Patel · No. 1042');
+    // The total at the foot is what is sent, and the button says it.
+    const total = within(within(newSale()).getByTestId('sale-summary')).getByText('Total').nextSibling.textContent;
+    expect(takeButton().textContent).toBe(`Take payment · ${total}`);
+    fireEvent.click(takeButton());
+    await waitFor(() => expect(svc.sell).toHaveBeenCalledTimes(1));
+    const body = svc.sell.mock.calls[0][1];
+    expect(body.entryId).toBe('e-maya');
+    expect(body.lines.map((l) => [l.productId, l.quantity])).toEqual([
+      ['p-water', 2],
+      ['p-towel', 1],
+    ]);
+    expect(`$${(body.totalMinor / 100).toFixed(2)}`).toBe(total);
+    expect(body.totalMinor).toBe(body.lines.reduce((n, l) => n + l.totalMinor, 0));
+  });
+
+  it('a full sale takes one more of a product already in it, and no product that is not', async () => {
+    const many = Array.from({ length: 21 }, (_, i) => product({ id: `p-${String(i)}`, name: `Thing ${String(i)}`, stock: null }));
+    svc.get.mockResolvedValue(page({ products: many }));
+    open();
+    await screen.findByRole('region', { name: 'New sale' });
+    for (const p of many) {
+      if (tile(p.id).disabled) break;
+      pick('Add a product', p.id);
+    }
+    const off = tiles().filter((b) => b.disabled);
+    expect(off.length).toBeGreaterThan(0);
+    expect(off.every((b) => !b.getAttribute('aria-label').includes('in sale'))).toBe(true);
+    expect(within(pickBox()).getByText(/^One sale can hold up to \d+ products\. Take payment for these, then start a new sale\.$/)).toBeTruthy();
+    pick('Add a product', 'p-0');
+    expect(tile('p-0').getAttribute('aria-label')).toContain('2 in sale');
+  });
+
+  it('the tabs: the sale is still there after Products and back, Add a product opens Products at its form, and an address opens the tab it names', async () => {
+    open();
+    await screen.findByRole('region', { name: 'New sale' });
+    expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual(['Register', 'Products 2', 'Tax', 'Discounts']);
+    pick('Add a product', 'p-water');
+    fireEvent.click(screen.getByRole('tab', { name: /^Products/ }));
+    expect(screen.queryByRole('region', { name: 'New sale' })).toBeNull();
+    expect(screen.getByRole('region', { name: 'Products' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('tab', { name: 'Register' }));
+    expect(screen.getByLabelText('How many').value).toBe('1');
+    fireEvent.click(within(pickBox()).getByRole('button', { name: 'Add a product' }));
+    expect(screen.getByRole('tab', { name: /^Products/ }).getAttribute('aria-selected')).toBe('true');
+    expect(within(screen.getByRole('region', { name: 'Products' })).getByRole('form', { name: 'Add a product' })).toBeTruthy();
+    cleanup();
+    resetConsoleOrgs();
+    open(ORG, undefined, '#tax');
+    expect((await screen.findByRole('tab', { name: 'Tax' })).getAttribute('aria-selected')).toBe('true');
+    expect(screen.getByRole('region', { name: 'Tax' })).toBeTruthy();
+    expect(screen.queryByRole('region', { name: 'New sale' })).toBeNull();
+  });
+
+  it("on a phone a row's ⋯ holds every one of its buttons, and Open their page opens the right person", async () => {
+    const had = window.matchMedia;
+    window.matchMedia = (query) => ({ matches: query === '(max-width: 767px)', addEventListener: () => undefined, removeEventListener: () => undefined });
+    const payment = { id: 'm1', typeName: '1 Month', amountMinor: 4999, currency: 'USD', method: 'card_at_desk', paidAt: '2026-10-12T15:30:00.000Z', by: 'Sam Desk', person: { entryId: 'e-maya', name: 'Maya Patel' }, receiptNumber: 40 };
+    svc.get.mockResolvedValue(page({ payments: [payment], totals: totals({ payments: 1, totalMinor: 4999, card_at_desk: 4999 }) }));
+    svc.receipt.mockReturnValue(new Promise(() => undefined));
+    try {
+      open();
+      const row = (await within(await screen.findByRole('region', { name: "Today's takings" })).findAllByTestId('takings-row'))[0];
+      expect(within(row).queryByRole('button', { name: "Open Maya Patel's page" })).toBeNull();
+      expect(within(row).queryByRole('button', { name: /^View receipt/ })).toBeNull();
+      fireEvent.click(within(row).getByRole('button', { name: 'More for the sale of 1 Month (membership)' }));
+      expect(within(row).getAllByRole('menuitem').map((m) => m.textContent)).toEqual(['View receipt', 'Open their page']);
+      fireEvent.click(within(row).getByRole('menuitem', { name: 'View receipt' }));
+      await waitFor(() => expect(svc.receipt).toHaveBeenCalledWith('g1', 40));
+      fireEvent.click(within(row).getByRole('button', { name: 'More for the sale of 1 Month (membership)' }));
+      fireEvent.click(within(row).getByRole('menuitem', { name: 'Open their page' }));
+      expect(screen.getByRole('dialog', { name: 'person e-maya' })).toBeTruthy();
+    } finally {
+      window.matchMedia = had;
+    }
+  });
 });
 
 describe('a product sale', () => {
@@ -196,7 +319,8 @@ describe('a product sale', () => {
     expect(svc.get).toHaveBeenCalledWith('g1');
     expect(takeButton().disabled).toBe(true);
     expect(within(newSale()).queryByTestId('sale-summary')).toBeNull();
-    expect(Array.from(screen.getByLabelText('Add a product').options).map((o) => o.textContent)).toEqual(['Pick a product', 'Towel · $5.00', 'Water · $1.99 · 8 left']);
+    expect(tiles().map((b) => b.getAttribute('aria-label'))).toEqual(['Add Towel · $5.00', 'Add Water · $1.99 · 8 left']);
+    expect(tiles().map((b) => b.textContent)).toEqual(['Towel$5.00 · plus tax', 'Water$1.99 · 8 left · plus tax']);
 
     pick('Add a product', 'p-water');
     fireEvent.change(screen.getByLabelText('How many'), { target: { value: '2' } });
@@ -226,13 +350,13 @@ describe('a product sale', () => {
     expect(done.textContent).toBe("Sale recordedSold: 2 × Water to a walk-in. $4.31, card at the desk.It is in today's list below. If it was a mistake, press ⋯ on its row, then Void sale.New saleView receipt");
     // The form is gone: there is nothing to press a second time by mistake.
     expect(within(newSale()).queryByRole('button', { name: /^Take payment/ })).toBeNull();
-    expect(screen.queryByLabelText('Add a product')).toBeNull();
+    expect(within(newSale()).queryByLabelText('How many')).toBeNull();
     expect(within(today()).getByTestId('takings-line').textContent).toBe('Taken today: $4.31 from 1 sale. Cash $4.31.');
     expect(within(today()).getAllByTestId('takings-row').map((r) => r.textContent)).toEqual([expect.stringContaining('2 × Water · $4.31')]);
     // New sale brings back an empty form: no product picked, so nothing can be sold yet.
     fireEvent.click(within(newSale()).getByRole('button', { name: 'New sale' }));
     expect(within(newSale()).queryByTestId('sale-done')).toBeNull();
-    expect(screen.getByLabelText('Add a product').value).toBe('');
+    expect(tile('p-water').getAttribute('aria-label')).toBe('Add Water · $1.99 · 8 left');
     expect(screen.queryByLabelText('How many')).toBeNull();
     expect(takeButton().disabled).toBe(true);
     fireEvent.click(takeButton());
@@ -579,7 +703,7 @@ describe('a membership', () => {
     open();
     await screen.findByRole('region', { name: 'New sale' });
     expect(within(newSale()).queryByRole('button', { name: 'A membership' })).toBeNull();
-    expect(within(newSale()).getByLabelText('Add a product')).toBeTruthy();
+    expect(tiles()).toHaveLength(2);
     const box = screen.getByRole('region', { name: 'Sell a membership' });
     expect(within(box).getByText("Memberships are sold on the member's own page, where you pick the membership, a discount if there is one, and the payment method.")).toBeTruthy();
     fireEvent.change(within(box).getByLabelText('Find them by name or member number'), { target: { value: 'maya' } });
@@ -609,9 +733,11 @@ describe('products and tax', () => {
     svc.get.mockResolvedValue(page({ products: [], tax: NO_TAX }));
     svc.addProduct.mockResolvedValue(page({ products: [product({ stock: null, taxRateIds: [] })], tax: NO_TAX }));
     open();
-    await screen.findByRole('region', { name: 'New sale' });
-    expect(within(newSale()).getByText('You have no products yet. Add what you sell at the desk, such as water or a towel, and it appears here.')).toBeTruthy();
-    fireEvent.click(within(newSale()).getByRole('button', { name: 'Add your first product' }));
+    await screen.findByRole('region', { name: 'Pick a product' });
+    expect(within(pickBox()).getByText('You have no products yet. Add what you sell at the desk, such as water or a towel, and it appears here.')).toBeTruthy();
+    fireEvent.click(within(pickBox()).getByRole('button', { name: 'Add your first product' }));
+    // It opens the Products tab, at its form.
+    expect(screen.getByRole('tab', { name: /^Products/ }).getAttribute('aria-selected')).toBe('true');
     const form = within(products()).getByRole('form', { name: 'Add a product' });
     fireEvent.click(within(form).getByRole('button', { name: 'Add product' }));
     expect(within(form).getByText('Give the product a name.')).toBeTruthy();
@@ -623,9 +749,9 @@ describe('products and tax', () => {
     fireEvent.change(within(form).getByLabelText('How many you have now'), { target: { value: '24' } });
     fireEvent.click(within(form).getByRole('button', { name: 'Add product' }));
     await waitFor(() => expect(svc.addProduct).toHaveBeenCalledWith('g1', { name: 'Water', priceMinor: 199, taxRateIds: [], stock: 24 }));
-    expect(await within(products()).findByText('Water added. It is now on the Sell form above.')).toBeTruthy();
+    expect(await within(products()).findByText('Water added. It is now on the Register.')).toBeTruthy();
     expect(within(products()).queryByRole('form')).toBeNull();
-    expect(screen.getByLabelText('Add a product')).toBeTruthy();
+    expect(tiles().map((b) => b.getAttribute('aria-label'))).toEqual(['Add Water · $1.99']);
   });
 
   it('a product is changed with the time its form read it, and archived only after the box is answered', async () => {
@@ -633,7 +759,7 @@ describe('products and tax', () => {
     svc.archiveProduct.mockResolvedValue(page({ products: [TOWEL], archived: [product({ archivedAt: '2026-10-12T16:00:00.000Z' })], archivedTotal: 1 }));
     svc.restoreProduct.mockResolvedValue(page());
     open();
-    await screen.findByRole('region', { name: 'Products' });
+    await screen.findByRole('tab', { name: /^Products/ });
     const rows = within(products()).getAllByTestId('product-row');
     expect(rows.map((r) => r.textContent)).toEqual([expect.stringContaining('Towel$5.00 · plus Sales tax 8.25% · stock not counted'), expect.stringContaining('Water$1.99 · plus Sales tax 8.25% · 8 in stock')]);
     fireEvent.click(within(products()).getByRole('button', { name: 'Change Water' }));
@@ -644,7 +770,7 @@ describe('products and tax', () => {
     await waitFor(() => expect(svc.changeProduct).toHaveBeenCalledWith('g1', 'p-water', { name: 'Water', priceMinor: 199, taxRateIds: ['r1'], stock: 20, updatedAt: '2026-10-12T10:00:00.000Z' }));
 
     fireEvent.click(await within(products()).findByRole('button', { name: 'Archive Water' }));
-    expect(within(products()).getByText('Archive Water? It leaves the Sell form. Its past sales are kept, and you can put it back.')).toBeTruthy();
+    expect(within(products()).getByText('Archive Water? It leaves the Register. Its past sales are kept, and you can put it back.')).toBeTruthy();
     fireEvent.click(within(products()).getByRole('button', { name: 'Keep it' }));
     expect(svc.archiveProduct).not.toHaveBeenCalled();
     fireEvent.click(within(products()).getByRole('button', { name: 'Archive Water' }));
@@ -658,7 +784,7 @@ describe('products and tax', () => {
   it('a save the server refuses is said in the form, and the list is read again', async () => {
     svc.changeProduct.mockRejectedValue(refusal(409, 'This product changed while you had it open, or one was sold. Nothing was saved: check it and try again.'));
     open();
-    await screen.findByRole('region', { name: 'Products' });
+    await screen.findByRole('tab', { name: /^Products/ });
     fireEvent.click(within(products()).getByRole('button', { name: 'Change Water' }));
     fireEvent.click(within(products()).getByRole('button', { name: 'Save product' }));
     expect((await within(products()).findByRole('alert')).textContent).toBe('This product changed while you had it open, or one was sold. Nothing was saved: check it and try again.');
@@ -670,7 +796,7 @@ describe('products and tax', () => {
       cleanup();
       resetConsoleOrgs();
       open({ ...ORG, country });
-      await screen.findByRole('region', { name: 'Tax' });
+      await screen.findByRole('tab', { name: /^Tax/ });
       fireEvent.click(within(taxBox()).getByRole('button', { name: 'Add a tax rate' }));
       const form = within(within(taxBox()).getByRole('form', { name: 'Add a tax rate' }));
       expect(form.getByLabelText('Tax name').getAttribute('placeholder')).toBe(name);
@@ -692,7 +818,7 @@ describe('products and tax', () => {
     svc.addTaxRate.mockResolvedValue(page({ tax: { included: false, rates: [GST, RATE] } }));
     svc.changeTaxRate.mockResolvedValue(page({ tax: { included: false, rates: [{ ...GST, pcm: 12000 }, RATE] } }));
     open();
-    await screen.findByRole('region', { name: 'Tax' });
+    await screen.findByRole('tab', { name: /^Tax/ });
     expect(within(taxBox()).getByText('Tax is added on top of the price of each product and membership that charges it.')).toBeTruthy();
     expect(within(taxBox()).getAllByTestId('tax-rate-row').map((r) => r.textContent)).toEqual([expect.stringContaining('Sales tax 8.25%Charged on 2 products.')]);
     fireEvent.click(within(taxBox()).getByRole('button', { name: 'Add a tax rate' }));
@@ -725,7 +851,7 @@ describe('products and tax', () => {
     svc.get.mockResolvedValue(page({ tax: { included: false, rates: [SPARE, HELD] } }));
     svc.removeTaxRate.mockResolvedValue(page({ tax: { included: false, rates: [HELD] } }));
     open();
-    await screen.findByRole('region', { name: 'Tax' });
+    await screen.findByRole('tab', { name: /^Tax/ });
     fireEvent.click(within(taxBox()).getByRole('button', { name: 'Remove Sales tax' }));
     expect(within(taxBox()).getByRole('alert').textContent).toBe(
       "Sales tax can't be removed: it is charged on 2 products and 3 members' memberships. Untick it on those first. A membership keeps the tax it was sold with, so Sales tax can be removed once nobody holds one.",
@@ -745,7 +871,7 @@ describe('products and tax', () => {
   it('the Tax box: Choose products ticks what charges a rate, sends every one ticked, and says it in the same place', async () => {
     svc.chargeTaxRate.mockResolvedValue(page({ products: [TOWEL, product({ taxRateIds: [] })] }));
     open();
-    await screen.findByRole('region', { name: 'Tax' });
+    await screen.findByRole('tab', { name: /^Tax/ });
     fireEvent.click(within(taxBox()).getByRole('button', { name: 'Choose products for Sales tax' }));
     const box = within(within(taxBox()).getByRole('group', { name: 'What charges Sales tax 8.25%' }));
     expect(box.getByText('Which products charge Sales tax 8.25%?')).toBeTruthy();
@@ -761,7 +887,7 @@ describe('products and tax', () => {
   it('the Tax box: how the tax is charged is saved on its own, and says it is saved', async () => {
     svc.saveTaxMode.mockResolvedValue(page({ tax: { included: true, rates: [RATE] } }));
     open();
-    await screen.findByRole('region', { name: 'Tax' });
+    await screen.findByRole('tab', { name: /^Tax/ });
     const save = within(taxBox()).getByRole('button', { name: 'Save' });
     expect(save.disabled).toBe(true);
     fireEvent.click(within(taxBox()).getByLabelText(/Already included in the price/));
@@ -777,7 +903,7 @@ describe('products and tax', () => {
     svc.addTaxRate.mockResolvedValue(page({ tax: { included: false, rates: [GST, RATE] } }));
     svc.addProduct.mockResolvedValue(page());
     open();
-    await screen.findByRole('region', { name: 'Products' });
+    await screen.findByRole('tab', { name: /^Products/ });
     fireEvent.click(within(products()).getByRole('button', { name: 'Add a product' }));
     const form = within(within(products()).getByRole('form', { name: 'Add a product' }));
     // The gym's one rate is ticked to start with; every rate of the gym is a tick box.
@@ -809,7 +935,7 @@ describe('products and tax', () => {
     svc.get.mockResolvedValue(page({ tax: { included: false, rates: [GST, QST, RATE, BIG] } }));
     svc.addProduct.mockResolvedValue(page());
     open();
-    await screen.findByRole('region', { name: 'Products' });
+    await screen.findByRole('tab', { name: /^Products/ });
     fireEvent.click(within(products()).getByRole('button', { name: 'Add a product' }));
     const form = within(within(products()).getByRole('form', { name: 'Add a product' }));
     const taxes = within(form.getByRole('group', { name: 'Tax' }));
@@ -833,7 +959,7 @@ describe('products and tax', () => {
   it('a gym with no country is sent to set it, and has no Add button', async () => {
     svc.get.mockResolvedValue(page({ currency: null, products: [] }));
     open();
-    await screen.findByRole('region', { name: 'Products' });
+    await screen.findByRole('tab', { name: /^Products/ });
     expect(within(products()).getByText('Set your country before adding a product. It decides the money your prices are in.')).toBeTruthy();
     expect(within(products()).queryByRole('button', { name: 'Add a product' })).toBeNull();
     fireEvent.click(within(products()).getByRole('link', { name: 'Set your country' }));
@@ -845,11 +971,11 @@ describe('who sees what', () => {
   it('staff who only record payments sell, and read the products with no button to change them', async () => {
     svc.get.mockResolvedValue(page({ canManage: false, products: [] }));
     open(SELLER);
-    await screen.findByRole('region', { name: 'New sale' });
-    expect(within(newSale()).getByText('The owner, or staff who can change membership types and prices, can add products.')).toBeTruthy();
-    expect(within(newSale()).queryByRole('button', { name: 'Add your first product' })).toBeNull();
+    await screen.findByRole('region', { name: 'Pick a product' });
+    expect(within(pickBox()).getByText('The owner, or staff who can change membership types and prices, can add products.')).toBeTruthy();
+    expect(within(pickBox()).queryByRole('button', { name: 'Add your first product' })).toBeNull();
     // No tick for the person's page: no membership from here.
-    expect(within(newSale()).queryByRole('button', { name: 'A membership' })).toBeNull();
+    expect(screen.queryByRole('region', { name: 'Sell a membership' })).toBeNull();
     expect(within(products()).getByText('The owner, or staff who can change membership types and prices, can add and change products and tax.')).toBeTruthy();
     expect(within(products()).queryByRole('button', { name: 'Add a product' })).toBeNull();
     // The tax is read, never changed.
@@ -863,7 +989,7 @@ describe('who sees what', () => {
   it('staff who only change prices have the products and the tax, and are told who can sell', async () => {
     svc.get.mockResolvedValue(page({ canSell: false, payments: null }));
     open(PRICER);
-    await screen.findByRole('region', { name: 'Products' });
+    await screen.findByRole('tab', { name: /^Products/ });
     expect(screen.queryByRole('region', { name: 'New sale' })).toBeNull();
     expect(screen.queryByRole('region', { name: "Today's takings" })).toBeNull();
     expect(screen.getByText('You can change products and tax here, but you can\'t record a sale. Ask the owner to turn on "Record members\' payments" for you.')).toBeTruthy();
@@ -883,7 +1009,7 @@ describe('who sees what', () => {
     await screen.findByRole('region', { name: 'New sale' });
     expect(screen.getAllByText('This gym needs a plan before anything here can be changed.').length).toBeGreaterThan(0);
     pick('Add a product', 'p-towel');
-    expect(screen.getByLabelText('Add a product').disabled).toBe(true);
+    expect(tiles().every((b) => b.disabled)).toBe(true);
     expect(takeButton().disabled).toBe(true);
     expect(within(today()).queryByRole('button', { name: 'More for the sale of 2 × Water' })).toBeNull();
     expect(within(products()).getByRole('button', { name: 'Add a product' }).disabled).toBe(true);
@@ -1232,7 +1358,7 @@ describe('Take payment on Terminal at Sell', () => {
     const box = await within(newSale()).findByTestId('terminal-pay-wait');
     expect(box.textContent).toContain('Waiting for the customer to pay $4.31 on the Terminal');
     expect(box.textContent).toContain('The customer taps, inserts or swipes their card.');
-    expect(screen.getByLabelText('Add a product').disabled).toBe(true);
+    expect(tiles().every((b) => b.disabled)).toBe(true);
     expect(screen.getByLabelText('How many').disabled).toBe(true);
     expect(takeButton().disabled).toBe(true);
     expect(within(newSale()).queryByTestId('sale-done')).toBeNull();
@@ -1288,7 +1414,7 @@ describe('Take payment on Terminal at Sell', () => {
     expect(within(lost).getByRole('alert').textContent).toBe("We couldn't hear back about this payment, and it may be on the Terminal. Press Check again before you take payment another way.");
     expect(within(newSale()).queryByText(/Nothing was charged/)).toBeNull();
     expect(screen.getByLabelText('Payment method').disabled).toBe(true);
-    expect(screen.getByLabelText('Add a product').disabled).toBe(true);
+    expect(tiles().every((b) => b.disabled)).toBe(true);
     expect(takeButton().disabled).toBe(true);
     expect(svc.sell).not.toHaveBeenCalled();
     // Check again: the same key, so the server answers with the press it already has.
@@ -1316,7 +1442,7 @@ describe('Take payment on Terminal at Sell', () => {
     fireEvent.click(within(lost).getByRole('button', { name: 'Check again' }));
     const done = await within(newSale()).findByTestId('sale-done');
     expect(done.textContent).toContain('Sold: 1 × Towel to a walk-in. $5.41, card on the Terminal.');
-    expect(screen.queryByLabelText('Add a product')).toBeNull();
+    expect(within(newSale()).queryByRole('button', { name: /^Take payment/ })).toBeNull();
     expect(svc.sell).not.toHaveBeenCalled();
   });
 
@@ -1376,7 +1502,7 @@ describe('Take payment on Terminal at Sell', () => {
     expect(box.textContent).toContain('Waiting for the customer to pay $4.31 on the Terminal');
     // Another desk's sale says which Terminal and who started it, with one Terminal too.
     expect(box.textContent).toContain('R5DESK001 · started by Sam Desk');
-    expect(screen.getByLabelText('Add a product').disabled).toBe(false);
+    expect(tiles().every((b) => !b.disabled)).toBe(true);
     orgApi.cancelTerminalSale.mockReturnValue(answered({ step: 'done', outcome: 'cancelled', pickedUp: true }));
     fireEvent.click(within(box).getByRole('button', { name: 'Cancel' }));
     const ended = await within(newSale()).findByTestId('terminal-sale-resumed');

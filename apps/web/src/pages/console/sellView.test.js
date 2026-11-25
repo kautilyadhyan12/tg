@@ -15,6 +15,9 @@ import {
   personOption,
   productBody,
   productOption,
+  productTileFacts,
+  sellTabFor,
+  tileInSale,
   productProblems,
   productRow,
   purchaseLine,
@@ -178,6 +181,34 @@ describe('the sale as it is shown', () => {
     expect(productOption(water({ stock: 8 }))).toBe('Water · $1.99 · 8 left');
     expect(productOption(water({ stock: 0 }))).toBe('Water · $1.99 · out of stock');
     expect(productOption(water({ currency: 'GBP' }))).toBe('Water · £1.99');
+  });
+  it('an address opens the tab it names; Register otherwise', () => {
+    expect(sellTabFor('#products', null)).toBe('products');
+    expect(sellTabFor('#tax', undefined)).toBe('tax');
+    expect(sellTabFor('#discounts', null)).toBe('discounts');
+    expect(sellTabFor('#takings', null)).toBe('register');
+    expect(sellTabFor('', { showProducts: true })).toBe('products');
+    expect(sellTabFor('', { productId: 'p1' })).toBe('products');
+    expect(sellTabFor('', { productId: '' })).toBe('register');
+    expect(sellTabFor('', { sellTo: { entryId: 'e1', name: 'Maya' } })).toBe('register');
+    expect(sellTabFor('', { refundSale: { saleId: 's1' } })).toBe('register');
+    expect(sellTabFor(undefined, null)).toBe('register');
+  });
+  it("a product's tile on the till says its price, what is left, and plus tax only where a tax of the gym's is added on top", () => {
+    expect(productTileFacts(water(), TEXAS)).toBe('$1.99 · plus tax');
+    expect(productTileFacts(water({ stock: 8 }), TEXAS)).toBe('$1.99 · 8 left · plus tax');
+    expect(productTileFacts(water({ stock: 0, taxRateIds: [] }), TEXAS)).toBe('$1.99 · out of stock');
+    // Tax already in the price, a rate the gym no longer has, no tax at all: nothing is added on top.
+    expect(productTileFacts(water(), { included: true, rates: [rate()] })).toBe('$1.99');
+    expect(productTileFacts(water({ taxRateIds: ['gone'] }), TEXAS)).toBe('$1.99');
+    expect(productTileFacts(water(), NO_TAX)).toBe('$1.99');
+  });
+  it('a tile says how many of it are in the sale, as its line has it', () => {
+    const lines = [{ productId: 'p1', quantityText: '2', discountId: '' }, { productId: 'p2', quantityText: '', discountId: '' }];
+    expect(tileInSale(lines, 'p1')).toBe('2 in sale');
+    expect(tileInSale(lines, 'p2')).toBe('In the sale');
+    expect(tileInSale(lines, 'p3')).toBeNull();
+    expect(tileInSale([{ productId: 'p1', quantityText: '0', discountId: '' }], 'p1')).toBe('In the sale');
   });
   it('how many one sale can hold', () => {
     expect(quantityMax(null)).toBe(99);

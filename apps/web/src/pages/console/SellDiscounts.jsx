@@ -126,7 +126,7 @@ function DiscountForm({ page, draft, setDraft, busy, error, membershipsTo, onSav
               <input type="radio" name={`${id}-scope`} checked={draft.scope === 'some'} disabled={busy || page.products.length === 0} onChange={() => set({ scope: 'some' })} />
               Selected products
             </label>
-            {page.products.length === 0 ? <p className="c-s13 c-t3 m-0">You have no products yet. Add one under Products above to choose it here.</p> : null}
+            {page.products.length === 0 ? <p className="c-s13 c-t3 m-0">You have no products yet. Add one under Products to choose it here.</p> : null}
             {draft.scope === 'some' ? (
               <div className="flex flex-col pl-7" role="group" aria-label="Products this discount applies to">
                 {page.products.map((product) => (
