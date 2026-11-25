@@ -2560,8 +2560,8 @@ or every third's size unreadable; a stranger who walks in and stays is taken onl
 member back where a stranger stood is the member again within 3 s, on all six; a passer-by nearer the phone just before the
 first squat is withheld and the set counts as with nobody passing. Lying side on, a body fills the picture's width, and a neighbour 1.8 m along it is off the picture (three
 cases, listed); on the bars the second man is not timed alone put nearer or beside (three). **Deliberate breaks**, each
-run red and put back: the set never telling the lock it counted (26 of the worst-thing tests red); no place, size alone (10
-red); no hold on a body that came all at once (1 red, the walk-in: 307 of the stranger's pictures given). **The whole proof before and after** (every video under every movement the camera
+run red and put back, after round one: the set never telling the lock it counted (56 of the worst-thing tests red); no place,
+size alone (39 red); no hold on a body that came all at once (30 red). **The whole proof before and after** (every video under every movement the camera
 counts or times, as filmed and under all 18 replays, 13,908 runs, the engine as merged against the lock; and every case a
 later change of the lock decides otherwise, run again): 16 differ, all on his own floor videos where he walks from the phone.
 His walk-back set counts 2 of 3 under uneven pictures (0 before) and done faster (1 before), still open (53). His
