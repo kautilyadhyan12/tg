@@ -2481,7 +2481,7 @@ the four shown; every other video (114) counts 0 and is told nothing, with every
 counts 0 with his own video left out (his hips read 0.15 moved, the others at most 0.11). A decline sit-up whose trunk comes up 25 to
 35 degrees by the camera, a decline crunch by the research file's own measure, is reported. **The hip thrust**
 (`movements/hip-thrust.json`): the hips' height rises from low; its start is the knees and hips each bent 130 degrees or less and
-the trunk 65 or less from upright, the back on the bench and short of lying (first built on the knees alone, its start also held at
+the trunk 65 or less from upright, the back on the bench and short of lying (and the shoulders 0.2 of a leg above the hips, the shins within 15 degrees of upright: a man sat up on the floor for a sit-up read as its start under uneven pictures; first built on the knees alone, its start also held at
 the top of a thrust, so a thrust split in two, and a sit-up lying down read as a short hip thrust and was told so); depth 0.15 of a leg,
 "hips open" 146, "back on the bench" at least 39 (a body that stood up reads under 20), "shoulders stay" at most 0.15. Of Kd's four
 videos two are judged, 5 of 5 as filmed and under 12 of the 14 held replays, and two reported (filmed from in front and above, the hips'
