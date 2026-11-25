@@ -213,9 +213,19 @@ describe("the worst thing: once a member's set has counted, a stranger the model
     });
     expect(runMovement(movement, { ...member, frames: walkIn }).count).toBeGreaterThan(0);
     const cut = firstCounted(movement, member) + 700;
-    const a = runMovement(movement, spliced(member, walkIn, cut));
+    const video = spliced(member, walkIn, cut);
+    const a = runMovement(movement, video);
     const b = runMovement(movement, spliced(member, walkIn, cut, true));
     expect([a.count, said(a.reps)]).toEqual([b.count, said(b.reps)]);
+    // Picture by picture: the camera reads nobody in every one of theirs, those at the member's place included.
+    const theirs = new Set(walkIn.flatMap((f) => f.people));
+    const set = new CameraSet({ movement, exercise: null });
+    const given = withLeadIn(video).frames.flatMap((f) => {
+      const p = set.next(f).person;
+      return f.people.some((q) => theirs.has(q)) ? [p.person] : [];
+    });
+    expect(given.length).toBe(walkIn.length);
+    expect(given.filter((p) => p !== null).length).toBe(0);
   });
 
   it.each(WHERE)("the L-sit: a stranger holding an L-sit %s adds no time to the member's hold", (how) => {
