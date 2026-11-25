@@ -1397,7 +1397,7 @@ export default function MemberListPanel({
                     className={`c-member-grid ${past ? 'c-member-grid-past' : ''} grid flex-grow min-w-0 text-left min-h-11 pr-4 py-3.5 md:pr-5 md:py-3`}
                   >
                     <span className="flex items-center gap-3 min-w-0" style={{ gridArea: 'who' }}>
-                    <span className="hidden md:inline-flex c-avatar c-avatar-sm" aria-hidden="true">
+                    <span className="c-avatar c-avatar-sm c-avatar-md" aria-hidden="true">
                       {initialsOf(e.fullName || '')}
                     </span>
                     <span className="flex flex-col gap-0.5 min-w-0">

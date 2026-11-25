@@ -730,6 +730,7 @@
   font-size: 15px;
   line-height: 22px;
   color: var(--t2);
+  overflow-wrap: anywhere;
 }
 /* The small label above a page's title: small capitals, orange. */
 .c-eyebrow {
@@ -1200,11 +1201,13 @@
 }
 /* On a touch screen wider than a phone (a tablet, an opened folding phone), the list's tools, its
    quick filters, the bar and the Filter's choices are 44 px to touch too (V3a-i), and so are
-   Waiting to join's Confirm and Not this person (V3b-i). */
+   Waiting to join's Confirm and Not this person (V3b-i), and every button on Staff and Staff
+   activity (V3b-ii). */
 @media (pointer: coarse) {
   .c-sticky-tools .c-btn,
   .c-selbar .c-btn,
-  .c-waiting .c-btn {
+  .c-waiting .c-btn,
+  .c-staff .c-btn {
     height: auto;
     min-height: 44px;
   }
@@ -2369,6 +2372,12 @@
   width: 34px;
   height: 34px;
   font-size: 12px;
+}
+/* Initials drawn only from 768 px: on a phone the name has the room. Two classes, so it wins over
+   .c-avatar's own display, which the stylesheet sets after Tailwind's .hidden. */
+.c-avatar.c-avatar-md { display: none; }
+@media (min-width: 768px) {
+  .c-avatar.c-avatar-md { display: inline-flex; }
 }
 /* A small round dot before a word: green for in the app, gold for what needs attention. */
 .c-dot {

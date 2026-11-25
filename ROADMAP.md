@@ -495,7 +495,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
      - V3a-ii. [x] **The boxes the bar opens** · merged 2026-11-25 · PR #641
    - V3b. **Members: In the app, waiting to join, and Staff**, in two (2026-11-25; boards `MembersNewApp`, `MembersNewStaff*` in `console-v2`):
      - V3b-i. [x] **In the app, a person opened from it, and Waiting to join** · merged 2026-11-25 · PR #644
-     - V3b-ii. [ ] **Staff**: the list and Invited, a staff member's panel, Invite staff, Staff activity
+     - V3b-ii. [x] **Staff** · merged 2026-11-25 · PR #645
    - V4a. [ ] **Sell** (web folder 1): the register, a sale, products, tax (`Sell*`, `PhoneSell`); a sale's refund boxes and its receipt in the middle, on a member's Purchases too (V2b-ii).
    - V4b. [ ] **Memberships** (web folder 1): the price list, adding a type, discounts (`Memberships*`, `MembershipAdd`).
    - V5. [ ] **Overview and getting in** (web folder 1): Overview, its banners and plan prompts, your organisations, creating a gym, signing in, joining as staff (`Overview*`, `Banners`, `GymReady`, `Orgs`, `CreateGym`, `SignIn`, `StaffInvite`, `PhoneOverview`).

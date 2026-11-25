@@ -803,8 +803,8 @@ describe('the staff list', () => {
     const boxes = ticks.getAllByRole('checkbox');
     expect(boxes.length).toBeGreaterThan(0);
     for (const box of boxes) expect(box.disabled).toBe(true);
-    // And the way to save them is gone too, not merely the boxes.
-    expect(ticks.getByRole('button', { name: 'Save permissions' }).disabled).toBe(true);
+    // And the way to save them is gone too, not merely the boxes: at the panel's foot.
+    expect(within(panel.getByTestId('privileges-foot')).getByRole('button', { name: 'Save permissions' }).disabled).toBe(true);
   });
 
   it('leaves all of it live on a paying gym — the positive control', async () => {
@@ -985,11 +985,12 @@ describe('a step already open when the gym lapses', () => {
     const panel = await openStaffPerson('u-trainer', 'Dev Roy');
     const ticks = within(panel.getByTestId('privileges-u-trainer'));
     ticks.getByLabelText(/^Check people in/).click();
-    await waitFor(() => expect(ticks.getByRole('button', { name: 'Save permissions' }).disabled).toBe(false));
+    const foot = within(panel.getByTestId('privileges-foot'));
+    await waitFor(() => expect(foot.getByRole('button', { name: 'Save permissions' }).disabled).toBe(false));
 
     await theGymLapsesUnderTheScreen();
 
-    expect(ticks.getByRole('button', { name: 'Save permissions' }).disabled).toBe(true);
+    expect(foot.getByRole('button', { name: 'Save permissions' }).disabled).toBe(true);
     for (const box of ticks.getAllByRole('checkbox')) expect(box.disabled).toBe(true);
     expect(panel.getByRole('button', { name: 'Remove from staff' }).disabled).toBe(true);
     expect(panel.getByText(READ_ONLY_NOTE)).toBeTruthy();

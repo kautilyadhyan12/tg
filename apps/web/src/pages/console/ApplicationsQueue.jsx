@@ -85,7 +85,7 @@ function ApplicantRow({ applicant, busy, readOnly, onConfirm, onReject }) {
       data-testid="applicant-row"
     >
       <div className="flex items-start gap-3 flex-1 min-w-0">
-        <span className="hidden md:inline-flex c-avatar c-avatar-sm flex-shrink-0" aria-hidden="true">
+        <span className="c-avatar c-avatar-sm c-avatar-md flex-shrink-0" aria-hidden="true">
           {initialsOf(applicant.displayName)}
         </span>
         <div className="flex flex-col gap-0.5 flex-1 min-w-0">
