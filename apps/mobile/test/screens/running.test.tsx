@@ -600,6 +600,8 @@ describe("a run stays inside what the server takes (round one of 37a, H1)", () =
 // its points over with the screen locked, in each of the person's units.
 
 const voice = jest.requireMock<{ voice: { said: string[]; quieted: number; canSpeak: string; missing: boolean } }>("../../src/screens/running/runVoiceNative").voice;
+/** The phone's motion sensor, as the setup's stand-in holds it (37i): `send(at, sd)` hands one second over. */
+const motion = jest.requireMock<{ motion: { send: (at: number, sd: number) => void; reset: () => void } }>("../../src/screens/running/runMotionNative").motion;
 
 /** A real run's points, thirty at a time, as Android hands them over with the screen off. */
 async function feedReal(points: readonly RealPoint[]) {
@@ -690,6 +692,72 @@ describe("the voice, through the whole app", () => {
     await waitFor(() => {
       expect(voice.quieted).toBeGreaterThan(0);
     });
+  });
+
+  // Testers on Google Play, 2026-11-20: after Start, with the GPS found, a path drew with nobody moving. With
+  // the phone's motion (37j), standing reads as standing on any phone, its place wandering 4 m either way.
+  it("Start and stand: Auto-paused, 0.00 and no route, nothing said in the first 15 s; a later stop says Auto-paused. once", async () => {
+    motion.reset();
+    const s = runServer();
+    await openRunning(s);
+    await startRunning();
+    const run = runNow();
+    if (run === null) throw new Error("no run");
+    /** `seconds` of points from `fromS`, as Android hands them over, with the motion of each second. */
+    const send = async (fromS: number, seconds: number, place: (s: number) => number, sd: number, accuracy: number) => {
+      for (let k = 0; k < seconds; k++) motion.send(run.startedAt + (fromS + k) * 1000, sd);
+      const locations = Array.from({ length: seconds }, (_, k) => ({
+        timestamp: run.startedAt + (fromS + k) * 1000,
+        coords: { latitude: 26.1445 + place(fromS + k) / 111_132, longitude: 91.7362, accuracy, speed: 0 },
+      }));
+      await act(() => takeLocations({ locations }));
+    };
+    const standing = (s: number) => 4 * Math.sin(s * 0.7);
+    for (let from = 1; from < 41; from += 10) await send(from, 10, standing, 0.04, 12);
+    expect(await screen.findByText("Auto-paused")).toBeTruthy();
+    await waitFor(
+      () => {
+        expect(screen.getByText("0.00 km")).toBeTruthy();
+        expect(trailMetres(drawnMap("live-map-view"))).toBe(0);
+      },
+      { timeout: 5000 },
+    );
+    expect(screen.queryByTestId("live-route")).toBeNull();
+    expect(voice.said).toEqual([]);
+    // Walking off: the clock starts from the first step, and the stop's end is not spoken of either.
+    const walking = (s: number) => standing(40) + 1.4 * (s - 40);
+    await send(41, 60, walking, 4.5, 12);
+    expect(runNow()?.phase).toBe("running");
+    expect(runNow()?.pauses).toEqual([[1000, 41_000]]);
+    expect(voice.said).toEqual([]);
+    // A stop a minute and a half in is said, once.
+    const stopped = (_: number) => walking(100);
+    await send(101, 20, stopped, 0.04, 12);
+    expect(await screen.findByText("Auto-paused")).toBeTruthy();
+    expect(voice.said).toEqual(["Auto-paused."]);
+  });
+
+  it("a phone in a pram that felt still is paused for a few seconds at most, then keeps every metre with no pause left", async () => {
+    motion.reset();
+    const s = runServer();
+    await openRunning(s);
+    await startRunning();
+    const run = runNow();
+    if (run === null) throw new Error("no run");
+    for (let from = 1; from < 121; from += 10) {
+      for (let k = 0; k < 10; k++) motion.send(run.startedAt + (from + k) * 1000, 0.05);
+      const locations = Array.from({ length: 10 }, (_, k) => ({
+        timestamp: run.startedAt + (from + k) * 1000,
+        coords: { latitude: 26.1445 + (3 * (from + k)) / 111_132, longitude: 91.7362, accuracy: 5, speed: 3 },
+      }));
+      await act(() => takeLocations({ locations }));
+    }
+    const now = runNow();
+    expect(now?.phase).toBe("running");
+    // The pause the feel made at the start is undone: none is kept, and every point is the run's.
+    expect(now?.pauses).toEqual([]);
+    expect(now?.points).toHaveLength(120);
+    expect(voice.said).toEqual([]);
   });
 
   it("says nothing after Finish, though Android hands over the last steps while its location stops (testers on Google Play, 2026-11-17)", async () => {
