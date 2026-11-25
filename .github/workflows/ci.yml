@@ -175,9 +175,10 @@ jobs:
       - run: pnpm install --frozen-lockfile
       # The parts name each package by hand, so a package added to the workspace would be tested by nothing and no
       # check would say so. This step is red until a new package with tests is given a part and added to this list.
+      # The repository's own top folder is left out: its `test` only runs the packages'.
       - name: every package with tests has a part
         run: |
-          have=$(pnpm m ls --json --depth -1 | jq -r '.[].path' | while read -r d; do jq -r 'select(.scripts.test != null) | .name' "$d/package.json"; done | sort | xargs)
+          have=$(pnpm m ls --json --depth -1 | jq -r '.[] | select(.path != env.PWD) | .path' | while read -r d; do jq -r 'select(.scripts.test != null) | .name' "$d/package.json"; done | sort | xargs)
           want="@app/config @app/engine @app/movement @app/shared api mobile web"
           echo "packages with tests: $have"
           if [ "$have" != "$want" ]; then echo "::error::the packages with tests are not the ones the parts run ($want)"; exit 1; fi
