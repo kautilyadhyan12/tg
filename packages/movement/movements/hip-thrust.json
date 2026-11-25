@@ -1,0 +1,129 @@
+{
+  "format": 1,
+  "name": "hip-thrust",
+  "counting": "rep",
+  "phone": "On the floor or a low stand, 2 to 3 metres away, side-on, the whole body and the bench in the picture.",
+  "drive": {
+    "measure": "hips height",
+    "toward": "higher"
+  },
+  "ready": [
+    {
+      "read": {
+        "kind": "value",
+        "measures": [
+          "left knee",
+          "right knee"
+        ]
+      },
+      "atMost": 130,
+      "from": "Seated low against the bench: the knees bent, the feet planted (the usual set-up, the knees well bent; not fitted)."
+    },
+    {
+      "read": {
+        "kind": "value",
+        "measures": [
+          "left hip",
+          "right hip"
+        ]
+      },
+      "atMost": 130,
+      "from": "The hips low and bent, 50 degrees or more short of straight (not fitted): only the bottom of a hip thrust, never its top, where the hips open (Kd's videos, 52c-ii: 74 to 124 degrees at the bottom, 158 to 180 at the top)."
+    },
+    {
+      "read": {
+        "kind": "value",
+        "measures": [
+          "trunk lean"
+        ]
+      },
+      "atMost": 65,
+      "from": "The upper back on the bench, the trunk leaning back from upright and short of lying (not fitted): a body lying on the floor, as for a sit-up, reads 70 or more. Kd's videos (52c-ii): 24 to 58 degrees at the bottom."
+    },
+    {
+      "read": {
+        "kind": "gap",
+        "from": [
+          "shoulders height"
+        ],
+        "less": [
+          "hips height"
+        ]
+      },
+      "atLeast": 0.2,
+      "from": "The upper back on the bench, above the hips: the shoulders 0.2 of a leg or more higher than the hips (not fitted). Kd's videos (52c-ii): 0.33 to 0.5 at the start of a hip thrust; lying for a sit-up 0.13 at most, where a sit-up lying down read as a short hip thrust under uneven pictures."
+    },
+    {
+      "read": {
+        "kind": "value",
+        "measures": [
+          "left shin lean",
+          "right shin lean"
+        ]
+      },
+      "atMost": 15,
+      "from": "The feet planted under the knees, the shins upright (Kd's research file: the shins roughly vertical), within 15 degrees (not fitted). Kd's videos (52c-ii): 2 to 15 at the start of a hip thrust; sat up for a sit-up 17 to 90, where a man sat up on the floor read as a hip thrust's start."
+    }
+  ],
+  "rules": [
+    {
+      "name": "depth",
+      "role": "count",
+      "at": "bottom",
+      "read": {
+        "kind": "drop"
+      },
+      "atLeast": 0.15,
+      "seen": "always",
+      "short": "Push your hips higher to count.",
+      "unseen": "Keep your whole body in view.",
+      "from": "Set by movement-check from 2 people's videos (scripts/movementVideos.ts), as filmed and as each replay that sets numbers (scripts/replays.ts), 50 reps: a quarter of the way back towards standing from the shallowest rep (0.21; standing 0)."
+    },
+    {
+      "name": "hips open",
+      "role": "count",
+      "at": "bottom",
+      "read": {
+        "kind": "value",
+        "measures": [
+          "left hip",
+          "right hip"
+        ]
+      },
+      "atLeast": 146,
+      "seen": "always",
+      "short": "Push your hips higher to count.",
+      "unseen": "Keep your whole body in view.",
+      "from": "Set by movement-check from 2 people's videos (scripts/movementVideos.ts), as filmed and as each replay that sets numbers (scripts/replays.ts), 50 reps: a quarter of the way back towards standing from the shallowest rep (160.40; standing 106.19)."
+    },
+    {
+      "name": "back on the bench",
+      "role": "match",
+      "at": "bottom",
+      "read": {
+        "kind": "value",
+        "measures": [
+          "trunk lean"
+        ]
+      },
+      "atLeast": 39,
+      "seen": "always",
+      "unseen": "Keep your whole body in view.",
+      "from": "Set by movement-check from 2 people's videos (scripts/movementVideos.ts), as filmed and as each replay that sets numbers (scripts/replays.ts), 50 reps: beyond the furthest rep by half its distance from the middle rep (56.28; standing 44.95)."
+    },
+    {
+      "name": "shoulders stay",
+      "role": "match",
+      "at": "rep",
+      "read": {
+        "kind": "change",
+        "measures": [
+          "shoulders height"
+        ]
+      },
+      "atMost": 0.15,
+      "seen": "when-seen",
+      "from": "Set by movement-check from 2 people's videos (scripts/movementVideos.ts), as filmed and as each replay that sets numbers (scripts/replays.ts), 50 reps: beyond the furthest rep by half its distance from the middle rep (0.15; standing 0)."
+    }
+  ]
+}

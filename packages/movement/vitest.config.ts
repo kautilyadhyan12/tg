@@ -15,14 +15,19 @@ export const PROOF_FILES = [
   "test/movementKindsReplaysSquatJump.test.ts",
   "test/movementKindsReplaysLunge.test.ts",
   "test/movementKindsReplaysWholes.test.ts",
+  "test/movementFloorWorkReplaysSitUp.test.ts",
+  "test/movementFloorWorkReplaysHipThrust.test.ts",
+  "test/movementHoldReplays.test.ts",
 ];
 
-/** GitHub runs the proof on three machines at once (.github/workflows/ci.yml, PROOF_PART): the two eight-minute tables
- *  each alone, and "rest", every other proof file. "rest" is whatever the named parts leave, and a part named here has
+/** GitHub runs the proof on four machines at once (.github/workflows/ci.yml, PROOF_PART): the squat jump's and the lunge's
+ *  eight-minute tables each alone, the sit-up's and the hip thrust's side by side ("floor-work", 52c-ii), and "rest", every
+ *  other proof file. "rest" is whatever the named parts leave, and a part named here has
  *  to be in ci.yml's matrix, or the proof refuses to start (vitest.proof.config.ts). */
 export const PROOF_PARTS: Record<string, string[]> = {
   "squat-jump": ["test/movementKindsReplaysSquatJump.test.ts"],
   lunge: ["test/movementKindsReplaysLunge.test.ts"],
+  "floor-work": ["test/movementFloorWorkReplaysSitUp.test.ts", "test/movementFloorWorkReplaysHipThrust.test.ts"],
 };
 
 export default defineConfig({
