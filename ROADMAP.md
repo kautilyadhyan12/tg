@@ -813,7 +813,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
       - 37i. [x] **The phone feels whether it is moving** · merged 2026-11-24 · PR #637
       - 37l. [x] **A run keeps recording with the screen off** · merged 2026-11-24 · PR #638
       - CI. [x] **GitHub's checks run at once, each on a machine of its own** (not an item of this list; Kd asked here) · merged 2026-11-25 · PR #642
-      - 37j. [ ] **Auto-pause and Start use the phone's motion**: a stop pauses within about 5 s on any phone; a phone that feels still but travels (a pram) is "on wheels" and the GPS decides.
+      - 37j. [x] **Auto-pause and Start use the phone's motion** · merged 2026-11-25 · PR #646
       - 37k. [ ] **The line holds still with Auto-pause off**: the still stretches go with the run to the server; the server goes live before the store build that sends them.
 38. [ ] **The global board** (its reminders moved to item 19e on 2026-11-05): last, as Kd ruled on 2026-11-01 (`rulings/2026-11-01-17c-ii-a.md`): Active days and Running, the server's checks, a stranger's profile, and follow requests for somebody who chose Hide me, seen from outside their gym; Follow with Followers and Following counts everywhere, gyms included (`rulings/2026-11-01-17c-ii-b.md`). It waits for items 18, 37, 53 and 64.
 40. [ ] **Workouts and runs from your watch** (Kd, 2026-11-12, `rulings/2026-11-12-37f-i.md`), after 37f: Android's Health Connect and a file upload (GPX, TCX, FIT) first, then Garmin's and Polar's own connections (Kd applies to Garmin's); Apple Health with the iPhone version. Workouts and runs with their heart rate, calories and distance, and weight from a smart scale; never sleep or heart rate variability.

@@ -28,10 +28,10 @@ import {
   type Units,
 } from "@app/shared";
 import { colours } from "../../look/colours";
-import { AUTO_START, nextAutoPause, type AutoPauseState } from "./autoPause";
+import { AUTO_START, autoPausedFrom, autoRunning, feelAt, nextAutoPause, type AutoPauseState } from "./autoPause";
 import { closedPauses, elapsedMs, movingMsOf } from "./runLive";
 import { beginLine, guideAdvance, guideDone, guideNextLook, guideSchedule, guideSkip, nowLine, skipLine } from "./runGuide";
-import { PAUSE_WORDS, VOICE_AFTER_LOAD, VOICE_START, heartLine, voiceCheck, type VoiceState } from "./runVoice";
+import { PAUSE_WORDS, START_HUSH_MS, VOICE_AFTER_LOAD, VOICE_START, heartLine, voiceCheck, type VoiceState } from "./runVoice";
 import { runVoiceNative } from "./runVoiceNative";
 import { runMotionNative } from "./runMotionNative";
 import { holdHeart, loadMonitor, savedHeartNow, takeHeartReadings } from "../../heart/monitor";
@@ -125,9 +125,16 @@ let writtenAt = 0;
 /** The monitor kept connected while a run is going (37f-i). */
 let heartHeld: (() => void) | null = null;
 /** The last points taken while paused, and how many are kept: Auto-pause starts the clock again from the
- *  last point near where the person stopped, which a slow walk leaves well over a minute behind at worst. */
-const PAUSED_TAIL = 120;
+ *  last point near where the person stopped, which a slow walk leaves well over a minute behind at worst, and
+ *  a phone on wheels from the pause's own start, once it has travelled 40 m or more (37j). */
+const PAUSED_TAIL = 300;
 let pausedTail: RunPoint[] = [];
+/** The heart readings taken while Auto-paused, as many as the points: a pause undone (a phone on wheels, 37j)
+ *  gives them back to the run. */
+let pausedHeart: [number, number][] = [];
+/** Whether the phone was known to be on wheels when the person pressed Pause: their Resume goes on from that,
+ *  never from a ride taken while paused (a bus, the re-check's L5). */
+let wheelsAtPause = false;
 /** Raised at each Start and each Save or Discard: points handed over while one of those happened
  *  belong to no run, and never bring a saved or thrown-away run back. */
 let generation = 0;
@@ -371,7 +378,9 @@ export function resetRecorder(withFiles: RunFiles = phoneRunFiles): void {
   files = withFiles;
   current = null;
   auto = AUTO_START;
+  wheelsAtPause = false;
   pausedTail = [];
+  pausedHeart = [];
   loaded = false;
   unwritten = 0;
   heartUnwritten = 0;
@@ -503,14 +512,23 @@ function takeMotion(run: LiveRun, until: number = RUN_MAX_ELAPSED_MS): void {
  *  after Finish, or while paused (the server leaves a pause out too), never two inside a second. */
 function takeHeart(run: LiveRun): void {
   const readings = takeHeartReadings();
-  if (run.phase !== "running") return;
-  for (const { at, bpm } of readings) {
-    const ms = Math.round(at - run.startedAt);
-    const lastAt = run.heart[run.heart.length - 1]?.[0] ?? -HEART_EVERY_MS;
-    if (ms < 0 || ms > RUN_MAX_ELAPSED_MS || ms - lastAt < HEART_EVERY_MS || run.heart.length >= RUN_MAX_POINTS) continue;
-    run.heart.push([ms, bpm]);
-    heartUnwritten += 1;
+  if (run.phase !== "running") {
+    // Auto-paused: kept aside, in case the pause is undone or the clock starts again from before this batch.
+    if (run.phase === "paused" && !run.pausedByPerson) {
+      for (const { at, bpm } of readings) pausedHeart.push([Math.round(at - run.startedAt), bpm]);
+      pausedHeart = pausedHeart.slice(-PAUSED_TAIL);
+    }
+    return;
   }
+  for (const { at, bpm } of readings) keepHeart(run, Math.round(at - run.startedAt), bpm);
+}
+
+/** One heart reading kept with the run: never one from before Go or past a day, never two inside a second. */
+function keepHeart(run: LiveRun, ms: number, bpm: number): void {
+  const lastAt = run.heart[run.heart.length - 1]?.[0] ?? -HEART_EVERY_MS;
+  if (ms < 0 || ms > RUN_MAX_ELAPSED_MS || ms - lastAt < HEART_EVERY_MS || run.heart.length >= RUN_MAX_POINTS) return;
+  run.heart.push([ms, bpm]);
+  heartUnwritten += 1;
 }
 
 /** The person's monitor kept connected from Go until the run is finished. */
@@ -573,7 +591,8 @@ export async function loadRun(): Promise<LiveRun | null> {
       holdMonitor(current.userId);
       startMotion();
     }
-    auto = { ...AUTO_START, paused: state.phase === "paused" };
+    auto = state.phase === "paused" ? autoPausedFrom(openPauseFrom(current)) : AUTO_START;
+    wheelsAtPause = false;
     primeVoice(current);
     // The app was closed mid-run: a step begun since was said by nobody, so what is left of the step
     // it is on is said now, and the steps ahead are handed over again.
@@ -614,6 +633,8 @@ export async function takeLocations(data: unknown, now: number = Date.now()): Pr
     return;
   }
   const was = run.phase;
+  /** When the Auto-pause this batch ended had begun. */
+  let resumedFrom: number | null = null;
   // Before the points: Auto-pause reads the motion of their seconds (37j).
   takeMotion(run);
   let full = false;
@@ -632,7 +653,8 @@ export async function takeLocations(data: unknown, now: number = Date.now()): Pr
     if (accuracyM === null || accuracyM <= GPS_WORST_ACCURACY_M) run.here = [point[1], point[2]];
     // Past the most pauses a run may hold, Auto-pause pauses no more, but still starts one it holds.
     if (run.autoPause && (run.pauses.length < RUN_MAX_PAUSES || run.phase === "paused")) {
-      const next = nextAutoPause(auto, { at, lat: point[1], lng: point[2], accuracyM, speed: location.coords.speed ?? null });
+      const feel = feelAt(run.motion, at);
+      const next = nextAutoPause(auto, { at, lat: point[1], lng: point[2], accuracyM, speed: location.coords.speed ?? null, feel });
       auto = next.state;
       const change = next.change;
       if (change?.kind === "pause" && run.phase === "running") {
@@ -641,6 +663,7 @@ export async function takeLocations(data: unknown, now: number = Date.now()): Pr
         run.pausedByPerson = false;
         writtenAt = 0; // a change of phase is written at once
       } else if (change?.kind === "resume" && run.phase === "paused" && !run.pausedByPerson) {
+        resumedFrom = openPauseFrom(run);
         closePause(run, change.at);
         run.phase = "running";
         // The steps that started the clock again were taken while paused: they are the run's.
@@ -649,6 +672,8 @@ export async function takeLocations(data: unknown, now: number = Date.now()): Pr
           run.points.push(kept);
           unwritten += 1;
         }
+        for (const [ms, bpm] of pausedHeart) if (ms >= change.at) keepHeart(run, ms, bpm);
+        pausedHeart = [];
         writtenAt = 0;
       }
     }
@@ -675,8 +700,11 @@ export async function takeLocations(data: unknown, now: number = Date.now()): Pr
   }
   // Only Auto-pause pauses a run here: a pause ends the stretch the maths smooths, so a mark passed
   // before it is said at once.
+  // A stop in the first seconds after Go is not spoken of, nor its end (37j): somebody who presses Start and
+  // stands while the phone settles hears nothing until they move off. The screen shows it as always.
   if (current.phase === "running" && was === "paused") {
-    say([PAUSE_WORDS.resumed, ...markNow(current, false), ...resumeLines(current, now)]);
+    const hushed = resumedFrom !== null && resumedFrom < START_HUSH_MS;
+    say([...(hushed ? [] : [PAUSE_WORDS.resumed]), ...markNow(current, false), ...resumeLines(current, now)]);
     scheduleGuide(current, now);
     writtenAt = 0;
   } else if (current.phase === "running") {
@@ -697,7 +725,8 @@ export async function takeLocations(data: unknown, now: number = Date.now()): Pr
       guideLookAt = 0;
       writtenAt = 0;
     }
-    say([...markNow(current, true), PAUSE_WORDS.auto]);
+    const from = openPauseFrom(current);
+    say([...markNow(current, true), ...(from !== null && from < START_HUSH_MS ? [] : [PAUSE_WORDS.auto])]);
     scheduleGuide(current, now);
   }
   if (now - writtenAt >= WRITE_EVERY_MS) {
@@ -732,10 +761,19 @@ async function takeLate(run: LiveRun, locations: PhoneLocations["locations"], mi
 /** The end of the last closed pause: a new one never starts inside it. */
 const lastOpenEnd = (run: LiveRun): number => run.pauses[run.pauses.length - 1]?.[1] ?? 0;
 
+/** When the open pause began; null when none is open. */
+function openPauseFrom(run: LiveRun): number | null {
+  const open = run.pauses[run.pauses.length - 1];
+  return open === undefined || open[1] !== null ? null : open[0];
+}
+
+/** Ends the open pause at `at`. One ended where it began was no pause (Auto-pause undoing a stop that was
+ *  a phone on wheels, 37j): it is not kept. */
 function closePause(run: LiveRun, at: number): void {
   const open = run.pauses[run.pauses.length - 1];
   if (open === undefined || open[1] !== null) return;
-  open[1] = Math.max(open[0], at);
+  if (at <= open[0]) run.pauses.pop();
+  else open[1] = at;
 }
 
 /** Android's own start of the app to take a point runs this before anything else (index.ts). */
@@ -784,8 +822,10 @@ export async function startRun(userId: string, runId: string, autoPause: boolean
   generation += 1;
   current = run;
   auto = AUTO_START;
+  wheelsAtPause = false;
   voice = VOICE_START;
   pausedTail = [];
+  pausedHeart = [];
   loaded = true;
   unwritten = 0;
   heartUnwritten = 0;
@@ -822,7 +862,8 @@ export async function pauseRun(now: number = Date.now()): Promise<void> {
   if (run.phase === "running") run.pauses.push([Math.max(elapsedMs(run, now), lastOpenEnd(run)), null]);
   run.phase = "paused";
   run.pausedByPerson = true;
-  auto = { ...AUTO_START, paused: true };
+  wheelsAtPause = auto.wheels;
+  auto = autoPausedFrom(openPauseFrom(run), wheelsAtPause);
   current = { ...run };
   if (was === "running") say([...markNow(current, true), ...step.lines, PAUSE_WORDS.person]);
   scheduleGuide(current, now);
@@ -836,10 +877,12 @@ export async function resumeRun(now: number = Date.now()): Promise<void> {
   // What the monitor sent while paused is not the run's.
   takeHeartReadings();
   closePause(run, elapsedMs(run, now));
+  const byPerson = run.pausedByPerson;
   run.phase = "running";
   run.pausedByPerson = false;
-  auto = AUTO_START;
+  auto = autoRunning(byPerson ? wheelsAtPause : auto.wheels);
   pausedTail = [];
+  pausedHeart = [];
   current = { ...run };
   say([PAUSE_WORDS.resumed, ...resumeLines(current, now)]);
   scheduleGuide(current, now);
@@ -891,7 +934,8 @@ export async function setAutoPause(on: boolean, now: number = Date.now()): Promi
     say([PAUSE_WORDS.resumed, ...resumeLines(run, now)]);
     scheduleGuide(run, now);
   }
-  auto = run.phase === "paused" ? { ...AUTO_START, paused: true } : AUTO_START;
+  const wheels = run.pausedByPerson ? wheelsAtPause : auto.wheels;
+  auto = run.phase === "paused" ? autoPausedFrom(openPauseFrom(run), wheels) : autoRunning(wheels);
   current = { ...run, autoPause: on };
   await keep(current);
   tell();
@@ -956,7 +1000,9 @@ export async function forgetRun(): Promise<void> {
   stopMotion();
   current = null;
   auto = AUTO_START;
+  wheelsAtPause = false;
   pausedTail = [];
+  pausedHeart = [];
   tell();
 }
 
