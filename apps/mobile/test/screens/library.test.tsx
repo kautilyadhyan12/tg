@@ -5,7 +5,7 @@ import { createHash } from "node:crypto";
 import { readdirSync, readFileSync } from "node:fs";
 import { heartSums, type OnboardingAnswers } from "@app/shared";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react-native";
-import { AppState, TextInput, type AppStateStatus } from "react-native";
+import { AccessibilityInfo, AppState, StyleSheet, TextInput, type AppStateStatus, type StyleProp, type ViewStyle } from "react-native";
 import { File, Paths } from "expo-file-system";
 import { App } from "../../src/App";
 import { Gesture, State } from "react-native-gesture-handler";
@@ -266,6 +266,257 @@ describe("62a: each exercise's own picture", () => {
     expect(await screen.findByText(`${String(all.length)} exercises · A to Z`)).toBeTruthy();
     await settle(50);
     for (const name of all) expect(screen.getByTestId(`kind-picture-${name.replace(/\.json$/, "")}`)).toBeTruthy();
+  });
+});
+
+describe("62b: each exercise's clip plays", () => {
+  const sha = (text: string) => createHash("sha256").update(text).digest("hex");
+  const BYTES = {
+    gobletPicture: "the goblet squat's own picture",
+    gobletClip: "the goblet squat's own clip",
+    rdlPicture: "the Romanian deadlift's own picture",
+    rdlClip: "the Romanian deadlift's own clip",
+  };
+  type Key = keyof typeof BYTES;
+  const KEYS = Object.keys(BYTES) as Key[];
+  const name = (key: Key) => `${sha(BYTES[key])}.${key.endsWith("Clip") ? "mp4" : "webp"}`;
+  /** A real file of the folder with its own picture and clip, each named by the sha256 of its test bytes. */
+  const withMedia = (file: string, picture: string, clip: string, ground: string) => {
+    const real = JSON.parse(readFileSync(`${FOLDER}${file}`, "utf8")) as Record<string, unknown>;
+    return { ...real, status: "live", met: 5, picture: { file: picture, width: 720, height: 1280, bytes: 30, ground }, clip: { file: clip, width: 720, height: 1280, bytes: 30, seconds: 4 } };
+  };
+  const library = () =>
+    download([
+      withMedia("kettlebell_goblet_squat.json", name("gobletPicture"), name("gobletClip"), "#D5D5D5"),
+      withMedia("dumbbell_romanian_deadlift.json", name("rdlPicture"), name("rdlClip"), "#D1D1D1"),
+    ]);
+  const open = () => openLibrary(libraryServer({ library: () => ({ status: 200, body: library() }) }).ask);
+  const served = new Map<string, string>();
+  const asked: string[] = [];
+  const landed = jest.mocked(File.downloadFileAsync).getMockImplementation();
+  const serveAll = () => {
+    for (const key of KEYS) served.set(name(key), BYTES[key]);
+  };
+  const fileOf = (uri: unknown) => String(uri).slice(String(uri).lastIndexOf("/") + 1);
+  /** The clip players on the screen: each with the clip it plays and whether it is playing. */
+  const players = () => screen.queryAllByTestId("clip-player").map((p) => ({ file: fileOf(p.props.uri), playing: p.props.playing as boolean }));
+  type ClipMock = { missing: boolean; firstFrame: "now" | "held"; release: (uri: string) => void; reset: () => void };
+  const clipMock = () => jest.requireMock<{ clipPlayer: ClipMock }>("../../src/library/clipNative").clipPlayer;
+  /** Whether a clip's box shows: it stays unseen (opacity 0) until its own first frame is drawn. */
+  const clipShows = (id: string) => StyleSheet.flatten(screen.getByTestId(`clip-${id}`).props.style as StyleProp<ViewStyle>).opacity !== 0;
+  /** Goblet squat (one set, then a rest), the Romanian deadlift (one set), then Squat, which has no clip. */
+  const keptWorkout = () => {
+    const file = new File(Paths.document, `my-workout-${RAVI.id}.json`);
+    if (file.exists) file.delete();
+    file.create();
+    const plan = (restSeconds: number | null) => ({ measuredIn: "reps", sets: [{ target: 2, weightGrams: null, restSeconds }] });
+    file.write(
+      JSON.stringify({ v: 2, name: "Legs", items: [{ id: "kettlebell_goblet_squat", plan: plan(30) }, { id: "dumbbell_romanian_deadlift", plan: plan(null) }, { id: "squat", plan: plan(null) }] }),
+    );
+  };
+  const startWorkout = async () => {
+    await fireEvent.press(await screen.findByRole("button", { name: /^My Workout/ }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Start workout" }));
+  };
+
+  beforeEach(() => {
+    served.clear();
+    asked.length = 0;
+    forgetAskedMedia();
+    jest.mocked(File.downloadFileAsync).mockImplementation((url, to) => {
+      asked.push(fileOf(url));
+      const body = served.get(fileOf(url));
+      if (body === undefined) return Promise.reject(new Error("UnableToDownload: 404"));
+      (to as File).write(body);
+      return Promise.resolve(to as File);
+    });
+    for (const one of Paths.document.list()) if (one.name === "library-media") one.delete();
+  });
+  afterEach(() => {
+    if (landed !== undefined) jest.mocked(File.downloadFileAsync).mockImplementation(landed);
+    clipMock().reset();
+  });
+
+  it("the worst thing: a workout shows the clip of the exercise being done, the next one's in a rest, and never the last one's", async () => {
+    serveAll();
+    keptWorkout();
+    await open();
+    await startWorkout();
+    expect(await screen.findByText("Exercise 1 of 3 · Set 1 of 1")).toBeTruthy();
+    await waitFor(() => {
+      expect(players()).toEqual([{ file: name("gobletClip"), playing: true }]);
+    });
+    expect(screen.getByTestId("clip-kettlebell_goblet_squat")).toBeTruthy();
+    // The set done, a rest: the exercise coming up next, its clip and none other.
+    await fireEvent.press(screen.getByRole("button", { name: "Set done · 2 reps" }));
+    expect(await screen.findByText("Coming up next")).toBeTruthy();
+    expect(screen.getAllByText("Dumbbell Romanian Deadlift").length).toBeGreaterThan(0);
+    expect(players()).toEqual([{ file: name("rdlClip"), playing: true }]);
+    expect(screen.queryByTestId("clip-kettlebell_goblet_squat")).toBeNull();
+    await fireEvent.press(screen.getByRole("button", { name: "Skip rest" }));
+    expect(await screen.findByText("Exercise 2 of 3 · Set 1 of 1")).toBeTruthy();
+    expect(players()).toEqual([{ file: name("rdlClip"), playing: true }]);
+    // Squat has no clip and no picture of its own: no clip at all, its kind's picture as before.
+    await fireEvent.press(screen.getByRole("button", { name: "Set done · 2 reps" }));
+    expect(await screen.findByText("Exercise 3 of 3 · Set 1 of 1")).toBeTruthy();
+    expect(players()).toEqual([]);
+    expect(screen.queryByTestId("workout-picture-dumbbell_romanian_deadlift")).toBeNull();
+  });
+
+  it("the worst thing, slow internet: while the next exercise's clip is still coming, no clip shows, never the last one's", async () => {
+    serveAll();
+    keptWorkout();
+    // The Romanian deadlift's clip never finishes coming.
+    const plain = jest.mocked(File.downloadFileAsync).getMockImplementation();
+    jest.mocked(File.downloadFileAsync).mockImplementation((url, to, options) => {
+      if (fileOf(url) === name("rdlClip")) return new Promise<File>(() => undefined);
+      if (plain === undefined) return Promise.reject(new Error("no download"));
+      return plain(url, to, options);
+    });
+    await open();
+    await startWorkout();
+    await waitFor(() => {
+      expect(players()).toEqual([{ file: name("gobletClip"), playing: true }]);
+    });
+    await fireEvent.press(screen.getByRole("button", { name: "Set done · 2 reps" }));
+    expect(await screen.findByText("Coming up next")).toBeTruthy();
+    await settle(50);
+    // Its own picture shows, and no clip at all.
+    expect(await screen.findByTestId("workout-picture-dumbbell_romanian_deadlift")).toBeTruthy();
+    expect(players()).toEqual([]);
+  });
+
+  it("the worst thing, a clip still loading: the next exercise's own picture shows until its own clip's first frame, never the last clip", async () => {
+    clipMock().firstFrame = "held";
+    serveAll();
+    keptWorkout();
+    await open();
+    await startWorkout();
+    await waitFor(() => {
+      expect(players()).toEqual([{ file: name("gobletClip"), playing: true }]);
+    });
+    const gobletUri = String(screen.getByTestId("clip-player").props.uri);
+    // Until its first frame is drawn the clip is unseen, and the picture under it is what shows.
+    expect(clipShows("kettlebell_goblet_squat")).toBe(false);
+    expect(screen.getByTestId("workout-picture-kettlebell_goblet_squat")).toBeTruthy();
+    await act(() => {
+      clipMock().release(gobletUri);
+    });
+    expect(clipShows("kettlebell_goblet_squat")).toBe(true);
+    // The rest: a player of the deadlift's own, unseen while it loads, over the deadlift's picture; the goblet squat's is gone.
+    await fireEvent.press(screen.getByRole("button", { name: "Set done · 2 reps" }));
+    expect(await screen.findByText("Coming up next")).toBeTruthy();
+    expect(players()).toEqual([{ file: name("rdlClip"), playing: true }]);
+    expect(clipShows("dumbbell_romanian_deadlift")).toBe(false);
+    expect(screen.getByTestId("workout-picture-dumbbell_romanian_deadlift")).toBeTruthy();
+    expect(screen.queryByTestId("clip-kettlebell_goblet_squat")).toBeNull();
+    // Releasing the old clip's frame again changes nothing; the new one's own frame shows it.
+    await act(() => {
+      clipMock().release(gobletUri);
+    });
+    expect(clipShows("dumbbell_romanian_deadlift")).toBe(false);
+    await act(() => {
+      clipMock().release(String(screen.getByTestId("clip-player").props.uri));
+    });
+    expect(clipShows("dumbbell_romanian_deadlift")).toBe(true);
+  });
+
+  it("every exercise's picture and clip is asked for as the workout opens, so none is missing later with no internet", async () => {
+    serveAll();
+    keptWorkout();
+    await open();
+    await startWorkout();
+    expect(await screen.findByText("Exercise 1 of 3 · Set 1 of 1")).toBeTruthy();
+    await waitFor(() => {
+      expect(KEYS.map((key) => keptMedia(name(key)) !== null)).toEqual([true, true, true, true]);
+    });
+    // With no internet now, the next exercise's clip still plays from the phone, asked for once in all.
+    served.clear();
+    await fireEvent.press(screen.getByRole("button", { name: "Set done · 2 reps" }));
+    expect(await screen.findByText("Coming up next")).toBeTruthy();
+    expect(players()).toEqual([{ file: name("rdlClip"), playing: true }]);
+    expect(asked.filter((f) => f === name("rdlClip"))).toHaveLength(1);
+  });
+
+  it("the clip stops on its frame while the workout is paused, and plays again on Resume", async () => {
+    serveAll();
+    keptWorkout();
+    await open();
+    await startWorkout();
+    await waitFor(() => {
+      expect(players()).toEqual([{ file: name("gobletClip"), playing: true }]);
+    });
+    await fireEvent.press(screen.getByRole("button", { name: "Pause workout" }));
+    expect(players()).toEqual([{ file: name("gobletClip"), playing: false }]);
+    await fireEvent.press(screen.getByRole("button", { name: "Resume workout" }));
+    expect(players()).toEqual([{ file: name("gobletClip"), playing: true }]);
+  });
+
+  it("an exercise's page plays its clip over its picture, and the button at its corner stops and starts it", async () => {
+    serveAll();
+    await open();
+    await openExercise(/^Kettlebell Goblet Squat,/);
+    expect(await screen.findByTestId("page-picture-kettlebell_goblet_squat")).toBeTruthy();
+    await waitFor(() => {
+      expect(players()).toEqual([{ file: name("gobletClip"), playing: true }]);
+    });
+    await fireEvent.press(screen.getByRole("button", { name: "Pause the clip" }));
+    expect(players()).toEqual([{ file: name("gobletClip"), playing: false }]);
+    await fireEvent.press(screen.getByRole("button", { name: "Play the clip" }));
+    expect(players()).toEqual([{ file: name("gobletClip"), playing: true }]);
+  });
+
+  it("with the phone's Remove animations on, the page waits for Play, and a workout shows the picture alone", async () => {
+    // The test setup's own stand-in, its answer put back after: a restore would leave it with none for the tests after this.
+    const reduce = jest.spyOn(AccessibilityInfo, "isReduceMotionEnabled");
+    const setup = reduce.getMockImplementation();
+    reduce.mockResolvedValue(true);
+    try {
+      serveAll();
+      keptWorkout();
+      await open();
+      await openExercise(/^Kettlebell Goblet Squat,/);
+      expect(await screen.findByRole("button", { name: "Play the clip" })).toBeTruthy();
+      expect(players()).toEqual([{ file: name("gobletClip"), playing: false }]);
+      await fireEvent.press(screen.getByRole("button", { name: "Play the clip" }));
+      expect(players()).toEqual([{ file: name("gobletClip"), playing: true }]);
+      await fireEvent.press(screen.getByRole("button", { name: "Close" }));
+      await startWorkout();
+      expect(await screen.findByTestId("workout-picture-kettlebell_goblet_squat")).toBeTruthy();
+      expect(players()).toEqual([]);
+    } finally {
+      reduce.mockImplementation(setup ?? (() => Promise.resolve(false)));
+    }
+  });
+
+  it("a clip not come yet, or refused by its name, is never played: the picture shows, and no pause button", async () => {
+    served.set(name("gobletPicture"), BYTES.gobletPicture);
+    // What comes under the clip's name is another file: thrown away.
+    served.set(name("gobletClip"), BYTES.rdlClip);
+    await open();
+    await openExercise(/^Kettlebell Goblet Squat,/);
+    expect(await screen.findByTestId("page-picture-kettlebell_goblet_squat")).toBeTruthy();
+    await settle(50);
+    expect(asked).toContain(name("gobletClip"));
+    expect(players()).toEqual([]);
+    expect(keptMedia(name("gobletClip"))).toBeNull();
+    expect(screen.queryByRole("button", { name: "Pause the clip" })).toBeNull();
+  });
+
+  it("a copy of the app built before the player shows the picture, on the page and in a workout, and never fails", async () => {
+    clipMock().missing = true;
+    serveAll();
+    keptWorkout();
+    await open();
+    await openExercise(/^Kettlebell Goblet Squat,/);
+    expect(await screen.findByTestId("page-picture-kettlebell_goblet_squat")).toBeTruthy();
+    await settle(50);
+    expect(players()).toEqual([]);
+    expect(screen.queryByRole("button", { name: "Pause the clip" })).toBeNull();
+    await fireEvent.press(screen.getByRole("button", { name: "Close" }));
+    await startWorkout();
+    expect(await screen.findByTestId("workout-picture-kettlebell_goblet_squat")).toBeTruthy();
+    expect(players()).toEqual([]);
   });
 });
 

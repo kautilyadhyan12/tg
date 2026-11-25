@@ -66,6 +66,8 @@ export const phoneLibraryEntrySchema = z.object({
       width: z.number().int().min(1).max(10_000),
       height: z.number().int().min(1).max(10_000),
       seconds: z.number().min(0).max(600),
+      /** The bottom corner KWAZO is in (62b); a page's own buttons keep to the other. */
+      mark: z.enum(["left", "right"]).catch("left").default("left"),
     })
     .nullable()
     .catch(null)

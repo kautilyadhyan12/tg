@@ -2813,6 +2813,38 @@ the seed after the old rows. The download is `GET /v1/library` (`libraryDownload
   workouts, the calendar's day and the workout's sets show it small. The workout screen's big picture changes in 62b, with the
   clip.
 
+**As built in 62b (2026-11-25; `rulings/2026-11-25-62b.md`, Kd's drawing "Exercise Clips on the Phone").**
+- **KWAZO in every clip.** The command lays the app's wordmark (`apps/api/tools/library-mark.png`, its white pill, made by
+  `library-mark.py` from `look/Wordmark.tsx`'s font and colours) into the clip itself, bottom-left, the pill 9.5 % of the clip's
+  short side tall and 4 % in (`markPlace`); `--mark-right` puts it bottom-right for a clip whose person reaches that corner, which
+  the terminal decides from the sheet, and the clip's file says which (`mark`, left where a file made before says none). Still
+  pictures carry no mark.
+- **A clip's grey meets its picture's.** On the walk Kd's clips were 2 to 8 shades off their pictures' grey (#CDCDCD on #D5D5D5,
+  #D5D9D4 on #D1D1D1, #B2B2B0 on #B8B6B7, as the command printed them), which showed as a box round the clip. The command measures the clip's grey round its edge (a frame each
+  second) and moves its colours by the difference before the mark is laid (`greyShift`, refused past 24 shades as not from one
+  final folder); the phone melts only the clip's last few per cent into the grey, short of the mark. The three clips were made
+  again (141 to 203 KB) and meet their pictures' grey within 2 shades.
+- **The player** is expo-video 57.0.5 (`library/clipPlayer.tsx`), loaded only where the phone has it (`library/clipNative.ts`): a
+  copy built before shows the picture. It plays the file the phone keeps (62a's sha256-checked download), so no Range request is
+  needed and a clip plays with no internet once it has come; looping, muted and mixing, so the person's music plays on (a muted
+  player never asks Android for the sound); the screen is never kept on by it; drawn as part of the page (texture view).
+- **One clip, one player.** Each exercise's clip has a player of its own and shows only from its own first frame, over its
+  picture; the kept-file hook never gives the last file's address for a new one (`useKeptFile`), so moving on in a workout shows
+  the new exercise's clip, its picture while the clip is still coming, and never the last one's.
+- **The page:** the clip over the picture, the same box; a pause button at the band's foot on the side away from KWAZO ("Pause the
+  clip" / "Play the clip"). With the phone's Remove animations on it waits for Play, and nothing moves before that setting is read.
+  The page and a workout show the clip by one rule: once the exercise's own picture has come (it is small and comes first).
+- **A workout:** the exercise's own picture whole at the top on its own grey, the top's buttons above it, the clip over it, the
+  line above the name and the name under it (`workoutPictureHeight`: its shape at the phone's width, at most 29 % of the screen's
+  height, never under 160); an exercise with no picture of its own keeps the band of 64a-ii. In a rest it is the exercise coming up
+  next; paused, the clip stops on its frame; with Remove animations on, the picture alone. Every exercise's picture and clip is
+  asked for when the workout opens.
+- **What the phone keeps:** every clip and picture once shown, in the documents folder; about 45 MB at most for 200 exercises (62a's
+  mean sizes), so no limit is set.
+- **Measured on Kd's phone** (2026-11-25, the development copy, a workout with the clip playing): the video player 8 % and its
+  decoder 4.5 % of one core, beside the app's own 38 %; the phone's sound-focus list empty while a clip played (no request from the
+  app), so the person's music plays on.
+
 ### 13.5 What a workout keeps (job 61)
 
 - **The save** is one whole workout under the id the phone made. Sent twice it is one
@@ -3300,7 +3332,7 @@ Read in the member web on 2026-11-16. Each line is ticked by the job named.
 | What a member does today | Job |
 |---|---|
 | Search exercises; filter by category and difficulty; A to Z; 20 at a time with Load more; "none found" with Clear filters; "could not load" with Try again | 63 |
-| An exercise's card and page: picture, clips, difficulty, equipment, calories a minute, reps or time, sets, about, how to do it, common mistakes, main and other muscles; a link that opens one exercise | 63 (clips: 62) |
+| An exercise's card and page: picture, clips, difficulty, equipment, calories a minute, reps or time, sets, about, how to do it, common mistakes, main and other muscles; a link that opens one exercise | 63 (clips: 62b) |
 | What the camera can do for it, said on the card (was "AI Supported") | 63, from folder 1's data |
 | Add to workout, no repeats; My Workout with its count | 63, 64a |
 | Name a workout; its exercises, estimated time and calories; move up and down, remove; sets, reps or time, rest; Clear; Add more | 64a |

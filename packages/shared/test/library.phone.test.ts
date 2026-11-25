@@ -106,7 +106,15 @@ describe("an exercise's own picture and clip (62a)", () => {
   it("each is read as the server sends it", () => {
     const read = readPhoneLibrary(download([{ ...plank(), picture, clip }]));
     expect(read?.exercises[0]?.picture).toEqual({ file: `${hash}.webp`, width: 720, height: 1280, ground: "#D5D5D5" });
-    expect(read?.exercises[0]?.clip).toEqual({ file: `${hash}.mp4`, width: 720, height: 1280, seconds: 4 });
+    expect(read?.exercises[0]?.clip).toEqual({ file: `${hash}.mp4`, width: 720, height: 1280, seconds: 4, mark: "left" });
+  });
+
+  it("the clip's KWAZO corner (62b): right is read; one sent before it, or a word the phone does not know, is left", () => {
+    const corner = (mark: unknown) => readPhoneLibrary(download([{ ...plank(), picture, clip: { ...clip, mark } }]))?.exercises[0]?.clip?.mark;
+    expect(corner("right")).toBe("right");
+    expect(corner("left")).toBe("left");
+    expect(corner(undefined)).toBe("left");
+    expect(corner("top")).toBe("left");
   });
 
   it("one the phone cannot read is none, and the exercise is still shown (with the app's picture of its kind)", () => {
