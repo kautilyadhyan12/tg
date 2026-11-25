@@ -810,6 +810,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
       - 37h. [x] **The run's clock never goes back, and a current pace somebody can run** · merged 2026-11-23 · PR #633
       - 37i. [x] **The phone feels whether it is moving** · merged 2026-11-24 · PR #637
       - 37l. [x] **A run keeps recording with the screen off** · merged 2026-11-24 · PR #638
+      - CI. [x] **GitHub's checks run at once, each on a machine of its own** (not an item of this list; Kd asked here) · merged 2026-11-25 · PR #642
       - 37j. [ ] **Auto-pause and Start use the phone's motion**: a stop pauses within about 5 s on any phone; a phone that feels still but travels (a pram) is "on wheels" and the GPS decides.
       - 37k. [ ] **The line holds still with Auto-pause off**: the still stretches go with the run to the server; the server goes live before the store build that sends them.
 38. [ ] **The global board** (its reminders moved to item 19e on 2026-11-05): last, as Kd ruled on 2026-11-01 (`rulings/2026-11-01-17c-ii-a.md`): Active days and Running, the server's checks, a stranger's profile, and follow requests for somebody who chose Hide me, seen from outside their gym; Follow with Followers and Following counts everywhere, gyms included (`rulings/2026-11-01-17c-ii-b.md`). It waits for items 18, 37, 53 and 64.
@@ -869,7 +870,10 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
     - 61a. [x] **Saving a whole workout from the phone** — merged 2026-11-18 (PR #582).
     - 61b. [x] **History and records for each exercise** — merged 2026-11-18 (PR #586).
     - 61c. [x] **Saved workouts** — merged 2026-11-19 (PR #591).
-62. [ ] **The clip line** (after 60): the generated clip made small, its still picture, and where clips are kept (Stage 4 item 4). Checking a clip against its exercise's rules waits for exercise folder 1's 52a and 52b.
+62. **The clip line** (after 60; split 2026-11-24 by its terminal in three, `handoff/2026-11-24-62a.md` keeps its line as first written).
+    - 62a. [x] **Each exercise's own picture, and the clip line** — merged 2026-11-25 (PR #640).
+    - 62b. [ ] **The clip plays**: looping on the exercise's page and beside the timer in a workout, kept for no signal (`expo-video`, Kd's yes asked in its plan).
+    - 62c. [ ] **Each clip checked against its exercise's camera rules**: once exercise folder 1 has that exercise's rules (job 54).
 63. **The Exercise Library on the phone** (§13.6; after 60). Split 2026-11-19 by its terminal, after Kd's drawings, in three.
     - 63a. [x] **The Library and an exercise's page** — merged 2026-11-19 (PR #596).
     - 63b. [x] **Find exercises** — merged 2026-11-20 (PR #599).

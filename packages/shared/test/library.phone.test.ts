@@ -24,6 +24,9 @@ function realEntries(): Record<string, unknown>[] {
   return checked.exercises.map((e) => libraryEntrySchema.parse({ ...e, status: e.status, met: mets.get(e.energy.compendium) }) as unknown as Record<string, unknown>);
 }
 
+/** The real folder's exercises by id, in order, read from the folder: never a list typed here. */
+const realIds = (): string[] => realEntries().map((e) => String(e.id)).sort();
+
 function download(exercises: unknown[]): unknown {
   return { fingerprint: "a".repeat(64), version: 4, list: { exercises, camera: [] } };
 }
@@ -55,7 +58,7 @@ describe("an exercise is never shown without its cautions", () => {
     ["cautions null", (en: Record<string, unknown>) => { en.cautions = null; }],
   ])("%s: the exercise is left out, and the others are still shown", (_, change) => {
     const read = readPhoneLibrary(download([withText(plank(), change), ...realEntries().filter((e) => e.id !== "plank")]));
-    expect(read?.exercises.map((e) => e.id).sort()).toEqual(["barbell_curl", "squat"]);
+    expect(read?.exercises.map((e) => e.id).sort()).toEqual(realIds().filter((id) => id !== "plank"));
     expect(read?.unread).toBe(1);
   });
 });
@@ -66,7 +69,8 @@ describe("the real Library, as the server sends it", () => {
     expect(libraryDownloadSchema.safeParse(download(realEntries())).success).toBe(true);
     const read = readPhoneLibrary(download(realEntries()));
     expect(read?.unread).toBe(0);
-    expect(read?.exercises.map((e) => e.id).sort()).toEqual(["barbell_curl", "plank", "squat"]);
+    expect(read?.exercises.map((e) => e.id).sort()).toEqual(realIds());
+    expect(realIds()).toEqual(readdirSync(EXERCISES).map((name) => name.replace(/.json$/, "")).sort());
     const squat = read?.exercises.find((e) => e.id === "squat");
     expect(squat?.muscles.main).toContain("vastus_lateralis");
     expect(squat?.muscles.steady).toContain("glute_med");
@@ -94,10 +98,38 @@ describe("words no list has yet are shown, never refused (§13.1, principle 7)",
   });
 });
 
+describe("an exercise's own picture and clip (62a)", () => {
+  const hash = "c".repeat(64);
+  const picture = { file: `${hash}.webp`, width: 720, height: 1280, bytes: 30_000, ground: "#D5D5D5" };
+  const clip = { file: `${hash}.mp4`, width: 720, height: 1280, bytes: 188_000, seconds: 4 };
+
+  it("each is read as the server sends it", () => {
+    const read = readPhoneLibrary(download([{ ...plank(), picture, clip }]));
+    expect(read?.exercises[0]?.picture).toEqual({ file: `${hash}.webp`, width: 720, height: 1280, ground: "#D5D5D5" });
+    expect(read?.exercises[0]?.clip).toEqual({ file: `${hash}.mp4`, width: 720, height: 1280, seconds: 4 });
+  });
+
+  it("one the phone cannot read is none, and the exercise is still shown (with the app's picture of its kind)", () => {
+    for (const bad of [{ ...picture, file: "../secret.webp" }, { ...picture, file: `${hash}.png` }, { ...picture, ground: "red" }, "squat.webp"]) {
+      const read = readPhoneLibrary(download([{ ...plank(), picture: bad }]));
+      expect(read?.exercises.map((e) => [e.id, e.picture]), JSON.stringify(bad)).toEqual([["plank", null]]);
+    }
+  });
+
+  it("an entry published before 62a, with no picture or clip at all, reads as none", () => {
+    const old = structuredClone(plank());
+    delete old.picture;
+    delete old.clip;
+    const read = readPhoneLibrary(download([old]));
+    expect(read?.exercises[0]?.picture).toBeNull();
+    expect(read?.exercises[0]?.clip).toBeNull();
+  });
+});
+
 describe("what cannot be read", () => {
   it("one broken exercise is left out and counted; the second of two with one id too", () => {
     const read = readPhoneLibrary(download([...realEntries(), { id: "broken" }, plank()]));
-    expect(read?.exercises).toHaveLength(3);
+    expect(read?.exercises).toHaveLength(realIds().length);
     expect(read?.unread).toBe(2);
   });
 

@@ -1,10 +1,10 @@
 import type { ReactNode } from "react";
-import { Image, StyleSheet, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 import { colours, sizes, type ColourName } from "../../look/colours";
 import { Icon } from "../../look/Icon";
-import { pictures } from "../../look/pictures";
 import { fonts, Txt } from "../../look/Txt";
-import { exercisePicture } from "../../library/pictures";
+import { ExerciseThumb } from "../library/ExerciseImage";
+import { useNamed } from "../library/useLibrary";
 import { Led } from "../library/Records";
 import { setsHeading, type ExerciseBlock, type RecordRow } from "./afterWords";
 
@@ -75,13 +75,15 @@ export function RecordsBox({ rows }: { rows: readonly RecordRow[] }) {
 
 /** "3 exercises · 9 sets", then every set, exercise by exercise, a gold PR on the set that made a record. */
 export function SetBlocks({ blocks }: { blocks: readonly ExerciseBlock[] }) {
+  // Each exercise's own picture (62a), from the Library kept on the phone.
+  const named = useNamed();
   return (
     <View style={styles.part}>
       <Txt kind="body">{setsHeading(blocks)}</Txt>
       {blocks.map((b) => (
         <View key={b.key} style={styles.box}>
           <View style={[styles.row, styles.blockTop]}>
-            <Image source={pictures[exercisePicture(b.exercise, b.kind)]} resizeMode="cover" style={styles.thumb} accessible={false} />
+            <ExerciseThumb id={b.exercise} kind={b.kind} picture={named(b.exercise).picture} fit="cover" style={styles.thumb} />
             <View style={styles.grow}>
               <Txt kind="strong">{b.name}</Txt>
               <Txt kind="small">{b.line}</Txt>

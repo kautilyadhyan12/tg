@@ -248,6 +248,11 @@ export const floatFade =
 export const pictureFadeUnderWords =
   "linear-gradient(to top, rgba(10,9,8,1) 0%, rgba(10,9,8,0.82) 20%, rgba(10,9,8,0.18) 55%, rgba(10,9,8,0.62) 100%)";
 
+/** Over a whole picture on its own colour (an exercise's, 62a): darker only at the very top, under the phone's clock,
+ *  and running into the page's black at its foot; never over the person. */
+export const wholePictureFade =
+  "linear-gradient(to bottom, rgba(10,9,8,0.55) 0%, rgba(10,9,8,0) 12%, rgba(10,9,8,0) 94%, rgba(10,9,8,1) 100%)";
+
 /** Under the Running page's START, over the page's foot: the page fading out as it scrolls under it. */
 export const dockShade = "linear-gradient(to bottom, rgba(10,9,8,0) 0%, rgba(10,9,8,0.9) 30%, rgba(10,9,8,1) 100%)";
 

@@ -2,8 +2,11 @@
 // workout's own page. Pure, so tested alone.
 import type { PhoneLibraryEntry } from "@app/shared";
 
-/** An exercise's name and kind (for its picture), from the Library kept on the phone. */
-export type Named = (exercise: string) => { name: string; kind: string };
+/** An exercise's own picture (62a), as the Library on the phone holds it. */
+type OwnPicture = PhoneLibraryEntry["picture"];
+
+/** An exercise's name, kind and own picture (for its picture), from the Library kept on the phone. */
+export type Named = (exercise: string) => { name: string; kind: string; picture: OwnPicture };
 
 /** An exercise the Library on the phone does not hold, by its id word made readable: "barbell_curl" → "Barbell curl". */
 export function idWords(id: string): string {
@@ -16,7 +19,7 @@ export function namedFrom(entries: readonly PhoneLibraryEntry[] | null): Named {
   const byId = new Map((entries ?? []).map((e) => [e.id, e]));
   return (exercise) => {
     const e = byId.get(exercise);
-    return e === undefined ? { name: idWords(exercise), kind: "strength" } : { name: e.text.en.name, kind: e.kind };
+    return e === undefined ? { name: idWords(exercise), kind: "strength", picture: null } : { name: e.text.en.name, kind: e.kind, picture: e.picture };
   };
 }
 
@@ -34,6 +37,6 @@ export function exercisesLine(ids: readonly string[], named: Named): string {
 export function serverFirst(named: Named, serverNames: ReadonlyMap<string, string | null>): Named {
   return (exercise) => {
     const own = named(exercise);
-    return { name: serverNames.get(exercise) ?? own.name, kind: own.kind };
+    return { name: serverNames.get(exercise) ?? own.name, kind: own.kind, picture: own.picture };
   };
 }

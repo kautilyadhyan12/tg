@@ -50,6 +50,8 @@ export function checkLibrary(input: LibraryInput): CheckedLibrary {
   const good: ExerciseFile[] = [];
   /** Every name and other name already seen, to the file and fact that holds it. */
   const names = new Map<string, { file: string; at: string; name: string }>();
+  /** Every picture and clip already named, to the file and fact that names it: one exercise's, never two (62a). */
+  const media = new Map<string, { file: string; at: string }>();
 
   for (const file of [...input.exerciseFiles].sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))) {
     const before = faults.length;
@@ -86,6 +88,21 @@ export function checkLibrary(input: LibraryInput): CheckedLibrary {
       if (kit.has(e)) fault(`equipment.${String(i)}`, `"${e}" is named twice`);
       kit.add(e);
     });
+
+    // A picture or clip belongs to one exercise: named by a second, the second would show another's movement (62a).
+    for (const [at, named] of [
+      ["picture.file", ex.picture?.file],
+      ["clip.file", ex.clip?.file],
+    ] as const) {
+      if (named === undefined) continue;
+      const held = media.get(named);
+      if (held !== undefined) fault(at, `${named} is already named by ${held.file} (${held.at}); each exercise has its own picture and clip`);
+      else media.set(named, { file: file.name, at });
+    }
+    // The clip and the picture come from one final folder: both tall, or both wide.
+    if (ex.picture !== null && ex.clip !== null && ex.picture.width > ex.picture.height !== ex.clip.width > ex.clip.height) {
+      fault("clip", "the clip and the picture are not the same shape (one tall, one wide): they come from one final folder");
+    }
 
     if (table !== null && !codes.has(ex.energy.compendium)) {
       fault("energy.compendium", `${ex.energy.compendium} is not in the Compendium table (${input.compendium.name}); add its row from the Compendium's own page first`);
