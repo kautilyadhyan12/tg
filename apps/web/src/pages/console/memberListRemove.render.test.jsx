@@ -262,6 +262,29 @@ describe('Remove from the bar', () => {
   });
 });
 
+describe('Remove in the middle (V3a-ii)', () => {
+  it('while it is removing, Cancel, the X, Escape and pressing outside do not close it', async () => {
+    draw();
+    await screen.findByText('Ben Carter');
+    fireEvent.click(tickOf('Cara Diaz'));
+    orgService.previewRemoveSelected.mockResolvedValue(box({ selected: 1, movingNotInApp: 1, move: [who('Cara Diaz', cara.entryId)] }));
+    let finish;
+    orgService.removeSelected.mockImplementation(() => new Promise((resolve) => (finish = resolve)));
+    fireEvent.click(bar().getByTestId('bar-remove'));
+    const dialog = within(await screen.findByTestId('remove-box'));
+    fireEvent.click(await dialog.findByRole('button', { name: 'Remove 1 member' }));
+    await waitFor(() => expect(orgService.removeSelected).toHaveBeenCalledTimes(1));
+    expect(dialog.getByRole('button', { name: 'Cancel' }).disabled).toBe(true);
+    expect(dialog.getByRole('button', { name: 'Close' }).disabled).toBe(true);
+    fireEvent.click(dialog.getByRole('button', { name: 'Cancel' }));
+    fireEvent.keyDown(document, { key: 'Escape' });
+    fireEvent.click(screen.getByTestId('box-outside'));
+    expect(screen.getByTestId('remove-box')).toBeTruthy();
+    finish({ data: { removed: { moved: 1, endedApp: 0, alreadyRemoved: false } } });
+    expect((await dialog.findByTestId('remove-done')).textContent).toBe('1 member moved to past members.');
+  });
+});
+
 describe('Remove on In the app', () => {
   const ORG = {
     id: GYM,

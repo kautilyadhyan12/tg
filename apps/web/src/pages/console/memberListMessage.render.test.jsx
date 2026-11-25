@@ -401,3 +401,22 @@ describe('Sent messages, from Members', () => {
     expect(await screen.findByText('the sent messages page')).toBeTruthy();
   });
 });
+
+// V3a-ii: Send message in the middle (round one of the review).
+describe('Send message in the middle', () => {
+  it('while it is sending, Cancel, the X, Escape and pressing outside do not close it', async () => {
+    const box = await open(boxOf({ selected: 2, send: [person(ada), person(ben)] }));
+    type(box, 'The gym is closed on Monday.');
+    let finish;
+    orgService.sendGroupMessage.mockImplementation(() => new Promise((resolve) => (finish = resolve)));
+    fireEvent.click(box.getByTestId('message-press'));
+    await waitFor(() => expect(orgService.sendGroupMessage).toHaveBeenCalledTimes(1));
+    expect(box.getByRole('button', { name: 'Cancel' }).disabled).toBe(true);
+    expect(box.getByRole('button', { name: 'Close' }).disabled).toBe(true);
+    fireEvent.keyDown(document, { key: 'Escape' });
+    fireEvent.click(screen.getByTestId('box-outside'));
+    expect(screen.getByTestId('message-box')).toBeTruthy();
+    finish(doneOf({ sent: 2 }));
+    expect(await box.findByTestId('message-done')).toBeTruthy();
+  });
+});
