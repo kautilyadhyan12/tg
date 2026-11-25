@@ -26,7 +26,7 @@ import { handOverNote, privilegesDiffer, sentAgainNotice, staffCountLabel, staff
 /** Initials beside a row, from 768 px (as on In the app); an invitation's from its address. */
 function RowInitials({ name }) {
   return (
-    <span className="hidden md:inline-flex c-avatar c-avatar-sm flex-shrink-0" aria-hidden="true">
+    <span className="c-avatar c-avatar-sm c-avatar-md flex-shrink-0" aria-hidden="true">
       {initialsOf(name)}
     </span>
   );

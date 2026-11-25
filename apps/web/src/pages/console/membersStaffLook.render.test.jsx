@@ -36,7 +36,8 @@ vi.mock('../../api/orgsApi', async (importOriginal) => {
   };
 });
 
-vi.mock('../../api/staffActivityApi', () => ({ staffActivityService: { list: vi.fn() } }));
+const activity = { list: vi.fn() };
+vi.mock('../../api/staffActivityApi', () => ({ staffActivityService: activity }));
 
 vi.mock('../../context/AuthContext', () => ({
   useAuth: () => ({ user: { id: 'u1' }, logout: vi.fn() }),
@@ -114,6 +115,7 @@ beforeEach(() => {
   orgService.removeStaff.mockResolvedValue({ data: { status: 'removed' } });
   orgService.removeMember.mockResolvedValue({ data: { status: 'removed' } });
   orgService.inviteStaff.mockResolvedValue({ data: { outcome: 'invited', invite: INVITE } });
+  activity.list.mockReturnValue(new Promise(() => {}));
 });
 
 afterEach(() => {
@@ -198,8 +200,14 @@ describe('a change not saved', () => {
     const mira = await openPerson('u3', 'Mira Sen');
     fireEvent.click(mira.getByLabelText(/^See who came in/));
     fireEvent.click(mira.getByRole('button', { name: 'See activity' }));
-    expect(mira.getByRole('button', { name: 'Close without saving' })).toBeTruthy();
     expect(screen.getByRole('dialog', { name: 'Mira Sen' })).toBeTruthy();
+    expect(activity.list).not.toHaveBeenCalled();
+    // Close without saving goes where See activity leads: Staff activity, showing Mira alone.
+    fireEvent.click(mira.getByRole('button', { name: 'Close without saving' }));
+    expect(await screen.findByRole('heading', { name: 'Staff activity' })).toBeTruthy();
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(activity.list).toHaveBeenCalledWith(ORG.id, expect.objectContaining({ worker: 'u3' }));
+    expect(orgService.updateStaffPrivileges).not.toHaveBeenCalled();
   });
 });
 
@@ -216,6 +224,9 @@ describe('the look', () => {
     drawStaff();
     const row = await screen.findByTestId('staff-tab-u3');
     expect(row.querySelector('.c-avatar').textContent).toBe('MS');
+    // Drawn only from 768 px, by the console's own class (jsdom draws no CSS; consoleCss.test.js holds the rule).
+    expect(row.querySelector('.c-avatar').classList.contains('c-avatar-md')).toBe(true);
+    expect(row.querySelector('.c-avatar').classList.contains('hidden')).toBe(false);
     expect(screen.getByTestId(`staff-invite-${INVITE.id}`).querySelector('.c-avatar').textContent).toBe('SC');
   });
 

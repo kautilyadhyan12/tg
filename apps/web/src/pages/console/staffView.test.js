@@ -18,6 +18,8 @@ import {
   abilityLabels,
   roleTargets,
   privilegeChoices,
+  groupedChoices,
+  privilegeGroupOf,
   privilegesDiffer,
   roleChangeWarning,
   staffCountLabel,
@@ -593,5 +595,21 @@ describe('the question asked before a role changes', () => {
       'Make Rita Sen a coach? Their permissions become the defaults for the new role.',
     );
     expect(roleChangeWarning(RITA, 'trainer', 'gym')).toMatch(/a trainer\?/);
+  });
+});
+
+describe('groupedChoices (V3b-ii)', () => {
+  // A permission added to shared with no heading here would fall under "Your gym", which on a
+  // trainer's panel is false: every one of them must be placed by name.
+  it('puts every permission under a heading by name, none by falling through', () => {
+    const choices = ORG_PRIVILEGES.map((value) => ({ value, label: value, hint: '' }));
+    const placed = groupedChoices(choices, 'gym').flatMap((g) => g.choices.map((c) => c.value));
+    expect([...placed].sort()).toEqual([...ORG_PRIVILEGES].sort());
+    for (const value of ORG_PRIVILEGES) expect(privilegeGroupOf(value)).not.toBeNull();
+  });
+
+  it("a trainer's boxes have no Your gym heading, and the headings come in their order", () => {
+    expect(groupedChoices(privilegeChoices('trainer', 'gym'), 'gym').map((g) => g.title)).toEqual(['Members', 'Front desk', 'Classes and plans', 'Money', 'Community', 'Reports']);
+    expect(groupedChoices(privilegeChoices('owner', 'studio'), 'studio').map((g) => g.title).at(-1)).toBe('Your studio');
   });
 });

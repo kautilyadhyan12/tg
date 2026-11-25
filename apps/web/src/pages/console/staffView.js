@@ -433,6 +433,11 @@ const PRIVILEGE_GROUPS = [
   ['business', ['org.manage', 'billing.manage', 'staff.manage']],
 ];
 
+/** The heading a permission is placed under by name, or null when it has none. */
+export function privilegeGroupOf(value) {
+  return PRIVILEGE_GROUPS.find(([, values]) => values.includes(value))?.[0] ?? null;
+}
+
 /** The tick boxes under their headings: `[{ key, title, choices }]`, a heading with no box
  *  left out. Each heading keeps the boxes in the order `choices` has them. */
 export function groupedChoices(choices, orgType) {
@@ -446,7 +451,7 @@ export function groupedChoices(choices, orgType) {
     reports: 'Reports',
     business: `Your ${words.it}`,
   };
-  const keyOf = (value) => PRIVILEGE_GROUPS.find(([, values]) => values.includes(value))?.[0] ?? 'business';
+  const keyOf = (value) => privilegeGroupOf(value) ?? 'business';
   return PRIVILEGE_GROUPS.map(([key]) => ({ key, title: titles[key], choices: choices.filter((c) => keyOf(c.value) === key) })).filter(
     (group) => group.choices.length > 0,
   );

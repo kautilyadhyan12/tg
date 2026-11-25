@@ -687,7 +687,7 @@ describe('what was found by the review', () => {
     fireEvent.click(rita.getByRole('button', { name: 'Close' }));
     expect(screen.getByRole('dialog', { name: 'Rita Sen' })).toBeTruthy();
     refuse();
-        expect(await within(rita.getByTestId('privileges-foot')).findByText('ZZ-MARKER refused for Rita.')).toBeTruthy();
+    expect(await within(rita.getByTestId('privileges-foot')).findByText('ZZ-MARKER refused for Rita.')).toBeTruthy();
     // Closed (her edit thrown away, as she is asked), the next person's panel says nothing of it.
     fireEvent.click(rita.getByRole('button', { name: 'Close' }));
     fireEvent.click(screen.getByRole('button', { name: 'Close without saving' }));

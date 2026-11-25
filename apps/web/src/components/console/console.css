@@ -730,6 +730,7 @@
   font-size: 15px;
   line-height: 22px;
   color: var(--t2);
+  overflow-wrap: anywhere;
 }
 /* The small label above a page's title: small capitals, orange. */
 .c-eyebrow {
@@ -2371,6 +2372,12 @@
   width: 34px;
   height: 34px;
   font-size: 12px;
+}
+/* Initials drawn only from 768 px: on a phone the name has the room. Two classes, so it wins over
+   .c-avatar's own display, which the stylesheet sets after Tailwind's .hidden. */
+.c-avatar.c-avatar-md { display: none; }
+@media (min-width: 768px) {
+  .c-avatar.c-avatar-md { display: inline-flex; }
 }
 /* A small round dot before a word: green for in the app, gold for what needs attention. */
 .c-dot {

@@ -235,6 +235,13 @@ describe("the second look's building blocks (V1-b)", () => {
   });
 
   // V3b-ii: the same for every button on Staff and Staff activity (Cancel invitation, Back to staff, Show more).
+  // V3b-ii round one: initials beside a name are drawn from 768 px only, by a rule that wins over
+  // .c-avatar's own display (Tailwind's .hidden did not: it comes first in the built stylesheet).
+  it('initials marked c-avatar-md are hidden on a phone and drawn from 768 px', () => {
+    expect(declarations('.c-avatar.c-avatar-md').display).toBe('none');
+    expect(declarations('.c-avatar.c-avatar-md', '(min-width: 768px)').display).toBe('inline-flex');
+  });
+
   it("Staff's buttons are 44 px on a touch screen", () => {
     expect(declarations('.c-staff .c-btn', '(pointer: coarse)')['min-height']).toBe('44px');
   });
