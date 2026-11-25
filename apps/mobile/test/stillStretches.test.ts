@@ -59,15 +59,16 @@ describe("the worst thing: with Auto-pause off, real metres left out because the
     [3, 15],
     [1, 5],
     [1, 15],
-  ])("a pram at %s m a second, the phone sure to %s m: the phone and the server count the same, within 6 m of what the run counted without the motion", (speed, accuracyM) => {
+  ])("a pram at %s m a second, the phone sure to %s m: the phone and the server count the same, to the metre what the run counts without the motion", (speed, accuracyM) => {
     const go = (seconds: number): Stretch => ({ seconds, speed, accuracyM, feel: "still" });
     const stop: Stretch = { seconds: 30, speed: 0, accuracyM, feel: "still" };
     const { fixes, metres } = walk([go(200), stop, go(170), stop, go(170)], speed * 100 + accuracyM);
     const { phone, server } = phoneAndServer(fixes);
     expect(server).toBe(phone);
     const plain = runSums(pointsOf(fixes), [], endOf(fixes), 70).distanceM;
-    expect(plain - phone).toBeLessThanOrEqual(6);
-    expect(metres - phone).toBeLessThanOrEqual(25);
+    expect(phone).toBe(plain);
+    // Against the metres truly pushed: 2 to 8 m short, the two stops' own edges, as without the motion.
+    expect(metres - phone).toBeLessThanOrEqual(10);
   });
 
   it("a pram left standing two minutes after Start, then pushed off: every metre pushed is counted", () => {
