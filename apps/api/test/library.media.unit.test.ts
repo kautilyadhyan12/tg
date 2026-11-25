@@ -5,7 +5,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { exerciseFileSchema } from "@app/shared";
-import { edgeColour, finalFiles, isMp4, isPng, madeSize, MARK_IN, MARK_SHADOW, MARK_TALL, markPlace, withMedia } from "../tools/library-media-lib.js";
+import { edgeColour, finalFiles, greyShift, greyShiftFilter, GREY_SHIFT_MOST, isMp4, isPng, madeSize, MARK_IN, MARK_SHADOW, MARK_TALL, markPlace, meanColour, withMedia } from "../tools/library-media-lib.js";
 
 const SQUAT = readFileSync(new URL("../../../packages/shared/library/exercises/squat.json", import.meta.url), "utf8");
 const hash = "d".repeat(64);
@@ -121,5 +121,34 @@ describe("KWAZO's place in a clip", () => {
         expect(p.y + p.height).toBeLessThanOrEqual(clipSize.height);
       }
     }
+  });
+});
+
+// A clip's grey moved to meet its picture's (62b): on the phone the clip lies over the picture's own grey, and the walk found
+// Kd's clips a few shades off theirs, which showed as a box.
+describe("a clip's grey meets its picture's", () => {
+  it.each([
+    // measured on the walk, 2026-11-25: the deadlift's clip, lighter and greener; the goblet squat's, darker
+    ["#D4D6D3", "#D1D1D1", { r: -3, g: -5, b: -2 }],
+    ["#CFCFCF", "#D5D5D5", { r: 6, g: 6, b: 6 }],
+    ["#D5D5D5", "#D5D5D5", { r: 0, g: 0, b: 0 }],
+  ])("%s to %s", (clipEdge, pictureEdge, shift) => {
+    expect(greyShift(clipEdge, pictureEdge)).toEqual(shift);
+  });
+
+  it("refuses a clip whose grey is far from its picture's, rather than shift its person's colours far", () => {
+    expect(GREY_SHIFT_MOST).toBe(24);
+    expect(greyShift("#B9B9B9", "#D1D1D1")).toEqual({ r: 24, g: 24, b: 24 });
+    expect(() => greyShift("#B8B8B8", "#D1D1D1")).toThrow("far from its picture's");
+    expect(() => greyShift("#FFFFFF", "#202020")).toThrow("far from its picture's");
+  });
+
+  it("writes ffmpeg's filter, each colour clipped to 0 to 255", () => {
+    expect(greyShiftFilter({ r: -3, g: 5, b: 0 })).toBe("lutrgb=r='clip(val-3,0,255)':g='clip(val+5,0,255)':b='clip(val+0,0,255)'");
+  });
+
+  it("the clip's grey is the mean of its frames' edges", () => {
+    expect(meanColour(["#D0D0D0", "#D2D4D6"])).toBe("#D1D2D3");
+    expect(() => meanColour([])).toThrow("no colours");
   });
 });

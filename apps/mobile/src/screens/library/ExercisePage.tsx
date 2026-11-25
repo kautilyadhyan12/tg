@@ -110,7 +110,7 @@ export function ExercisePage({
         height={own.height}
         ground={own.ground}
         above={tag}
-        over={<ClipOver id={entry.id} clip={entry.clip} playing={clipPlaying} />}
+        over={<ClipOver id={entry.id} clip={entry.clip} playing={clipPlaying} ground={own.ground} />}
         {...(clipReady
           ? {
               corner: (

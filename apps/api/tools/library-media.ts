@@ -16,7 +16,7 @@ import { fileURLToPath } from "node:url";
 import { z } from "zod";
 import { exerciseIdSchema, type ExerciseClip, type ExercisePicture } from "@app/shared";
 import { MEDIA_FOLDER } from "../src/modules/library/media.js";
-import { edgeColour, finalFiles, isMp4, isPng, LONG_SIDE, madeSize, markPlace, withMedia } from "./library-media-lib.js";
+import { edgeColour, finalFiles, greyShift, greyShiftFilter, isMp4, isPng, LONG_SIDE, madeSize, markPlace, meanColour, withMedia } from "./library-media-lib.js";
 
 const EXERCISES = fileURLToPath(new URL("../../../packages/shared/library/exercises/", import.meta.url));
 const SHEETS = join(MEDIA_FOLDER, "..", "sheets");
@@ -64,26 +64,36 @@ if (clipShape.width > clipShape.height !== pictureShape.width > pictureShape.hei
   throw new Error(`the clip (${String(clipShape.width)}×${String(clipShape.height)}) and the picture (${String(pictureShape.width)}×${String(pictureShape.height)}) are not the same shape`);
 }
 
-// The clip: H.264 main, no sound, nothing of the original's own details (who made it, where, when), playable as it arrives,
-// with KWAZO in its corner.
-const markShape = probe(MARK);
-const place = markPlace(madeSize(clipShape.width, clipShape.height), markShape, corner);
-const clipMade = made("mp4", [
-  "-i", clipIn, "-i", MARK,
-  "-filter_complex", `[0:v:0]${scaleFilter}[v];[1:v]scale=${String(place.width)}:${String(place.height)}[m];[v][m]overlay=${String(place.x)}:${String(place.y)},format=yuv420p[out]`,
-  "-map", "[out]", "-an", "-sn", "-dn", "-map_metadata", "-1",
-  "-c:v", "libx264", "-profile:v", "main", "-pix_fmt", "yuv420p", "-crf", "28", "-preset", "slow", "-movflags", "+faststart",
-]);
 // The picture: WebP at quality 90, nothing of the original's own details.
 const pictureMade = made("webp", ["-i", pictureIn, "-map_metadata", "-1", "-vf", scaleFilter, "-c:v", "libwebp", "-quality", "90", "-compression_level", "6"]);
-
-const clipOut = probe(join(MEDIA_FOLDER, clipMade.file));
 const pictureOut = probe(join(MEDIA_FOLDER, pictureMade.file));
 const expected = madeSize(pictureShape.width, pictureShape.height);
 if (Math.abs(pictureOut.width - expected.width) > 2 || Math.abs(pictureOut.height - expected.height) > 2) throw new Error("the picture was not made at its expected size");
 const rgb = execFileSync("ffmpeg", ["-v", "error", "-i", join(MEDIA_FOLDER, pictureMade.file), "-f", "rawvideo", "-pix_fmt", "rgb24", "-"], { maxBuffer: 64 * 1024 * 1024 });
+const ground = edgeColour(new Uint8Array(rgb), pictureOut.width, pictureOut.height);
 
-const picture: ExercisePicture = { file: pictureMade.file, width: pictureOut.width, height: pictureOut.height, bytes: pictureMade.bytes, ground: edgeColour(new Uint8Array(rgb), pictureOut.width, pictureOut.height) };
+// The clip's own grey round its edge, the mean of a frame each second, at the size it is made.
+const clipSize = madeSize(clipShape.width, clipShape.height);
+const frameBytes = clipSize.width * clipSize.height * 3;
+const frames = execFileSync("ffmpeg", ["-v", "error", "-i", clipIn, "-vf", `${scaleFilter},fps=1`, "-f", "rawvideo", "-pix_fmt", "rgb24", "-"], { maxBuffer: 256 * 1024 * 1024 });
+const edges: string[] = [];
+for (let at = 0; at + frameBytes <= frames.length; at += frameBytes) edges.push(edgeColour(new Uint8Array(frames.subarray(at, at + frameBytes)), clipSize.width, clipSize.height));
+const clipGrey = meanColour(edges);
+const shift = greyShift(clipGrey, ground);
+
+// The clip: H.264 main, no sound, nothing of the original's own details (who made it, where, when), playable as it arrives,
+// its grey moved to meet its picture's, with KWAZO in its corner (after the move, so the mark keeps its own colours).
+const markShape = probe(MARK);
+const place = markPlace(clipSize, markShape, corner);
+const clipMade = made("mp4", [
+  "-i", clipIn, "-i", MARK,
+  "-filter_complex", `[0:v:0]${scaleFilter},${greyShiftFilter(shift)}[v];[1:v]scale=${String(place.width)}:${String(place.height)}[m];[v][m]overlay=${String(place.x)}:${String(place.y)},format=yuv420p[out]`,
+  "-map", "[out]", "-an", "-sn", "-dn", "-map_metadata", "-1",
+  "-c:v", "libx264", "-profile:v", "main", "-pix_fmt", "yuv420p", "-crf", "28", "-preset", "slow", "-movflags", "+faststart",
+]);
+const clipOut = probe(join(MEDIA_FOLDER, clipMade.file));
+
+const picture: ExercisePicture = { file: pictureMade.file, width: pictureOut.width, height: pictureOut.height, bytes: pictureMade.bytes, ground };
 const clip: ExerciseClip = { file: clipMade.file, width: clipOut.width, height: clipOut.height, bytes: clipMade.bytes, seconds: Math.round(clipOut.seconds * 100) / 100 };
 
 // The sheet: the picture, then one frame of the clip a second, side by side, to be looked at before --write.
@@ -96,7 +106,7 @@ execFileSync("ffmpeg", [
 
 const kb = (file: string) => `${String(Math.round(statSync(file).size / 1024))} KB`;
 console.log(id);
-console.log(`  clip     ${kb(clipIn)} → ${String(Math.round(clip.bytes / 1024))} KB  ${String(clip.width)}×${String(clip.height)}  ${String(clip.seconds)} s  KWAZO bottom-${corner}  ${clip.file}`);
+console.log(`  clip     ${kb(clipIn)} → ${String(Math.round(clip.bytes / 1024))} KB  ${String(clip.width)}×${String(clip.height)}  ${String(clip.seconds)} s  KWAZO bottom-${corner}  grey ${clipGrey} moved to ${ground}  ${clip.file}`);
 console.log(`  picture  ${kb(pictureIn)} → ${String(Math.round(picture.bytes / 1024))} KB  ${String(picture.width)}×${String(picture.height)}  edge ${picture.ground}  ${picture.file}`);
 console.log(`  sheet    ${sheet}`);
 if (!write) {

@@ -356,7 +356,7 @@ function OwnTop({ id, uri, picture, clip, playing, above }: { id: string; uri: s
     <View style={[styles.ownBand, { backgroundColor: picture.ground, paddingTop: insets.top + 12 + TOP + 10 }]}>
       <View style={{ height }}>
         {uri === null ? null : <Image testID={`workout-picture-${id}`} source={{ uri }} resizeMode="contain" style={styles.ownFill} accessible={false} />}
-        <ClipOver id={id} clip={clip} playing={playing} />
+        <ClipOver id={id} clip={clip} playing={playing} ground={picture.ground} />
       </View>
       <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.ownFade]} />
       <View style={[styles.ownAbove, { top: insets.top + 12 }]}>{above}</View>
@@ -503,7 +503,8 @@ const styles = StyleSheet.create({
   plusBig: { width: 64, height: 64, borderRadius: 32, alignItems: "center", justifyContent: "center", experimental_backgroundImage: raisedOrangeGradient, boxShadow: shadows.button },
   plusMark: { lineHeight: 38 },
   row: { flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 10, borderTopWidth: 1, borderTopColor: colours.timerSplit },
-  rowName: { width: 66 },
+  // As wide as its word needs at the largest text ("WEIGHT" broke in two at a fixed 66, seen on the 62b walk).
+  rowName: { minWidth: 66 },
   rowValue: { flex: 1, flexDirection: "row", alignItems: "flex-end", justifyContent: "center", gap: 6 },
   round: { width: sizes.press, height: sizes.press, borderRadius: sizes.press / 2, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: colours.lineStrong, backgroundColor: colours.raised },
   // −15 and +15: as wide and as tall as their words need, never cut at the largest text.
