@@ -6,7 +6,8 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import type { MovementFrame } from "@app/shared";
 import { encodeBodyPoints } from "../scripts/bodyPoints.js";
-import { readKept, runChecks, videoOf, type KeptFile } from "../scripts/bodyCheck.js";
+import { PossibleBody } from "../src/index.js";
+import { readKept, videoOf, type KeptFile } from "../scripts/bodyCheck.js";
 import { CHANGED_SIZE, CHANGED_SPEED, bodyChanges, followOne } from "../scripts/follow.js";
 import { KEPT_MODEL, KEPT_VIDEOS, type KeptVideo } from "../scripts/keptVideos.js";
 import { SET_FROM, VIDEOS } from "./helpers/body.js";
@@ -144,8 +145,11 @@ describe("the plain sign that the body followed changed, on real cases from outs
   });
 
   it("the possible-body check refuses the follower's change of body as a jump, on that real file (round one, T5)", () => {
-    // Measured: 12 points refused as jumps.
-    const refused = runChecks(cut.frames).flatMap((c) => c.refused);
+    // Measured: 12 points refused as jumps. The stand-in follower's own choices: since 52d-i every run of the engine goes
+    // through the lock, which keeps the man on this file (onePerson.test.ts).
+    const followed = followOne(cut.frames);
+    const check = new PossibleBody();
+    const refused = cut.frames.flatMap((f, i) => check.check(f.t, f.aspect, f.down, followed[i] ?? null).refused);
     expect(refused.filter((r) => r === "jump").length).toBeGreaterThan(0);
   });
 

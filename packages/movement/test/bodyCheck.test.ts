@@ -105,7 +105,7 @@ describe("what body-check counts and draws", () => {
       const refused = new Array<CheckedBody["refused"][number]>(33).fill(null);
       refused[joint] = why;
       const person = VIDEOS[0]?.frames.find((f) => f.people.length > 0)?.people[0] ?? null;
-      return { t, aspect: 1, down: null, person, size: 1, refused };
+      return { t, aspect: 1, down: null, person, size: 1, refused, fresh: false };
     };
     const checked = [
       refusedAt(0, null, KP.left_wrist),

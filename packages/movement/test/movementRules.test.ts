@@ -123,8 +123,8 @@ function recorded(change?: Change, fast = false, exercise: ExerciseCamera | null
       const y = 0.9 + b.feetY + (alone?.[1] ?? 0);
       return { x, y, world: [0, 0, 0], raw: { x, y } };
     });
-    const body: SteadyBody = { t, aspect: ASPECT, down: [0, 1, 0], size: SIZE, points, refused: points.map(() => null) };
-    const measured: MeasuredBody = { t, leg: 0.9, trunk: 0.5, onFloor: true, readings };
+    const body: SteadyBody = { t, aspect: ASPECT, down: [0, 1, 0], size: SIZE, points, refused: points.map(() => null), fresh: false };
+    const measured: MeasuredBody = { t, leg: 0.9, trunk: 0.5, onFloor: true, readings, fresh: false };
     const f = m.next(body, measured);
     record.add(f);
     if (f.rep !== null) reps.push(f.rep);

@@ -40,13 +40,10 @@ describe("the worst thing: no other movement is counted as a squat however the w
 
   it("the rows open today are listed here, each with the job that closes it, and say nothing", () => {
     const open = ROWS.filter(openRow);
-    expect(open.map((r) => `${r.replay.name}: ${r.label}`)).toEqual([
-      "passer-by at the bottom: usual_v08",
-      "slower: squat_jack_2",
-      "twice as slow: squat_jack_2",
-    ]);
+    expect(open.map((r) => `${r.replay.name}: ${r.label}`)).toEqual(["slower: squat_jack_2", "twice as slow: squat_jack_2"]);
     for (const r of open) expect(r.reps.filter((x) => x.verdict === "short" || x.verdict === "refused").length).toBe(0);
-    // Each counts what its entry says it does, and no more: the sit-and-stand one rep, the slowed squat jack two at 1.5 times as slowly and one at twice.
-    expect(open.map((r) => r.count)).toEqual([1, 2, 1]);
+    // Each counts what its entry says it does, and no more: the slowed squat jack two at 1.5 times as slowly and one at twice. His
+    // sit-and-stand on a chair (usual_v08), open under every replay since 52d-i, is out of this table: onePerson.test.ts.
+    expect(open.map((r) => r.count)).toEqual([2, 1]);
   });
 });

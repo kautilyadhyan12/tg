@@ -863,13 +863,14 @@ export const MOVEMENT_VIDEOS: readonly MovementVideo[] = [
   },
   {
     ...floorOther("usual_v08", "floor", "side", "The phone on the floor, upright; barefoot: he sits on a chair side on, gets up, sits (a chair squat's movement: 54)."),
-    replayOpen: {
-      replays: ["passer-by at the bottom"],
-      why:
-        "54, where the chair squat is made on the squat: sitting down on a chair and getting up is a chair squat's movement, which this list " +
-        "counts as a twin of the squat (chair_squat_reference). As filmed he sits for several seconds each time and nothing is counted; with " +
-        "somebody walking past while he sits, the sitting is hidden and one sit-and-stand counts as a squat.",
-    },
+    open:
+      "54, where the chair squat is made on the squat: sitting down on a chair and getting up is a chair squat's movement, which this list " +
+      "counts as a twin of the squat (chair_squat_reference). Drawn 2026-11-25 (52d-i), a picture a second: he walks from the phone, sits at " +
+      "2 s, stands at 12 s turning the chair round, sits again facing the other way at 14 s and stands at 17 s, then walks to the phone. Under " +
+      "the squat his second sit-and-stand (13.8 to 17.1 s, the hips 0.24 of a leg down, the knees at 100 degrees) counts 1 as filmed, a chair " +
+      "squat by eye; the first, begun as he walks to the chair and ended turning it, is another movement. Before 52d-i nothing was counted: the " +
+      "standing taken while he was at the phone, found again 1.3 to 1.8 times smaller, was kept and no dip began; the lock now takes him afresh. " +
+      "Under the replays it counts 0 to 2 (onePerson.test.ts has each).",
   },
   floorOther("usual_v09", "floor", "side", "The phone on the floor, upright: he stands at a chair, one leg lifted and bent."),
   floorOther("usual_v10", "floor", "side", "The phone on the floor, on its long side: he sits on a chair, gets up, sits (54)."),

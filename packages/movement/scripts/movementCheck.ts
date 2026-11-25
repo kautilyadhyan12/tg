@@ -32,8 +32,22 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { ExerciseCamera, Movement, MovementFrame, MovementRule } from "@app/shared";
-import { FOOT_ROOM, MATCH_LIMITS, MEASURE_LIST, MovementMatcher, NEVER_JUMP, SLOWEST_RATE, breakOf, parseExercise, parseMovement, type MatchLimits, type RepResult } from "../src/index.js";
-import { readKept, videoOf, type Video } from "./bodyCheck.js";
+import {
+  CAMERA_SETTINGS,
+  CameraSet,
+  FOOT_ROOM,
+  MATCH_LIMITS,
+  MEASURE_LIST,
+  MovementMatcher,
+  NEVER_JUMP,
+  SLOWEST_RATE,
+  breakOf,
+  parseExercise,
+  parseMovement,
+  type MatchLimits,
+  type RepResult,
+} from "../src/index.js";
+import { lockAgrees, readKept, videoOf, type Video } from "./bodyCheck.js";
 import { runOf } from "./measureCheck.js";
 import { MOVEMENT_VIDEOS, forMovement, framesOf, isOther, labelOf, type MovementVideo } from "./movementVideos.js";
 import { REPLAYS, type Replay } from "./replays.js";
@@ -130,20 +144,47 @@ export function withLeadIn(video: Video): Video {
   return out;
 }
 
-/** `exercise`: its checked mistakes are judged in each counted rep (`RepResult.form`). */
+/** `exercise`: its checked mistakes are judged in each counted rep (`RepResult.form`). The set as the camera runs it
+ *  (`CameraSet`: one person locked on, and told once the set has counted). Made fast: the stages before the counting are
+ *  run once for a video (`runOf`, the lock told nothing), and the set is run again whole only when the lock, told at its
+ *  first counted rep, follows another body after it (`lockAgrees`); `movementCamera.test.ts` holds the two the same. */
 export function runMovement(movement: Movement, video: Video, exercise: ExerciseCamera | null = null, limits: MatchLimits = MATCH_LIMITS): Run {
-  const { steady, measured } = runOf(withLeadIn(video));
+  const lead = withLeadIn(video);
+  const { steady, measured } = runOf(lead);
   const matcher = new MovementMatcher(movement, limits, exercise);
   const reps: RepResult[] = [];
   let count = 0;
-  steady.forEach((body, i) => {
+  let counted: number | null = null;
+  for (let i = 0; i < steady.length; i++) {
+    const body = steady[i];
     const m = measured[i];
-    if (m === undefined) return;
+    if (body === undefined || m === undefined) continue;
     const frame = matcher.next(body, m);
     count = frame.count;
     if (frame.rep !== null) reps.push(frame.rep);
-  });
+    if (counted === null && frame.rep?.verdict === "counted") counted = i;
+  }
+  if (counted !== null && !lockAgrees(lead.frames, counted)) return cameraRun(movement, lead, exercise, limits);
   const last = matcher.finish();
+  if (last !== null) {
+    count = last.count;
+    if (last.rep !== null) reps.push(last.rep);
+  }
+  return { count, reps };
+}
+
+/** The set run whole as the camera runs it, frame by frame (`CameraSet`). */
+export function cameraRun(movement: Movement, video: Video, exercise: ExerciseCamera | null = null, limits: MatchLimits = MATCH_LIMITS): Run {
+  const set = new CameraSet({ movement, exercise }, { ...CAMERA_SETTINGS, match: limits });
+  const reps: RepResult[] = [];
+  let count = 0;
+  for (const f of video.frames) {
+    const { match } = set.next(f);
+    if (match === null) continue;
+    count = match.count;
+    if (match.rep !== null) reps.push(match.rep);
+  }
+  const last = set.finish().match;
   if (last !== null) {
     count = last.count;
     if (last.rep !== null) reps.push(last.rep);
