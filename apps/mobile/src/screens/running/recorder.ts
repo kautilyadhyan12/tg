@@ -132,6 +132,9 @@ let pausedTail: RunPoint[] = [];
 /** The heart readings taken while Auto-paused, as many as the points: a pause undone (a phone on wheels, 37j)
  *  gives them back to the run. */
 let pausedHeart: [number, number][] = [];
+/** Whether the phone was known to be on wheels when the person pressed Pause: their Resume goes on from that,
+ *  never from a ride taken while paused (a bus, the re-check's L5). */
+let wheelsAtPause = false;
 /** Raised at each Start and each Save or Discard: points handed over while one of those happened
  *  belong to no run, and never bring a saved or thrown-away run back. */
 let generation = 0;
@@ -856,7 +859,8 @@ export async function pauseRun(now: number = Date.now()): Promise<void> {
   if (run.phase === "running") run.pauses.push([Math.max(elapsedMs(run, now), lastOpenEnd(run)), null]);
   run.phase = "paused";
   run.pausedByPerson = true;
-  auto = autoPausedFrom(openPauseFrom(run), auto.wheels);
+  wheelsAtPause = auto.wheels;
+  auto = autoPausedFrom(openPauseFrom(run), wheelsAtPause);
   current = { ...run };
   if (was === "running") say([...markNow(current, true), ...step.lines, PAUSE_WORDS.person]);
   scheduleGuide(current, now);
@@ -872,7 +876,7 @@ export async function resumeRun(now: number = Date.now()): Promise<void> {
   closePause(run, elapsedMs(run, now));
   run.phase = "running";
   run.pausedByPerson = false;
-  auto = autoRunning(auto.wheels);
+  auto = autoRunning(wheelsAtPause);
   pausedTail = [];
   pausedHeart = [];
   current = { ...run };
@@ -926,7 +930,8 @@ export async function setAutoPause(on: boolean, now: number = Date.now()): Promi
     say([PAUSE_WORDS.resumed, ...resumeLines(run, now)]);
     scheduleGuide(run, now);
   }
-  auto = run.phase === "paused" ? autoPausedFrom(openPauseFrom(run), auto.wheels) : autoRunning(auto.wheels);
+  const wheels = run.pausedByPerson ? wheelsAtPause : auto.wheels;
+  auto = run.phase === "paused" ? autoPausedFrom(openPauseFrom(run), wheels) : autoRunning(wheels);
   current = { ...run, autoPause: on };
   await keep(current);
   tell();

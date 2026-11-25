@@ -58,8 +58,11 @@ export const RUN_GAP_MS = FEEL_OLDEST_MS;
 /** Between two points that feel the same, no point at all for up to this (Kd's table: 4 s) keeps the run. */
 export const RUN_MISSING_MS = STILL_MS;
 /** Paused, a phone that feels still is on wheels once its distance from the stop has grown by `travelMetres`
- *  steadily: never back by more than RISE_BACK_M, never faster than RISE_FASTEST_MPS (a jump of the signal),
- *  so neither a jump that stays nor a drift that stops is taken for a pram (round one, H1). */
+ *  steadily, judged every RISE_STEP_MS: never back by more than half how sure the point is (RISE_BACK_M at
+ *  least), never on by more than RISE_FASTEST_MPS and that much again (a jump of the signal). So neither a jump that stays nor a drift
+ *  that stops is a pram (round one, H1), and a pram's own wander does not hide it (the re-check, H5: judged each
+ *  second with 2 m, a pram sure to 25 m was never found). */
+export const RISE_STEP_MS = 5000;
 export const RISE_BACK_M = 2;
 export const RISE_FASTEST_MPS = 5;
 /** Paused: points in a row that feel moving, no sooner than LEAVE_AFTER_MS after the pause began, start the
@@ -106,7 +109,8 @@ interface LeaveRun {
   nearAt: number;
 }
 
-/** While paused: a phone that feels still, moving steadily away from the stop. */
+/** While paused: a phone that feels still, moving steadily away from the stop; `lastAt` and `lastM` are the
+ *  point it was last judged at. */
 interface Rise {
   fromAt: number;
   fromM: number;
@@ -134,9 +138,9 @@ export interface AutoPauseState {
   stillRun: StillRun | null;
   leaveRun: LeaveRun | null;
   rise: Rise | null;
-  /** While paused: a rise broke since the pause began (the phone stood, or the signal jumped), so a pram is
-   *  dated from its own rise, never from the pause's start. */
-  riseBroken: boolean;
+  /** While paused and the phone feels still: when it was last near the stop (a quarter of how sure the point
+   *  is, STILL_M at least). A pram is dated from then, so standing before it set off is not counted. */
+  stillNearAt: number | null;
 }
 
 export const AUTO_START: AutoPauseState = {
@@ -152,7 +156,7 @@ export const AUTO_START: AutoPauseState = {
   stillRun: null,
   leaveRun: null,
   rise: null,
-  riseBroken: false,
+  stillNearAt: null,
 };
 
 /** Paused from `at` (by the person, or read back after the app was closed), the stop's place not yet known;
@@ -179,12 +183,14 @@ const fast = (fix: Fix): boolean => fix.speed !== null && fix.speed >= GO_MPS;
 /** How far from where the person stopped this point must lie to count as moving: past what a phone
  *  this sure of itself wanders while it lies still. */
 export const goMetres = (fix: Fix): number => Math.max(GO_M, Math.min(2 * (fix.accuracyM ?? 0), GO_MOST_M));
-/** How far a phone that FEELS still must be from a place before it is believed to have travelled: three times
- *  how sure the point is, and never under TRAVEL_LEAST_M. The brief's 10 m was passed by Kd's phone lying on
- *  a table (2026-11-25, sure to 3 m): its place slid 11.5 m in 20 s, in a straight line, then stopped, and
- *  the run was taken for one on wheels. A pram keeps going; a phone's drift does not. */
+/** How far a phone that FEELS still must have gone from a place before it is believed to have travelled: four
+ *  times how sure the point is, and never under TRAVEL_LEAST_M. The brief's 10 m was passed by Kd's phone lying
+ *  on a table (2026-11-25, sure to 3 m): its place slid 11.5 m in 20 s, in a straight line, then stopped. Three
+ *  times was passed by one standing phone in 1,000 sure to 30 m, whose place rose steadily 94 m in 130 s (the
+ *  re-check). A pram keeps going; a phone's drift does not. */
 export const TRAVEL_LEAST_M = 40;
-export const travelMetres = (fix: Fix): number => Math.max(TRAVEL_LEAST_M, 3 * (fix.accuracyM ?? 0));
+export const TRAVEL_TIMES = 4;
+export const travelMetres = (fix: Fix): number => Math.max(TRAVEL_LEAST_M, TRAVEL_TIMES * (fix.accuracyM ?? 0));
 /** How much farther from the stop a phone that feels moving must have gone in LEAVE_WINDOW_MS to be leaving it:
  *  half how sure the point is, and never under LEAVE_LEAST_M. Standing and shaken, sure to 5 m, a phone's place
  *  wandered the brief's 3 m from where it was 133 times in 400 within 30 s; over 10 s, 8 m, never in 400 over
@@ -228,7 +234,7 @@ interface Step {
 /** Paused from `at`, the person having stopped at `anchor`, the middle of `n` points. */
 function pausedAtPlace(state: AutoPauseState, at: number, anchor: Fix | null, nearAt: number, n: number): Step {
   return {
-    state: { ...AUTO_START, paused: true, anchor, anchorN: anchor === null ? 0 : n, nearAt, wheels: state.wheels, pausedAt: at },
+    state: { ...AUTO_START, paused: true, anchor, anchorN: anchor === null ? 0 : n, nearAt, stillNearAt: nearAt, wheels: state.wheels, pausedAt: at },
     change: { kind: "pause", at },
   };
 }
@@ -276,27 +282,29 @@ function stopByPlace(state: AutoPauseState, fix: Fix): Step {
 
 /** Paused, a phone that feels still: only moving steadily away from the stop by `travelMetres` starts the clock
  *  (the wander of a standing phone reaches goMetres; a jump of the signal, or a drift that stops, is no pram).
- *  From the last point near the stop, which is the pause's own start for a phone that went straight on, and
- *  never before its rise if one broke since the pause; it is on wheels from then. */
+ *  From the last point near the stop, which is the pause's own start for a phone that went straight on; it is
+ *  on wheels from then. */
 function goByTravel(state: AutoPauseState, fix: Fix): Step {
   const base: AutoPauseState = { ...state, leaveRun: null };
   if (!usable(fix)) return { state: base, change: null };
   const anchor = state.anchor ?? { ...fix, speed: null };
   const m = metresApart(anchor, fix);
   const nearAt = m <= STILL_M ? fix.at : state.nearAt;
+  const stillNearAt = m <= Math.max(STILL_M, (fix.accuracyM ?? 0) / 4) ? fix.at : state.stillNearAt;
   const was = state.rise;
-  const steady = was !== null && m >= was.lastM - RISE_BACK_M && m - was.lastM <= (RISE_FASTEST_MPS * Math.max(fix.at - was.lastAt, 1)) / 1000;
-  const rise: Rise = was !== null && steady ? { ...was, lastAt: fix.at, lastM: m } : { fromAt: fix.at, fromM: m, lastAt: fix.at, lastM: m };
-  const riseBroken = state.riseBroken || (was !== null && !steady);
-  if (m - rise.fromM >= travelMetres(fix)) {
-    const at = Math.max(nearAt ?? state.pausedAt ?? fix.at, riseBroken ? rise.fromAt : -Infinity);
-    return resumedAt(state, fix, at, true);
-  }
-  // Near the stop, the point is one more of the person standing there.
+  const step = was === null ? 0 : fix.at - was.lastAt;
+  const back = Math.max(RISE_BACK_M, (fix.accuracyM ?? 0) / 2);
+  const steady = was !== null && (step < RISE_STEP_MS || (m >= was.lastM - back && m - was.lastM <= (RISE_FASTEST_MPS * step) / 1000 + back));
+  const rise: Rise =
+    was === null || !steady ? { fromAt: fix.at, fromM: m, lastAt: fix.at, lastM: m } : step < RISE_STEP_MS ? was : { ...was, lastAt: fix.at, lastM: m };
+  // Judged only where the rise is judged, so a jump inside a step is seen as one before it counts.
+  const judged = was !== null && steady && step >= RISE_STEP_MS;
+  if (judged && m - rise.fromM >= travelMetres(fix)) return resumedAt(state, fix, stillNearAt ?? state.pausedAt ?? fix.at, true);
+  // As near the stop as the phone's wander, the point is one more of the person standing there.
   const n = state.anchor === null ? 0 : state.anchorN;
-  const near = state.anchor === null || m <= goMetres(fix);
+  const near = state.anchor === null || m <= Math.max(STILL_M, (fix.accuracyM ?? 0) / 2);
   const place = near ? { ...anchor, lat: (anchor.lat * n + fix.lat) / (n + 1), lng: (anchor.lng * n + fix.lng) / (n + 1) } : anchor;
-  return { state: { ...base, anchor: place, anchorN: near ? n + 1 : n, nearAt, rise, riseBroken }, change: null };
+  return { state: { ...base, anchor: place, anchorN: near ? n + 1 : n, nearAt, stillNearAt, rise }, change: null };
 }
 
 /** Paused, step 2: the position says moving (GO_POINTS in a row beyond `goMetres`), for a sure point. */
@@ -343,7 +351,7 @@ function goByFeel(state: AutoPauseState, fix: Fix): Step {
     return resumedAt(state, fix, from, state.wheels);
   }
   const leaveRun: LeaveRun = { firstAt: run.firstAt, lastAt: fix.at, count, placed, recent, nearAt };
-  return { state: { ...state, anchor, rise: null, riseBroken: state.riseBroken || state.rise !== null, leaveRun }, change: null };
+  return { state: { ...state, anchor, rise: null, leaveRun }, change: null };
 }
 
 export function nextAutoPause(state: AutoPauseState, fix: Fix): Step {

@@ -392,6 +392,20 @@ describe("Auto-pause with the motion, through the recorder", () => {
     expect(runNow()?.pauses).toEqual([[31_000, 40_000]]);
   });
 
+  it("a ride taken during the person's own pause (a bus, the phone still) does not leave the run on wheels after Resume", async () => {
+    const run = await startRun(RAVI.id, randomUUID(), true, Date.now());
+    const walk = (s: number) => 1.4 * s;
+    await points(1, 20, walk, MOVING_SD);
+    await act(() => pauseRun(run.startedAt + 21_000));
+    // On the bus, paused: still, and 4 m a second for a minute.
+    const bus = (s: number) => walk(21) + 4 * (s - 21);
+    await points(22, 60, bus, STILL_SD);
+    await act(() => resumeRun(run.startedAt + 82_000));
+    // Off the bus, standing: the motion still pauses it within a few seconds (the place alone needs 8 s).
+    await points(83, 5, () => bus(81), STILL_SD);
+    expect(runNow()?.phase).toBe("paused");
+  });
+
   it("a pause read back after the app was closed waits 10 s from its own start before the motion starts the clock", async () => {
     const run = await startRun(RAVI.id, randomUUID(), true, Date.now());
     await points(1, 5, () => 0, STILL_SD);

@@ -151,8 +151,8 @@ describe("the worst thing: real metres thrown away because the phone felt still 
     expect(counted(without(fixes)).on - on).toBeLessThanOrEqual(6);
     // And against the metres truly walked: the two stops' own edges, as the rule without the motion loses them.
     expect(metres - on).toBeLessThanOrEqual(25);
-    // One stop by feel at most before the phone is known to be on wheels, undone at once (a pram at 1 m a
-    // second passes back through the stop's 3 m for a few seconds); then only the two real stops pause.
+    // One stop by feel at most before the phone is known to be on wheels, undone from when it left the stop's
+    // own wander (a pram at 1 m a second sure to 15 m is near it for a few seconds); then only the real stops.
     const kept = pausesOf(changes, endOf(fixes));
     expect(changes.filter((c) => c?.kind === "pause").length).toBeLessThanOrEqual(3);
     const stops = kept.filter(([from]) => from >= 100_000);
@@ -163,7 +163,27 @@ describe("the worst thing: real metres thrown away because the phone felt still 
     expect(second?.[0]).toBeGreaterThanOrEqual(395_000);
     expect(second?.[1]).toBeLessThanOrEqual(440_000);
     const atStart = kept.filter(([from]) => from < 100_000);
-    expect(atStart.reduce((t, [from, to]) => t + to - from, 0)).toBeLessThanOrEqual(5000);
+    expect(atStart.reduce((t, [from, to]) => t + to - from, 0)).toBeLessThanOrEqual(8000);
+  });
+
+  // The re-check (H5): a real phone's place wanders on a pram as on a table. Pushed straight for 5 minutes, the
+  // phone feeling still, the place wandering as the standing tests' does (half the accuracy, over 30 s).
+  it.each([
+    [1, 5],
+    [1, 15],
+    [1, 25],
+    [2, 15],
+    [2, 25],
+    [3, 15],
+    [3, 25],
+  ])("a pram at %s m a second, its place wandering, sure to %s m: found on wheels every time, at most 60 m lost (50 tries)", (speed, accuracyM) => {
+    let worst = 0;
+    for (let seed = 1; seed <= 50; seed++) {
+      const { fixes, metres } = walk([{ seconds: 300, speed, accuracyM, feel: "still", off: wander(300, accuracyM / 2, 30, seed * 7919 + accuracyM * 13 + speed) }]);
+      expect(stateAfter(fixes).wheels).toBe(true);
+      worst = Math.max(worst, metres - counted(fixes).on);
+    }
+    expect(worst).toBeLessThanOrEqual(60);
   });
 
   it("a pram left standing two minutes after Start, then pushed off, counts from when it left, not from Start", () => {
@@ -278,10 +298,10 @@ describe("Auto-pause by the phone's motion", () => {
     // The brief: under 1 in 20 at 5 m over 30 s. Round one (H3) found the old rule worse the longer it lasted
     // (260 in 1,000 over 2 minutes at 5 m). The rest are the numbers as measured, told to Kd in the handoff:
     // at 10 m and worse the place cannot tell 10 s of walking from a standing phone's drift.
-    expect(inTheHand(5, 30, 400)).toEqual({ starts: 0, mostM: 0 });
-    expect(inTheHand(5, 120, 400)).toEqual({ starts: 25, mostM: 11 });
-    expect(inTheHand(10, 30, 400)).toEqual({ starts: 64, mostM: 21 });
-    expect(inTheHand(15, 30, 400)).toEqual({ starts: 200, mostM: 50 });
+    expect(inTheHand(5, 30, 400)).toEqual({ starts: 1, mostM: 5 });
+    expect(inTheHand(5, 120, 400)).toEqual({ starts: 28, mostM: 11 });
+    expect(inTheHand(10, 30, 400)).toEqual({ starts: 59, mostM: 19 });
+    expect(inTheHand(15, 30, 400)).toEqual({ starts: 201, mostM: 53 });
   });
 
   // Round one (H1): a jump of the signal that stays where it landed is not a pram. A pram's distance from the stop
