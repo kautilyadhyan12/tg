@@ -5,7 +5,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { exerciseFileSchema } from "@app/shared";
-import { edgeColour, finalFiles, isMp4, isPng, madeSize, withMedia } from "../tools/library-media-lib.js";
+import { edgeColour, finalFiles, isMp4, isPng, madeSize, MARK_IN, MARK_SHADOW, MARK_TALL, markPlace, withMedia } from "../tools/library-media-lib.js";
 
 const SQUAT = readFileSync(new URL("../../../packages/shared/library/exercises/squat.json", import.meta.url), "utf8");
 const hash = "d".repeat(64);
@@ -91,5 +91,35 @@ describe("the colour round a picture's edge", () => {
 
   it("refuses bytes that are not that many pixels", () => {
     expect(() => edgeColour(new Uint8Array(10), 4, 4)).toThrow("is not 4×4 pixels");
+  });
+});
+
+// KWAZO in a corner of every clip (62b): the app's wordmark picture (890 × 348, its pill 256 tall inside its shadow).
+describe("KWAZO's place in a clip", () => {
+  const mark = { width: 890, height: 348 };
+  it.each([
+    [{ width: 720, height: 1280 }, "left", { width: 238, height: 93, x: 17, y: 1170 }],
+    [{ width: 720, height: 1280 }, "right", { width: 238, height: 93, x: 465, y: 1170 }],
+    [{ width: 1280, height: 720 }, "left", { width: 238, height: 93, x: 17, y: 610 }],
+    [{ width: 1280, height: 720 }, "right", { width: 238, height: 93, x: 1025, y: 610 }],
+    [{ width: 1080, height: 1920 }, "left", { width: 358, height: 140, x: 25, y: 1755 }],
+  ] as const)("%o, bottom-%s", (clipSize, corner, placed) => {
+    expect(markPlace(clipSize, mark, corner)).toEqual(placed);
+  });
+
+  it("the pill sits the same share in from its side and its foot, inside the clip, in every shape", () => {
+    for (const clipSize of [{ width: 720, height: 1280 }, { width: 1280, height: 720 }, { width: 1080, height: 1920 }, { width: 640, height: 640 }]) {
+      for (const corner of ["left", "right"] as const) {
+        const p = markPlace(clipSize, mark, corner);
+        const short = Math.min(clipSize.width, clipSize.height);
+        const shadow = Math.round(short * MARK_TALL * MARK_SHADOW);
+        const inset = Math.round(short * MARK_IN);
+        expect(clipSize.height - (p.y + p.height - shadow)).toBe(inset);
+        expect(corner === "left" ? p.x + shadow : clipSize.width - (p.x + p.width - shadow)).toBe(inset);
+        expect(p.x).toBeGreaterThanOrEqual(0);
+        expect(p.x + p.width).toBeLessThanOrEqual(clipSize.width);
+        expect(p.y + p.height).toBeLessThanOrEqual(clipSize.height);
+      }
+    }
   });
 });

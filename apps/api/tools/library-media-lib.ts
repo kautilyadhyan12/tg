@@ -61,3 +61,27 @@ export function withMedia(fileText: string, id: string, picture: ExercisePicture
   const after = exerciseFileSchema.parse({ ...before.data, picture, clip });
   return `${JSON.stringify(after, null, 2)}\n`;
 }
+
+/** KWAZO in a corner of every clip (Kd, 2026-11-25: "can you put kwazo in a corner say boottom left corner in the video
+ *  frame"), the app's own wordmark on its white pill (`tools/library-mark.png`, made by `tools/library-mark.py` from
+ *  `look/Wordmark.tsx`'s font and colours). It is part of the video, so it stays with the clip wherever the clip goes.
+ *  The pill is this share of the clip's short side tall, and this share in from its side and its foot. */
+export const MARK_TALL = 0.095;
+export const MARK_IN = 0.04;
+/** The mark's picture holds a soft shadow round the pill, this share of the pill's height on every side. */
+export const MARK_SHADOW = 0.18;
+
+/** Where the mark goes in a clip of this size: bottom-left, or bottom-right for a clip whose person reaches the
+ *  bottom-left corner (Kd, 2026-11-25: the terminal looks at every clip's sheet and says so). The mark's picture is
+ *  scaled to `width` × `height` and laid at `x`, `y` (its shadow may run past the inset, never past the clip). */
+export function markPlace(clip: { width: number; height: number }, mark: { width: number; height: number }, corner: "left" | "right"): { width: number; height: number; x: number; y: number } {
+  const short = Math.min(clip.width, clip.height);
+  const pill = short * MARK_TALL;
+  const height = Math.round(pill * (1 + 2 * MARK_SHADOW));
+  const width = Math.round((mark.width * height) / mark.height);
+  const shadow = Math.round(pill * MARK_SHADOW);
+  const inset = Math.round(short * MARK_IN);
+  const x = corner === "left" ? inset - shadow : clip.width - inset - (width - shadow);
+  const y = clip.height - inset - (height - shadow);
+  return { width, height, x, y };
+}

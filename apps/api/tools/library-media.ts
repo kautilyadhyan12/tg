@@ -1,8 +1,9 @@
 // The clip line (job 62a): makes one exercise's clip and still picture small from Kd's finished `final` folder, keeps
 // them in the server's media folder named by their sha256, and writes a picture sheet to look at. With --write it also
-// names them in the exercise's file. Videos never go to git: the media folder is ignored.
+// names them in the exercise's file. Videos never go to git: the media folder is ignored. Every clip carries KWAZO in its
+// bottom-left corner (62b); --mark-right puts it bottom-right, for a clip whose person reaches the bottom-left corner.
 //
-//   corepack pnpm --filter api exec tsx tools/library-media.ts "<Kd's exercise folder, or its final folder>" <exercise id> [--write]
+//   corepack pnpm --filter api exec tsx tools/library-media.ts "<Kd's exercise folder, or its final folder>" <exercise id> [--mark-right] [--write]
 //
 // Look at the sheet (frames of the clip beside the picture) before --write: an automatic check of the two against each
 // other was measured and does not work (62a's plan), and a real person filmed in a real gym must never be published.
@@ -15,15 +16,17 @@ import { fileURLToPath } from "node:url";
 import { z } from "zod";
 import { exerciseIdSchema, type ExerciseClip, type ExercisePicture } from "@app/shared";
 import { MEDIA_FOLDER } from "../src/modules/library/media.js";
-import { edgeColour, finalFiles, isMp4, isPng, LONG_SIDE, madeSize, withMedia } from "./library-media-lib.js";
+import { edgeColour, finalFiles, isMp4, isPng, LONG_SIDE, madeSize, markPlace, withMedia } from "./library-media-lib.js";
 
 const EXERCISES = fileURLToPath(new URL("../../../packages/shared/library/exercises/", import.meta.url));
 const SHEETS = join(MEDIA_FOLDER, "..", "sheets");
+const MARK = fileURLToPath(new URL("./library-mark.png", import.meta.url));
 
 const args = process.argv.slice(2);
 const write = args.includes("--write");
-const [given, rawId] = args.filter((a) => a !== "--write");
-if (given === undefined || rawId === undefined) throw new Error('usage: library-media.ts "<exercise folder>" <exercise id> [--write]');
+const corner = args.includes("--mark-right") ? "right" : "left";
+const [given, rawId] = args.filter((a) => a !== "--write" && a !== "--mark-right");
+if (given === undefined || rawId === undefined) throw new Error('usage: library-media.ts "<exercise folder>" <exercise id> [--mark-right] [--write]');
 const id = exerciseIdSchema.parse(rawId);
 const exerciseFile = join(EXERCISES, `${id}.json`);
 if (!existsSync(exerciseFile)) throw new Error(`no exercise file ${id}.json: write the exercise's page first`);
@@ -61,9 +64,14 @@ if (clipShape.width > clipShape.height !== pictureShape.width > pictureShape.hei
   throw new Error(`the clip (${String(clipShape.width)}×${String(clipShape.height)}) and the picture (${String(pictureShape.width)}×${String(pictureShape.height)}) are not the same shape`);
 }
 
-// The clip: H.264 main, no sound, nothing of the original's own details (who made it, where, when), playable as it arrives.
+// The clip: H.264 main, no sound, nothing of the original's own details (who made it, where, when), playable as it arrives,
+// with KWAZO in its corner.
+const markShape = probe(MARK);
+const place = markPlace(madeSize(clipShape.width, clipShape.height), markShape, corner);
 const clipMade = made("mp4", [
-  "-i", clipIn, "-map", "0:v:0", "-an", "-sn", "-dn", "-map_metadata", "-1", "-vf", scaleFilter,
+  "-i", clipIn, "-i", MARK,
+  "-filter_complex", `[0:v:0]${scaleFilter}[v];[1:v]scale=${String(place.width)}:${String(place.height)}[m];[v][m]overlay=${String(place.x)}:${String(place.y)},format=yuv420p[out]`,
+  "-map", "[out]", "-an", "-sn", "-dn", "-map_metadata", "-1",
   "-c:v", "libx264", "-profile:v", "main", "-pix_fmt", "yuv420p", "-crf", "28", "-preset", "slow", "-movflags", "+faststart",
 ]);
 // The picture: WebP at quality 90, nothing of the original's own details.
@@ -88,11 +96,11 @@ execFileSync("ffmpeg", [
 
 const kb = (file: string) => `${String(Math.round(statSync(file).size / 1024))} KB`;
 console.log(id);
-console.log(`  clip     ${kb(clipIn)} → ${String(Math.round(clip.bytes / 1024))} KB  ${String(clip.width)}×${String(clip.height)}  ${String(clip.seconds)} s  ${clip.file}`);
+console.log(`  clip     ${kb(clipIn)} → ${String(Math.round(clip.bytes / 1024))} KB  ${String(clip.width)}×${String(clip.height)}  ${String(clip.seconds)} s  KWAZO bottom-${corner}  ${clip.file}`);
 console.log(`  picture  ${kb(pictureIn)} → ${String(Math.round(picture.bytes / 1024))} KB  ${String(picture.width)}×${String(picture.height)}  edge ${picture.ground}  ${picture.file}`);
 console.log(`  sheet    ${sheet}`);
 if (!write) {
-  console.log("  Look at the sheet. When the clip and the picture are this exercise's, and no real person is in them, run again with --write.");
+  console.log("  Look at the sheet. When the clip and the picture are this exercise's, no real person is in them, and KWAZO covers nobody, run again with --write (--mark-right where the person reaches the bottom-left corner).");
 } else {
   writeFileSync(exerciseFile, withMedia(readFileSync(exerciseFile, "utf8"), id, picture, clip));
   console.log(`  written into ${exerciseFile}`);
