@@ -421,6 +421,42 @@ export function privilegeChoices(role, orgType) {
   return copy.filter((choice) => !isOwnerOnlyPrivilege(choice.value) && !OWNER_ROW_ONLY.includes(choice.value));
 }
 
+// The heading each permission is drawn under (V3b-ii, the board `MembersNewStaffPerson`), in
+// the order the headings are drawn. A permission missing here goes under the last heading.
+const PRIVILEGE_GROUPS = [
+  ['people', ['members.read', 'codes.invite', 'members.confirm', 'members.remove', 'codes.manage']],
+  ['desk', ['attendance.read', 'attendance.mark']],
+  ['classes', ['schedule.manage', 'plans.manage']],
+  ['money', ['billing.members', 'memberships.manage']],
+  ['community', ['leaderboard.manage', 'posts.manage']],
+  ['reports', ['reports.read']],
+  ['business', ['org.manage', 'billing.manage', 'staff.manage']],
+];
+
+/** The heading a permission is placed under by name, or null when it has none. */
+export function privilegeGroupOf(value) {
+  return PRIVILEGE_GROUPS.find(([, values]) => values.includes(value))?.[0] ?? null;
+}
+
+/** The tick boxes under their headings: `[{ key, title, choices }]`, a heading with no box
+ *  left out. Each heading keeps the boxes in the order `choices` has them. */
+export function groupedChoices(choices, orgType) {
+  const words = orgWords(orgType);
+  const titles = {
+    people: words.peopleCap,
+    desk: 'Front desk',
+    classes: 'Classes and plans',
+    money: 'Money',
+    community: 'Community',
+    reports: 'Reports',
+    business: `Your ${words.it}`,
+  };
+  const keyOf = (value) => privilegeGroupOf(value) ?? 'business';
+  return PRIVILEGE_GROUPS.map(([key]) => ({ key, title: titles[key], choices: choices.filter((c) => keyOf(c.value) === key) })).filter(
+    (group) => group.choices.length > 0,
+  );
+}
+
 /** Ticks drawn on the owner's own row and offered to nobody else. They are the owner's by
  *  default, and whether another member of staff may be given them from this screen has
  *  not been decided; the server does not refuse them, so one held by somebody else is

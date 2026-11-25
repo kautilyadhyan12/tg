@@ -5,12 +5,12 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { exerciseFileSchema } from "@app/shared";
-import { edgeColour, finalFiles, isMp4, isPng, madeSize, withMedia } from "../tools/library-media-lib.js";
+import { edgeColour, finalFiles, greyShift, greyShiftFilter, GREY_SHIFT_MOST, isMp4, isPng, madeSize, MARK_IN, MARK_SHADOW, MARK_TALL, markPlace, meanColour, withMedia } from "../tools/library-media-lib.js";
 
 const SQUAT = readFileSync(new URL("../../../packages/shared/library/exercises/squat.json", import.meta.url), "utf8");
 const hash = "d".repeat(64);
 const picture = { file: `${hash}.webp`, width: 720, height: 1280, bytes: 30_000, ground: "#D5D5D5" };
-const clip = { file: `${hash}.mp4`, width: 720, height: 1280, bytes: 188_000, seconds: 4 };
+const clip = { file: `${hash}.mp4`, width: 720, height: 1280, bytes: 188_000, seconds: 4, mark: "left" as const };
 
 describe("the worst thing: one exercise's clip or picture written into another's file", () => {
   it("writes into the file whose id it is given, and refuses another's", () => {
@@ -91,5 +91,65 @@ describe("the colour round a picture's edge", () => {
 
   it("refuses bytes that are not that many pixels", () => {
     expect(() => edgeColour(new Uint8Array(10), 4, 4)).toThrow("is not 4×4 pixels");
+  });
+});
+
+// KWAZO in a corner of every clip (62b): the app's wordmark picture (890 × 348, its pill 256 tall inside its shadow).
+describe("KWAZO's place in a clip", () => {
+  const mark = { width: 890, height: 348 };
+  it.each([
+    [{ width: 720, height: 1280 }, "left", { width: 238, height: 93, x: 17, y: 1170 }],
+    [{ width: 720, height: 1280 }, "right", { width: 238, height: 93, x: 465, y: 1170 }],
+    [{ width: 1280, height: 720 }, "left", { width: 238, height: 93, x: 17, y: 610 }],
+    [{ width: 1280, height: 720 }, "right", { width: 238, height: 93, x: 1025, y: 610 }],
+    [{ width: 1080, height: 1920 }, "left", { width: 358, height: 140, x: 25, y: 1755 }],
+  ] as const)("%o, bottom-%s", (clipSize, corner, placed) => {
+    expect(markPlace(clipSize, mark, corner)).toEqual(placed);
+  });
+
+  it("the pill sits the same share in from its side and its foot, inside the clip, in every shape", () => {
+    for (const clipSize of [{ width: 720, height: 1280 }, { width: 1280, height: 720 }, { width: 1080, height: 1920 }, { width: 640, height: 640 }]) {
+      for (const corner of ["left", "right"] as const) {
+        const p = markPlace(clipSize, mark, corner);
+        const short = Math.min(clipSize.width, clipSize.height);
+        const shadow = Math.round(short * MARK_TALL * MARK_SHADOW);
+        const inset = Math.round(short * MARK_IN);
+        expect(clipSize.height - (p.y + p.height - shadow)).toBe(inset);
+        expect(corner === "left" ? p.x + shadow : clipSize.width - (p.x + p.width - shadow)).toBe(inset);
+        expect(p.x).toBeGreaterThanOrEqual(0);
+        expect(p.x + p.width).toBeLessThanOrEqual(clipSize.width);
+        expect(p.y + p.height).toBeLessThanOrEqual(clipSize.height);
+      }
+    }
+  });
+});
+
+// A clip's grey moved to meet its picture's (62b): on the phone the clip lies over the picture's own grey, and the walk found
+// Kd's clips a few shades off theirs, which showed as a box.
+describe("a clip's grey meets its picture's", () => {
+  it.each([
+    // as the command printed them, 2026-11-25: the deadlift's clip, lighter and greener; the goblet squat's and the calf raise's, darker
+    ["#D5D9D4", "#D1D1D1", { r: -4, g: -8, b: -3 }],
+    ["#CDCDCD", "#D5D5D5", { r: 8, g: 8, b: 8 }],
+    ["#B2B2B0", "#B8B6B7", { r: 6, g: 4, b: 7 }],
+    ["#D5D5D5", "#D5D5D5", { r: 0, g: 0, b: 0 }],
+  ])("%s to %s", (clipEdge, pictureEdge, shift) => {
+    expect(greyShift(clipEdge, pictureEdge)).toEqual(shift);
+  });
+
+  it("refuses a clip whose grey is far from its picture's, rather than shift its person's colours far", () => {
+    expect(GREY_SHIFT_MOST).toBe(24);
+    expect(greyShift("#B9B9B9", "#D1D1D1")).toEqual({ r: 24, g: 24, b: 24 });
+    expect(() => greyShift("#B8B8B8", "#D1D1D1")).toThrow("far from its picture's");
+    expect(() => greyShift("#FFFFFF", "#202020")).toThrow("far from its picture's");
+  });
+
+  it("writes ffmpeg's filter, each colour clipped to 0 to 255", () => {
+    expect(greyShiftFilter({ r: -3, g: 5, b: 0 })).toBe("lutrgb=r='clip(val-3,0,255)':g='clip(val+5,0,255)':b='clip(val+0,0,255)'");
+  });
+
+  it("the clip's grey is the mean of its frames' edges", () => {
+    expect(meanColour(["#D0D0D0", "#D2D4D6"])).toBe("#D1D2D3");
+    expect(() => meanColour([])).toThrow("no colours");
   });
 });

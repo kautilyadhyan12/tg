@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
-import { AlertTriangle, ChevronRight, Loader2, Search, Upload, UserMinus, UserPlus, X } from 'lucide-react';
+import { AlertTriangle, ChevronRight, Loader2, Search, Upload, UserMinus, UserPlus } from 'lucide-react';
 import { PtSessionsEndDialog } from '../../components/console/PtSessionsEnding';
 import { ptSessionsAsked } from './ptSessionsEndView';
 import { ConfirmInline, ConsoleFailed, ConsoleLoading } from '../../components/console/ConsoleStates';
@@ -28,7 +28,8 @@ import {
   seatIsFree,
 } from './consoleView';
 import { canMakeRoomNow, consoleIsReadOnly, memberMeterText, readOnlyNote, seatMeter } from './billingView';
-import { shortWhen } from './memberListPeople';
+import { initialsOf, shortWhen } from './memberListPeople';
+import { SidePanel } from '../../components/console/ConsoleBoxes';
 import { AGREEMENT_NOT_SIGNED_SHOW, NO_CARD_SHOW, PAST_PAYMENT_DUE_SHOW, PAST_SHOW, PAYMENT_DUE_SHOW } from './weekView';
 import { canManageStaff } from './staffView';
 import PlanChoiceDialog from '../../components/console/PlanChoiceDialog';
@@ -70,9 +71,14 @@ function RosterRow({ member, words, onOpen, picked = null, onTick }) {
         className={`grid flex-grow min-w-0 text-left min-h-11 py-3.5 gap-x-3 items-center ${picked === null ? 'px-4 md:px-5' : 'pr-4 md:pr-5'}`}
         style={{ gridTemplateColumns: 'minmax(0, 1fr) auto 18px' }}
       >
-        <span className="flex flex-col gap-0.5 min-w-0">
-          <span className="c-s15 c-w6 c-t1 c-ell">{member.displayName}</span>
-          <span className="c-s13 c-t2 c-ell">In the app since {shortWhen(member.joinedAt)}</span>
+        <span className="flex items-center gap-3 min-w-0">
+          <span className="c-avatar c-avatar-sm c-avatar-md flex-shrink-0" aria-hidden="true">
+            {initialsOf(member.displayName)}
+          </span>
+          <span className="flex flex-col gap-0.5 min-w-0">
+            <span className="c-s15 c-w6 c-t1 c-ell">{member.displayName}</span>
+            <span className="c-s14 c-t2 c-ell">In the app since {shortWhen(member.joinedAt)}</span>
+          </span>
         </span>
         <span>
           {staffTag(member, words) !== null ? (
@@ -112,30 +118,18 @@ function RosterSheet({ member, words, seesList, canRemove, managesStaff, viewer,
   const question = movesRecord
     ? `Remove ${member.displayName}? They'll be moved to past ${words.people} and lose access to your ${words.it} in the app. Their own workout history isn't affected, and you can put them back at any time.`
     : `Remove ${member.displayName}'s app access? They'll lose access to your ${words.it} in the app. Their own workout history isn't affected.`;
+  // From the right, the whole screen on a phone (`Boxes`): its X and Escape close it, never
+  // while a Remove is under way.
   return (
-    <div className="fixed inset-0 z-50" style={{ background: 'var(--scrim)' }}>
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-label={member.displayName}
-        className="c-sheet absolute inset-0 md:left-auto md:w-[480px] md:border-l flex flex-col overflow-y-auto"
-        style={{ borderColor: 'var(--card-line)' }}
-      >
-        <div className="flex items-start gap-3 px-4 pt-5 pb-4 md:px-7 md:pt-7 md:pb-5 border-b" style={{ borderColor: 'var(--line)' }}>
-          <div className="flex flex-col gap-1 flex-grow min-w-0">
-            <h2 className="c-h1 c-ell" style={{ fontSize: 28, lineHeight: '34px' }}>
-              {member.displayName}
-            </h2>
-            <span className="c-s14 c-t2">
-              In the app since {shortWhen(member.joinedAt)}
-              {groupLabelText(member) === '—' ? '' : ` · ${groupLabelText(member)}`}
-            </span>
-          </div>
-          <button type="button" aria-label="Close" onClick={onClose} className="c-icon-btn">
-            <X aria-hidden="true" className="w-5 h-5" />
-          </button>
-        </div>
-        <div className="flex flex-col gap-4 px-4 py-5 md:px-7">
+    <SidePanel
+      title={member.displayName}
+      sub={`In the app since ${shortWhen(member.joinedAt)}${groupLabelText(member) === '—' ? '' : ` · ${groupLabelText(member)}`}`}
+      onClose={onClose}
+      busy={busy}
+      saveLabel={null}
+      testId="roster-panel"
+    >
+        <div className="flex flex-col gap-4">
           {staffTag(member, words) !== null ? (
             <>
               <p className="c-s14 c-t2">
@@ -201,7 +195,7 @@ function RosterSheet({ member, words, seesList, canRemove, managesStaff, viewer,
                   <Tick state={alsoStaff ? 'on' : 'off'} label={staff.tickLabel} onClick={() => setAlsoStaff((on) => !on)} />
                   <span className="flex flex-col gap-0.5 cursor-pointer" onClick={() => setAlsoStaff((on) => !on)}>
                     <span className="c-s14 c-w6 c-t1">{staff.tickLabel}</span>
-                    <span className="c-s13 c-t2">{alsoStaff ? staff.goLine : staff.keepLine}</span>
+                    <span className="c-s14 c-t2">{alsoStaff ? staff.goLine : staff.keepLine}</span>
                   </span>
                 </div>
               ) : null}
@@ -237,8 +231,7 @@ function RosterSheet({ member, words, seesList, canRemove, managesStaff, viewer,
             />
           ) : null}
         </div>
-      </div>
-    </div>
+    </SidePanel>
   );
 }
 
@@ -448,6 +441,8 @@ export default function Members() {
       // names the sessions and waits for its own button.
       const sessions = ptSessionsAsked(err);
       if (sessions !== null) {
+        // Their panel closes, or it would cover the box (the panel is drawn over the page).
+        setOpenUserId(null);
         setPtEnding({ member, alsoStaff, sessions, moved: named !== null });
         return;
       }

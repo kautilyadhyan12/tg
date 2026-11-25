@@ -493,7 +493,9 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
    - V3a. **Members: Your list**, in two (2026-11-23; board `Members`):
      - V3a-i. [x] **The page, quick filters, the list, the bar and Filter from the right** · merged 2026-11-23 · PR #635
      - V3a-ii. [x] **The boxes the bar opens** · merged 2026-11-25 · PR #641
-   - V3b. [ ] **Members: In the app, waiting to join, and Staff** (web folder 1): a staff member's panel, Invite staff, Staff activity (`MembersNewApp`, `MembersNewStaff*`).
+   - V3b. **Members: In the app, waiting to join, and Staff**, in two (2026-11-25; boards `MembersNewApp`, `MembersNewStaff*` in `console-v2`):
+     - V3b-i. [x] **In the app, a person opened from it, and Waiting to join** · merged 2026-11-25 · PR #644
+     - V3b-ii. [x] **Staff** · merged 2026-11-25 · PR #645
    - V4a. [ ] **Sell** (web folder 1): the register, a sale, products, tax (`Sell*`, `PhoneSell`); a sale's refund boxes and its receipt in the middle, on a member's Purchases too (V2b-ii).
    - V4b. [ ] **Memberships** (web folder 1): the price list, adding a type, discounts (`Memberships*`, `MembershipAdd`).
    - V5. [ ] **Overview and getting in** (web folder 1): Overview, its banners and plan prompts, your organisations, creating a gym, signing in, joining as staff (`Overview*`, `Banners`, `GymReady`, `Orgs`, `CreateGym`, `SignIn`, `StaffInvite`, `PhoneOverview`).
@@ -872,7 +874,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
     - 61c. [x] **Saved workouts** — merged 2026-11-19 (PR #591).
 62. **The clip line** (after 60; split 2026-11-24 by its terminal in three, `handoff/2026-11-24-62a.md` keeps its line as first written).
     - 62a. [x] **Each exercise's own picture, and the clip line** — merged 2026-11-25 (PR #640).
-    - 62b. [ ] **The clip plays**: looping on the exercise's page and beside the timer in a workout, kept for no signal (`expo-video`, Kd's yes asked in its plan).
+    - 62b. [x] **The clip plays** — merged 2026-11-25 (PR #643).
     - 62c. [ ] **Each clip checked against its exercise's camera rules**: once exercise folder 1 has that exercise's rules (job 54).
 63. **The Exercise Library on the phone** (§13.6; after 60). Split 2026-11-19 by its terminal, after Kd's drawings, in three.
     - 63a. [x] **The Library and an exercise's page** — merged 2026-11-19 (PR #596).
