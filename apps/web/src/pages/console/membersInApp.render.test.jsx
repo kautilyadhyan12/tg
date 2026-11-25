@@ -143,6 +143,30 @@ describe('In the app: one person opened from the right', () => {
     finish({ data: { status: 'removed' } });
   });
 
+  // Round one, High-1: the panel is drawn over the page, so with it still open the box that names
+  // the sessions sat under it and could not be pressed (on a phone it could not be seen).
+  it('with personal training booked, the panel closes and the box naming the sessions is the one left to answer', async () => {
+    const sessions = {
+      count: 1,
+      packSessions: 0,
+      mark: 'c'.repeat(64),
+      sessions: [{ id: '66666666-6666-4666-8666-000000000001', personName: 'Rita Sen', trainerName: 'Sam Trainer', localDate: '2026-10-09', localStartMinute: 600, minutes: 60, packSession: false }],
+    };
+    orgService.removeMember.mockRejectedValueOnce(
+      Object.assign(new Error('refused'), { response: { status: 409, data: { error: 'pt_sessions_ending', message: 'This person has personal training sessions booked.', sessions } } }),
+    );
+    drawInApp();
+    const dialog = await openRow('Rita Sen');
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Remove' }));
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Remove' }));
+    const box = await screen.findByTestId('pt-sessions-end-box');
+    expect(screen.queryByTestId('roster-panel')).toBeNull();
+    expect(document.querySelector('.c-scrim')).toBeNull();
+    fireEvent.click(within(box).getByRole('button', { name: "Don't remove" }));
+    expect(screen.queryByTestId('pt-sessions-end-box')).toBeNull();
+    expect(orgService.removeMember).toHaveBeenCalledTimes(1);
+  });
+
   it('a row reads in 14 px words with their initials, and the panel is the one from the right', async () => {
     drawInApp();
     const row = (await screen.findAllByTestId('roster-row')).find((r) => r.textContent.includes('Rita Sen'));

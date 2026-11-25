@@ -85,32 +85,32 @@ function ApplicantRow({ applicant, busy, readOnly, onConfirm, onReject }) {
       data-testid="applicant-row"
     >
       <div className="flex items-start gap-3 flex-1 min-w-0">
-      <span className="hidden md:inline-flex c-avatar c-avatar-sm flex-shrink-0" aria-hidden="true">
-        {initialsOf(applicant.displayName)}
-      </span>
-      <div className="flex flex-col gap-0.5 flex-1 min-w-0">
-        <span className="c-s15 c-w6 c-t1 c-ell">{applicant.displayName}</span>
-        {/* Under the name and never beside it, so the tag never cuts a name short. */}
-        {flagged ? <span className="c-tag c-tag-warn self-start">Needs a decision</span> : null}
-        {/* KD RULING 2026-08-21 — THE CODE'S LABEL IS OFF THIS ROW.
-            He raised it during the clock smoke ("Front Desk" on every row) and
-            was told what it is for: Part 3 §2.1's group mechanism, the thing
-            that tells a big gym which desk, class or campaign somebody came
-            through. He then ruled names off join codes altogether — *"this kind
-            of names not needed men"* — which settles it, because EVERY code now
-            carries the same default label and the field can no longer
-            distinguish anything. It was noise while a gym had one code; it is
-            noise permanently until names come back.
-            **The no-removal rule's AUTHORISED path**: an explicit ruling against
-            a cited cost. `groupLabelText` and the roster's own column are
-            UNTOUCHED (R1.1) — this is the row he named. */}
-        <span className="c-s14 c-t2">{[waiting, expiring].filter(Boolean).join(' · ')}</span>
-        {nudged !== null ? (
-          <span className="c-s14 c-w6" style={{ color: 'var(--warn)' }}>
-            {nudged}
-          </span>
-        ) : null}
-      </div>
+        <span className="hidden md:inline-flex c-avatar c-avatar-sm flex-shrink-0" aria-hidden="true">
+          {initialsOf(applicant.displayName)}
+        </span>
+        <div className="flex flex-col gap-0.5 flex-1 min-w-0">
+          <span className="c-s15 c-w6 c-t1 c-ell">{applicant.displayName}</span>
+          {/* Under the name and never beside it, so the tag never cuts a name short. */}
+          {flagged ? <span className="c-tag c-tag-warn self-start">Needs a decision</span> : null}
+          {/* KD RULING 2026-08-21 — THE CODE'S LABEL IS OFF THIS ROW.
+              He raised it during the clock smoke ("Front Desk" on every row) and
+              was told what it is for: Part 3 §2.1's group mechanism, the thing
+              that tells a big gym which desk, class or campaign somebody came
+              through. He then ruled names off join codes altogether — *"this kind
+              of names not needed men"* — which settles it, because EVERY code now
+              carries the same default label and the field can no longer
+              distinguish anything. It was noise while a gym had one code; it is
+              noise permanently until names come back.
+              **The no-removal rule's AUTHORISED path**: an explicit ruling against
+              a cited cost. `groupLabelText` and the roster's own column are
+              UNTOUCHED (R1.1) — this is the row he named. */}
+          <span className="c-s14 c-t2">{[waiting, expiring].filter(Boolean).join(' · ')}</span>
+          {nudged !== null ? (
+            <span className="c-s14 c-w6" style={{ color: 'var(--warn)' }}>
+              {nudged}
+            </span>
+          ) : null}
+        </div>
       </div>
       <div className="flex flex-wrap items-center gap-2 flex-shrink-0">
         <button
@@ -307,29 +307,29 @@ export default function ApplicationsQueue({
       ) : null}
 
       <ul className="border-t" style={{ borderColor: 'var(--line)' }}>
-      {state.items.map((a) => (
-        <ApplicantRow
-          key={a.id}
-          applicant={a}
-          busy={busyId === a.id}
-          readOnly={readOnly}
-          onConfirm={() => decide(a.id, () => orgService.confirmApplication(gymId, a.id), true)}
-          onReject={() => decide(a.id, () => orgService.rejectApplication(gymId, a.id), false)}
-        />
-      ))}
+        {state.items.map((a) => (
+          <ApplicantRow
+            key={a.id}
+            applicant={a}
+            busy={busyId === a.id}
+            readOnly={readOnly}
+            onConfirm={() => decide(a.id, () => orgService.confirmApplication(gymId, a.id), true)}
+            onReject={() => decide(a.id, () => orgService.rejectApplication(gymId, a.id), false)}
+          />
+        ))}
       </ul>
 
       {state.nextCursor !== null ? (
         <div className="px-4 py-3 md:px-5 border-t" style={{ borderColor: 'var(--line)' }}>
-        <button
-          type="button"
-          onClick={loadMore}
-          disabled={loadingMore}
-          className="c-btn c-btn-s"
-        >
-          {loadingMore ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-          {loadingMore ? 'Loading…' : 'Show more'}
-        </button>
+          <button
+            type="button"
+            onClick={loadMore}
+            disabled={loadingMore}
+            className="c-btn c-btn-s"
+          >
+            {loadingMore ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+            {loadingMore ? 'Loading…' : 'Show more'}
+          </button>
         </div>
       ) : null}
     </section>

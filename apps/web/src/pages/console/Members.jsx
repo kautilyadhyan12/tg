@@ -441,6 +441,8 @@ export default function Members() {
       // names the sessions and waits for its own button.
       const sessions = ptSessionsAsked(err);
       if (sessions !== null) {
+        // Their panel closes, or it would cover the box (the panel is drawn over the page).
+        setOpenUserId(null);
         setPtEnding({ member, alsoStaff, sessions, moved: named !== null });
         return;
       }
