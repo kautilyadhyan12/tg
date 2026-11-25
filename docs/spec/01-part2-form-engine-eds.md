@@ -2562,8 +2562,15 @@ later change of the lock decides otherwise, run again): 16 differ, all on his ow
 His walk-back set counts 2 of 3 under uneven pictures (0 before) and done faster (1 before), still open (53). His
 sit-and-stand on a chair (`usual_v08`) counts its second sit-and-stand, 13.8 to 17.1 s, a chair squat by eye and the squat's
 twin: before, the standing taken at the phone, him found again 1.3 to 1.8 times smaller, was kept and no dip ever began;
-written open for 54, with its count under each replay. On the old six-person barbell file the lock keeps the man in the three
-frames where the stand-in follower jumped between bodies. **Limits, in plain sight:** a body of the member's size whose trunk
+written open for 54, with its count under each replay. The phone's own runs: his walk-back set now counts 3 of 3 on the phone as
+on the laptop (the body learned while he was at the lens, whose knee the body check refused until 4.9 s, is forgotten when he
+is found again smaller), so 20 of his 22 floor squats on the phone; `usual_v08` counts its chair squat on both, the phone also
+telling his first sit to go lower (written). Through the floor view, shown only, his floor sets read through the lock move its
+readings: from 12.6 to 14.5 degrees "feet stay down" alone falls short of his floor, his standing hips now within reach; with
+the measured wander added, every judged reading is within reach from 12.6 degrees and 2 of his 10 raised squats are lost; on all
+fours a floor phone sees one ankle in 60 found pictures of 100 (61 before); it is held at no lean (`movementFloorView.test.ts`).
+On the old six-person barbell file the lock keeps the man in the three frames where the stand-in follower jumped between
+bodies. **Limits, in plain sight:** a body of the member's size whose trunk
 lies within 0.95 m of their place when the model changes to them is taken for them (a stranger squatting 0.5 m beside; a
 neighbour lunging 1.1 m beside, 0.95 m away mid-lunge), so a neighbour doing a moving exercise is never taken only beyond about
 1.7 m; before the set has counted, whoever the model follows is the person (a stranger who squats first is counted, and the

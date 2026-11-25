@@ -218,18 +218,6 @@ export const MOVEMENT_VIDEOS: readonly MovementVideo[] = [
   //    pictures at 2 to 2.5 a second (exercise folder 1's reviews/floor-phone). Good-form squats: every one counts. ───
   { file: "movement-points/floor_phone_test", cut: [0, 12], floor: true, movement: "squat", person: FLOOR_PERSON, view: "side", reps: 3, sets: false,
     seen: "2026-11-20 (52a-ii-b-i), 16 frames of the set drawn with the model's points: the one man, followed in each. The phone on a shiny floor, upright; sandals. From the first picture, at the phone with his hands on the floor, as he walks back from it, then three squats side on. Judged, never setting a number: the model finds nobody in some of its first frames.",
-    phoneOpen: {
-      why:
-        "53, where a live set begins with the person walking back from the phone: on the phone's reading the body check refuses his near " +
-        "knee as a broken bone until 4.9 s (the laptop's until 4.1 s), its length learned while he was at the lens; his first squat begins at " +
-        "5.0 s, before he was read standing still with his legs, and is never begun.",
-      differences: [
-        "the laptop counts 3, the phone 2",
-        "the laptop says 5.1 s counted, the phone 7.6 s counted",
-        "the laptop says 7.6 s counted, the phone 10.0 s counted",
-        "the phone does not say 10.0 s counted",
-      ],
-    },
     leftOutOpen: {
       count: 2,
       why:
@@ -871,6 +859,12 @@ export const MOVEMENT_VIDEOS: readonly MovementVideo[] = [
       "squat by eye; the first, begun as he walks to the chair and ended turning it, is another movement. Before 52d-i nothing was counted: the " +
       "standing taken while he was at the phone, found again 1.3 to 1.8 times smaller, was kept and no dip began; the lock now takes him afresh. " +
       "Under the replays it counts 0 to 2 (onePerson.test.ts has each).",
+    phoneOpen: {
+      why:
+        "54, where the chair squat is made: on the phone's reading his first sit, begun as he walks to the chair, is read as a chair squat " +
+        "that stopped short and told to go lower, and his second sit-and-stand is judged 0.2 s later; the laptop reads the first as another movement.",
+      differences: ["the laptop says 13.8 s counted, the phone 2.9 s short (depth)", "the phone also says 14.0 s counted"],
+    },
   },
   floorOther("usual_v09", "floor", "side", "The phone on the floor, upright: he stands at a chair, one leg lifted and bent."),
   floorOther("usual_v10", "floor", "side", "The phone on the floor, on its long side: he sits on a chair, gets up, sits (54)."),
