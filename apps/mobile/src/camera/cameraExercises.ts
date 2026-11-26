@@ -7,6 +7,7 @@ import sitUp from "@app/movement/movements/sit-up.json";
 import squatJump from "@app/movement/movements/squat-jump.json";
 import squat from "@app/movement/movements/squat.json";
 import type { ExerciseCamera } from "@app/shared";
+import type { PictureName } from "../look/pictures";
 
 // What the camera can count today (ROADMAP Stage 5 53a): the movements exercise folder 1 has built and proven (spec Part 2
 // §12.5), carried in the app and checked by the engine's own code before they are used. Until the Library's download
@@ -21,6 +22,8 @@ export interface CameraExercise {
   readonly camera: ExerciseCamera | null;
   /** The Library's exercise whose picture and clip are the reference, where the Library has one. */
   readonly libraryId: string | null;
+  /** The app's own picture of it, the reference until the Library has a picture of its own (as the Library's cards show). */
+  readonly picture: PictureName | null;
   readonly measuredIn: "reps" | "time";
   /** The set's target to start from: reps, or seconds. */
   readonly target: number;
@@ -42,12 +45,12 @@ function withCamera(json: unknown, cameraJson: unknown): { counts: CameraCounts;
 const squatWithCamera = withCamera(squat, squatCamera);
 
 export const CAMERA_EXERCISES: readonly CameraExercise[] = [
-  { key: "squat", name: "Squat", ...squatWithCamera, libraryId: "squat", measuredIn: "reps", target: 10 },
+  { key: "squat", name: "Squat", ...squatWithCamera, libraryId: "squat", picture: "squat", measuredIn: "reps", target: 10 },
   // The squat's twin by declaration (§12.3): counted by the squat's movement, its own mistakes not yet written (54).
-  { key: "goblet", name: "Kettlebell Goblet Squat", counts: counted(squat), camera: null, libraryId: "kettlebell_goblet_squat", measuredIn: "reps", target: 10 },
-  { key: "squat-jump", name: "Squat Jump", counts: counted(squatJump), camera: null, libraryId: null, measuredIn: "reps", target: 10 },
-  { key: "lunge", name: "Lunge", counts: counted(lunge), camera: null, libraryId: null, measuredIn: "reps", target: 10 },
-  { key: "sit-up", name: "Sit-up", counts: counted(sitUp), camera: null, libraryId: null, measuredIn: "reps", target: 10 },
-  { key: "hip-thrust", name: "Hip Thrust", counts: counted(hipThrust), camera: null, libraryId: null, measuredIn: "reps", target: 10 },
-  { key: "l-sit", name: "L-sit", counts: counted(lSit), camera: null, libraryId: null, measuredIn: "time", target: 20 },
+  { key: "goblet", name: "Kettlebell Goblet Squat", counts: counted(squat), camera: null, libraryId: "kettlebell_goblet_squat", picture: null, measuredIn: "reps", target: 10 },
+  { key: "squat-jump", name: "Squat Jump", counts: counted(squatJump), camera: null, libraryId: null, picture: "jumpsquat", measuredIn: "reps", target: 10 },
+  { key: "lunge", name: "Lunge", counts: counted(lunge), camera: null, libraryId: null, picture: null, measuredIn: "reps", target: 10 },
+  { key: "sit-up", name: "Sit-up", counts: counted(sitUp), camera: null, libraryId: null, picture: null, measuredIn: "reps", target: 10 },
+  { key: "hip-thrust", name: "Hip Thrust", counts: counted(hipThrust), camera: null, libraryId: null, picture: null, measuredIn: "reps", target: 10 },
+  { key: "l-sit", name: "L-sit", counts: counted(lSit), camera: null, libraryId: null, picture: null, measuredIn: "time", target: 20 },
 ];

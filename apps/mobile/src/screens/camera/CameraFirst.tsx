@@ -19,7 +19,8 @@ export function CameraFirst({ off, onTurnOn, onByHand, onBack }: { off: boolean;
     <View style={styles.page}>
       <PictureTop
         picture="squat"
-        tall={1.4}
+        tall={1.775}
+        band={1.25}
         title={off ? CAMERA_OFF.title : FIRST_TITLE}
         above={
           <Pressable accessibilityRole="button" accessibilityLabel="Back" onPress={onBack} style={styles.back} hitSlop={4}>

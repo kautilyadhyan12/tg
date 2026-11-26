@@ -183,6 +183,7 @@ export const colours = {
   footRed: "#B91C1C",
   /** The camera's picture under the words at its foot and top, so they read over any room. */
   cameraShade: "rgba(10,9,8,0.75)",
+  cameraShadeClear: "rgba(10,9,8,0)",
 } as const;
 
 export type ColourName = keyof typeof colours;
@@ -300,6 +301,8 @@ export const shadows = {
   /** A day run on Your runs' calendar (37c-i): the footprint lit from under. */
   dayGlow: "0 0 16px 4px rgba(255,138,31,0.55)",
   sheet: "0 -12px 48px rgba(0,0,0,0.6)",
+  /** The camera screen's reference clip, lifted off the camera's picture (53a). */
+  cameraTile: "0 12px 30px rgba(0,0,0,0.45)",
   /** A run's round Start, Pause and Resume (37a): a halo, then the glow under it. */
   roundButton: "0 0 0 10px rgba(255,138,31,0.12), 0 0 0 22px rgba(255,138,31,0.05), 0 10px 38px rgba(255,138,31,0.55)",
 } as const;

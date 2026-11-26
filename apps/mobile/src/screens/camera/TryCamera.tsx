@@ -11,6 +11,7 @@ import { holdWords } from "../../library/records";
 import { Button } from "../../look/Button";
 import { colours, sizes } from "../../look/colours";
 import { Modal } from "../../look/Modal";
+import { pictures } from "../../look/pictures";
 import { Sheet } from "../../look/Sheet";
 import { Txt } from "../../look/Txt";
 import { useSession } from "../../session/SessionProvider";
@@ -51,7 +52,7 @@ export function TryCameraLink() {
 
   return (
     <>
-      <Button label="Try the camera" kind="link" onPress={() => { setPicking(true); }} />
+      <Button label="Try the camera" kind="link" onPress={() => { setPicking(true); }} style={styles.link} />
       <Sheet open={picking} title="Try the camera" onClose={() => { setPicking(false); }}>
         {CAMERA_EXERCISES.map((e) => (
           <Pressable key={e.key} accessibilityRole="button" accessibilityLabel={`${e.name}, ${e.measuredIn === "time" ? holdWords(e.target) : repsWords(e.target)}`} onPress={() => void open(e)} style={styles.choice}>
@@ -111,7 +112,7 @@ function TrySetScreen({ me, exercise, onClose }: { me: string; exercise: CameraE
     setBox(false);
   }, [set, live, result]);
 
-  const reference = useReference(exercise.libraryId, !set.paused && result === null);
+  const reference = useReference(exercise, !set.paused && result === null);
   const timed = exercise.measuredIn === "time";
   const digits = timed ? holdWords(set.heldMs / 1000).replace(" s", "") : String(shownReps(set)).padStart(2, "0");
   const sound = { on: soundOn, flip: () => { const next = !soundOn; setSoundOn(next); void soundFile.current.write(soundText(next)).catch(() => undefined); } };
@@ -157,33 +158,39 @@ function Done({ result, timed, onDone }: { result: { reps: number; heldMs: numbe
         <Txt kind="h2">Set done</Txt>
         <Txt kind="strong">{timed ? `Held ${holdWords(result.heldMs / 1000)}` : repsWords(result.reps)}</Txt>
         {result.form === null ? null : <Txt kind="body">{`Form score ${String(Math.round(result.form))}`}</Txt>}
-        <Button label="Done" raised onPress={onDone} />
+        <Button label="Done" raised wide onPress={onDone} />
       </View>
     </View>
   );
 }
 
-/** The exercise's own picture, its clip playing over it, from the Library kept on the phone; null until it has come, and
- *  for an exercise the Library does not have (no tile is drawn). */
-function useReference(libraryId: string | null, playing: boolean): ReactNode {
+/** The exercise's own picture, its clip playing over it, from the Library kept on the phone, once it has come; until the
+ *  Library has a picture of its own, the app's own picture of it; null for an exercise with neither (no tile is drawn). */
+function useReference(exercise: CameraExercise, playing: boolean): ReactNode {
   const named = useNamed();
-  const own = libraryId === null ? null : named(libraryId);
+  const own = exercise.libraryId === null ? null : named(exercise.libraryId);
   useKeepMedia([own?.picture?.file, own?.clip?.file].filter((f): f is string => f !== undefined));
   const uri = useOwnPicture(own?.picture ?? null);
-  if (libraryId === null || own?.picture === null || own?.picture === undefined || uri === null) return null;
-  const ground = own.picture.ground;
-  return (
-    <View style={[styles.fill, { backgroundColor: ground }]}>
-      <Image source={{ uri }} resizeMode="cover" style={styles.fill} accessible={false} />
-      <ClipOver id={`camera-${libraryId}`} clip={own.clip} playing={playing} ground={ground} />
-    </View>
-  );
+  if (own?.picture !== null && own?.picture !== undefined && uri !== null) {
+    const ground = own.picture.ground;
+    return (
+      <View style={[styles.fill, { backgroundColor: ground }]}>
+        <Image source={{ uri }} resizeMode="cover" style={styles.whole} accessible={false} />
+        <ClipOver id={`camera-${exercise.key}`} clip={own.clip} playing={playing} ground={ground} />
+      </View>
+    );
+  }
+  if (exercise.picture === null) return null;
+  return <Image testID={`camera-picture-${exercise.key}`} source={pictures[exercise.picture]} resizeMode="cover" style={styles.whole} accessible={false} />;
 }
 
 const styles = StyleSheet.create({
+  link: { alignSelf: "center" },
   choice: { flexDirection: "row", alignItems: "center", gap: 12, minHeight: sizes.button, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: colours.line },
   grow: { flex: 1 },
   above: { flex: 1 },
   done: { backgroundColor: colours.box, borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: sizes.edge, paddingBottom: 32, gap: 8 },
   fill: { position: "absolute", left: 0, right: 0, top: 0, bottom: 0 },
+  /** A picture filling its tile: an Image laid out by its edges alone is drawn at its own size. */
+  whole: { width: "100%", height: "100%" },
 });

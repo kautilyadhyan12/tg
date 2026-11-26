@@ -79,7 +79,7 @@ export function CameraBox({ set, units, sound, press, byHand, onClose, onByHand,
             )}
           </Row>
         </View>
-        <Button label={main} onPress={() => { press({ kind: "done" }); }} raised />
+        <Button label={main} onPress={() => { press({ kind: "done" }); }} raised wide />
         <View style={styles.pills}>
           <Pill icon={set.paused ? "play" : "pause"} words={set.paused ? "Resume" : "Pause"} onPress={() => { press({ kind: set.paused ? "resume" : "pause" }); }} />
           <Pill icon={sound.on ? "volume" : "volumeOff"} words={sound.on ? "Sound on" : "Sound off"} onPress={sound.flip} />

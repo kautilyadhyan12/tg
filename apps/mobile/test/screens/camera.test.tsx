@@ -173,6 +173,8 @@ describe("I stand my phone up, step back, do my squats, and the phone counts the
     await turnOn();
     expect(countSays()).toBe("00 / 10");
     expect(screen.getByText(SET_UP_WORDS)).toBeTruthy();
+    // The squat has no picture of its own in the Library yet: the app's own picture of it is the reference in the corner.
+    expect(screen.getByTestId("camera-picture-squat")).toBeTruthy();
     await play(SQUATS);
     expect(screen.queryByText(SET_UP_WORDS)).toBeNull();
     expect(countSays()).toBe("03 / 10");

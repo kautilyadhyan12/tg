@@ -6,7 +6,7 @@ import { NO_VIEW, type LineTone, type LiveSet, type LiveView } from "../../camer
 import { PoseCameraView } from "../../camera/poseCameraNative";
 import type { PoseEvent } from "../../camera/poseFrame";
 import { drawn } from "../../camera/skeleton";
-import { colours } from "../../look/colours";
+import { colours, shadows } from "../../look/colours";
 import { cameraSizes } from "../../look/sizing";
 import { Txt } from "../../look/Txt";
 import { soundNative } from "../../sound/soundNative";
@@ -89,13 +89,12 @@ export function CameraSet({ live, title, digits, of, paused, sound, stopped, ref
         />
       ) : null}
       <Pressable testID="camera-tap" style={StyleSheet.absoluteFill} onPress={onTap} accessibilityRole="button" accessibilityLabel={TAP_WORDS}>
-        {on && box !== null ? <Body view={view} width={box.width} height={box.height} /> : null}
+        {/* Paused, or once the set has ended, the camera rests: no line is left on a picture it no longer reads. */}
+        {on && !paused && box !== null ? <Body view={view} width={box.width} height={box.height} /> : null}
         <View pointerEvents="none" style={[styles.foot, styles.shade]} />
         <View style={[styles.corners, { top: insets.top + 10 }]} pointerEvents="none">
           <View style={styles.count} accessible accessibilityLabel={`${digits} ${of}`}>
-            <View style={view.flash ? styles.glowGreen : styles.glowRed}>
-              <Led text={digits} colour={view.flash ? "ledGreen" : "ledRed"} height={sizes.digits} bare />
-            </View>
+            <Led text={digits} colour={view.flash && !paused ? "ledGreen" : "ledRed"} height={sizes.digits} bare />
             <Txt kind="h1" style={styles.of}>
               {of}
             </Txt>
@@ -199,13 +198,11 @@ const styles = StyleSheet.create({
   page: { flex: 1, backgroundColor: colours.page, overflow: "hidden" },
   corners: { position: "absolute", left: 16, right: 8, flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" },
   count: { flexDirection: "row", alignItems: "flex-end", gap: 10, paddingTop: 6 },
-  glowRed: { filter: [{ dropShadow: { offsetX: 0, offsetY: 0, standardDeviation: 10, color: "rgba(255,75,62,0.55)" } }] },
-  glowGreen: { filter: [{ dropShadow: { offsetX: 0, offsetY: 0, standardDeviation: 10, color: "rgba(54,217,106,0.6)" } }] },
   of: { color: colours.text, textShadowColor: colours.wordShadow, textShadowRadius: 6, textShadowOffset: { width: 0, height: 1 } },
-  tile: { borderRadius: 18, overflow: "hidden", borderWidth: 1, borderColor: colours.lineStrong, backgroundColor: colours.raised, boxShadow: "0 12px 30px rgba(0,0,0,0.45)" },
+  tile: { borderRadius: 18, overflow: "hidden", borderWidth: 1, borderColor: colours.lineStrong, backgroundColor: colours.raised, boxShadow: shadows.cameraTile },
   tileSetUp: { borderWidth: 2, borderColor: colours.orange },
   foot: { position: "absolute", left: 0, right: 0, bottom: 0, height: "22%" },
-  shade: { experimental_backgroundImage: `linear-gradient(to bottom, rgba(10,9,8,0), ${colours.cameraShade})` },
+  shade: { experimental_backgroundImage: `linear-gradient(to bottom, ${colours.cameraShadeClear}, ${colours.cameraShade})` },
   bottom: { position: "absolute", left: 16, right: 16, bottom: 0, gap: 6 },
   setUp: { gap: 8, paddingBottom: 14 },
   line: { minHeight: 68, borderRadius: 20, paddingHorizontal: 20, paddingVertical: 14, alignItems: "center", justifyContent: "center", marginBottom: 8 },

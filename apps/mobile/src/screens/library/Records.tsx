@@ -242,9 +242,14 @@ export function Led({ text, colour, height, bare = false }: { text: string; colo
     <Svg width={width} height={height} accessible={false}>
       {parts
         .filter((p) => p.lit || !bare)
-        .map((p) => (
-          <Path key={p.key} d={box(p.x, p.y, p.w, p.h, r)} fill={p.lit ? on : colours.ledOff} />
-        ))}
+        .map((p) =>
+          bare ? (
+            // Over a picture, each lit segment glows a little round its edge, as a wall timer's light does.
+            <Path key={p.key} d={box(p.x, p.y, p.w, p.h, r)} fill={on} stroke={on} strokeOpacity={0.3} strokeWidth={t * 0.8} />
+          ) : (
+            <Path key={p.key} d={box(p.x, p.y, p.w, p.h, r)} fill={p.lit ? on : colours.ledOff} />
+          ),
+        )}
       {dots.map((d) => (
         <Circle key={d.key} cx={d.cx} cy={d.cy} r={r} fill={on} />
       ))}
