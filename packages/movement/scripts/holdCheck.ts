@@ -14,8 +14,8 @@
 import { existsSync, readFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import type { HoldMovement, MovementFile, MovementReady } from "@app/shared";
-import { HoldMatcher, parseMovementFile, readPosition, type HoldResult } from "../src/index.js";
-import { readKept, type KeptFile, type Video } from "./bodyCheck.js";
+import { CameraSet, HoldMatcher, parseMovementFile, readPosition, type HoldResult } from "../src/index.js";
+import { lockAgrees, readKept, type KeptFile, type Video } from "./bodyCheck.js";
 import { runOf } from "./measureCheck.js";
 import { LEAD_IN, MOVEMENTS, asReplayed, seedOf, withLeadIn, type ProofVideo } from "./movementCheck.js";
 import { MOVEMENT_VIDEOS, framesOf, isOther, labelOf, type MovementVideo } from "./movementVideos.js";
@@ -57,17 +57,43 @@ function leadOf(video: Video): number {
   return Math.round(LEAD_IN / step) * step;
 }
 
-/** A hold over one video: only the time held inside its own clock, from its first picture to its last. */
+/** A hold over one video: only the time held inside its own clock, from its first picture to its last. As the camera runs
+ *  it (`CameraSet`), made fast as `runMovement` is: the stages once for a video, and the set run again whole only when the
+ *  lock, told at the first held second, follows another body after it (`lockAgrees`). */
 export function runHold(hold: HoldMovement, video: Video): HoldRun {
-  const { measured } = runOf(withLeadIn(video));
+  const lead = withLeadIn(video);
+  const { measured } = runOf(lead);
   const matcher = new HoldMatcher(hold);
   const found: HoldResult[] = [];
-  for (const m of measured) {
+  let held: number | null = null;
+  for (let i = 0; i < measured.length; i++) {
+    const m = measured[i];
+    if (m === undefined) continue;
     const frame = matcher.next(m);
     if (frame.hold !== null) found.push(frame.hold);
+    if (held === null && frame.holding) held = i;
   }
+  if (held !== null && !lockAgrees(lead.frames, held)) return heldIn(cameraHolds(hold, lead), video);
   const last = matcher.finish();
   if (last?.hold) found.push(last.hold);
+  return heldIn(found, video);
+}
+
+/** Every hold of the set run whole as the camera runs it, frame by frame (`CameraSet`), on frames given as they are. */
+export function cameraHolds(hold: HoldMovement, video: Video): HoldResult[] {
+  const set = new CameraSet({ hold });
+  const found: HoldResult[] = [];
+  for (const f of video.frames) {
+    const h = set.next(f).hold;
+    if (h?.hold) found.push(h.hold);
+  }
+  const last = set.finish().hold;
+  if (last?.hold) found.push(last.hold);
+  return found;
+}
+
+/** The holds of a run of the video with its first and last pictures held (`withLeadIn`), kept inside its own clock. */
+export function heldIn(found: readonly HoldResult[], video: Video): HoldRun {
   const t0 = (video.frames[0]?.t ?? 0) + leadOf(video);
   const end = (video.frames[video.frames.length - 1]?.t ?? 0) + leadOf(video);
   const holds = found.flatMap((h) => {

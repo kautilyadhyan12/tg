@@ -527,6 +527,9 @@ export interface MeasuredBody {
   readonly onFloor: boolean;
   /** Every measure of the list, each read flat and in 3D. */
   readonly readings: ReadonlyMap<MeasureName, Reading>;
+  /** A new person begins at this frame (`CheckedBody.fresh`): what was measured of the body before is forgotten, and the
+   *  counting after this starts afresh. */
+  readonly fresh: boolean;
 }
 
 // ── The floor ──────────────────────────────────────────────────────────────────────────
@@ -719,9 +722,9 @@ export class BodyMeasures {
   }
 
   next(body: SteadyBody): MeasuredBody {
-    const { t, aspect, size: perMetre, points } = body;
+    const { t, aspect, size: perMetre, points, fresh } = body;
     const limits = this.limits;
-    if (this.lastT !== null && t < this.lastT) {
+    if (fresh || (this.lastT !== null && t < this.lastT)) {
       this.lengths = new Map();
       this.flatFloor.reset();
       this.worldFloor.reset();
@@ -801,7 +804,7 @@ export class BodyMeasures {
       }
       readings.set(m.name, { flat: onPicture, world: inWorld, shown, off });
     }
-    return { t, leg, trunk, onFloor: flatSpace !== null && this.flatFloor.settled, readings };
+    return { t, leg, trunk, onFloor: flatSpace !== null && this.flatFloor.settled, readings, fresh };
   }
 
   /** The body's own leg and trunk, metres: the middle of every reading of them in the last `ownMemory`, each side seen in

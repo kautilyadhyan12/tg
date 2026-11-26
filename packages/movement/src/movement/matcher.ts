@@ -551,9 +551,9 @@ export class MovementMatcher {
   next(body: SteadyBody, measured: MeasuredBody): MatchFrame {
     const t = measured.t;
     // A frame with the same time as the one before decides nothing (the possible-body check refuses it whole); only a
-    // clock that went back is a new stream.
+    // clock that went back, or a new person (`MeasuredBody.fresh`), is a new stream.
     if (this.lastT !== null && t === this.lastT) return this.still(t);
-    if (this.lastT !== null && t < this.lastT) this.reset();
+    if (measured.fresh || (this.lastT !== null && t < this.lastT)) this.reset();
     this.lastT = t;
     this.frameTimes = [...this.frameTimes.slice(-9), t];
     const L = this.limits;

@@ -65,8 +65,9 @@ describe("the worst thing: no other movement is ever counted as a squat", () => 
     expect(r.count).toBe(0);
   });
 
-  it("no other movement is open any more: the kettlebell push press, counted 3 until the depth was set from the squat's form standard, counts 0", () => {
-    expect(TABLE.rows.filter((r) => r.entry.open !== undefined).map((r) => [r.label, r.count])).toEqual([]);
+  it("one other video is open, his sit-and-stand on a chair, a chair squat (54); the kettlebell push press, counted 3 until the depth was set from the squat's form standard, counts 0", () => {
+    // Since 52d-i his second sit-and-stand counts, a chair squat by eye, the squat's twin: scripts/movementVideos.ts.
+    expect(TABLE.rows.filter((r) => r.entry.open !== undefined).map((r) => [r.label, r.count])).toEqual([["usual_v08", 1]]);
     expect(row("fresh_push_press_kettlebell").count).toBe(0);
   });
 

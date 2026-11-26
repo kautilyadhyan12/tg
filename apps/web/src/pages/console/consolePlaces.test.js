@@ -93,6 +93,10 @@ describe('where each place is', () => {
     expect(Object.keys(PLACES).sort()).toEqual(Object.keys(NEEDS).sort());
   });
 
+  it("Sell's Discounts tab has its own address, for the links that name it (V4a-i)", () => {
+    expect(placeTo('iron-house', 'sellDiscounts')).toBe('/console/iron-house/sell#discounts');
+  });
+
   it('there is no address without a gym, or for a place that is not on the list', () => {
     for (const slug of [undefined, null, '', 7]) expect(placeTo(slug, 'members')).toBeNull();
     for (const place of ['billing', '', undefined, 'toString', '__proto__', 'constructor']) {

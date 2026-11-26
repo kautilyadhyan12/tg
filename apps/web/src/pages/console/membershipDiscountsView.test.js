@@ -104,8 +104,8 @@ describe('what is offered on a membership', () => {
 
   it('a fixed amount kept in the old money is said on the membership form, and a product-only one is not', () => {
     const pounds = { ...page([discount({ ...FOUNDERS, currency: 'GBP' }), discount({ ...WATER_ONLY, kind: 'amount', percentBp: null, amountMinor: 100, currency: 'GBP' })]) };
-    expect(oldMoneySaleLine(pounds, 'membership')).toBe('Founders cannot be used until its amount is saved again in USD. Open it under Discounts below and press Change.');
-    expect(oldMoneySaleLine(pounds)).toBe('Water deal cannot be used until its amount is saved again in USD. Open it under Discounts below and press Change.');
+    expect(oldMoneySaleLine(pounds, 'membership')).toBe('Founders cannot be used until its amount is saved again in USD. Open it under Discounts and press Change.');
+    expect(oldMoneySaleLine(pounds)).toBe('Water deal cannot be used until its amount is saved again in USD. Open it under Discounts and press Change.');
   });
 });
 

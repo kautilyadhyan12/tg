@@ -169,10 +169,13 @@ describe("every proof video, as the phone's chosen set-up read it (51b-ii; kept 
     expect(allSame(rows)).toBe(false);
   });
 
-  it("the open cases are three, a man's own floor squats, and on the phone no other movement is counted", () => {
+  it("the open cases are three, two of a man's own floor squats and his sit-and-stand on a chair, and on the phone no other movement is counted", () => {
+    // Since 52d-i his walk-back set counts 3 of 3 on the phone as on the laptop: the lock forgets the body learned while he
+    // was at the lens, whose knee the body check refused until 4.9 s. His sit-and-stand on a chair (usual_v08) counts its
+    // chair squat on both, open for 54 (scripts/movementVideos.ts).
     const open = rows.filter((r) => r.entry.phoneOpen !== undefined);
-    expect(open.map((r) => r.label).sort()).toEqual(["floor_phone_test 0-12 s", "floor_phone_test 13.9-21.1 s", "usual_v04 9.8-17.5 s"]);
-    for (const r of rows.filter((x) => x.entry.movement !== "squat")) expect([r.label, r.phone?.count]).toEqual([r.label, 0]);
+    expect(open.map((r) => r.label).sort()).toEqual(["floor_phone_test 13.9-21.1 s", "usual_v04 9.8-17.5 s", "usual_v08"]);
+    for (const r of rows.filter((x) => x.entry.movement !== "squat" && x.entry.open === undefined)) expect([r.label, r.phone?.count]).toEqual([r.label, 0]);
     // 119 of 122 since 52c-ii: its 21 videos of floor work and holds read the same on both (98 of 101 since 52c-i: a man's
     // rooftop lunges are two takes joined by a fade, each a set of its own; 97 of 100 before).
     expect(rows.filter((r) => r.verdict === "same").length).toBe(119);
@@ -184,10 +187,11 @@ describe("every proof video, as the phone's chosen set-up read it (51b-ii; kept 
     expect(sumo?.verdict).toBe("same");
   });
 
-  it("a man's own squats from a phone on the floor: the phone counts 19 of his 22, each one missed written with its job", () => {
+  it("a man's own squats from a phone on the floor: the phone counts 20 of his 22, each one missed written with its job", () => {
     const own = rows.filter((r) => r.entry.person === "man, his own phone, on the floor and raised" && r.entry.movement === "squat" && r.entry.reps !== null);
     expect(own.reduce((n, r) => n + r.laptop.count, 0)).toBe(22);
-    expect(own.reduce((n, r) => n + (r.phone?.count ?? 0), 0)).toBe(19);
+    // 19 until 52d-i: his walk-back set's first squat, lost on the phone, counts since the lock forgets the body learned at the lens.
+    expect(own.reduce((n, r) => n + (r.phone?.count ?? 0), 0)).toBe(20);
     for (const r of own.filter((x) => x.verdict !== "same")) {
       expect([r.label, r.laptop.count - (r.phone?.count ?? 0), /^5(2a-ii-b-ii-b-ii|3), /.test(r.entry.phoneOpen?.why ?? "")]).toEqual([r.label, 1, true]);
     }

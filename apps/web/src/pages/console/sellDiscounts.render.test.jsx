@@ -111,10 +111,29 @@ const open = (org = ORG) => {
     </MemoryRouter>,
   );
 };
-const newSale = () => screen.getByRole('region', { name: 'New sale' });
-const today = () => screen.getByRole('region', { name: "Today's takings" });
-const discounts = () => screen.getByRole('region', { name: 'Discounts' });
-const pick = (label, value) => fireEvent.change(within(newSale()).getByLabelText(label), { target: { value } });
+/** Opens one of Sell's tabs (V4a-i) where it is not open already: every tab stays drawn, the others hidden. */
+const showTab = (name) => {
+  const tab = screen.queryByRole('tab', { name: new RegExp(`^${name}`) });
+  if (tab !== null && tab.getAttribute('aria-selected') !== 'true') fireEvent.click(tab);
+};
+const newSale = () => {
+  showTab('Register');
+  return screen.getByRole('region', { name: 'New sale' });
+};
+const today = () => {
+  showTab('Register');
+  return screen.getByRole('region', { name: "Today's takings" });
+};
+const discounts = () => {
+  showTab('Discounts');
+  return screen.getByRole('region', { name: 'Discounts' });
+};
+/** "Add a product" is a press on the product's tile on the till; anything else is a box in the sale. */
+const pick = (label, value) => {
+  if (label !== 'Add a product') return fireEvent.change(within(newSale()).getByLabelText(label), { target: { value } });
+  showTab('Register');
+  return fireEvent.click(within(screen.getByRole('list', { name: 'Products to add' })).getAllByRole('button').find((b) => b.dataset.product === value));
+};
 const takeButton = () => within(newSale()).getByRole('button', { name: /^Take payment/ });
 const summary = () => within(newSale()).getByTestId('sale-summary').textContent;
 const options = (label) => [...within(newSale()).getByLabelText(label).querySelectorAll('option')].map((o) => o.textContent);
@@ -242,7 +261,7 @@ describe('the Discounts list', () => {
   it('lists each discount with what it is, and adds one from the form', async () => {
     svc.get.mockResolvedValue(page({ discounts: [discount({ startsOn: '2026-06-01', endsOn: '2026-12-31', maxUses: 100, uses: 3 }), TOWELS, discount({ id: 'd-old', name: 'Spring', code: null, endsOn: '2026-04-30' })] }));
     open();
-    await screen.findByRole('region', { name: 'Discounts' });
+    await screen.findByRole('tab', { name: /^Discounts/ });
     expect(within(discounts()).getAllByTestId('discount-row').map((r) => r.textContent)).toEqual([
       'Summer saleActive20% off · Promo code SUMMER20 · All products · 1 Jun 2026 to 31 Dec 2026 · Used 3 of 100ChangeArchive',
       'Towels onlyActive10% off · Promo code TOWEL · Towel · Not used yetChangeArchive',
@@ -281,7 +300,8 @@ describe('the Discounts list', () => {
     const types = [{ id: 't-gold', name: 'Gold Monthly' }, { id: 't-pass', name: 'Day pass' }];
     svc.get.mockResolvedValue(page({ discounts: [], membershipTypes: types }));
     open();
-    fireEvent.click(await within(await screen.findByRole('region', { name: 'Discounts' })).findByRole('button', { name: 'Add a discount' }));
+    await screen.findByRole('tab', { name: /^Discounts/ });
+    fireEvent.click(await within(discounts()).findByRole('button', { name: 'Add a discount' }));
     const form = within(within(discounts()).getByRole('form', { name: 'Add a discount' }));
     fireEvent.change(form.getByLabelText('Discount name'), { target: { value: 'First month' } });
     fireEvent.change(form.getByRole('textbox', { name: 'Percentage off' }), { target: { value: '20' } });
@@ -330,7 +350,8 @@ describe('the Discounts list', () => {
     const types = [{ id: 't-gold', name: 'Gold Monthly' }];
     svc.get.mockResolvedValue(page({ discounts: [], membershipTypes: types }));
     open();
-    fireEvent.click(await within(await screen.findByRole('region', { name: 'Discounts' })).findByRole('button', { name: 'Add a discount' }));
+    await screen.findByRole('tab', { name: /^Discounts/ });
+    fireEvent.click(await within(discounts()).findByRole('button', { name: 'Add a discount' }));
     const form = within(within(discounts()).getByRole('form', { name: 'Add a discount' }));
     // No code yet: nothing to say about who uses it.
     expect(form.queryByRole('checkbox', { name: 'Limit to one use per member' })).toBeNull();
@@ -357,7 +378,8 @@ describe('the Discounts list', () => {
   it('a gym with no membership types is told so in the form, with a button to Memberships', async () => {
     svc.get.mockResolvedValue(page({ discounts: [], membershipTypes: [] }));
     open();
-    fireEvent.click(await within(await screen.findByRole('region', { name: 'Discounts' })).findByRole('button', { name: 'Add a discount' }));
+    await screen.findByRole('tab', { name: /^Discounts/ });
+    fireEvent.click(await within(discounts()).findByRole('button', { name: 'Add a discount' }));
     const form = within(within(discounts()).getByRole('form', { name: 'Add a discount' }));
     fireEvent.click(form.getByRole('checkbox', { name: 'Memberships' }));
     expect(form.getByText('You have no memberships on your price list yet.')).toBeTruthy();
@@ -367,7 +389,7 @@ describe('the Discounts list', () => {
   it('changes one, archives it after asking, and puts it back', async () => {
     svc.get.mockResolvedValue(page({ discounts: [discount({ uses: 4 })] }));
     open();
-    await screen.findByRole('region', { name: 'Discounts' });
+    await screen.findByRole('tab', { name: /^Discounts/ });
     fireEvent.click(within(discounts()).getByRole('button', { name: 'Change Summer sale' }));
     const form = within(discounts()).getByRole('form', { name: 'Change discount' });
     expect(within(form).getByLabelText('Discount name').value).toBe('Summer sale');
@@ -403,7 +425,7 @@ describe('the Discounts list', () => {
   it('a refused save is said in the form, which stays open with what was typed', async () => {
     svc.get.mockResolvedValue(page({ discounts: [] }));
     open();
-    await screen.findByRole('region', { name: 'Discounts' });
+    await screen.findByRole('tab', { name: /^Discounts/ });
     fireEvent.click(within(discounts()).getByRole('button', { name: 'Add a discount' }));
     const form = within(discounts()).getByRole('form', { name: 'Add a discount' });
     fireEvent.change(within(form).getByLabelText('Discount name'), { target: { value: 'Autumn' } });
@@ -417,7 +439,7 @@ describe('the Discounts list', () => {
   it('staff who sell but cannot change prices read the list, use it, and are told who can change it', async () => {
     svc.get.mockResolvedValue(page({ canManage: false }));
     open(SELLER);
-    await screen.findByRole('region', { name: 'Discounts' });
+    await screen.findByRole('tab', { name: /^Discounts/ });
     expect(within(discounts()).getAllByTestId('discount-row')).toHaveLength(3);
     expect(within(discounts()).queryByRole('button', { name: 'Add a discount' })).toBeNull();
     expect(within(discounts()).queryByRole('button', { name: /^Change / })).toBeNull();
@@ -470,13 +492,13 @@ describe('what the screen says stays true', () => {
     const water = { ...WATER, currency: 'GBP' };
     svc.get.mockResolvedValue(page({ currency: 'GBP', products: [water], discounts: [STAFF] }));
     open();
-    await screen.findByRole('region', { name: 'Discounts' });
+    await screen.findByRole('tab', { name: /^Discounts/ });
     expect(within(discounts()).getByTestId('discount-row').textContent).toBe(
       'StaffNeeds saving$1.00 off · No promo code · All products · Not used yetThis amount is in USD. Press Change and save it again to use it in GBP.ChangeArchive',
     );
     pick('Add a product', 'p-water');
     expect(within(newSale()).getByText('No discount applies to this product today.')).toBeTruthy();
-    expect(within(newSale()).getByText('Staff cannot be used until its amount is saved again in GBP. Open it under Discounts below and press Change.')).toBeTruthy();
+    expect(within(screen.getByRole('region', { name: 'Pick a product' })).getByText('Staff cannot be used until its amount is saved again in GBP. Open it under Discounts and press Change.')).toBeTruthy();
     // Change opens it with the amount, to be saved in the gym's money as it is now.
     fireEvent.click(within(discounts()).getByRole('button', { name: 'Change Staff' }));
     expect(within(discounts()).getByLabelText('Amount off, in GBP').value).toBe('1.00');
@@ -491,7 +513,7 @@ describe("Refer a friend's gift under Discounts (the security pass over item 20,
   it('has no Change: whoever sets the offer is taken to Refer a friend, anybody else is told the owner changes it there; Archive stays', async () => {
     svc.get.mockResolvedValue(page({ discounts: [GIFT, discount()] }));
     open();
-    await screen.findByRole('region', { name: 'Discounts' });
+    await screen.findByRole('tab', { name: /^Discounts/ });
     const rows = within(discounts()).getAllByTestId('discount-row');
     const giftRow = within(rows[0]);
     expect(giftRow.queryByRole('button', { name: /^Change / })).toBeNull();
@@ -504,7 +526,7 @@ describe("Refer a friend's gift under Discounts (the security pass over item 20,
   it('for a manager who may not set the offer: a plain line, and no link', async () => {
     svc.get.mockResolvedValue(page({ discounts: [GIFT] }));
     open(MANAGER);
-    await screen.findByRole('region', { name: 'Discounts' });
+    await screen.findByRole('tab', { name: /^Discounts/ });
     const giftRow = within(within(discounts()).getByTestId('discount-row'));
     expect(giftRow.getByText('The owner changes this gift in Refer a friend.')).toBeTruthy();
     expect(giftRow.queryByRole('link')).toBeNull();

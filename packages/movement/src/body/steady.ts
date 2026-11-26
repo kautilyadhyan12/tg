@@ -56,6 +56,8 @@ export interface SteadyBody {
   /** For each of the 33 points: its steady value, or null exactly when it is refused. */
   readonly points: readonly (SteadyPoint | null)[];
   readonly refused: readonly (Refusal | null)[];
+  /** A new person begins at this frame (`CheckedBody.fresh`). */
+  readonly fresh: boolean;
 }
 
 /** The share of a new value a filter takes at this cut-off, for a step of `seconds`. */
@@ -112,8 +114,8 @@ export class SteadyPoints {
   }
 
   next(body: CheckedBody): SteadyBody {
-    const { t, aspect, down, size, person, refused } = body;
-    if (this.aspect !== aspect) {
+    const { t, aspect, down, size, person, refused, fresh } = body;
+    if (fresh || this.aspect !== aspect) {
       for (const f of [...this.flat, ...this.world]) f.reset();
       this.aspect = aspect;
     }
@@ -134,6 +136,6 @@ export class SteadyPoints {
       const [wx = 0, wy = 0, wz = 0] = world.next(t, seen3d, 1);
       points.push({ x: x / aspect, y, world: [wx, wy, wz], raw: { x: seen[0], y: seen[1] } });
     }
-    return { t, aspect, down, size, points, refused };
+    return { t, aspect, down, size, points, refused, fresh };
   }
 }

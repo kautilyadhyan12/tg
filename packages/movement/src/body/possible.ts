@@ -112,6 +112,9 @@ export interface CheckedBody {
   readonly size: number | null;
   /** For each of the 33 points: null when it may be used, otherwise why not. */
   readonly refused: readonly (Refusal | null)[];
+  /** A new person begins at this frame (`OnePerson`): every stage after this one starts afresh, as at a clock that went
+   *  back. */
+  readonly fresh: boolean;
 }
 
 type BoneState = "unjudged" | "learning" | "holds" | "broken";
@@ -259,14 +262,15 @@ export class PossibleBody {
     this.limits = limits;
   }
 
-  /** One frame of the person followed, or null when nobody was found. */
-  check(t: number, aspect: number, down: Down | null, person: SeenPerson | null): CheckedBody {
+  /** One frame of the person followed, or null when nobody was found. `fresh`: a new person begins here (`OnePerson`),
+   *  so nothing learned of the body before is kept. */
+  check(t: number, aspect: number, down: Down | null, person: SeenPerson | null, fresh = false): CheckedBody {
     const all = (why: Refusal): Refusal[] => new Array<Refusal>(POINTS).fill(why);
-    if (this.lastT !== null && t === this.lastT) return { t, aspect, down, person, size: null, refused: all("time") };
+    if (this.lastT !== null && t === this.lastT) return { t, aspect, down, person, size: null, refused: all("time"), fresh: false };
     const { limits } = this;
     const frame = this.lastT !== null && t > this.lastT ? t - this.lastT : 0;
     // A clock that went back, or a person gone longer than bones are remembered: a new body.
-    if ((this.lastT !== null && t < this.lastT) || (person !== null && this.body.seen !== null && t - this.body.seen > limits.boneMemory)) {
+    if (fresh || (this.lastT !== null && t < this.lastT) || (person !== null && this.body.seen !== null && t - this.body.seen > limits.boneMemory)) {
       this.body = freshBody();
     }
     this.lastT = t;
@@ -274,10 +278,10 @@ export class PossibleBody {
     body.sizes.forget(t - limits.sizeMemory);
     body.trunk.forget(t - limits.boneMemory);
 
-    if (person === null) return { t, aspect, down, person, size: body.sizes.median(), refused: all("not-found") };
+    if (person === null) return { t, aspect, down, person, size: body.sizes.median(), refused: all("not-found"), fresh };
     body.seen = t;
     const world = person.world;
-    if (world === null) return { t, aspect, down, person, size: null, refused: all("no-3d") };
+    if (world === null) return { t, aspect, down, person, size: null, refused: all("no-3d"), fresh };
 
     // 1. The model is sure of it, and it lies on the picture.
     const refused: (Refusal | null)[] = new Array<Refusal | null>(POINTS).fill(null);
@@ -359,7 +363,7 @@ export class PossibleBody {
         state.candidate = null;
       }
     }
-    return { t, aspect, down, person, size, refused };
+    return { t, aspect, down, person, size, refused, fresh };
   }
 
   /** Metres a second from one place to another, for this body's size. */
