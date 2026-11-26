@@ -2672,7 +2672,11 @@ camera lost everybody for a moment, is the member's and followed as they walk (t
 model has changed to a stranger at a place of the member's (52d-i's limit), the stranger is followed wherever they walk and
 counted there. Before 52d-ii a body seen outside the place, the member walking out of it included, was held and taken only after
 standing 3 s in the place: a member who stepped out and walked back waited 3 s; now they are followed in every picture.
-[[PROOF2]]
+**The whole proof before and after** (every video under every movement the camera counts or times, as filmed and under all 18
+replays, 13,908 runs, the engine as merged against this job's last commit): 1 differs. Under the small model's gap, shown only
+(the app does not use that model), his first raised pair counts 0 of its 2 squats (1 before). His sit-and-stand on a chair
+(`usual_v08`) counts as it did after 52d-i in every run, and the phone's own runs read as the laptop's as before under every
+movement (under the squat 119 of 122 the same, the same three open).
 **Deliberate breaks**, each run red and put back: the follow without the plain sign (12 of the worst-thing tests red); without
 its gap and reach (2 red, the second unseen; added after a break that stayed green, following a refused body's look, which
 52d-i's hold on a body that came all at once already refuses); the walked-to place following any body seen (14 red); and,
