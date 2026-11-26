@@ -2632,11 +2632,13 @@ person has two places: where they exercised in the second before the set counted
 were over their last second followed (`OnePerson.where`), which goes with them and is theirs only for `takeOver`, 3 s, after their
 newest look (round one: never forgotten, the spot where a member walked out of the picture took anybody who came in there later,
 at once). A body found after the camera lost the person for longer than `walkGap` is the person only at one of the two; every
-other body is held as 52d-i holds it, and so is every other body in a picture the person is given in, the one nearest them, its
-time in a place counted only once the person has gone (round one: a neighbour doing their reps 2 m from where a member
+other body is held as 52d-i holds it, and so is every other body in a picture the person is given in, each with a hold of its
+own, its time in a place counted only once the person has gone (round one: a neighbour doing their reps 2 m from where a member
 exercised, seen beside them as the member walked 1.2 m towards them and given nothing, was taken 0.8 m from where the member
-stood the moment the member left the picture, 3 counted against 1); a held body is the one nearest where it was, of those
-within its reach. **Tried first and not
+stood the moment the member left the picture, 3 counted against 1; its re-check: with only the nearest held, a second body there
+was taken, 4 against 1). Each hold goes on in the body nearest where it was, of those within its reach that no newer hold has
+taken; and a body that goes on from the person's newest look a moment before, nearer it than a hold's, is the person's (the
+member back beside their last look, a body seen with them 0.4 m further on, `onePerson.test.ts`). **Tried first and not
 kept, each measured:** a walk held as another body, its new place made theirs once it had stood there 3 s, as a stranger's is
 in the person's place: the stages after the lock then saw nobody for more than 3 s and forgot the body's bones, leg and trunk,
 and after a step the hip thrust and the sit-up counted nothing more; one place that goes with the person: once the model had
@@ -2657,7 +2659,7 @@ off the picture or counts nothing alone there (the sit-up's and the hip thrust's
 stranger 1.8 m the other way counts nothing alone there (two each). **With other people in the picture** (several bodies a
 picture, as the model gives when asked for more than one): the squatters and the lunger walking 1.2 m towards a neighbour doing
 their reps 2 m from the member's place, standing half a second and leaving the picture: the neighbour counts as nobody there
-would, and is never given; each stepping 1.5 m aside with another person walking the same way 1 m behind them, through the
+would, and is never given; the same with somebody also standing still just behind where they stopped: both count as nobody; each stepping 1.5 m aside with another person walking the same way 1 m behind them, through the
 member's place: every picture gives the member. **Then the member:** each of the four standing members, who
 walks 1.5 m aside between two reps (the lunger 1.5, every one with room), stands a second and does the rest of the set there,
 counts and is told exactly as if they had stood as long in their own place, is followed in every picture, and the place they
@@ -2671,7 +2673,8 @@ standing 3 s in the place: a member who stepped out and walked back waited 3 s; 
 **Deliberate breaks**, each run red and put back: the follow without the plain sign (12 of the worst-thing tests red); without
 its gap and reach (2 red, the second unseen; added after a break that stayed green, following a refused body's look, which
 52d-i's hold on a body that came all at once already refuses); the walked-to place following any body seen (14 red); and,
-for round one's two rules, the walked-to place never forgotten (7 red) and a body beside the member never held (3 red).
+for round one's two rules, the walked-to place never forgotten (7 red) and a body beside the member never held (3 red), and
+for its re-check, only the nearest body beside the member held (3 red).
 
 An exercise that does not pass is published as "count by hand", never with a wrong camera
 count. Kd tries one exercise of each kind of movement on the phone, about a dozen, never
