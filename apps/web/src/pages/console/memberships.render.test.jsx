@@ -179,9 +179,9 @@ describe('discounts for memberships (18b-ii-b)', () => {
     draw([gym()]);
     const box = await screen.findByRole('region', { name: 'Discounts' });
     const rows = await within(box).findAllByTestId('discount-row');
-    expect(rows.map((r) => r.textContent)).toEqual(['First monthActive20% off · Promo code FIRST20 · All memberships, first payment only · Not used yetChangeArchive']);
+    expect(rows.map((r) => r.textContent)).toEqual(['First monthActive20% off · Promo code FIRST20 · All memberships, first payment only · Not used yetEditArchive']);
     fireEvent.click(within(box).getByRole('button', { name: 'Add a discount' }));
-    const form = within(within(box).getByRole('form', { name: 'Add a discount' }));
+    const form = within(screen.getByRole('form', { name: 'Add a discount' }));
     expect(form.getByRole('checkbox', { name: 'Products' }).checked).toBe(false);
     expect(form.getByRole('checkbox', { name: 'Memberships' }).checked).toBe(true);
     fireEvent.change(form.getByLabelText('Discount name'), { target: { value: 'Founders' } });
@@ -189,7 +189,7 @@ describe('discounts for memberships (18b-ii-b)', () => {
     fireEvent.click(form.getByLabelText('Every payment'));
     const founders = { ...FIRST, id: 'd-founders', name: 'Founders', code: null, percentBp: 1000, membershipPayments: 'every' };
     register.addDiscount.mockResolvedValue(sellPage([FIRST, founders, WATER]));
-    fireEvent.click(form.getByRole('button', { name: 'Add discount' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add discount' }));
     await waitFor(() => expect(register.addDiscount).toHaveBeenCalledTimes(1));
     expect(register.addDiscount.mock.calls[0][1]).toMatchObject({ name: 'Founders', percentBp: 1000, forProducts: false, forMemberships: true, allMembershipTypes: true, membershipPayments: 'every' });
     expect(await within(box).findByText("Founders added. Staff can now choose it when they add a membership on a member's page.")).toBeTruthy();

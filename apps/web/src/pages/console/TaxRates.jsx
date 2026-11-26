@@ -61,7 +61,7 @@ function RateForm({ draft, setDraft, busy, error, onSave, onCancel, nested = fal
         },
       };
   return (
-    <Box className="flex flex-col gap-4 p-4" style={{ border: '1px solid var(--line)', borderRadius: 12 }} aria-label={draft.id === null ? 'Add a tax rate' : 'Change tax rate'} {...how}>
+    <Box className="c-item gap-4" style={{ background: 'var(--raise)' }} aria-label={draft.id === null ? 'Add a tax rate' : 'Change tax rate'} {...how}>
       <div className="c-field">
         <label className="c-label" htmlFor={`${id}-name`}>
           Tax name
@@ -76,7 +76,7 @@ function RateForm({ draft, setDraft, busy, error, onSave, onCancel, nested = fal
         <input id={`${id}-rate`} className="c-input" style={{ maxWidth: 160 }} inputMode="decimal" value={draft.rate} disabled={busy} onChange={(e) => set({ rate: e.target.value })} />
         {problems.rate ? <p className="c-s14 m-0" style={BAD}>{problems.rate}</p> : null}
       </div>
-      <p className="c-s13 c-t3 m-0">{draft.id === null ? RATE_HINT : rateChangeNote(rates.find((r) => r.id === draft.id))}</p>
+      <p className="c-hint m-0">{draft.id === null ? RATE_HINT : rateChangeNote(rates.find((r) => r.id === draft.id))}</p>
       <div className="flex flex-wrap gap-2">
         <button type={nested ? 'button' : 'submit'} className="c-btn c-btn-p c-btn-lg" disabled={busy} onClick={nested ? onSave : undefined}>
           {busy ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : null}
@@ -99,7 +99,7 @@ export function NewRateInline({ gymId, country = null, onPage = null, onAdded, o
   const [state, setState] = useState({ busy: false, error: null });
   const save = async () => {
     if (Object.keys(rateProblems(draft, country)).length > 0) {
-      setDraft((was) => ({ ...was, pressed: true }));
+      setDraft((was) => ({ ...was, pressed: (was.pressed || 0) + 1 }));
       return;
     }
     const body = rateBody(draft);
@@ -123,6 +123,7 @@ function ChargeBox({ gymId, page, rate, use, onPage, onDone, onCancel }) {
   const [ticked, setTicked] = useState(() => new Set(choices.filter((c) => c.on).map((c) => c.id)));
   const [state, setState] = useState({ busy: false, error: null });
   const what = use === 'memberships' ? 'memberships' : 'products';
+  const changedTicks = choices.some((c) => c.on !== ticked.has(c.id));
   const toggle = (id) =>
     setTicked((was) => {
       const next = new Set(was);
@@ -142,7 +143,7 @@ function ChargeBox({ gymId, page, rate, use, onPage, onDone, onCancel }) {
     }
   };
   return (
-    <div className="flex flex-col gap-3 p-4" style={{ border: '1px solid var(--line)', borderRadius: 12 }} role="group" aria-label={`What charges ${rateLabel(rate)}`}>
+    <div className="c-item gap-3" style={{ background: 'var(--raise)', paddingBottom: 0 }} role="group" aria-label={`What charges ${rateLabel(rate)}`}>
       <p className="c-s15 c-w6 c-t1 m-0">{`Which ${what} charge ${rateLabel(rate)}?`}</p>
       {choices.length === 0 ? (
         <p className="c-s14 c-t2 m-0">{use === 'memberships' ? 'You have no membership types yet. Add one to the price list above first.' : 'You have no products yet. Add one under Products first.'}</p>
@@ -154,15 +155,16 @@ function ChargeBox({ gymId, page, rate, use, onPage, onDone, onCancel }) {
                 <input type="checkbox" className="mt-1" checked={ticked.has(c.id)} disabled={state.busy} onChange={() => toggle(c.id)} />
                 <span className="flex flex-col">
                   {c.name}
-                  {c.note !== null ? <span className="c-s13 c-t3">{c.note}</span> : null}
+                  {c.note !== null ? <span className="c-hint">{c.note}</span> : null}
                 </span>
               </label>
             </li>
           ))}
         </ul>
       )}
-      {use === 'memberships' ? <p className="c-s13 c-t3 m-0">Members who already hold a membership keep the tax it was sold with. New memberships charge what you tick here.</p> : null}
-      <div className="flex flex-wrap gap-2">
+      {use === 'memberships' ? <p className="c-hint m-0">Members who already hold a membership keep the tax it was sold with. New memberships charge what you tick here.</p> : null}
+      {/* A long list keeps Save and Cancel on screen at its foot. */}
+      <div className="c-box-foot" style={{ background: 'var(--raise)' }}>
         <button type="button" className="c-btn c-btn-p c-btn-lg" disabled={state.busy || choices.length === 0} onClick={() => void save()}>
           {state.busy ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : null}
           {state.busy ? 'Saving…' : 'Save'}
@@ -170,8 +172,17 @@ function ChargeBox({ gymId, page, rate, use, onPage, onDone, onCancel }) {
         <button type="button" className="c-btn c-btn-s c-btn-lg" disabled={state.busy} onClick={onCancel}>
           Cancel
         </button>
+        {changedTicks ? (
+          <span className="c-s14 c-t2" role="status">
+            Not saved yet.
+          </span>
+        ) : null}
+        {state.error !== null ? (
+          <div className="w-full">
+            <Refusal>{state.error}</Refusal>
+          </div>
+        ) : null}
       </div>
-      {state.error !== null ? <Refusal>{state.error}</Refusal> : null}
     </div>
   );
 }
@@ -194,10 +205,11 @@ function TaxMode({ gymId, page, locked, onPage }) {
   };
   return (
     <div className="flex flex-col gap-3 pt-4" style={LINE}>
-      <fieldset className="flex flex-col gap-1" style={{ border: 0, padding: 0, margin: 0 }}>
-        <legend className="c-label">How the tax is charged</legend>
+      <fieldset className="flex flex-col gap-3" style={{ border: 0, padding: 0, margin: 0 }}>
+        <legend className="c-h3 mb-3">How the tax is charged</legend>
+        <div className="c-choices">
         {taxModes(page.currency, page.tax.rates[0] ?? null).map((m) => (
-          <label key={m.value} className="flex items-start gap-3 c-s15 c-t1 py-2">
+          <label key={m.value} className={`c-choice c-s15${mode === m.value ? ' c-choice-on' : ''}`}>
             <input
               type="radio"
               className="mt-1"
@@ -210,23 +222,29 @@ function TaxMode({ gymId, page, locked, onPage }) {
                 setState({ saving: false, error: null, saved: false });
               }}
             />
-            <span className="flex flex-col">
-              {m.label}
-              <span className="c-s13 c-t3">{m.hint}</span>
+            <span className="flex flex-col gap-1">
+              <span className="c-w6">{m.label}</span>
+              <span className="c-s14 c-t2">{m.hint}</span>
             </span>
           </label>
         ))}
+        </div>
       </fieldset>
-      <div className="flex flex-wrap items-center gap-3">
+      {/* While a choice waits for Save, Save stays on screen. */}
+      <div className={changed ? 'c-box-foot' : 'flex flex-wrap items-center gap-3'}>
         <button type="button" className="c-btn c-btn-p c-btn-lg" disabled={locked || !changed || state.saving} onClick={() => void save()}>
           {state.saving ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : null}
           {state.saving ? 'Saving…' : 'Save'}
         </button>
-        <p className="c-s13 c-t3 m-0" role="status">
-          {state.saved && !changed ? 'Saved. New sales and new memberships use this. Members who already hold a membership keep how it was sold.' : changed ? 'Not saved yet.' : ''}
+        <p className="c-s14 c-t2 m-0" role="status">
+          {state.saved && !changed ? 'Saved. New sales and new memberships use this. Members who already hold a membership keep how it was sold.' : changed ? 'Not saved yet.' : 'Nothing changed yet.'}
         </p>
+        {state.error !== null ? (
+          <div className="w-full">
+            <Refusal>{state.error}</Refusal>
+          </div>
+        ) : null}
       </div>
-      {state.error !== null ? <Refusal>{state.error}</Refusal> : null}
     </div>
   );
 }
@@ -254,11 +272,13 @@ export default function TaxRates({ gymId, country = null, page, locked, lockedNo
     setNoteAt(null);
     setState({ busy: false, error: null, done: null });
   };
-  const run = async (work, done) => {
-    setNoteAt(null);
+  // `at`: the rate a refusal is said under; `doneAt`: where it is said once done (null: the top).
+  const run = async (work, done, at = null, doneAt = at) => {
+    setNoteAt(at);
     setState({ busy: true, error: null, done: null });
     try {
       onPage(await work());
+      setNoteAt(doneAt);
       setState({ busy: false, error: null, done });
       return true;
     } catch (err) {
@@ -291,7 +311,7 @@ export default function TaxRates({ gymId, country = null, page, locked, lockedNo
       }
       return;
     }
-    const ok = await run(() => registerService.changeTaxRate(gymId, draft.id, body), `${label} saved. ${RATE_CHANGE_NOTE}`);
+    const ok = await run(() => registerService.changeTaxRate(gymId, draft.id, body), `${label} saved. ${RATE_CHANGE_NOTE}`, draft.id);
     if (ok) setDraft(null);
   };
   const cancel = () => {
@@ -300,30 +320,32 @@ export default function TaxRates({ gymId, country = null, page, locked, lockedNo
   };
 
   return (
-    <section className="c-card p-4 md:p-5 flex flex-col gap-4" aria-label="Tax" id="tax">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="c-h2">Tax</h2>
-        {canManage && draft === null ? (
-          <button type="button" className="c-btn c-btn-s c-btn-lg" disabled={locked || full || state.busy} onClick={() => { setDraft(emptyRateDraft()); setAsking(null); clear(); }}>
+    <section className="c-card p-4 md:p-6 flex flex-col gap-4" aria-label="Tax" id="tax">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="flex flex-col gap-1 min-w-0">
+          <h2 className="c-h2">Tax rates</h2>
+          <p className="c-s14 c-t2 m-0">{`${taxLine(page.tax)} ${use === 'memberships' ? 'Products on the Sell page use these same tax rates.' : 'Memberships use these same tax rates, on their own Tax tab.'}`}</p>
+        </div>
+        {canManage ? (
+          <button type="button" className="c-btn c-btn-p" disabled={locked || full || state.busy || draft !== null} onClick={() => { setDraft(emptyRateDraft()); setAsking(null); clear(); }}>
             <Plus aria-hidden="true" className="w-4 h-4" />
             Add a tax rate
           </button>
         ) : null}
       </div>
-      <p className="c-s14 c-t2 m-0">{taxLine(page.tax)}</p>
-      {canManage && locked && lockedNote !== null ? <p className="c-s14 c-t3 m-0">{lockedNote}</p> : null}
-      {canManage && full ? <p className="c-s14 c-t3 m-0">{TOO_MANY_RATES}</p> : null}
+      {canManage && locked && lockedNote !== null ? <p className="c-s14 c-t2 m-0">{lockedNote}</p> : null}
+      {canManage && full ? <p className="c-s14 c-t2 m-0">{TOO_MANY_RATES}</p> : null}
 
       {draft !== null && draft.id === null ? <RateForm rates={rates} country={country} draft={draft} setDraft={setDraft} busy={state.busy} error={state.error} onSave={() => void save()} onCancel={cancel} /> : null}
       {state.done !== null && noteAt === null ? <SavedNote>{state.done}</SavedNote> : null}
-      {state.error !== null && draft === null ? <Refusal>{state.error}</Refusal> : null}
+      {state.error !== null && draft === null && noteAt === null ? <Refusal>{state.error}</Refusal> : null}
 
       {rates.length > 0 ? (
-        <ul className="list-none m-0 p-0">
+        <ul className="c-items">
           {rates.map((rate) => {
             const block = rateRemoveBlock(rate);
             return (
-              <li key={rate.id} className="flex flex-col gap-3 py-3" style={LINE} data-testid="tax-rate-row">
+              <li key={rate.id} className="c-item" data-testid="tax-rate-row">
                 {draft !== null && draft.id === rate.id ? (
                   <RateForm rates={rates} country={country} draft={draft} setDraft={setDraft} busy={state.busy} error={state.error} onSave={() => void save()} onCancel={cancel} />
                 ) : (
@@ -337,8 +359,8 @@ export default function TaxRates({ gymId, country = null, page, locked, lockedNo
                         <button type="button" className="c-btn c-btn-s c-btn-sm" disabled={locked || state.busy || draft !== null} onClick={() => { setChoosing(rate.id); setAsking(null); clear(); }} aria-label={`${chooseWord} for ${rate.name}`}>
                           {chooseWord}
                         </button>
-                        <button type="button" className="c-btn c-btn-s c-btn-sm" disabled={locked || state.busy || draft !== null} onClick={() => { setDraft(draftFromRate(rate)); setAsking(null); setChoosing(null); clear(); }} aria-label={`Change ${rate.name}`}>
-                          Change
+                        <button type="button" className="c-btn c-btn-s c-btn-sm" disabled={locked || state.busy || draft !== null} onClick={() => { setDraft(draftFromRate(rate)); setAsking(null); setChoosing(null); clear(); }} aria-label={`Edit ${rate.name}`}>
+                          Edit
                         </button>
                         <button type="button" className="c-btn c-btn-s c-btn-sm" disabled={locked || state.busy || draft !== null} onClick={() => { setAsking(rate.id); setChoosing(null); clear(); }} aria-label={`Remove ${rate.name}`}>
                           Remove
@@ -348,6 +370,7 @@ export default function TaxRates({ gymId, country = null, page, locked, lockedNo
                   </div>
                 )}
                 {state.done !== null && noteAt === rate.id ? <SavedNote>{state.done}</SavedNote> : null}
+                {state.error !== null && draft === null && noteAt === rate.id ? <Refusal>{state.error}</Refusal> : null}
                 {choosing === rate.id && canManage && !locked ? (
                   <ChargeBox
                     gymId={gymId}
@@ -379,7 +402,7 @@ export default function TaxRates({ gymId, country = null, page, locked, lockedNo
                       busy={state.busy}
                       onConfirm={() => {
                         setAsking(null);
-                        void run(() => registerService.removeTaxRate(gymId, rate.id), `${rate.name} removed.`);
+                        void run(() => registerService.removeTaxRate(gymId, rate.id), `${rate.name} removed.`, rate.id, null);
                       }}
                       onCancel={() => setAsking(null)}
                     />

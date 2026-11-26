@@ -2693,3 +2693,17 @@
 .c-sale-row-money { font-size: 15px; line-height: 20px; font-weight: 600; white-space: nowrap; font-variant-numeric: tabular-nums; color: var(--t1); }
 .c-page-headrow { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px 16px; }
 .c-page-headrow-a { display: flex; flex-wrap: wrap; gap: 8px; }
+
+/* Sell's Products, Tax and Discounts tabs, and Memberships' Tax and Discounts (V4a-iii; boards
+   `SellProducts`, `SellTax`, `Discounts`). A thing in a list is a box of its own; a choice of two
+   is two boxes, the picked one lit; a box's Save stays on screen while its list is longer. */
+.c-item { display: flex; flex-direction: column; gap: 12px; padding: 12px 16px; border: 1px solid var(--line); border-radius: 14px; min-width: 0; }
+.c-items { display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.c-choices { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: 8px; }
+.c-choice { display: flex; align-items: flex-start; gap: 12px; padding: 14px 16px; border: 1px solid var(--ctl-line); border-radius: 14px; color: var(--t1); cursor: pointer; min-width: 0; overflow-wrap: anywhere; }
+.c-choice-on { border-color: var(--soft-line); background: var(--soft); }
+.c-choice input { margin-top: 2px; flex: none; }
+.c-box-foot { position: sticky; bottom: 64px; z-index: 5; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 12px 0; background: var(--card); border-top: 1px solid var(--line); }
+@media (min-width: 768px) {
+  .c-box-foot { bottom: 0; }
+}

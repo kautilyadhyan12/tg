@@ -263,14 +263,14 @@ describe('the Discounts list', () => {
     open();
     await screen.findByRole('tab', { name: /^Discounts/ });
     expect(within(discounts()).getAllByTestId('discount-row').map((r) => r.textContent)).toEqual([
-      'Summer saleActive20% off · Promo code SUMMER20 · All products · 1 Jun 2026 to 31 Dec 2026 · Used 3 of 100ChangeArchive',
-      'Towels onlyActive10% off · Promo code TOWEL · Towel · Not used yetChangeArchive',
-      'SpringExpired20% off · No promo code · All products · Until 30 Apr 2026 · Not used yetChangeArchive',
+      'Summer saleActive20% off · Promo code SUMMER20 · All products · 1 Jun 2026 to 31 Dec 2026 · Used 3 of 100EditArchive',
+      'Towels onlyActive10% off · Promo code TOWEL · Towel · Not used yetEditArchive',
+      'SpringExpired20% off · No promo code · All products · Until 30 Apr 2026 · Not used yetEditArchive',
     ]);
 
     fireEvent.click(within(discounts()).getByRole('button', { name: 'Add a discount' }));
-    const form = within(discounts()).getByRole('form', { name: 'Add a discount' });
-    fireEvent.click(within(form).getByRole('button', { name: 'Add discount' }));
+    const form = screen.getByRole('form', { name: 'Add a discount' });
+    fireEvent.click(screen.getByRole('button', { name: 'Add discount' }));
     expect(within(form).getByText('Give the discount a name.')).toBeTruthy();
     expect(within(form).getByText('Enter the percentage as a number above 0 and under 100, like 10.')).toBeTruthy();
     expect(svc.addDiscount).not.toHaveBeenCalled();
@@ -280,20 +280,20 @@ describe('the Discounts list', () => {
     fireEvent.change(within(form).getByLabelText('Amount off, in USD'), { target: { value: '1.50' } });
     fireEvent.change(within(form).getByLabelText('Promo code (optional)'), { target: { value: 'week5' } });
     fireEvent.click(within(form).getByLabelText('Selected products'));
-    fireEvent.click(within(form).getByRole('button', { name: 'Add discount' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add discount' }));
     expect(within(form).getByText('Tick at least one product.')).toBeTruthy();
     fireEvent.click(within(form).getByLabelText('Water'));
     fireEvent.click(within(form).getByLabelText('Limit how many times it can be used in total'));
     fireEvent.change(within(form).getByLabelText('Usage limit'), { target: { value: '25' } });
     const added = discount({ id: 'd-week', name: 'Members week', code: 'WEEK5', kind: 'amount', percentBp: null, amountMinor: 150, currency: 'USD', maxUses: 25, allProducts: false, productIds: ['p-water'] });
     svc.addDiscount.mockResolvedValue(page({ discounts: [added] }));
-    fireEvent.click(within(form).getByRole('button', { name: 'Add discount' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add discount' }));
     await waitFor(() =>
       expect(svc.addDiscount).toHaveBeenCalledWith('g1', { name: 'Members week', code: 'WEEK5', kind: 'amount', percentBp: null, amountMinor: 150, startsOn: null, endsOn: null, maxUses: 25, forProducts: true, allProducts: false, productIds: ['p-water'], forMemberships: false, allMembershipTypes: true, membershipTypeIds: [], membershipPayments: null, oncePerMember: true, inApp: false }),
     );
     expect(await within(discounts()).findByText('Members week added. Staff can now choose it when they sell a product.')).toBeTruthy();
-    expect(within(discounts()).queryByRole('form')).toBeNull();
-    expect(within(discounts()).getByTestId('discount-row').textContent).toBe('Members weekActive$1.50 off · Promo code WEEK5 · Water · Used 0 of 25ChangeArchive');
+    expect(screen.queryByRole('form')).toBeNull();
+    expect(within(discounts()).getByTestId('discount-row').textContent).toBe('Members weekActive$1.50 off · Promo code WEEK5 · Water · Used 0 of 25EditArchive');
   });
 
   it('a discount for memberships: ticked instead of products, limited to the ones ticked, and asked how often before it is sent', async () => {
@@ -302,15 +302,15 @@ describe('the Discounts list', () => {
     open();
     await screen.findByRole('tab', { name: /^Discounts/ });
     fireEvent.click(await within(discounts()).findByRole('button', { name: 'Add a discount' }));
-    const form = within(within(discounts()).getByRole('form', { name: 'Add a discount' }));
+    const form = within(screen.getByRole('form', { name: 'Add a discount' }));
     fireEvent.change(form.getByLabelText('Discount name'), { target: { value: 'First month' } });
     fireEvent.change(form.getByRole('textbox', { name: 'Percentage off' }), { target: { value: '20' } });
     fireEvent.click(form.getByRole('checkbox', { name: 'Products' }));
-    fireEvent.click(form.getByRole('button', { name: 'Add discount' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add discount' }));
     expect(form.getByText('Tick products, memberships, or both.')).toBeTruthy();
     fireEvent.click(form.getByRole('checkbox', { name: 'Memberships' }));
     fireEvent.click(form.getByLabelText('Selected memberships'));
-    fireEvent.click(form.getByRole('button', { name: 'Add discount' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add discount' }));
     expect(form.getByText('Tick at least one membership.')).toBeTruthy();
     expect(form.getByText('Choose whether it comes off the first payment only or every payment.')).toBeTruthy();
     expect(svc.addDiscount).not.toHaveBeenCalled();
@@ -318,7 +318,7 @@ describe('the Discounts list', () => {
     fireEvent.click(form.getByLabelText('First payment only'));
     const added = discount({ id: 'd-first', name: 'First month', code: null, forProducts: false, forMemberships: true, allMembershipTypes: false, membershipTypeIds: ['t-gold'], membershipPayments: 'first' });
     svc.addDiscount.mockResolvedValue(page({ discounts: [added], membershipTypes: types }));
-    fireEvent.click(form.getByRole('button', { name: 'Add discount' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add discount' }));
     await waitFor(() =>
       expect(svc.addDiscount).toHaveBeenCalledWith('g1', {
         name: 'First month',
@@ -352,7 +352,7 @@ describe('the Discounts list', () => {
     open();
     await screen.findByRole('tab', { name: /^Discounts/ });
     fireEvent.click(await within(discounts()).findByRole('button', { name: 'Add a discount' }));
-    const form = within(within(discounts()).getByRole('form', { name: 'Add a discount' }));
+    const form = within(screen.getByRole('form', { name: 'Add a discount' }));
     // No code yet: nothing to say about who uses it.
     expect(form.queryByRole('checkbox', { name: 'Limit to one use per member' })).toBeNull();
     fireEvent.change(form.getByLabelText('Discount name'), { target: { value: 'Spring' } });
@@ -371,7 +371,7 @@ describe('the Discounts list', () => {
     expect(form.getByText(/^Members type SPRING when they buy a membership in the app, and the discount comes off what they pay./)).toBeTruthy();
     const added = discount({ id: 'd-spring', name: 'Spring', code: 'SPRING', forProducts: false, forMemberships: true, membershipPayments: 'every', oncePerMember: true, inApp: true });
     svc.addDiscount.mockResolvedValue(page({ discounts: [added], membershipTypes: types }));
-    fireEvent.click(form.getByRole('button', { name: 'Add discount' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add discount' }));
     await waitFor(() => expect(svc.addDiscount).toHaveBeenCalledWith('g1', expect.objectContaining({ code: 'SPRING', forMemberships: true, oncePerMember: true, inApp: true })));
   });
 
@@ -380,7 +380,7 @@ describe('the Discounts list', () => {
     open();
     await screen.findByRole('tab', { name: /^Discounts/ });
     fireEvent.click(await within(discounts()).findByRole('button', { name: 'Add a discount' }));
-    const form = within(within(discounts()).getByRole('form', { name: 'Add a discount' }));
+    const form = within(screen.getByRole('form', { name: 'Add a discount' }));
     fireEvent.click(form.getByRole('checkbox', { name: 'Memberships' }));
     expect(form.getByText('You have no memberships on your price list yet.')).toBeTruthy();
     expect(form.getByRole('link', { name: 'Open Memberships' })).toBeTruthy();
@@ -390,14 +390,14 @@ describe('the Discounts list', () => {
     svc.get.mockResolvedValue(page({ discounts: [discount({ uses: 4 })] }));
     open();
     await screen.findByRole('tab', { name: /^Discounts/ });
-    fireEvent.click(within(discounts()).getByRole('button', { name: 'Change Summer sale' }));
-    const form = within(discounts()).getByRole('form', { name: 'Change discount' });
+    fireEvent.click(within(discounts()).getByRole('button', { name: 'Edit Summer sale' }));
+    const form = screen.getByRole('form', { name: 'Change discount' });
     expect(within(form).getByLabelText('Discount name').value).toBe('Summer sale');
     expect(within(form).getByLabelText('Percentage off', { selector: 'input[inputmode]' }).value).toBe('20');
     expect(within(form).getByLabelText('Promo code (optional)').value).toBe('SUMMER20');
     fireEvent.change(within(form).getByLabelText('Percentage off', { selector: 'input[inputmode]' }), { target: { value: '25' } });
     svc.changeDiscount.mockResolvedValue(page({ discounts: [discount({ percentBp: 2500, uses: 4 })] }));
-    fireEvent.click(within(form).getByRole('button', { name: 'Save discount' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save discount' }));
     await waitFor(() =>
       expect(svc.changeDiscount).toHaveBeenCalledWith('g1', 'd-summer', { name: 'Summer sale', code: 'SUMMER20', kind: 'percent', percentBp: 2500, amountMinor: null, startsOn: null, endsOn: null, maxUses: null, forProducts: true, allProducts: true, productIds: [], forMemberships: false, allMembershipTypes: true, membershipTypeIds: [], membershipPayments: null, oncePerMember: false, inApp: false, updatedAt: '2026-10-13T10:00:00.000Z' }),
     );
@@ -413,9 +413,9 @@ describe('the Discounts list', () => {
     svc.archiveDiscount.mockResolvedValue(page({ discounts: [], archivedDiscounts: [gone], archivedDiscountsTotal: 1 }));
     fireEvent.click(within(discounts()).getByRole('button', { name: 'Archive' }));
     await waitFor(() => expect(svc.archiveDiscount).toHaveBeenCalledWith('g1', 'd-summer'));
-    expect(await within(discounts()).findByText('Summer sale archived. Find it under Archived discounts below.')).toBeTruthy();
-    fireEvent.click(within(discounts()).getByRole('button', { name: 'Show archived discounts (1)' }));
-    expect(within(discounts()).getByTestId('archived-discount-row').textContent).toContain('Summer sale · 25% off');
+    expect(await within(discounts()).findByText('Summer sale archived. Find it under Show archived.')).toBeTruthy();
+    fireEvent.click(within(discounts()).getByRole('button', { name: 'Show archived (1)' }));
+    expect(within(discounts()).getByTestId('archived-discount-row').textContent).toContain('Summer sale25% off');
     svc.restoreDiscount.mockResolvedValue(page({ discounts: [discount({ percentBp: 2500, uses: 4 })] }));
     fireEvent.click(within(discounts()).getByRole('button', { name: 'Put Summer sale back' }));
     await waitFor(() => expect(svc.restoreDiscount).toHaveBeenCalledWith('g1', 'd-summer'));
@@ -427,12 +427,12 @@ describe('the Discounts list', () => {
     open();
     await screen.findByRole('tab', { name: /^Discounts/ });
     fireEvent.click(within(discounts()).getByRole('button', { name: 'Add a discount' }));
-    const form = within(discounts()).getByRole('form', { name: 'Add a discount' });
+    const form = screen.getByRole('form', { name: 'Add a discount' });
     fireEvent.change(within(form).getByLabelText('Discount name'), { target: { value: 'Autumn' } });
     fireEvent.change(within(form).getByLabelText('Percentage off', { selector: 'input[inputmode]' }), { target: { value: '15' } });
     svc.addDiscount.mockRejectedValue(refusal(409, 'Another discount already uses this promo code. Pick another code.'));
-    fireEvent.click(within(form).getByRole('button', { name: 'Add discount' }));
-    expect(await within(form).findByText('Another discount already uses this promo code. Pick another code.')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Add discount' }));
+    expect(await within(screen.getByTestId('discount-panel')).findByText('Another discount already uses this promo code. Pick another code.')).toBeTruthy();
     expect(within(form).getByLabelText('Discount name').value).toBe('Autumn');
   });
 
@@ -494,14 +494,14 @@ describe('what the screen says stays true', () => {
     open();
     await screen.findByRole('tab', { name: /^Discounts/ });
     expect(within(discounts()).getByTestId('discount-row').textContent).toBe(
-      'StaffNeeds saving$1.00 off · No promo code · All products · Not used yetThis amount is in USD. Press Change and save it again to use it in GBP.ChangeArchive',
+      'StaffNeeds saving$1.00 off · No promo code · All products · Not used yetThis amount is in USD. Press Edit and save it again to use it in GBP.EditArchive',
     );
     pick('Add a product', 'p-water');
     expect(within(newSale()).getByText('No discount applies to this product today.')).toBeTruthy();
     expect(within(screen.getByRole('region', { name: 'Pick a product' })).getByText('Staff cannot be used until its amount is saved again in GBP. Open it under Discounts and press Change.')).toBeTruthy();
     // Change opens it with the amount, to be saved in the gym's money as it is now.
-    fireEvent.click(within(discounts()).getByRole('button', { name: 'Change Staff' }));
-    expect(within(discounts()).getByLabelText('Amount off, in GBP').value).toBe('1.00');
+    fireEvent.click(within(discounts()).getByRole('button', { name: 'Edit Staff' }));
+    expect(screen.getByLabelText('Amount off, in GBP').value).toBe('1.00');
   });
 });
 });
@@ -520,7 +520,7 @@ describe("Refer a friend's gift under Discounts (the security pass over item 20,
     expect(giftRow.getByRole('link', { name: 'Change in Refer a friend' }).getAttribute('href')).toBe('/console/iron-house/settings#refer-a-friend');
     expect(giftRow.getByRole('button', { name: "Archive Refer a friend: friend's gift, WELCOME20" })).toBeTruthy();
     // Every other discount keeps its Change.
-    expect(within(rows[1]).getByRole('button', { name: 'Change Summer sale' })).toBeTruthy();
+    expect(within(rows[1]).getByRole('button', { name: 'Edit Summer sale' })).toBeTruthy();
   });
 
   it('for a manager who may not set the offer: a plain line, and no link', async () => {
@@ -531,5 +531,37 @@ describe("Refer a friend's gift under Discounts (the security pass over item 20,
     expect(giftRow.getByText('The owner changes this gift in Refer a friend.')).toBeTruthy();
     expect(giftRow.queryByRole('link')).toBeNull();
     expect(giftRow.queryByRole('button', { name: /^Change / })).toBeNull();
+  });
+});
+
+describe('Discounts in the third look (V4a-iii)', () => {
+  it('the worst thing first: Edit on one of three discounts opens that one and sends only that one, from a panel on the right', async () => {
+    svc.changeDiscount.mockResolvedValue(page());
+    open();
+    await screen.findByRole('tab', { name: /^Discounts/ });
+    fireEvent.click(within(discounts()).getByRole('button', { name: 'Edit Towels only' }));
+    const box = within(screen.getByTestId('discount-panel'));
+    expect(box.getByRole('heading', { name: 'Change discount' })).toBeTruthy();
+    expect(box.getByLabelText('Discount name').value).toBe('Towels only');
+    expect(box.getByLabelText('Promo code (optional)').value).toBe('TOWEL');
+    // The discount type is two choices, the picked one lit.
+    expect(box.getByLabelText('Percentage off', { selector: 'input[type="radio"]' }).closest('label').className).toContain('c-choice-on');
+    fireEvent.change(box.getByLabelText('Discount name'), { target: { value: 'Towels only' } });
+    fireEvent.click(box.getByRole('button', { name: 'Save discount' }));
+    await waitFor(() => expect(svc.changeDiscount).toHaveBeenCalledTimes(1));
+    expect(svc.changeDiscount.mock.calls[0][1]).toBe('d-towels');
+    expect(svc.changeDiscount.mock.calls[0][2]).toMatchObject({ name: 'Towels only', code: 'TOWEL', percentBp: 1000, allProducts: false, productIds: ['p-towel'] });
+    const row = within(discounts()).getAllByTestId('discount-row').find((r) => r.textContent.startsWith('Towels only'));
+    expect(await within(row).findByText(/^Towels only saved\./)).toBeTruthy();
+  });
+
+  it('Save with a field wrong says so in the foot beside Save, and nothing is sent', async () => {
+    open();
+    await screen.findByRole('tab', { name: /^Discounts/ });
+    fireEvent.click(within(discounts()).getByRole('button', { name: 'Add a discount' }));
+    const box = within(screen.getByTestId('discount-panel'));
+    fireEvent.click(box.getByRole('button', { name: 'Add discount' }));
+    expect(box.getByText('Fix what is marked in red above.')).toBeTruthy();
+    expect(svc.addDiscount).not.toHaveBeenCalled();
   });
 });

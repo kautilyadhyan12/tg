@@ -1,8 +1,9 @@
-import { useId, useState } from 'react';
-import { Loader2, Plus } from 'lucide-react';
+import { useId, useRef, useState } from 'react';
+import { Plus } from 'lucide-react';
 import { DISCOUNTS_MAX, promoCodeFrom } from '@app/shared';
 import { registerService } from '../../api/registerApi';
 import { errorText } from '../../api/orgsApi';
+import { SidePanel } from '../../components/console/ConsoleBoxes';
 import { ConfirmInline } from '../../components/console/ConsoleStates';
 import DatePick from '../../components/console/DatePick';
 import PlaceLink from '../../components/console/PlaceLink';
@@ -23,6 +24,7 @@ import {
 } from './sellDiscountsView';
 import { priceExample } from './sellView';
 import { SavedNote } from './SellProducts';
+import { FIX_ABOVE, draftKey, useFirstProblem } from './useFirstProblem';
 
 // DISCOUNTS (spec Part 3 §14.3; ROADMAP 18b-ii-a and 18b-ii-b): the gym's own discounts and
 // promo codes, on products, memberships or both, for staff who may change prices. One list,
@@ -32,11 +34,13 @@ import { SavedNote } from './SellProducts';
 
 const LINE = { borderTop: '1px solid var(--line)' };
 const BAD = { color: 'var(--bad)' };
-const BOX = { border: '1px solid var(--line)', borderRadius: 12 };
 const ROW = { minHeight: 44 };
+const bad = (problem) => (problem ? 'true' : undefined);
 
-function DiscountForm({ page, draft, setDraft, busy, error, membershipsTo, onSave, onCancel }) {
+function DiscountForm({ formId, page, draft, setDraft, busy, membershipsTo, onSave }) {
   const problems = draft.pressed ? discountProblems(draft, page.currency, page.products, page.membershipTypes) : {};
+  const formRef = useRef(null);
+  useFirstProblem(formRef, draft.pressed);
   const id = useId();
   const set = (patch) => setDraft((was) => ({ ...was, ...patch }));
   const toggle = (productId) =>
@@ -45,36 +49,40 @@ function DiscountForm({ page, draft, setDraft, busy, error, membershipsTo, onSav
   const types = page.membershipTypes;
   return (
     <form
-      className="flex flex-col gap-4 p-4"
-      style={BOX}
+      ref={formRef}
+      id={formId}
+      className="flex flex-col gap-5"
       aria-label={draft.id === null ? 'Add a discount' : 'Change discount'}
       onSubmit={(e) => {
         e.preventDefault();
         onSave();
       }}
     >
-      <div className="c-field">
+      <div className="c-field" data-bad={bad(problems.name)}>
         <label className="c-label" htmlFor={`${id}-name`}>
           Discount name
         </label>
         <input id={`${id}-name`} className="c-input" value={draft.name} maxLength={120} disabled={busy} onChange={(e) => set({ name: e.target.value })} placeholder="Summer sale" />
-        <p className="c-s13 c-t3 m-0">Staff see this name when they sell, and it is kept on the sale.</p>
+        <p className="c-hint m-0">Staff see this name when they sell, and it is kept on the sale.</p>
         {problems.name ? <p className="c-s14 m-0" style={BAD}>{problems.name}</p> : null}
       </div>
 
-      <fieldset className="flex flex-col" style={{ border: 0, padding: 0, margin: 0 }}>
-        <legend className="c-label">Discount type</legend>
-        <label className="flex items-center gap-3 c-s15 c-t1" style={ROW}>
-          <input type="radio" name={`${id}-kind`} checked={draft.kind === 'percent'} disabled={busy} onChange={() => set({ kind: 'percent' })} />
-          Percentage off
-        </label>
-        <label className="flex items-center gap-3 c-s15 c-t1" style={ROW}>
-          <input type="radio" name={`${id}-kind`} checked={draft.kind === 'amount'} disabled={busy} onChange={() => set({ kind: 'amount' })} />
-          Fixed amount off
-        </label>
+      <fieldset className="flex flex-col gap-2" style={{ border: 0, padding: 0, margin: 0 }}>
+        <legend className="c-label mb-2">Discount type</legend>
+        <div className="c-choices">
+          {[
+            ['percent', 'Percentage off'],
+            ['amount', 'Fixed amount off'],
+          ].map(([kind, words]) => (
+            <label key={kind} className={`c-choice c-s15 c-w6${draft.kind === kind ? ' c-choice-on' : ''}`}>
+              <input type="radio" name={`${id}-kind`} checked={draft.kind === kind} disabled={busy} onChange={() => set({ kind })} />
+              {words}
+            </label>
+          ))}
+        </div>
       </fieldset>
       {draft.kind === 'percent' ? (
-        <div className="c-field">
+        <div className="c-field" data-bad={bad(problems.value)}>
           <label className="c-label" htmlFor={`${id}-percent`}>
             Percentage off
           </label>
@@ -82,7 +90,7 @@ function DiscountForm({ page, draft, setDraft, busy, error, membershipsTo, onSav
           {problems.value ? <p className="c-s14 m-0" style={BAD}>{problems.value}</p> : null}
         </div>
       ) : (
-        <div className="c-field">
+        <div className="c-field" data-bad={bad(problems.value)}>
           <label className="c-label" htmlFor={`${id}-amount`}>
             {page.currency === null ? 'Amount off' : `Amount off, in ${page.currency}`}
           </label>
@@ -96,21 +104,21 @@ function DiscountForm({ page, draft, setDraft, busy, error, membershipsTo, onSav
             onChange={(e) => set({ amount: e.target.value })}
             placeholder={page.currency === null ? '' : priceExample(page.currency)}
           />
-          <p className="c-s13 c-t3 m-0">On a product it comes off once for each sale, however many are bought. On a membership it comes off each payment it applies to.</p>
+          <p className="c-hint m-0">On a product it comes off once for each sale, however many are bought. On a membership it comes off each payment it applies to.</p>
           {problems.value ? <p className="c-s14 m-0" style={BAD}>{problems.value}</p> : null}
         </div>
       )}
 
-      <div className="c-field">
+      <div className="c-field" data-bad={bad(problems.code)}>
         <label className="c-label" htmlFor={`${id}-code`}>
           Promo code (optional)
         </label>
         <input id={`${id}-code`} className="c-input" style={{ maxWidth: 280, textTransform: 'uppercase' }} value={draft.code} maxLength={40} autoComplete="off" disabled={busy} onChange={(e) => set({ code: e.target.value })} placeholder="SUMMER20" />
-        <p className="c-s13 c-t3 m-0">A code a customer gives at the desk. Leave it empty for a discount that only staff choose.</p>
+        <p className="c-hint m-0">A code a customer gives at the desk. Leave it empty for a discount that only staff choose.</p>
         {problems.code ? <p className="c-s14 m-0" style={BAD}>{problems.code}</p> : null}
       </div>
 
-      <fieldset className="flex flex-col" style={{ border: 0, padding: 0, margin: 0 }}>
+      <fieldset className="flex flex-col" style={{ border: 0, padding: 0, margin: 0 }} data-bad={bad(problems.appliesTo || problems.products || problems.types || problems.payments)}>
         <legend className="c-label">Applies to</legend>
         <label className="flex items-center gap-3 c-s15 c-w6 c-t1" style={ROW}>
           <input type="checkbox" checked={draft.forProducts} disabled={busy} onChange={(e) => set({ forProducts: e.target.checked })} />
@@ -126,7 +134,7 @@ function DiscountForm({ page, draft, setDraft, busy, error, membershipsTo, onSav
               <input type="radio" name={`${id}-scope`} checked={draft.scope === 'some'} disabled={busy || page.products.length === 0} onChange={() => set({ scope: 'some' })} />
               Selected products
             </label>
-            {page.products.length === 0 ? <p className="c-s13 c-t3 m-0">You have no products yet. Add one under Products to choose it here.</p> : null}
+            {page.products.length === 0 ? <p className="c-hint m-0">You have no products yet. Add one under Products to choose it here.</p> : null}
             {draft.scope === 'some' ? (
               <div className="flex flex-col pl-7" role="group" aria-label="Products this discount applies to">
                 {page.products.map((product) => (
@@ -157,7 +165,7 @@ function DiscountForm({ page, draft, setDraft, busy, error, membershipsTo, onSav
               </label>
               {types.length === 0 ? (
                 <div className="flex flex-col gap-2">
-                  <p className="c-s13 c-t3 m-0">You have no memberships on your price list yet.</p>
+                  <p className="c-hint m-0">You have no memberships on your price list yet.</p>
                   {membershipsTo !== null ? <PlaceLink to={membershipsTo}>Open Memberships</PlaceLink> : null}
                 </div>
               ) : null}
@@ -181,7 +189,7 @@ function DiscountForm({ page, draft, setDraft, busy, error, membershipsTo, onSav
                   {MEMBERSHIP_PAYMENTS_WORDS[often]}
                 </label>
               ))}
-              <p className="c-s13 c-t3 m-0">A membership that is paid once, such as a day pass or a class pack, gets the discount on that one payment.</p>
+              <p className="c-hint m-0">A membership that is paid once, such as a day pass or a class pack, gets the discount on that one payment.</p>
               {problems.payments ? <p className="c-s14 m-0" style={BAD}>{problems.payments}</p> : null}
             </fieldset>
           </div>
@@ -199,7 +207,7 @@ function DiscountForm({ page, draft, setDraft, busy, error, membershipsTo, onSav
             </button>
           ) : null}
         </div>
-        <div className="c-field" style={{ minWidth: 220 }}>
+        <div className="c-field" style={{ minWidth: 220 }} data-bad={bad(problems.endsOn)}>
           <span className="c-label">End date (optional)</span>
           <DatePick newLook label="End date" value={draft.endsOn} min={draft.startsOn === '' ? undefined : draft.startsOn} today={page.today} disabled={busy} emptyText="No end date" onChange={(day) => set({ endsOn: day })} />
           {draft.endsOn !== '' ? (
@@ -210,19 +218,19 @@ function DiscountForm({ page, draft, setDraft, busy, error, membershipsTo, onSav
           {problems.endsOn ? <p className="c-s14 m-0" style={BAD}>{problems.endsOn}</p> : null}
         </div>
       </div>
-      <p className="c-s13 c-t3 m-0">The discount works on both of these days and every day between them.</p>
+      <p className="c-hint m-0">The discount works on both of these days and every day between them.</p>
 
       <label className="flex items-center gap-3 c-s15 c-t1" style={ROW}>
         <input type="checkbox" checked={draft.limited} disabled={busy} onChange={(e) => set({ limited: e.target.checked })} />
         Limit how many times it can be used in total
       </label>
       {draft.limited ? (
-        <div className="c-field">
+        <div className="c-field" data-bad={bad(problems.maxUses)}>
           <label className="c-label" htmlFor={`${id}-uses`}>
             Usage limit
           </label>
           <input id={`${id}-uses`} className="c-input" style={{ maxWidth: 160 }} inputMode="numeric" value={draft.maxUses} disabled={busy} onChange={(e) => set({ maxUses: e.target.value })} placeholder="100" />
-          <p className="c-s13 c-t3 m-0">Each sale or membership made with the discount counts as one use. A product sale you void gives its use back.</p>
+          <p className="c-hint m-0">Each sale or membership made with the discount counts as one use. A product sale you void gives its use back.</p>
           {problems.maxUses ? <p className="c-s14 m-0" style={BAD}>{problems.maxUses}</p> : null}
         </div>
       ) : null}
@@ -234,7 +242,7 @@ function DiscountForm({ page, draft, setDraft, busy, error, membershipsTo, onSav
             <input type="checkbox" checked={draft.oncePerMember} disabled={busy} onChange={(e) => set({ oncePerMember: e.target.checked })} />
             Limit to one use per member
           </label>
-          <p className="c-s13 c-t3 m-0">
+          <p className="c-hint m-0">
             A member can use {promoCodeFrom(draft.code)} once, at the front desk or in the app. Untick this to let members use it every time they buy.
           </p>
           {draft.forMemberships ? (
@@ -243,7 +251,7 @@ function DiscountForm({ page, draft, setDraft, busy, error, membershipsTo, onSav
                 <input type="checkbox" checked={draft.inApp} disabled={busy} onChange={(e) => set({ inApp: e.target.checked })} />
                 Members can enter this code in the app
               </label>
-              <p className="c-s13 c-t3 m-0">
+              <p className="c-hint m-0">
                 Members type {promoCodeFrom(draft.code)} when they buy a membership in the app, and the discount comes off what they pay. Anyone who knows the code
                 can use it.
               </p>
@@ -252,16 +260,6 @@ function DiscountForm({ page, draft, setDraft, busy, error, membershipsTo, onSav
         </fieldset>
       ) : null}
 
-      <div className="flex flex-wrap gap-2">
-        <button type="submit" className="c-btn c-btn-p c-btn-lg" disabled={busy}>
-          {busy ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : null}
-          {busy ? 'Saving…' : draft.id === null ? 'Add discount' : 'Save discount'}
-        </button>
-        <button type="button" className="c-btn c-btn-s c-btn-lg" disabled={busy} onClick={onCancel}>
-          Cancel
-        </button>
-      </div>
-      {error !== null ? <Refusal>{error}</Refusal> : null}
     </form>
   );
 }
@@ -273,18 +271,30 @@ export default function SellDiscounts({ gymId, page, locked, lockedNote, use = '
   const shownArchived = page.archivedDiscounts.filter(here);
   const canManage = page.canManage;
   const [draft, setDraft] = useState(null);
+  // The draft as the panel opened: what "You have changes that aren't saved." compares.
+  const [startedAs, setStartedAs] = useState(null);
   const [state, setState] = useState({ busy: false, error: null, done: null });
+  // Where the last sentence is said: under the discount it is about, at the top, or by the archived.
+  const [noteAt, setNoteAt] = useState('top');
   const [asking, setAsking] = useState(null);
   const [showArchived, setShowArchived] = useState(false);
   /** The last discount saved is listed on the other page. */
   const [away, setAway] = useState(false);
   const full = page.discounts.length >= DISCOUNTS_MAX;
   const clear = { busy: false, error: null, done: null };
+  const formId = useId();
+  const open = (next) => {
+    setDraft(next);
+    setStartedAs(draftKey(next));
+  };
 
-  const run = async (work, done) => {
+  // `at`: where a refusal is said (where it was pressed); `doneAt`: where it is said once done.
+  const run = async (work, done, at = 'top', doneAt = at) => {
+    setNoteAt(at);
     setState({ busy: true, error: null, done: null });
     try {
       onPage(await work());
+      setNoteAt(doneAt);
       setState({ busy: false, error: null, done });
       return true;
     } catch (err) {
@@ -298,7 +308,7 @@ export default function SellDiscounts({ gymId, page, locked, lockedNote, use = '
   const save = async () => {
     if (draft === null) return;
     if (Object.keys(discountProblems(draft, page.currency, page.products, page.membershipTypes)).length > 0) {
-      setDraft((was) => ({ ...was, pressed: true }));
+      setDraft((was) => ({ ...was, pressed: (was.pressed || 0) + 1 }));
       return;
     }
     const body = discountBody(draft, page.currency, page.products, page.membershipTypes);
@@ -306,40 +316,44 @@ export default function SellDiscounts({ gymId, page, locked, lockedNote, use = '
     // One that no longer applies here is listed on the other page: said, with its button.
     const elsewhere = use === 'products' ? !body.forProducts : !body.forMemberships;
     const away = elsewhere ? (use === 'products' ? ' It is for memberships only, so it is listed on the Memberships page.' : ' It is for products only, so it is listed under Discounts on the Sell page.') : '';
+    // A discount changed and still listed here is spoken of under its own row.
+    const at = draft.id === null || elsewhere ? 'top' : draft.id;
     const ok = await run(
       () => (draft.id === null ? registerService.addDiscount(gymId, body) : registerService.changeDiscount(gymId, draft.id, body)),
       (draft.id === null ? `${body.name} added. Staff can now choose it ${where}.` : `${body.name} saved. Sales and memberships already made keep the discount they were made with.`) + away,
+      at,
     );
     setAway(elsewhere);
     if (ok) setDraft(null);
   };
-  const form = () => (
-    <DiscountForm
-      page={page}
-      draft={draft}
-      setDraft={setDraft}
-      busy={state.busy}
-      error={state.error}
-      membershipsTo={membershipsTo}
-      onSave={() => void save()}
-      onCancel={() => {
-        setDraft(null);
-        setState(clear);
-      }}
-    />
+  const close = () => {
+    setDraft(null);
+    setState(clear);
+  };
+  const said = (at) => (
+    <>
+      {state.done !== null && noteAt === at ? <SavedNote>{state.done}</SavedNote> : null}
+      {state.done !== null && noteAt === at && away && otherTo !== null ? <PlaceLink to={otherTo}>{use === 'products' ? 'Open Memberships' : 'Open Sell'}</PlaceLink> : null}
+      {state.error !== null && draft === null && noteAt === at ? <Refusal>{state.error}</Refusal> : null}
+    </>
   );
+  const problemsShown = draft !== null && draft.pressed && Object.keys(discountProblems(draft, page.currency, page.products, page.membershipTypes)).length > 0;
 
   return (
-    <section className="c-card p-4 md:p-5 flex flex-col gap-4" aria-label="Discounts" id="discounts">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="c-h2">Discounts</h2>
-        {canManage && draft === null ? (
+    <section className="c-card p-4 md:p-6 flex flex-col gap-4" aria-label="Discounts" id="discounts">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="flex flex-col gap-1 min-w-0">
+          <h2 className="c-h2">Discounts</h2>
+          <p className="c-s14 c-t2 m-0">Take a percentage or a fixed amount off, with a promo code if you want one.</p>
+        </div>
+        {canManage ? (
           <button
             type="button"
-            className="c-btn c-btn-s c-btn-lg"
-            disabled={locked || full || state.busy}
+            className="c-btn c-btn-p"
+            disabled={locked || full || state.busy || draft !== null}
             onClick={() => {
-              setDraft(emptyDiscountDraft(use));
+              open(emptyDiscountDraft(use));
+              setAsking(null);
               setState(clear);
             }}
           >
@@ -348,14 +362,11 @@ export default function SellDiscounts({ gymId, page, locked, lockedNote, use = '
           </button>
         ) : null}
       </div>
-      {!canManage ? <p className="c-s14 c-t3 m-0">{NO_MANAGING_DISCOUNTS}</p> : null}
-      {canManage && locked ? <p className="c-s14 c-t3 m-0">{lockedNote}</p> : null}
-      {canManage && full ? <p className="c-s14 c-t3 m-0">{TOO_MANY_DISCOUNTS}</p> : null}
+      {!canManage ? <p className="c-s14 c-t2 m-0">{NO_MANAGING_DISCOUNTS}</p> : null}
+      {canManage && locked ? <p className="c-s14 c-t2 m-0">{lockedNote}</p> : null}
+      {canManage && full ? <p className="c-s14 c-t2 m-0">{TOO_MANY_DISCOUNTS}</p> : null}
 
-      {draft !== null && draft.id === null ? form() : null}
-      {state.done !== null ? <SavedNote>{state.done}</SavedNote> : null}
-      {state.done !== null && away && otherTo !== null ? <PlaceLink to={otherTo}>{use === 'products' ? 'Open Memberships' : 'Open Sell'}</PlaceLink> : null}
-      {state.error !== null && draft === null ? <Refusal>{state.error}</Refusal> : null}
+      {said('top')}
 
       {shown.length === 0 ? (
         <p className="c-s15 c-t2 m-0">
@@ -364,54 +375,59 @@ export default function SellDiscounts({ gymId, page, locked, lockedNote, use = '
             : 'No discounts for memberships yet. Add one to take a percentage or a fixed amount off a membership, with a promo code if you want one.'}
         </p>
       ) : (
-        <ul className="list-none m-0 p-0">
+        <ul className="c-items">
           {shown.map((discount) => {
             const tag = discountStatusTag(discount, page.today, page.currency);
             return (
-              <li key={discount.id} className="flex flex-col gap-3 py-3" style={LINE} data-testid="discount-row">
-                {draft !== null && draft.id === discount.id ? (
-                  form()
-                ) : (
-                  <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-                    <div className="flex flex-col gap-1 min-w-0">
-                      <p className="c-s15 c-w6 c-t1 m-0 flex flex-wrap items-center gap-2">
-                        {discount.name}
-                        <span className={`c-tag ${tag.tag}`}>{tag.words}</span>
-                      </p>
-                      <p className="c-s14 c-t2 m-0">{discountRow(discount, page.products, page.membershipTypes)}</p>
-                      {discountInOldMoney(discount, page.currency) ? <p className="c-s14 c-t1 m-0">{oldMoneyLine(discount, page.currency)}</p> : null}
-                    </div>
-                    {canManage ? (
-                      <div className="flex flex-wrap items-center gap-2 flex-shrink-0">
-                        {discount.referralGift === true ? (
-                          // Every invite link promises this gift: it is changed with the offer.
-                          referralTo !== null ? (
-                            <PlaceLink to={referralTo}>Change in Refer a friend</PlaceLink>
-                          ) : (
-                            <span className="c-s14 c-t3">{REFERRAL_GIFT_OWNER_LINE}</span>
-                          )
-                        ) : (
-                          <button
-                            type="button"
-                            className="c-btn c-btn-s c-btn-sm"
-                            disabled={locked || state.busy || draft !== null}
-                            onClick={() => {
-                              setDraft(draftFromDiscount(discount));
-                              setAsking(null);
-                              setState(clear);
-                            }}
-                            aria-label={`Change ${discount.name}`}
-                          >
-                            Change
-                          </button>
-                        )}
-                        <button type="button" className="c-btn c-btn-s c-btn-sm" disabled={locked || state.busy || draft !== null} onClick={() => setAsking(discount.id)} aria-label={`Archive ${discount.name}`}>
-                          Archive
-                        </button>
-                      </div>
-                    ) : null}
+              <li key={discount.id} className="c-item" data-testid="discount-row">
+                <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                  <div className="flex flex-col gap-1 min-w-0">
+                    <p className="c-s15 c-w6 c-t1 m-0 flex flex-wrap items-center gap-2">
+                      {discount.name}
+                      <span className={`c-tag ${tag.tag}`}>{tag.words}</span>
+                    </p>
+                    <p className="c-s14 c-t2 m-0">{discountRow(discount, page.products, page.membershipTypes)}</p>
+                    {discountInOldMoney(discount, page.currency) ? <p className="c-s14 c-t1 m-0">{oldMoneyLine(discount, page.currency)}</p> : null}
                   </div>
-                )}
+                  {canManage ? (
+                    <div className="flex flex-wrap items-center gap-2 flex-shrink-0">
+                      {discount.referralGift === true ? (
+                        // Every invite link promises this gift: it is changed with the offer.
+                        referralTo !== null ? (
+                          <PlaceLink to={referralTo}>Change in Refer a friend</PlaceLink>
+                        ) : (
+                          <span className="c-s14 c-t2">{REFERRAL_GIFT_OWNER_LINE}</span>
+                        )
+                      ) : (
+                        <button
+                          type="button"
+                          className="c-btn c-btn-s c-btn-sm"
+                          disabled={locked || state.busy || draft !== null}
+                          onClick={() => {
+                            open(draftFromDiscount(discount));
+                            setAsking(null);
+                            setState(clear);
+                          }}
+                          aria-label={`Edit ${discount.name}`}
+                        >
+                          Edit
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        className="c-btn c-btn-s c-btn-sm"
+                        disabled={locked || state.busy || draft !== null}
+                        onClick={() => {
+                          setAsking(discount.id);
+                          setState(clear);
+                        }}
+                        aria-label={`Archive ${discount.name}`}
+                      >
+                        Archive
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
                 {asking === discount.id ? (
                   <ConfirmInline
                     newLook
@@ -420,33 +436,40 @@ export default function SellDiscounts({ gymId, page, locked, lockedNote, use = '
                     busy={state.busy}
                     onConfirm={() => {
                       setAsking(null);
-                      void run(() => registerService.archiveDiscount(gymId, discount.id), `${discount.name} archived. Find it under Archived discounts below.`);
+                      void run(() => registerService.archiveDiscount(gymId, discount.id), `${discount.name} archived. Find it under Show archived.`, discount.id, 'archived');
                     }}
                     onCancel={() => setAsking(null)}
                   />
                 ) : null}
+                {said(discount.id)}
               </li>
             );
           })}
         </ul>
       )}
 
-      {shownArchived.length > 0 ? (
+      {shownArchived.length > 0 || noteAt === 'archived' ? (
         <div className="flex flex-col gap-2 pt-3" style={LINE}>
-          <button type="button" className="c-btn-link c-s14 c-w6 self-start" style={ROW} aria-expanded={showArchived} onClick={() => setShowArchived((was) => !was)}>
-            {`${showArchived ? 'Hide' : 'Show'} archived discounts (${String(shownArchived.length)})`}
-          </button>
+          {shownArchived.length > 0 ? (
+            <button type="button" className="c-btn-link c-s14 c-w6 self-start" style={ROW} aria-expanded={showArchived} onClick={() => setShowArchived((was) => !was)}>
+              {`${showArchived ? 'Hide' : 'Show'} archived (${String(shownArchived.length)})`}
+            </button>
+          ) : null}
+          {said('archived')}
           {showArchived ? (
             <ul className="list-none m-0 p-0">
               {shownArchived.map((discount) => (
                 <li key={discount.id} className="flex flex-wrap items-center justify-between gap-2 py-2" data-testid="archived-discount-row">
-                  <span className="c-s14 c-t2">{`${discount.name} · ${discountRow(discount, page.products, page.membershipTypes)}`}</span>
+                  <span className="flex flex-col min-w-0">
+                    <span className="c-s15 c-t1">{discount.name}</span>
+                    <span className="c-s14 c-t2">{`${discountRow(discount, page.products, page.membershipTypes)} · Archived`}</span>
+                  </span>
                   {canManage ? (
                     <button
                       type="button"
                       className="c-btn c-btn-s c-btn-sm"
                       disabled={locked || state.busy}
-                      onClick={() => void run(() => registerService.restoreDiscount(gymId, discount.id), `${discount.name} can be used again.`)}
+                      onClick={() => void run(() => registerService.restoreDiscount(gymId, discount.id), `${discount.name} can be used again.`, 'archived')}
                       aria-label={`Put ${discount.name} back`}
                     >
                       Put back
@@ -454,10 +477,36 @@ export default function SellDiscounts({ gymId, page, locked, lockedNote, use = '
                   ) : null}
                 </li>
               ))}
-              {page.archivedDiscountsTotal > page.archivedDiscounts.length ? <li className="c-s13 c-t3 py-2">{`Showing the newest ${String(shownArchived.length)}.`}</li> : null}
+              {page.archivedDiscountsTotal > page.archivedDiscounts.length ? <li className="c-s14 c-t2 py-2">{`Showing the newest ${String(shownArchived.length)}.`}</li> : null}
             </ul>
           ) : null}
         </div>
+      ) : null}
+
+      {draft !== null ? (
+        <SidePanel
+          title={draft.id === null ? 'Add a discount' : 'Change discount'}
+          onClose={close}
+          unsaved={draftKey(draft) !== startedAs}
+          formId={formId}
+          saveLabel={draft.id === null ? 'Add discount' : 'Save discount'}
+          busy={state.busy}
+          cancelLabel="Cancel"
+          testId="discount-panel"
+          foot={
+            state.error !== null ? (
+              <div className="w-full">
+                <Refusal>{state.error}</Refusal>
+              </div>
+            ) : problemsShown ? (
+              <span className="c-s14 c-w6" style={BAD}>
+                {FIX_ABOVE}
+              </span>
+            ) : null
+          }
+        >
+          <DiscountForm formId={formId} page={page} draft={draft} setDraft={setDraft} busy={state.busy} membershipsTo={membershipsTo} onSave={() => void save()} />
+        </SidePanel>
       ) : null}
     </section>
   );
