@@ -326,7 +326,7 @@ export function takingsWords(page, key = 'all') {
     return `${words.title} ${past ? `on ${shortDay(page.day)}` : 'today'}: ${money(t.totalMinor)} from ${count(t.count, words.one, words.many)}. ${howWords(t, money)}.`;
   }
   if (totals.count === 0 && totals.payments === 0) {
-    if (totals.otherCurrency > 0) return `${past ? `Taken on ${shortDay(page.day)}` : 'Taken today'}: ${money(0)}.`;
+    if (totals.otherCurrency > 0) return `${past ? `Revenue on ${shortDay(page.day)}` : 'Revenue today'}: ${money(0)}.`;
     return past ? `Nothing was taken on ${shortDay(page.day)}.` : 'Nothing taken yet today.';
   }
   const what = [];
@@ -334,7 +334,7 @@ export function takingsWords(page, key = 'all') {
   const fees = kindTotals(page, 'fees').count;
   if (totals.payments - fees > 0) what.push(count(totals.payments - fees, 'membership payment', 'membership payments'));
   if (fees > 0) what.push(count(fees, 'fee', 'fees'));
-  return `${past ? `Taken on ${shortDay(page.day)}` : 'Taken today'}: ${money(totals.totalMinor)} from ${listed(what)}. ${howWords(totals, money)}.`;
+  return `${past ? `Revenue on ${shortDay(page.day)}` : 'Revenue today'}: ${money(totals.totalMinor)} from ${listed(what)}. ${howWords(totals, money)}.`;
 }
 
 /** The smaller lines under it, each only where it is true. */
@@ -358,6 +358,56 @@ export function takingsNotes(page, key = 'all') {
   const hidden = all ? page.salesNotShown + page.paymentsNotShown : kind.notShown;
   if (hidden > 0) notes.push(`The list shows the newest. ${count(hidden, 'earlier one is', 'earlier ones are')} not listed.`);
   return notes;
+}
+
+const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+/** "Mon 16 Nov": the day the Revenue card is for. */
+export function weekdayDay(day) {
+  const [y, m, d] = day.split('-').map(Number);
+  return `${WEEKDAYS[new Date(Date.UTC(y, m - 1, d)).getUTCDay()]} ${shortDay(day, false)}`;
+}
+
+/** The ways money comes in, in the order the Revenue card lists them. */
+const METHOD_ORDER = ['terminal', 'cash', 'upi', 'card_at_desk', 'bank_transfer', 'link', 'company', 'app'];
+
+/** The Revenue card (V4a-ii, the boards `Sell` and `SellDay`): the day's total, what it came from,
+ *  and each way it was paid. The gym's own ways by hand are listed even at nothing, as a till's
+ *  end-of-day sheet does; another way only where money came in by it. */
+export function dayRevenue(page, country = null) {
+  const { totals, currency } = page;
+  const past = pastDay(page);
+  const day = typeof page.day === 'string' ? page.day : page.today;
+  const money = (minor) => formatMinor(minor, currency ?? 'USD');
+  const what = [];
+  if (totals.count > 0) what.push(count(totals.count, 'sale', 'sales'));
+  const fees = kindTotals(page, 'fees').count;
+  if (totals.payments - fees > 0) what.push(count(totals.payments - fees, 'membership payment', 'membership payments'));
+  if (fees > 0) what.push(count(fees, 'fee', 'fees'));
+  const byHand = new Set(paymentMethodsByHand(country ?? null));
+  const methods = METHOD_ORDER.filter((m) => (totals[m] ?? 0) > 0 || byHand.has(m)).map((m) => ({ key: m, label: methodWords(m), amount: money(totals[m] ?? 0) }));
+  const nothing = totals.count === 0 && totals.payments === 0;
+  return {
+    title: past ? `Revenue on ${shortDay(day)}` : 'Revenue today',
+    day: weekdayDay(day),
+    total: money(totals.totalMinor),
+    from: nothing ? (totals.otherCurrency > 0 ? null : past ? `Nothing was taken on ${shortDay(day, false)}.` : 'Nothing taken yet today.') : `From ${listed(what)}`,
+    methods: nothing && totals.otherCurrency === 0 ? [] : methods,
+  };
+}
+
+/** Over the day's list: "Today's sales", and how many the open tab holds, the newest first. Where the server
+ *  sent only the newest (`SALES_SHOWN` of each kind), it says the newest N of the day's whole number (round one, H1). */
+export function salesHeading(page, rows, key = 'all') {
+  const past = pastDay(page);
+  const n = rows.length;
+  const hidden = key === 'all' ? (page.salesNotShown ?? 0) + (page.paymentsNotShown ?? 0) : (kindTotals(page, key).notShown ?? 0);
+  const total = n + hidden;
+  const when = past ? 'that day' : 'today';
+  const num = (x) => x.toLocaleString('en');
+  return {
+    title: past ? `Sales on ${shortDay(page.day)}` : "Today's sales",
+    sub: total === 0 ? null : hidden > 0 ? `The newest ${num(n)} of ${num(total)} ${when}` : `${num(n)} ${when} · the newest first`,
+  };
 }
 
 /** Who a sale or payment was for: their name, a walk-in, or somebody whose record was
@@ -712,4 +762,10 @@ export function rateProblems(draft, country = null) {
 /** The rate form as the server takes it. Call only with no problems. */
 export function rateBody(draft) {
   return { name: draft.name.trim(), pcm: taxRateToPcm(draft.rate) };
+}
+
+/** A question's sentence split for a box in the middle: "Void this sale?" its title, the rest under it. */
+export function questionParts(text) {
+  const at = text.indexOf('? ');
+  return at < 0 ? { title: text, body: null } : { title: text.slice(0, at + 1), body: text.slice(at + 2) };
 }

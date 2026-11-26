@@ -45,3 +45,11 @@ describe('a sale on the Terminal: who pays, and how it ended', () => {
     expect(terminalPayOutcomeLine(sale({ outcome }), name, 1900)).toBe(line);
   });
 });
+
+describe("a Terminal payment's ending, drawn in its colour (V4a-ii)", () => {
+  it('every ending has a colour: green paid, plain where nothing happened, orange to check, red where money and the record differ', async () => {
+    const { terminalOutcomeTone } = await import('./terminalPayView');
+    const want = { paid: 'good', cancelled: 'plain', cancelled_on_terminal: 'plain', timed_out: 'plain', no_answer: 'warn', gone: 'warn', refused: 'bad', not_recorded: 'bad', something_new: 'bad' };
+    expect(Object.fromEntries(Object.keys(want).map((outcome) => [outcome, terminalOutcomeTone({ outcome })]))).toEqual(want);
+  });
+});

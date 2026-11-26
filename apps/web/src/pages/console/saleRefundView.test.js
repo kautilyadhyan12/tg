@@ -95,7 +95,7 @@ describe('a sale’s refunds', () => {
 
   it('Void refund says what changes, the shelf too', () => {
     expect(voidSaleRefundWords(sale({ refunds: [refund()] }), 'rf1')).toEqual({
-      question: 'Void the $2.50 refund noted on 16 Oct 2026? It will no longer count, and the sale counts that much again. 1 will come off the shelf count again. It stays in the list crossed out.',
+      question: 'Void the $2.50 refund of 3 × Water noted on 16 Oct 2026? It will no longer count, and the sale counts that much again. 1 will come off the shelf count again. It stays in the list crossed out.',
       done: 'Refund voided. The sale counts $2.50 again.',
     });
   });

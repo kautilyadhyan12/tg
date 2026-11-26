@@ -2666,3 +2666,30 @@
   .c-till-sale { padding: 16px; }
   .c-sale-take { bottom: 64px; margin: 0 -16px; padding: 12px 16px; }
 }
+
+/* A sale (V4a-ii, the boards `SellSale` and `SellDay`): the Terminal's steps, numbered in a frame; the Revenue card's
+   ways of paying; a row of the day's list with its amount at the right. */
+.c-steps-at { padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; }
+.c-step-n {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  background: var(--soft);
+  color: var(--soft-t);
+  font-size: 14px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.c-rev-ways { display: flex; flex-direction: column; margin: 0; }
+.c-rev-ways > div { display: flex; justify-content: space-between; gap: 16px; padding: 10px 0; }
+.c-rev-ways > div + div { border-top: 1px solid var(--line); }
+.c-sale-row { display: flex; align-items: flex-start; gap: 12px 16px; }
+.c-sale-row-words { display: flex; flex-direction: column; gap: 2px; flex: 1 1 220px; min-width: 0; }
+.c-sale-row-end { display: flex; align-items: center; flex: none; gap: 8px; margin-left: auto; }
+.c-sale-row-acts { display: flex; flex-wrap: wrap; gap: 8px; }
+.c-sale-row-money { font-size: 15px; line-height: 20px; font-weight: 600; white-space: nowrap; font-variant-numeric: tabular-nums; color: var(--t1); }
+.c-page-headrow { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px 16px; }
+.c-page-headrow-a { display: flex; flex-wrap: wrap; gap: 8px; }

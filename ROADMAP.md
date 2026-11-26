@@ -498,7 +498,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
      - V3b-ii. [x] **Staff** · merged 2026-11-25 · PR #645
    - V4a. **Sell**, in three (2026-11-25; boards `Sell*`, `PhoneSell`):
     - V4a-i. [x] **The tabs, the Register as a till, Sell a membership and Today's sales** · merged 2026-11-25 · PR #648
-    - V4a-ii. [ ] **A sale**: the Terminal waiting and each way it ends, Sale recorded, Void and Refund, another day (`SellSale`, `SellDay`); a sale's refund boxes and its receipt in the middle, on a member's Purchases too.
+    - V4a-ii. [x] **A sale** · merged 2026-11-26 · PR #650
     - V4a-iii. [ ] **Products, Tax and Discounts** (`SellProducts`, `SellTax`, `Discounts`)
    - V4b. [ ] **Memberships** (web folder 1): the price list, adding a type, discounts (`Memberships*`, `MembershipAdd`).
    - V5. [ ] **Overview and getting in** (web folder 1): Overview, its banners and plan prompts, your organisations, creating a gym, signing in, joining as staff (`Overview*`, `Banners`, `GymReady`, `Orgs`, `CreateGym`, `SignIn`, `StaffInvite`, `PhoneOverview`).
