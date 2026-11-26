@@ -220,7 +220,7 @@ function appConfig(build: Build): ExpoConfig {
     // microphone, which no feature uses.
     plugins: [
       "expo-secure-store",
-      ["expo-camera", { cameraPermission: "Allow $(PRODUCT_NAME) to take photos of your meals and your gym's updates.", microphonePermission: false, recordAudioAndroid: false }],
+      ["expo-camera", { cameraPermission: "Allow $(PRODUCT_NAME) to take photos of your meals and your gym's updates, and to count your exercises.", microphonePermission: false, recordAudioAndroid: false }],
       ["expo-image-picker", { photosPermission: "Allow $(PRODUCT_NAME) to open the photos you pick.", microphonePermission: false }],
       // A gym's messages as notifications (18b-i): the small icon and its colour on Android's bar.
       ["expo-notifications", { icon: BRAND.notificationIcon, color: BRAND.violet }],
@@ -242,8 +242,9 @@ function appConfig(build: Build): ExpoConfig {
       "./plugins/shortNativeBuild.js",
       // The store's file is signed with KWAZO's own upload key, never the development one (21c-i).
       ...(build.signedForTheStore ? ["./plugins/storeSigning.js"] : []),
-      // A folder's copy holds the phone test's pose library (51a), which would send Google its usage reports.
-      ...(build.signedForTheStore ? [] : ["./plugins/noUsageReports.js"]),
+      // The pose library (the camera screen's, 53a, in every build; and the phone test's, 51a, in a folder's copy) would
+      // send Google its usage reports: every build takes the sender away.
+      "./plugins/noUsageReports.js",
     ],
     extra,
   };

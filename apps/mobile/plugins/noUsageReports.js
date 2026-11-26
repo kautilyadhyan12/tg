@@ -1,4 +1,4 @@
-// An Expo config plugin for a folder's copy (app.config.ts, ROADMAP Stage 5 51a). Google's Android pose library,
+// An Expo config plugin for every build (app.config.ts; ROADMAP Stage 5 51a, and the store's app since 53a). Google's Android pose library,
 // MediaPipe Tasks, sends usage reports to Google by itself each time a model starts and as it reads pictures: the
 // app's name and version, the library's version, which task, how many pictures and how long each took. Never a
 // picture or a body point, but Kd ruled on 2026-10-18 that nothing goes online beyond the result a person shares.
@@ -7,7 +7,7 @@
 // transport-backend-cct. With none declared, the transport deletes what it gathered on the phone ("Unknown backend
 // for …, deleting event batch") and sends nothing. Firebase's optional delivery statistics, off unless switched on,
 // go the same way; notifications themselves do not use it.
-// Job 53, which brings the pose library to the store's app, adds this plugin to the store's build too.
+// Job 53a brought the pose library to the store's app (modules/pose-camera), and this plugin with it.
 const { withAndroidManifest } = require("expo/config-plugins");
 
 const DISCOVERY = "com.google.android.datatransport.runtime.backends.TransportBackendDiscovery";

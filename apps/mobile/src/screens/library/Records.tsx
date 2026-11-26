@@ -187,8 +187,9 @@ const DIGITS: Readonly<Record<string, string>> = { 0: "abcdef", 1: "bc", 2: "abd
 const LETTERS: Readonly<Record<string, string>> = { P: "abefg", A: "abcefg", U: "bcdef", S: "acdfg", E: "adefg", D: "abdf" };
 
 /** Digits as an LED wall timer lights them, seven segments each, the unlit ones faintly there. Digits, ":", "." and the
- *  capitals of `LETTERS`. */
-export function Led({ text, colour, height }: { text: string; colour: ColourName; height: number }) {
+ *  capitals of `LETTERS`. `bare`: the lit segments alone, over a picture (the camera screen, 53a: Kd, "the black grey
+ *  number in background can it be transparent"). */
+export function Led({ text, colour, height, bare = false }: { text: string; colour: ColourName; height: number; bare?: boolean }) {
   const w = height * 0.52;
   const t = Math.max(3, height * 0.12);
   const gap = height * 0.2;
@@ -239,9 +240,11 @@ export function Led({ text, colour, height }: { text: string; colour: ColourName
   const width = Math.max(1, x - gap);
   return (
     <Svg width={width} height={height} accessible={false}>
-      {parts.map((p) => (
-        <Path key={p.key} d={box(p.x, p.y, p.w, p.h, r)} fill={p.lit ? on : colours.ledOff} />
-      ))}
+      {parts
+        .filter((p) => p.lit || !bare)
+        .map((p) => (
+          <Path key={p.key} d={box(p.x, p.y, p.w, p.h, r)} fill={p.lit ? on : colours.ledOff} />
+        ))}
       {dots.map((d) => (
         <Circle key={d.key} cx={d.cx} cy={d.cy} r={r} fill={on} />
       ))}

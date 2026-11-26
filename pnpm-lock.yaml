@@ -124,6 +124,9 @@ importers:
 
   apps/mobile:
     dependencies:
+      '@app/movement':
+        specifier: workspace:*
+        version: link:../../packages/movement
       '@app/shared':
         specifier: workspace:*
         version: link:../../packages/shared
