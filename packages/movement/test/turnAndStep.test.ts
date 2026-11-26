@@ -257,6 +257,23 @@ describe("the limits, in plain sight: a body of the member's size within a strid
     expect(runMovement(m.movement, withStranger).count).toBeGreaterThan(runMovement(m.movement, withNobody).count);
   });
 
+  it("the squat: a stranger who stood 0.5 m beside the member, found alone right at the member's last spot after the camera lost everybody for 4 pictures, is followed as they walk 1.6 m away, and counted there", () => {
+    // The second re-check's Low, kept in plain sight: a body that goes on from the member's newest look a moment before, nearer
+    // it than a held body's, is the member's. Held instead whenever no other body is in the picture, the member back beside
+    // their own last look was refused (onePerson.test.ts, "the lock itself").
+    const m = memberOf("squat", "sumo_squat_2a");
+    const theirs = placed(videoOf("prisoner_squat_2").frames, m.aspect, m.own.middle, m.own.size);
+    const first = theirs[0];
+    if (first === undefined) throw new Error("no picture");
+    const beside = m.stand(0, 1).map((f) => ({ ...f, people: [...f.people, ...across(first, m.dx(0.5)).people] }));
+    const away = [...Array.from({ length: 48 }, (_, k) => across(first, m.dx(0.15 + (1.6 * (k + 1)) / 48))), ...theirs.map((f) => across(f, m.dx(1.75)))];
+    const lost = nobody(m.still, 4);
+    const start = [across(first, m.dx(0.15))];
+    const withStranger = runMovement(m.movement, withMiddle(m.member, m.cut, [...beside, ...lost, ...start, ...away]));
+    const withNobody = runMovement(m.movement, withMiddle(m.member, m.cut, [...m.stand(0, 1), ...lost, ...nobody(m.still, 1 + away.length)]));
+    expect(withStranger.count).toBeGreaterThan(withNobody.count);
+  });
+
   it("the squat: once the model has changed to a stranger at the member's place, the stranger is followed wherever they walk, and counted there", () => {
     const m = memberOf("squat", "sumo_squat_2a");
     const atPlace = placed(videoOf("prisoner_squat_2").frames, m.aspect, m.own.middle, m.own.size);

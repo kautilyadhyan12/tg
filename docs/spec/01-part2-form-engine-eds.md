@@ -2665,7 +2665,10 @@ walks 1.5 m aside between two reps (the lunger 1.5, every one with room), stands
 counts and is told exactly as if they had stood as long in their own place, is followed in every picture, and the place they
 walked to is theirs; lost for half a second as they walk and found within a stride of where they were, they count as if they
 had stayed. **Limits, in plain sight** (pinned): a stranger the model changes to all at once in the member's own place after the
-member walked away, or found within a stride of where the member was when the camera lost them, is taken for them; and once the
+member walked away, or found within a stride of where the member was when the camera lost them, is taken for them; a stranger
+who stood 0.5 m beside the member, found alone right at the member's last spot within 250 ms of their newest look after the
+camera lost everybody for a moment, is the member's and followed as they walk (the second re-check: 4 counted against 1 in 25 of
+27 runs; held instead whenever no other body is in the picture, the member back beside their own last look was refused); and once the
 model has changed to a stranger at a place of the member's (52d-i's limit), the stranger is followed wherever they walk and
 counted there. Before 52d-ii a body seen outside the place, the member walking out of it included, was held and taken only after
 standing 3 s in the place: a member who stepped out and walked back waited 3 s; now they are followed in every picture.
