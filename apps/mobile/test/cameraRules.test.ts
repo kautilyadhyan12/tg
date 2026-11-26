@@ -37,7 +37,9 @@ describe("which way is down, in the selfie camera's picture", () => {
       return;
     }
     expect(got).not.toBeNull();
-    down.forEach((v, k) => expect(got?.[k]).toBeCloseTo(v, 9));
+    down.forEach((v, k) => {
+      expect(got?.[k]).toBeCloseTo(v, 9);
+    });
   });
 
   it("a reading a little off Earth's pull is made a unit, as the engine asks", () => {

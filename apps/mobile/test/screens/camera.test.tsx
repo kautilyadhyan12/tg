@@ -330,7 +330,7 @@ describe("who is offered it", () => {
   it("never the store's app, nor a copy built before the camera", async () => {
     await openTry("Squat", server().ask, { apiUrl: "https://api.kwazo.app" });
     expect(screen.queryByRole("button", { name: "Try the camera" })).toBeNull();
-    screen.unmount();
+    await screen.unmount();
     poseCamera.missing = true;
     await render(<App extra={extra} store={memoryStore(kept(1, RAVI))} ask={server().ask} />);
     await fireEvent.press(await screen.findByRole("tab", { name: "Me" }));
