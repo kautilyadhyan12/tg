@@ -2683,6 +2683,44 @@ its gap and reach (2 red, the second unseen; added after a break that stayed gre
 for round one's two rules, the walked-to place never forgotten (7 red) and a body beside the member never held (3 red), and
 for its re-check, only the nearest body beside the member held (3 red).
 
+**As built, the camera screen counts a set (53a, 2026-11-26; `rulings/2026-11-26-53a.md`).** The app itself now holds the
+camera: `modules/pose-camera` (the store's app included) shows the selfie camera's picture across its view, mirrored as a
+selfie camera shows a person, and gives each newest picture to Google's pose library in its live mode, as 51b-ii picked it:
+the full model, asked for one person, at the sureness every kept file was measured with (0.5), on the main chip's 4 cores
+(`PoseCameraCores`, the phone test's `PhoneTestCores` under its own name), at 480 by 640. The model reads the picture as the
+camera took it, upright and **never mirrored**, as the proof videos were filmed, so its left is the person's own left (51b-ii
+mirrored it, as Google's sample does). The model file is fetched by the build at its pinned address and refused unless its
+size and SHA-256 are the laptop's (`build.gradle`, the same numbers as `phoneRun.ts`); it is never in git. Each answer goes to
+the screen with the picture's size, the phone's clock and Android's gravity reading, and is gone: the module writes no file,
+reaches nothing on the internet and logs only counts (`test/poseCamera.test.ts` reads its code, since GitHub never builds the
+app), and every build takes away the library's own sender of usage reports (`plugins/noUsageReports.js`, the store's app
+too since 53a). **On the screen's side** (`apps/mobile/src/camera`), each answer is made the engine's frame and checked by its
+schema (`frameOf`; anything broken is no frame at all), "down" being the gravity reading turned into the selfie picture's own
+frame (`downOf`: (gx, gy, −gz) over its size, none while the phone is moved, its size more than 2 m/s² from Earth's), and the
+set is the engine's own `CameraSet` (`LiveSet`), which also keeps its summary where the exercise has a camera file. Every
+exercise gets this one screen; only what it counts is the exercise's own. **What it shows** (Kd's drawing of 2026-11-26):
+until the person first stands ready, "Step back until the camera sees you like the picture." and where the phone may stand;
+then the count in the top left in lit digits with no unlit ones behind them, green for 0.6 s with the workout's rep sound at
+each counted rep; the exercise's reference clip in the top right; the person's own lines, joints and gold corners while the
+lock follows them; and one line at the foot, only while there is something to say: a rep's reason in its movement's own words
+for 4 s (amber for a rep that fell short, red for what the camera could not see), or "The camera can't see you." once the
+person has been unseen 2 s. A tap opens a box from the bottom with the count by hand, the target and the weight, Set done,
+Pause (the camera and model then rest, and nothing seen counts), Sound, End, Reset set, Count this set myself and Skip
+exercise. A camera or model that stops says "The camera stopped. Count this set yourself." and the set goes on by hand with
+what it had counted. **Until 64b** a folder's copy tries it from Me, "Try the camera": one set of the squat, the kettlebell
+goblet squat (its twin), the squat jump, the lunge, the sit-up, the hip thrust or the L-sit's hold, nothing of it saved; the
+movement files ride in the app until the Library's download carries them (§13.3). **Measured on the laptop:** played to the
+screen's own pieces as the module hands them over, every kept frame comes back the same frame; six real sets (a prisoner squat,
+a goblet squat, a squat jump, a forward lunge, a weighted sit-up, a dumbbell hip thrust) count exactly what the engine's own
+proof counts for them and what was counted by eye, each counted rep flashing once; a barbell deadlift seen as a squat counts 0
+and says nothing; the L-sit's time held is the engine's; the push press's short dips say "Go lower to count." for 4 s.
+**The worst thing first** (`test/screens/camera.test.tsx`): a whole set of a real person's squats played to the screen from
+Me, Try the camera, makes no request, writes no file and logs nothing. **Deliberate breaks**, each run red and put back: the
+module keeping each answer in the app's own folder (red), and anywhere else through `kotlin.io` (green at first: the check
+then named every way of writing a file, and it went red); the screen posting each answer to the internet (347 calls caught);
+the screen keeping each answer in a person's file (red); the store's app built without taking away the usage reports (two
+tests red).
+
 An exercise that does not pass is published as "count by hand", never with a wrong camera
 count. Kd tries one exercise of each kind of movement on the phone, about a dozen, never
 each one. After launch the server sees, for each exercise, how often members changed the
