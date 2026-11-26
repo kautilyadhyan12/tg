@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { Link, useLocation, useParams } from 'react-router-dom';
-import { CheckCircle2, ChevronDown, Loader2 } from 'lucide-react';
+import { Check, ChevronDown, Info, Loader2, Plus, ReceiptText, TriangleAlert } from 'lucide-react';
 import { registerService } from '../../api/registerApi';
 import { orgService, errorStatus, errorText } from '../../api/orgsApi';
 import { ConsoleFailed, ConsoleLoading } from '../../components/console/ConsoleStates';
@@ -18,6 +18,7 @@ import TaxRates from './TaxRates';
 import ReceiptBox from '../../components/console/ReceiptBox';
 import DatePick from '../../components/console/DatePick';
 import MoreMenu from '../../components/console/MoreMenu';
+import { MiddleBox } from '../../components/console/ConsoleBoxes';
 import { usePhone } from '../../components/console/usePhone';
 import { BasketRefundBox, SaleRefundLines, SquareRefundsToPlace } from './SaleRefunds';
 import { saleBasketMenu, saleRefundPick } from './saleRefundMenu';
@@ -29,7 +30,7 @@ import { addToBasket, applyBasketCode, basketBody, basketCodeNote, basketView, w
 import { FriendGiftNote, MemberGiftNote } from './FriendGift';
 import TerminalPayBox from './TerminalPayBox';
 import { cardTerminalSerial } from './memberCardView';
-import { TERMINAL_METHOD, TERMINAL_SALE_HINT, TERMINAL_SALE_LOST, mayHavePaid, payTerminalName, terminalPayOutcomeLine, tillSetupView } from './terminalPayView';
+import { TERMINAL_METHOD, TERMINAL_SALE_HINT, TERMINAL_SALE_LOST, mayHavePaid, payTerminalName, terminalOutcomeTone, terminalPayOutcomeLine, tillSetupView } from './terminalPayView';
 import { CARD_REFUND_LATE_LINE, SALE_LINES_MAX, formatMinor, saleBaskets } from '@app/shared';
 import {
   NO_SELLING_LINE,
@@ -44,7 +45,9 @@ import {
   quantityMax,
   soldWords,
   rowsOfKind,
-  takingsHeading,
+  dayRevenue,
+  questionParts,
+  salesHeading,
   takingsNotes,
   takingsPaymentsNote,
   takingsRows,
@@ -126,15 +129,18 @@ function SaleRecorded({ words, note, onNew, children, below = null }) {
     box.current?.scrollIntoView?.({ block: 'nearest' });
   }, []);
   return (
-    <div ref={box} className="flex flex-col gap-3" role="status" data-testid="sale-done">
-      <p className="c-s16 c-w7 c-t1 m-0 flex items-center gap-2">
-        <CheckCircle2 aria-hidden="true" className="w-5 h-5 flex-shrink-0" style={{ color: 'var(--good)' }} />
-        Sale recorded
-      </p>
-      <p className="c-s15 c-t1 m-0">{words}</p>
-      <p className="c-s14 c-t2 m-0">{note}</p>
-      <div className="flex flex-wrap gap-2">
-        <button type="button" className="c-btn c-btn-p c-btn-lg" onClick={onNew}>
+    <div ref={box} className="c-strip c-strip-good" style={{ alignItems: 'flex-start' }} role="status" data-testid="sale-done">
+      <span className="c-pay-ic c-pay-ic-good" aria-hidden="true">
+        <Check className="w-5 h-5" />
+      </span>
+      <div className="c-strip-words">
+        <p className="c-h3 m-0">Sale recorded</p>
+        <p className="c-s15 c-t1 m-0">{words}</p>
+        <p className="c-s14 c-t2 m-0">{note}</p>
+      </div>
+      <div className="flex flex-wrap gap-2 w-full">
+        <button type="button" className="c-btn c-btn-p" onClick={onNew}>
+          <Plus aria-hidden="true" className="w-4 h-4" />
           New sale
         </button>
         {children}
@@ -501,16 +507,17 @@ function ProductSale({ gymId, org, page: gymPage, locked, firstPerson, addMember
             : "It is in today's list below. If it was a mistake, press ⋯ on its row, then Void sale."
         }
         onNew={() => setState({ busy: false, error: null, done: null })}
-        below={number !== null && state.receiptOpen ? <ReceiptBox gymId={gymId} gym={org} number={number} onClose={() => setState((was) => ({ ...was, receiptOpen: false }))} /> : null}
+        below={number !== null && state.receiptOpen ? <ReceiptBox gymId={gymId} gym={org} number={number} onClose={() => setState((was) => ({ ...was, receiptOpen: false }))} inMiddle /> : null}
       >
         {number !== null ? (
           <button
             type="button"
-            className="c-btn c-btn-s c-btn-lg"
+            className="c-btn c-btn-s"
             aria-expanded={state.receiptOpen === true}
             aria-label={receiptButtonLabel(number, 'this sale')}
             onClick={() => setState((was) => ({ ...was, receiptOpen: !was.receiptOpen }))}
           >
+            <ReceiptText aria-hidden="true" className="w-4 h-4" />
             {RECEIPT_BUTTON}
           </button>
         ) : null}
@@ -739,8 +746,8 @@ function ProductSale({ gymId, org, page: gymPage, locked, firstPerson, addMember
                 </div>
               ) : null}
               {setup !== null ? (
-                <div className="flex flex-wrap items-center gap-2" data-testid="sell-terminal-setup">
-                  <p className="c-s14 c-t2 m-0">{setup.line}</p>
+                <div className="c-strip c-strip-plain" data-testid="sell-terminal-setup">
+                  <p className="c-strip-words c-s14 c-t1 m-0">{setup.line}</p>
                   {setup.button !== null && paymentsTo !== null ? (
                     <Link to={paymentsTo} className="c-btn c-btn-s">
                       {setup.button}
@@ -770,14 +777,14 @@ function ProductSale({ gymId, org, page: gymPage, locked, firstPerson, addMember
               {view.problem !== null && lines.length > 0 && view.rows.every((r) => r.problem === null) ? <TabLine text={view.problem} onOpenTab={onOpenTab} /> : null}
               <p className="c-s14 c-t3 m-0">{onTerminal ? TERMINAL_SALE_HINT : SALE_HINT}</p>
               {lostKey !== null ? (
-                <div className="rounded-[14px] p-3 flex flex-col gap-3" style={{ background: 'var(--raise)' }} data-testid="terminal-pay-lost">
-                  <p className="c-s14 c-t1 m-0" role="alert">
+                <div className="c-strip c-strip-warn" data-testid="terminal-pay-lost">
+                  <p className="c-strip-words c-s14 c-t1 m-0" role="alert">
                     {TERMINAL_SALE_LOST}
                   </p>
                   <div>
                     <button
                       type="button"
-                      className="c-btn c-btn-p"
+                      className="c-btn c-btn-s"
                       disabled={state.busy}
                       onClick={() => {
                         const again = lostKey;
@@ -795,11 +802,12 @@ function ProductSale({ gymId, org, page: gymPage, locked, firstPerson, addMember
                 <TerminalPayBox gymId={gymId} entryId={null} payment={onTill.payment} name={buyerName} showName={terminals.length > 1} onAnswer={onTillAnswer} onEnded={(why) => setState({ busy: false, error: why, done: null })} />
               ) : null}
               {onTill !== null && onTill.payment.step === 'done' && onTill.payment.outcome !== 'paid' ? (
-                <div className="rounded-[14px] p-3 flex flex-col gap-3" style={{ background: 'var(--raise)' }} data-testid="terminal-pay-ended">
-                  <p className="c-s14 m-0" style={{ color: mayHavePaid(onTill.payment) ? 'var(--t1)' : 'var(--bad)' }} role="alert">
+                <div className={`c-strip c-strip-${terminalOutcomeTone(onTill.payment)}`} data-testid="terminal-pay-ended" data-tone={terminalOutcomeTone(onTill.payment)}>
+                  <OutcomeIcon tone={terminalOutcomeTone(onTill.payment)} />
+                  <p className="c-strip-words c-s14 c-t1 m-0" role="alert">
                     {terminalPayOutcomeLine(onTill.payment, buyerName, onTill.payment.amountMinor)}
                   </p>
-                  <div className="flex flex-wrap gap-2">
+                  <div className="flex flex-wrap gap-2 w-full">
                     {!mayHavePaid(onTill.payment) && pickedTerminal !== undefined ? (
                       <button
                         type="button"
@@ -846,6 +854,14 @@ function ProductSale({ gymId, org, page: gymPage, locked, firstPerson, addMember
   );
 }
 
+const OUTCOME_ICONS = { good: Check, plain: Info, warn: TriangleAlert, bad: TriangleAlert };
+const OUTCOME_COLOURS = { good: 'var(--good)', plain: 'var(--t2)', warn: 'var(--warn)', bad: 'var(--bad)' };
+/** The mark at the start of a Terminal payment's ending, in its colour. */
+function OutcomeIcon({ tone }) {
+  const Icon = OUTCOME_ICONS[tone] ?? Info;
+  return <Icon aria-hidden="true" className="w-5 h-5 flex-shrink-0" style={{ color: OUTCOME_COLOURS[tone] ?? 'var(--t2)' }} />;
+}
+
 /** A sale left waiting on a Terminal when Sell was closed (18d-vi-b-ii): its box until it ends, then
  *  how it ended, with Close. */
 function ResumedSale({ gymId, payment: first, showName, onPaid, onClose }) {
@@ -864,8 +880,9 @@ function ResumedSale({ gymId, payment: first, showName, onPaid, onClose }) {
     );
   }
   return (
-    <div className="rounded-[14px] p-3 flex flex-col gap-3" style={{ background: 'var(--raise)' }} data-testid="terminal-sale-resumed">
-      <p className="c-s14 m-0" style={{ color: payment.outcome === 'paid' || mayHavePaid(payment) ? 'var(--t1)' : 'var(--bad)' }} role="status">
+    <div className={`c-strip c-strip-${terminalOutcomeTone(payment)}`} data-testid="terminal-sale-resumed" data-tone={terminalOutcomeTone(payment)}>
+      <OutcomeIcon tone={terminalOutcomeTone(payment)} />
+      <p className="c-strip-words c-s14 c-t1 m-0" role="status">
         {payment.outcome === 'paid' ? `${terminalPayOutcomeLine(payment, null, payment.amountMinor)} It is in today's list below.` : terminalPayOutcomeLine(payment, null, payment.amountMinor)}
       </p>
       <div>
@@ -882,7 +899,7 @@ function ResumedSale({ gymId, payment: first, showName, onPaid, onClose }) {
 function MembershipFinder({ gymId, words, locked, addMemberTo, onOpen }) {
   const [person, setPerson] = useState(null);
   return (
-    <section className="c-card p-4 md:p-5 flex flex-col gap-4" aria-label="Sell a membership">
+    <section id="sell-membership" className="c-card p-4 md:p-5 flex flex-col gap-4" aria-label="Sell a membership">
       <div className="flex flex-col gap-1">
         <h2 className="c-h2">Sell a membership</h2>
         <p className="c-s14 c-t2 m-0">Memberships are sold on the {words.person}&apos;s own page, where you pick the membership, a discount if there is one, and the payment method.</p>
@@ -915,10 +932,23 @@ function ScrollHere({ target }) {
 
 /** The day's product sales and membership payments, newest first, with the day's total: today,
  *  or an earlier day picked to find a sale to refund (18p). */
-function Takings({ gymId, org, page, locked, canOpenPeople, onOpenPerson, onPage, onReload, squareEveryMs, refundSale = null, onStock }) {
-  /** The day picked; null is today. Another day's list is read here, apart from the page. */
-  // Opened from Overview's Refunds to review: that sale's day first.
-  const [pick, setPick] = useState(refundSale !== null && refundSale.day !== page.today ? refundSale.day : null);
+/** Which day the Revenue card and the list show: "View another day" opens a calendar; on another day, Back to today. */
+function DayButtons({ pick, today, onDay }) {
+  const onToday = pick === null || pick === today;
+  return (
+    <>
+      {!onToday ? (
+        <button type="button" className="c-btn c-btn-s" onClick={() => onDay(null)}>
+          Back to today
+        </button>
+      ) : null}
+      <DatePick label="View another day" button="View another day" value={pick ?? today} min="2000-01-01" max={today} today={today} onChange={(day) => onDay(day === today ? null : day)} newLook />
+    </>
+  );
+}
+
+function Takings({ gymId, org, page, pick, onDay, between = null, locked, canOpenPeople, onOpenPerson, onPage, onReload, squareEveryMs, refundSale = null, onStock }) {
+  /** Another day's list is read here, apart from the page; `pick` is the day picked, null for today. */
   const [other, setOther] = useState({ day: null, page: null, error: null });
   const onToday = pick === null || pick === page.today;
   const shownPage = onToday ? page : other.day === pick ? other.page : null;
@@ -927,13 +957,26 @@ function Takings({ gymId, org, page, locked, canOpenPeople, onOpenPerson, onPage
   const [voidReason, setVoidReason] = useState({ reason: '', tried: false });
   /** The sale whose refund box is open, by its row's key, and whether it sends the money to the card. */
   const [refunding, setRefunding] = useState(null);
-  /** The row whose receipt is open under it, by its key. */
+  /** A refund on its way: the box in the middle stays until its answer. */
+  const [refundSending, setRefundSending] = useState(false);
+  /** The row whose receipt is open, by its key. */
   const [receiptFor, setReceiptFor] = useState(null);
   const [state, setState] = useState({ busy: false, error: null, done: null });
   const [all, setAll] = useState(false);
   /** Which kind of the day's takings is shown (18q-ii): all, products, memberships or fees. */
   const [tab, setTab] = useState('all');
   const phone = usePhone();
+
+  // Another day picked, here or at the top of the page: what was open on the last one closes.
+  const [seenPick, setSeenPick] = useState(pick);
+  if (seenPick !== pick) {
+    setSeenPick(pick);
+    setAsking(null);
+    setRefunding(null);
+    setReceiptFor(null);
+    setAll(false);
+    setState({ busy: false, error: null, done: null });
+  }
 
   const loadOther = useCallback(
     (day) =>
@@ -947,14 +990,6 @@ function Takings({ gymId, org, page, locked, canOpenPeople, onOpenPerson, onPage
     if (pick !== null && pick !== page.today) void loadOther(pick);
   }, [pick, page.today, loadOther]);
 
-  const showDay = (day) => {
-    setPick(day === page.today ? null : day);
-    setAsking(null);
-    setRefunding(null);
-    setReceiptFor(null);
-    setAll(false);
-    setState({ busy: false, error: null, done: null });
-  };
   // A refund to the card still with Square: the worker tells no page, so this one reads again by itself for a while.
   useReadWhileSquareWaits(
     salesWaitOnSquare(shownPage?.sales),
@@ -967,6 +1002,7 @@ function Takings({ gymId, org, page, locked, canOpenPeople, onOpenPerson, onPage
   /** What a refund or a void of a refund did, said where it was done; the list is read again. */
   const doneHere = (key) => (words, sent) => {
     setRefunding(null);
+    setRefundSending(false);
     setState({ busy: false, error: null, done: { key, words, sent: sent ?? null, read: shownPage } });
     // Today's list says the refunds noted today, whichever day's sale they were for.
     void onReload();
@@ -976,6 +1012,7 @@ function Takings({ gymId, org, page, locked, canOpenPeople, onOpenPerson, onPage
   const askVoid = (key) => {
     setVoidReason({ reason: '', tried: false });
     setRefunding(null);
+    setState((was) => ({ ...was, error: null }));
     setAsking(key);
   };
 
@@ -988,10 +1025,11 @@ function Takings({ gymId, org, page, locked, canOpenPeople, onOpenPerson, onPage
     try {
       onPage(await registerService.voidSale(gymId, row.sale.id, { reason: voidReason.reason }));
       setState({ busy: false, error: null, done: { key: row.key, words: saleVoidedWords(row.basket) } });
+      setAsking(null);
     } catch (err) {
+      // Said inside the box, which stays open: the page behind it is covered.
       setState({ busy: false, error: errorText(err, "We couldn't void that sale. Try again."), done: null });
     }
-    setAsking(null);
   };
 
   const rows = shownPage === null ? [] : rowsOfKind(takingsRows(shownPage, org.timezone, org.clockFormat), tab);
@@ -1012,200 +1050,259 @@ function Takings({ gymId, org, page, locked, canOpenPeople, onOpenPerson, onPage
     if (refundRow !== null) document.querySelector(`[data-sale-row="${refundRow}"]`)?.scrollIntoView?.({ block: 'center' });
   }, [refundRow]);
 
+  const revenue = shownPage === null ? null : dayRevenue(shownPage, org.country ?? null);
+  const heading = shownPage === null ? null : salesHeading(shownPage, takingsRows(shownPage, org.timezone, org.clockFormat));
+  const loadingOrFailed =
+    other.error !== null && shownPage === null ? (
+      <Refusal>{other.error}</Refusal>
+    ) : (
+      <p className="c-s14 c-t2 m-0">Loading that day…</p>
+    );
+
   return (
-    <section id="takings" className="c-card" aria-label={onToday ? "Today's takings" : 'Takings on another day'}>
-      <div className="flex flex-col gap-1 p-4 md:p-5">
-        <h2 className="c-h2">{shownPage === null ? '…' : takingsHeading(shownPage)}</h2>
-        {/* The calendar opens in place, pushing the list down: this card clips what sticks out. */}
-        <div className="flex flex-wrap items-end gap-2 pb-1">
-          <div className="c-field">
-            <span className="c-label">See another day's sales</span>
-            <DatePick label="See another day's sales" value={pick ?? page.today} min="2000-01-01" max={page.today} today={page.today} onChange={(day) => showDay(day)} newLook />
+    <>
+      <section id="takings" className="c-card p-4 md:p-5 flex flex-col gap-4" aria-label={revenue?.title ?? 'Revenue'} data-testid="revenue-card">
+        <div className="c-page-headrow">
+          <div className="flex flex-col gap-1 min-w-0">
+            <h2 className="c-h2">{revenue?.title ?? '…'}</h2>
+            {revenue !== null ? <p className="c-s14 c-t2 m-0">{revenue.day}</p> : null}
           </div>
-          {!onToday ? (
-            <button type="button" className="c-btn c-btn-s" onClick={() => showDay(page.today)}>
-              Back to today
-            </button>
-          ) : null}
+          <div className="c-page-headrow-a">
+            <DayButtons pick={pick} today={page.today} onDay={onDay} />
+          </div>
         </div>
-        {shownPage === null ? (
-          other.error !== null ? (
-            <Refusal>{other.error}</Refusal>
-          ) : (
-            <p className="c-s14 c-t2 m-0">Loading that day…</p>
-          )
+        {revenue === null ? (
+          loadingOrFailed
         ) : (
           <>
-            <div className="flex flex-wrap gap-2 py-1" role="group" aria-label="Kind of sale">
-              {TAKINGS_TABS.map(({ key, label }) => (
-                <button
-                  key={key}
-                  type="button"
-                  aria-pressed={tab === key}
-                  className={tab === key ? 'c-chip c-chip-on' : 'c-chip'}
-                  onClick={() => {
-                    setTab(key);
-                    setAll(false);
-                  }}
-                >
-                  {label}
-                  <span className="c-n">{takingsTabTotal(shownPage, key)}</span>
-                </button>
-              ))}
+            <div className="flex flex-col gap-1">
+              <p className="c-big m-0 c-t1" data-testid="revenue-total">
+                {revenue.total}
+              </p>
+              {revenue.from !== null ? (
+                <p className="c-s14 c-t2 m-0" data-testid="revenue-from">
+                  {revenue.from}
+                </p>
+              ) : null}
             </div>
-            <p className="c-s15 c-w6 c-t1 m-0" data-testid="takings-line">
-              {takingsWords(shownPage, tab)}
-            </p>
-            {takingsNotes(shownPage, tab).map((note) => (
-              <p key={note} className="c-s14 c-t3 m-0">
+            {revenue.methods.length > 0 ? (
+              <dl className="c-rev-ways" aria-label="How it was paid">
+                {revenue.methods.map((m) => (
+                  <div key={m.key}>
+                    <dt className="c-s14 c-t2">{m.label}</dt>
+                    <dd className="m-0 c-s15 c-w6 c-t1 c-num">{m.amount}</dd>
+                  </div>
+                ))}
+              </dl>
+            ) : null}
+            {takingsNotes(shownPage, 'all').map((note) => (
+              <p key={note} className="c-s14 c-t2 m-0">
                 {note}
               </p>
             ))}
           </>
         )}
-        {state.error !== null ? <Refusal>{state.error}</Refusal> : null}
-        {refundNote !== null ? (
-          <p className="c-s14 c-w5 m-0" style={{ color: 'var(--warn)' }} role="status" data-testid="sale-review-note">
-            {refundNote}
-          </p>
-        ) : null}
-      </div>
-      {rows.length > 0 ? (
-        <ul className="list-none m-0 p-0">
-          {shown.map((row) => {
-            const menu = saleBasketMenu(row.basket, row.title, (toCard) => {
-              setAsking(null);
-              setRefunding({ saleId: row.key, toCard });
-            });
-            const items = locked ? [] : [...menu.items];
-            if (row.canUndo && !locked) items.push({ ...SALE_MENU_WORDS.voidSale, danger: true, onPick: () => askVoid(row.key) });
-            const opensPerson = row.person !== null && canOpenPeople;
-            // On a phone the row's ⋯ holds every one of its buttons (the PhoneSell board).
-            const phoneItems = [
-              { label: RECEIPT_BUTTON, onPick: () => setReceiptFor((was) => (was === row.key ? null : row.key)) },
-              ...(opensPerson ? [{ label: 'Open their page', onPick: () => onOpenPerson(row.person.entryId) }] : []),
-              ...items,
-            ];
-            const said = state.done !== null && state.done.key === row.key ? saleSaidNow(state.done, row.basket, state.done.read !== shownPage) : null;
-            return (
-              <li key={row.key} className="flex flex-col gap-2 p-4" style={LINE} data-testid="takings-row" data-sale-row={row.key}>
-                <div className={phone ? "flex items-start justify-between gap-3" : "flex flex-col gap-2 md:flex-row md:items-center md:justify-between"}>
-                  <div className="flex flex-col min-w-0">
-                    <p className="c-s15 c-w6 c-t1 m-0">
-                      <span style={row.undone ? { textDecoration: 'line-through' } : undefined}>{`${row.title} · ${row.amount}`}</span>
-                      {row.undone ? <span className="c-tag c-tag-plain ml-2">Voided</span> : null}
-                      {row.refundTag !== null ? <span className="c-tag c-tag-warn ml-2">{row.refundTag}</span> : null}
-                    </p>
-                    <p className="c-s14 c-t2 m-0">{row.facts}</p>
-                    {row.voided !== null ? <p className="c-s14 c-t3 m-0">{row.voided}</p> : null}
-                  </div>
-                  {phone ? (
-                    <div className="flex flex-shrink-0">
-                      <MoreMenu label={null} alignRight ariaLabel={`More for the sale of ${row.title}`} items={phoneItems} disabled={state.busy} />
-                    </div>
-                  ) : (
-                  <div className="flex flex-wrap items-center gap-2 flex-shrink-0">
-                    {opensPerson ? (
-                      <button type="button" className="c-btn c-btn-s c-btn-sm" onClick={() => onOpenPerson(row.person.entryId)} aria-label={`Open ${row.person.name}'s page`}>
-                        Open their page
-                      </button>
-                    ) : null}
-                    <button
-                      type="button"
-                      className="c-btn c-btn-s c-btn-sm"
-                      aria-expanded={receiptFor === row.key}
-                      aria-label={receiptButtonLabel(row.receiptNumber, row.title)}
-                      onClick={() => setReceiptFor((was) => (was === row.key ? null : row.key))}
-                    >
-                      {RECEIPT_BUTTON}
-                    </button>
-                    {items.length > 0 ? <MoreMenu label={menu.label} compact={menu.label !== null} alignRight ariaLabel={menu.ariaLabel} items={items} disabled={state.busy} /> : null}
-                  </div>
-                  )}
-                </div>
-                {said !== null ? (
-                  <p className="c-s14 c-t1 c-w6 m-0" role="status">
-                    {said}
-                  </p>
-                ) : null}
-                {receiptFor === row.key ? <ReceiptBox gymId={gymId} gym={org} number={row.receiptNumber} onClose={() => setReceiptFor(null)} /> : null}
-                {saleRefundPick(refunding, row.key) !== null && row.basket !== null ? (
-                  <BasketRefundBox
-                    gymId={gymId}
-                    country={org.country}
-                    basket={row.basket}
-                    who={row.sale.person?.name ?? null}
-                    toCard={refunding.toCard}
-                    paymentsTo={placeFor(org.slug, viewerPrivileges(org), 'payments')}
-                    onDone={doneHere(row.key)}
-                    onStopped={() => {
-                      void onReload();
-                      if (!onToday) void loadOther(pick);
-                    }}
-                    onClose={() => setRefunding(null)}
-                  />
-                ) : null}
-                {asking === row.key && row.sale !== null ? (
-                  <form
-                    noValidate
-                    className="flex flex-col gap-3"
-                    data-testid="void-sale"
-                    onSubmit={(e) => {
-                      e.preventDefault();
-                      if (!state.busy) void voidSale(row);
+      </section>
+
+      {between}
+
+      <section className="c-card" aria-label={onToday ? "Today's takings" : 'Takings on another day'} data-testid="takings-list">
+        <div className="flex flex-col gap-3 p-4 md:p-5">
+          <div className="flex flex-col gap-1">
+            <h2 className="c-h2">{heading?.title ?? '…'}</h2>
+            {heading?.sub != null ? <p className="c-s14 c-t2 m-0">{heading.sub}</p> : null}
+          </div>
+          {shownPage === null ? (
+            loadingOrFailed
+          ) : (
+            <>
+              <div className="flex flex-wrap gap-2" role="group" aria-label="Kind of sale">
+                {TAKINGS_TABS.map(({ key, label }) => (
+                  <button
+                    key={key}
+                    type="button"
+                    aria-pressed={tab === key}
+                    className={tab === key ? 'c-chip c-chip-on' : 'c-chip'}
+                    onClick={() => {
+                      setTab(key);
+                      setAll(false);
                     }}
                   >
-                    <p className="c-s14 c-t1 m-0">{voidSaleQuestion(row.basket)}</p>
-                    <label className="c-field">
-                      <span className="c-label">Why are you voiding it?</span>
-                      <select className="c-sel" value={voidReason.reason} onChange={(e) => setVoidReason({ reason: e.target.value, tried: false })}>
-                        <option value="">Choose one</option>
-                        {SALE_VOID_CHOICES.map((reason) => (
-                          <option key={reason.value} value={reason.value}>
-                            {reason.label}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    {voidReason.tried ? (
-                      <span className="c-s14" style={{ color: 'var(--bad)' }} role="alert">
-                        Pick why you are voiding it.
-                      </span>
-                    ) : null}
-                    <div className="flex flex-wrap items-center gap-2">
-                      <button type="submit" disabled={state.busy} className="c-btn c-btn-sm c-btn-danger">
-                        Void sale
-                      </button>
-                      <button type="button" onClick={() => setAsking(null)} disabled={state.busy} className="c-btn c-btn-sm c-btn-s">
-                        Keep it
-                      </button>
-                    </div>
-                  </form>
-                ) : null}
-                {row.basket !== null ? <SquareRefundsToPlace key={`${row.key}-${refundSale?.place ?? ''}`} gymId={gymId} basket={row.basket} canAct={!locked && page.canSell} opened={refundSale?.place ?? null} onDone={doneHere(row.key)} /> : null}
-                {row.basket !== null
-                  ? row.basket.lines.map((line) => (
-                      <SaleRefundLines key={line.id} gymId={gymId} gym={org} sale={line} named={row.basket.lines.length > 1} canAct={!locked && page.canSell} onDone={doneHere(row.key)} onStock={onStock} />
-                    ))
-                  : null}
-              </li>
-            );
-          })}
-        </ul>
-      ) : null}
-      {rows.length > TAKINGS_FOLDED ? (
-        <div className="p-4" style={LINE}>
-          <button type="button" className="c-btn c-btn-s c-btn-lg w-full md:w-auto" aria-expanded={all} onClick={() => setAll((was) => !was)}>
-            {all ? `Show only the newest ${String(TAKINGS_FOLDED)}` : `Show all ${String(rows.length)}`}
-          </button>
+                    {label}
+                    <span className="c-n">{takingsTabTotal(shownPage, key)}</span>
+                  </button>
+                ))}
+              </div>
+              {/* All is the Revenue card above; a kind says its own share here. */}
+              {tab === 'all' ? null : (
+                <>
+                  <p className="c-s15 c-w6 c-t1 m-0" data-testid="takings-line">
+                    {takingsWords(shownPage, tab)}
+                  </p>
+                  {takingsNotes(shownPage, tab).map((note) => (
+                    <p key={note} className="c-s14 c-t2 m-0">
+                      {note}
+                    </p>
+                  ))}
+                </>
+              )}
+            </>
+          )}
+          {state.error !== null && asking === null ? <Refusal>{state.error}</Refusal> : null}
+          {refundNote !== null ? (
+            <p className="c-s14 c-w5 m-0" style={{ color: 'var(--warn)' }} role="status" data-testid="sale-review-note">
+              {refundNote}
+            </p>
+          ) : null}
         </div>
-      ) : null}
-      {paymentsNote !== null ? (
-        <p className="px-4 py-3 c-s14 c-t3 m-0" style={LINE}>
-          {paymentsNote}
-        </p>
-      ) : null}
-    </section>
+        {rows.length > 0 ? (
+          <ul className="list-none m-0 p-0">
+            {shown.map((row) => {
+              const menu = saleBasketMenu(row.basket, row.title, (toCard) => {
+                setAsking(null);
+                setRefunding({ saleId: row.key, toCard });
+              });
+              const items = locked ? [] : [...menu.items];
+              if (row.canUndo && !locked) items.push({ ...SALE_MENU_WORDS.voidSale, danger: true, onPick: () => askVoid(row.key) });
+              const opensPerson = row.person !== null && canOpenPeople;
+              // On a phone the row's ⋯ holds every one of its buttons (the PhoneSell board).
+              const phoneItems = [
+                { label: RECEIPT_BUTTON, onPick: () => setReceiptFor(row.key) },
+                ...(opensPerson ? [{ label: 'Open their page', onPick: () => onOpenPerson(row.person.entryId) }] : []),
+                ...items,
+              ];
+              const said = state.done !== null && state.done.key === row.key ? saleSaidNow(state.done, row.basket, state.done.read !== shownPage) : null;
+              const question = asking === row.key && row.sale !== null ? questionParts(voidSaleQuestion(row.basket)) : null;
+              return (
+                <li key={row.key} className="flex flex-col gap-2 p-4" style={LINE} data-testid="takings-row" data-sale-row={row.key}>
+                  <div className="c-sale-row">
+                    <div className="c-sale-row-words">
+                      <p className="c-s15 c-w6 c-t1 m-0">
+                        <span style={row.undone ? { textDecoration: 'line-through' } : undefined}>{row.title}</span>
+                        {row.undone ? <span className="c-tag c-tag-plain ml-2">Voided</span> : null}
+                        {row.refundTag !== null ? <span className="c-tag c-tag-warn ml-2">{row.refundTag}</span> : null}
+                      </p>
+                      <p className="c-s14 c-t2 m-0">{row.facts}</p>
+                      {row.voided !== null ? <p className="c-s14 c-t2 m-0">{row.voided}</p> : null}
+                    </div>
+                    <div className="c-sale-row-end">
+                      <span className="c-sale-row-money" style={row.undone ? { textDecoration: 'line-through', color: 'var(--t2)' } : undefined}>
+                        {row.amount}
+                      </span>
+                      {phone ? (
+                        <MoreMenu label={null} alignRight ariaLabel={`More for the sale of ${row.title}`} items={phoneItems} disabled={state.busy} />
+                      ) : (
+                        <>
+                          {opensPerson ? (
+                            <button type="button" className="c-btn c-btn-s c-btn-sm" onClick={() => onOpenPerson(row.person.entryId)} aria-label={`Open ${row.person.name}'s page`}>
+                              Open their page
+                            </button>
+                          ) : null}
+                          <button
+                            type="button"
+                            className="c-btn c-btn-s c-btn-sm"
+                            aria-haspopup="dialog"
+                            aria-label={receiptButtonLabel(row.receiptNumber, row.title)}
+                            onClick={() => setReceiptFor(row.key)}
+                          >
+                            {RECEIPT_BUTTON}
+                          </button>
+                          {items.length > 0 ? <MoreMenu label={menu.label} compact={menu.label !== null} alignRight ariaLabel={menu.ariaLabel} items={items} disabled={state.busy} /> : null}
+                        </>
+                      )}
+                    </div>
+                  </div>
+                  {said !== null ? (
+                    <p className="c-s14 c-t1 c-w6 m-0" role="status">
+                      {said}
+                    </p>
+                  ) : null}
+                  {receiptFor === row.key ? <ReceiptBox gymId={gymId} gym={org} number={row.receiptNumber} onClose={() => setReceiptFor(null)} inMiddle /> : null}
+                  {saleRefundPick(refunding, row.key) !== null && row.basket !== null ? (
+                    <MiddleBox label={SALE_MENU_WORDS.refund.label} busy={refundSending} onClose={() => setRefunding(null)} testId="sale-refund-middle">
+                      <BasketRefundBox
+                        gymId={gymId}
+                        country={org.country}
+                        basket={row.basket}
+                        who={row.sale.person?.name ?? null}
+                        toCard={refunding.toCard}
+                        paymentsTo={placeFor(org.slug, viewerPrivileges(org), 'payments')}
+                        onSending={setRefundSending}
+                        onDone={doneHere(row.key)}
+                        onStopped={() => {
+                          void onReload();
+                          if (!onToday) void loadOther(pick);
+                        }}
+                        onClose={() => setRefunding(null)}
+                      />
+                    </MiddleBox>
+                  ) : null}
+                  {question !== null ? (
+                    <MiddleBox label={question.title} busy={state.busy} error={state.error} onClose={() => setAsking(null)} testId="void-sale-middle">
+                      <form
+                        noValidate
+                        className="c-inbox flex flex-col gap-3"
+                        data-testid="void-sale"
+                        onSubmit={(e) => {
+                          e.preventDefault();
+                          if (!state.busy) void voidSale(row);
+                        }}
+                      >
+                        <p className="c-inbox-t c-s15 c-w6 c-t1 m-0">{question.title}</p>
+                        {question.body !== null ? <p className="c-s14 c-t2 m-0">{question.body}</p> : null}
+                        <label className="c-field">
+                          <span className="c-label">Why are you voiding it?</span>
+                          <select className="c-sel" value={voidReason.reason} onChange={(e) => setVoidReason({ reason: e.target.value, tried: false })}>
+                            <option value="">Choose one</option>
+                            {SALE_VOID_CHOICES.map((reason) => (
+                              <option key={reason.value} value={reason.value}>
+                                {reason.label}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        {voidReason.tried ? (
+                          <span className="c-s14" style={{ color: 'var(--bad)' }} role="alert">
+                            Pick why you are voiding it.
+                          </span>
+                        ) : null}
+                        <div className="c-inbox-a">
+                          <button type="submit" disabled={state.busy} className="c-btn c-btn-danger">
+                            {state.busy ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : null}
+                            Void sale
+                          </button>
+                          <button type="button" onClick={() => setAsking(null)} disabled={state.busy} className="c-btn c-btn-s" data-autofocus>
+                            Keep it
+                          </button>
+                        </div>
+                      </form>
+                    </MiddleBox>
+                  ) : null}
+                  {row.basket !== null ? <SquareRefundsToPlace key={`${row.key}-${refundSale?.place ?? ''}`} gymId={gymId} basket={row.basket} canAct={!locked && page.canSell} opened={refundSale?.place ?? null} onDone={doneHere(row.key)} /> : null}
+                  {row.basket !== null
+                    ? row.basket.lines.map((line) => (
+                        <SaleRefundLines key={line.id} gymId={gymId} gym={org} sale={line} named={row.basket.lines.length > 1} canAct={!locked && page.canSell} onDone={doneHere(row.key)} onStock={onStock} />
+                      ))
+                    : null}
+                </li>
+              );
+            })}
+          </ul>
+        ) : null}
+        {rows.length > TAKINGS_FOLDED ? (
+          <div className="p-4" style={LINE}>
+            <button type="button" className="c-btn c-btn-s c-btn-lg w-full md:w-auto" aria-expanded={all} onClick={() => setAll((was) => !was)}>
+              {all ? `Show only the newest ${String(TAKINGS_FOLDED)}` : `Show all ${String(rows.length)}`}
+            </button>
+          </div>
+        ) : null}
+        {paymentsNote !== null ? (
+          <p className="px-4 py-3 c-s14 c-t2 m-0" style={LINE}>
+            {paymentsNote}
+          </p>
+        ) : null}
+      </section>
+    </>
   );
 }
 
@@ -1230,6 +1327,16 @@ export default function Sell() {
   /** Their page opens with Add membership open: it was opened to sell one. */
   const [personAdds, setPersonAdds] = useState(false);
   const [columns, setColumns] = useState(null);
+  /** The day the Revenue card and the list show; null is today. Opened from Overview's Refunds to review: that sale's day. */
+  const [day, setDay] = useState(() => location.state?.refundSale?.day ?? null);
+  // Sell a membership at the top of the page: its card, once the Register is drawn, and its name box.
+  const [toMembership, setToMembership] = useState(0);
+  useEffect(() => {
+    if (toMembership === 0) return;
+    const card = document.getElementById('sell-membership');
+    card?.scrollIntoView?.({ block: 'start' });
+    card?.querySelector('input')?.focus({ preventScroll: true });
+  }, [toMembership]);
   const productsRef = useRef(null);
   // Scrolled to once the Products tab is drawn, never in the press that opens it (round one, L1).
   const [toProducts, setToProducts] = useState(0);
@@ -1318,9 +1425,35 @@ export default function Sell() {
 
   return (
     <div className="c-page c-sell">
-      <header className="flex flex-col gap-1.5 min-w-0">
-        <h1 className="c-h1">Sell</h1>
-        <p className="c-sub">{`Record what ${org.name} sells at the desk.`}</p>
+      <header className="c-page-headrow">
+        <div className="flex flex-col gap-1.5 min-w-0">
+          <h1 className="c-h1">Sell</h1>
+          <p className="c-sub">{`Record what ${org.name} sells at the desk.`}</p>
+        </div>
+        {!refused && page !== null && page.canSell ? (
+          <div className="c-page-headrow-a">
+            <DayButtons
+              pick={day}
+              today={page.today}
+              onDay={(next) => {
+                setTab('register');
+                setDay(next);
+              }}
+            />
+            {sellsMemberships ? (
+              <button
+                type="button"
+                className="c-btn c-btn-s"
+                onClick={() => {
+                  setTab('register');
+                  setToMembership((n) => n + 1);
+                }}
+              >
+                Sell a membership
+              </button>
+            ) : null}
+          </div>
+        ) : null}
       </header>
 
       {refused ? (
@@ -1379,11 +1512,13 @@ export default function Sell() {
                 onPage={setPage}
                 below={
                   <>
-                    {sellsMemberships ? <MembershipFinder gymId={gymId} words={words} locked={readOnly} addMemberTo={placeFor(orgSlug, privileges, 'addMember')} onOpen={(entryId) => openPerson(entryId, true)} /> : null}
                     <Takings
                       gymId={gymId}
                       org={org}
                       page={page}
+                      pick={day}
+                      onDay={setDay}
+                      between={sellsMemberships ? <MembershipFinder gymId={gymId} words={words} locked={readOnly} addMemberTo={placeFor(orgSlug, privileges, 'addMember')} onOpen={(entryId) => openPerson(entryId, true)} /> : null}
                       locked={readOnly}
                       canOpenPeople={sellsMemberships}
                       onOpenPerson={openPerson}

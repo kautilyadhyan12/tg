@@ -104,7 +104,9 @@ describe("refund a sale from the person's page (18p)", () => {
     const box = await screen.findByRole("region", { name: "Purchases" });
     fireEvent.click(within(box).getByRole("button", { name: "More for the sale of 2 × Water" }));
     fireEvent.click(within(box).getByRole("menuitem", { name: /^Refund sale/ }));
-    const form = within(box).getByTestId("sale-refund-form");
+    // It opens in the middle of the screen, over the page (V4a-ii).
+    const form = within(screen.getByTestId("sale-refund-middle")).getByTestId("sale-refund-form");
+    expect(box.contains(form)).toBe(false);
     fireEvent.change(within(form).getByLabelText("Why it was refunded"), { target: { value: "charged_too_much" } });
     svc.purchases.mockResolvedValue({ sales: [sale({ canUndo: false, canRefund: false, refundedMinor: 431, refunds: [] })], notShown: 0 });
     fireEvent.click(within(form).getByRole("button", { name: "Note refund" }));

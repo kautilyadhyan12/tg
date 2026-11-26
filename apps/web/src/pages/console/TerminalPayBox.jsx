@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Check, Circle, Loader2 } from 'lucide-react';
+import { Check, Loader2, TabletSmartphone } from 'lucide-react';
 import { orgService, errorText } from '../../api/orgsApi';
 import { TERMINAL_STOPPING, cardTerminalSerial } from './memberCardView';
 import { TERMINAL_FEE_NOT_OWED, payTerminalName, terminalPayWaitWords } from './terminalPayView';
@@ -17,13 +17,17 @@ const PASSING_FAULTS_MAX = 5;
 /** Still not on the Terminal's screen after this: the box says to check it. */
 const NOT_SHOWN_AFTER_MS = 20_000;
 
-function Step({ state, children }) {
+/** One step at the Terminal (the board `SellSale`): its number while it is still to come, a turning wheel while it
+ *  happens, a tick once done. */
+function Step({ state, n, children }) {
   return (
-    <li className="flex items-start gap-2 c-s14" style={{ color: state === 'later' ? 'var(--t2)' : 'var(--t1)' }} data-state={state}>
-      {state === 'done' ? <Check aria-hidden="true" className="w-4 h-4 mt-0.5 flex-shrink-0" style={{ color: 'var(--good)' }} /> : null}
-      {state === 'now' ? <Loader2 aria-hidden="true" className="w-4 h-4 mt-0.5 flex-shrink-0 animate-spin" /> : null}
-      {state === 'later' ? <Circle aria-hidden="true" className="w-4 h-4 mt-0.5 flex-shrink-0" /> : null}
-      <span>{children}</span>
+    <li className="flex items-start gap-3 c-s14" style={{ color: state === 'later' ? 'var(--t2)' : 'var(--t1)' }} data-state={state}>
+      <span className="c-step-n" aria-hidden="true">
+        {state === 'done' ? <Check className="w-3.5 h-3.5" style={{ color: 'var(--good)' }} /> : null}
+        {state === 'now' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
+        {state === 'later' ? n : null}
+      </span>
+      <span className="pt-0.5">{children}</span>
     </li>
   );
 }
@@ -111,9 +115,13 @@ export default function TerminalPayBox({ gymId, entryId, payment, name, showName
   };
 
   return (
-    <div className="rounded-[14px] p-3 flex flex-col gap-3" style={{ background: 'var(--raise)' }} data-testid="terminal-pay-wait" role="status">
-      <div className="flex flex-col gap-1">
-        <p className="c-s15 c-w6 c-t1 m-0">{words.title}</p>
+    <div className="c-inbox flex flex-col gap-3" data-testid="terminal-pay-wait" role="status">
+      <div className="flex items-start gap-3">
+        <span className="c-pay-ic c-pay-ic-accent" aria-hidden="true">
+          <TabletSmartphone className="w-5 h-5" />
+        </span>
+        <div className="flex flex-col gap-1 min-w-0">
+        <p className="c-h3 m-0">{words.title}</p>
         {showName ? (
           <p className="c-s14 c-t2 m-0">
             {payTerminalName(payment.terminal)}
@@ -121,11 +129,12 @@ export default function TerminalPayBox({ gymId, entryId, payment, name, showName
             {payment.startedByName ? ` · started by ${payment.startedByName}` : null}
           </p>
         ) : null}
+        </div>
       </div>
-      <ol className="flex flex-col gap-2 m-0 p-0 list-none">
-        {payment.card != null ? <Step state={agreeing ? 'now' : 'done'}>{words.agree}</Step> : null}
-        <Step state={agreeing ? 'later' : payment.pickedUp ? 'done' : 'now'}>{words.shown}</Step>
-        <Step state={!agreeing && payment.pickedUp ? 'now' : 'later'}>{words.card}</Step>
+      <ol className="c-steps-at flex flex-col gap-2.5 m-0 list-none">
+        {payment.card != null ? <Step n={1} state={agreeing ? 'now' : 'done'}>{words.agree}</Step> : null}
+        <Step n={payment.card != null ? 2 : 1} state={agreeing ? 'later' : payment.pickedUp ? 'done' : 'now'}>{words.shown}</Step>
+        <Step n={payment.card != null ? 3 : 2} state={!agreeing && payment.pickedUp ? 'now' : 'later'}>{words.card}</Step>
       </ol>
       {slow && !payment.pickedUp && !payment.stopping ? <p className="c-s14 c-t2 m-0">{words.notShown}</p> : null}
       {payment.tooLate ? <p className="c-s14 c-t1 m-0">{words.tooLate}</p> : null}
