@@ -37,7 +37,7 @@ describe("the worst thing first: the camera keeps and sends nothing of a person 
 
   it("no file is written, no picture is made into one, nothing is recorded or kept", () => {
     expect(code).not.toMatch(
-      /FileOutputStream|FileWriter|openFileOutput|\.compress\(|MediaStore|MediaRecorder|VideoCapture|ImageCapture|Recorder\b|writeBytes|writeText|outputStream\(|bufferedWriter|SharedPreferences|DataStore|filesDir|cacheDir|externalCache|getExternal/,
+      /\bFile\(|toFile\(|java\.io|java\.nio\.file|kotlin\.io|FileOutputStream|FileWriter|RandomAccessFile|openFileOutput|\.compress\(|MediaStore|MediaRecorder|VideoCapture|ImageCapture|Recorder\b|writeBytes|writeText|appendText|appendBytes|printWriter|outputStream\(|bufferedWriter|SharedPreferences|DataStore|SQLite|filesDir|cacheDir|externalCache|getExternal/,
     );
     // Its one read is the model the build put in the app.
     expect(code.match(/assets\.open\(/g)).toHaveLength(1);
