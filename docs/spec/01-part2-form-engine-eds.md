@@ -2629,8 +2629,14 @@ set counted: a body that goes on from their newest look a moment before (`walks`
 no more than `walkGap`, 250 ms, one lost picture at 8 a second, between two looks, and reaching no further than the plain sign's
 5 m/s over one picture at 8 a second, 0.625 m, however long the gap) is the person, and the one that goes on comes first. And the
 person has two places: where they exercised in the second before the set counted, which stays theirs for the set, and where they
-were over their last second followed (`OnePerson.where`), which goes with them. A body found after the camera lost the person for
-longer than `walkGap` is the person only at one of the two; every other body is held as 52d-i holds it. **Tried first and not
+were over their last second followed (`OnePerson.where`), which goes with them and is theirs only for `takeOver`, 3 s, after their
+newest look (round one: never forgotten, the spot where a member walked out of the picture took anybody who came in there later,
+at once). A body found after the camera lost the person for longer than `walkGap` is the person only at one of the two; every
+other body is held as 52d-i holds it, and so is every other body in a picture the person is given in, the one nearest them, its
+time in a place counted only once the person has gone (round one: a neighbour doing their reps 2 m from where a member
+exercised, seen beside them as the member walked 1.2 m towards them and given nothing, was taken 0.8 m from where the member
+stood the moment the member left the picture, 3 counted against 1); a held body is the one nearest where it was, of those
+within its reach. **Tried first and not
 kept, each measured:** a walk held as another body, its new place made theirs once it had stood there 3 s, as a stranger's is
 in the person's place: the stages after the lock then saw nobody for more than 3 s and forgot the body's bones, leg and trunk,
 and after a step the hip thrust and the sit-up counted nothing more; one place that goes with the person: once the model had
@@ -2643,11 +2649,16 @@ movement put in as the model would follow them: the model changing all at once t
 member's place as the member walks 1.0 m aside; a passer-by nearer the phone, 1.6 times the member's size, who stops in the
 member's place; the camera losing the walking member for a second (the plain sign alone would reach 5 m in it) and finding a
 stranger 1.8 m the other side; the member
-walking 1.8 m aside and back, then a stranger where they had walked to. On each of the 14 cases a picture has room for, the
+walking 1.8 m aside and back, then a stranger where they had walked to; the camera losing the walking member, 1.2 m aside, for 4
+s, then a stranger where they were. On each of the 19 cases a picture has room for, the
 stranger counts and is told exactly as nobody there would be, the camera reads nobody in each of their pictures, and the proof's
 own run is the camera's. Not tried, measured: lying side on, a body fills the picture's width, and a stranger 1.8 m along it is
 off the picture or counts nothing alone there (the sit-up's and the hip thrust's three each); the lunge's and the squat jump's
-stranger 1.8 m the other way counts nothing alone there (two each). **Then the member:** each of the four standing members, who
+stranger 1.8 m the other way counts nothing alone there (two each). **With other people in the picture** (several bodies a
+picture, as the model gives when asked for more than one): the squatters and the lunger walking 1.2 m towards a neighbour doing
+their reps 2 m from the member's place, standing half a second and leaving the picture: the neighbour counts as nobody there
+would, and is never given; each stepping 1.5 m aside with another person walking the same way 1 m behind them, through the
+member's place: every picture gives the member. **Then the member:** each of the four standing members, who
 walks 1.5 m aside between two reps (the lunger 1.5, every one with room), stands a second and does the rest of the set there,
 counts and is told exactly as if they had stood as long in their own place, is followed in every picture, and the place they
 walked to is theirs; lost for half a second as they walk and found within a stride of where they were, they count as if they
@@ -2659,7 +2670,8 @@ standing 3 s in the place: a member who stepped out and walked back waited 3 s; 
 [[PROOF2]]
 **Deliberate breaks**, each run red and put back: the follow without the plain sign (12 of the worst-thing tests red); without
 its gap and reach (2 red, the second unseen; added after a break that stayed green, following a refused body's look, which
-52d-i's hold on a body that came all at once already refuses); the walked-to place following any body seen (14 red).
+52d-i's hold on a body that came all at once already refuses); the walked-to place following any body seen (14 red); and,
+for round one's two rules, the walked-to place never forgotten (7 red) and a body beside the member never held (3 red).
 
 An exercise that does not pass is published as "count by hand", never with a wrong camera
 count. Kd tries one exercise of each kind of movement on the phone, about a dozen, never
