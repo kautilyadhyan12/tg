@@ -50,7 +50,11 @@ describe("the worst thing first: the camera keeps and sends nothing of a person 
 
   it("the phone's log is told counts and a failure's kind, never a point", () => {
     const logs = code.split("\n").filter((l) => /Log\.[a-z]\(/.test(l)).map((l) => l.trim());
-    expect(logs).toEqual(['Log.i(TAG, "answers=$a found=$f")', 'Log.w(TAG, "The $reason stopped: ${e?.javaClass?.simpleName ?: "no picture"}")']);
+    expect(logs).toEqual([
+      "if (debuggable) Log.i(TAG, \"frames=${frames ?: \"the camera's own\"}\")",
+      'Log.i(TAG, "answers=$a found=$f")',
+      'Log.w(TAG, "The $reason stopped: ${e?.javaClass?.simpleName ?: "no picture"}")',
+    ]);
     // The counts only while a folder's copy is measured: a debuggable build.
     expect(view).toMatch(/if \(debuggable\) \{\n\s+val \(a, f\)/);
   });
@@ -75,6 +79,13 @@ describe("the camera as the phone test picked it (51b-ii)", () => {
     expect(view).toContain("postRotate(turn.toFloat(), raw.width / 2f, raw.height / 2f)");
     expect(view).not.toMatch(/postScale\(-1/);
     expect(view).toContain("CameraSelector.DEFAULT_FRONT_CAMERA");
+  });
+
+  it("the camera films no faster than the model reads, and the screen's picture is small (53a's 20-minute run)", () => {
+    expect(view).toContain("private const val FRAMES_MOST = 24");
+    expect(view).toContain("?.filter { it.upper in FRAMES_LEAST..FRAMES_MOST }");
+    expect(view).toContain("frames?.let { shownBuilder.setTargetFrameRate(it) }");
+    expect(view).toContain("private val SHOWN = Size(960, 720)");
   });
 
   it("the full model, asked for one person, at the sureness every kept file was measured with, on the main chip's 4 cores", () => {

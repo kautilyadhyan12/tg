@@ -6,6 +6,7 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Matrix
 import android.hardware.Sensor
+import android.hardware.camera2.CameraCharacteristics
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
@@ -14,7 +15,10 @@ import android.os.HandlerThread
 import android.os.Looper
 import android.os.SystemClock
 import android.util.Log
+import android.util.Range
 import android.util.Size
+import androidx.camera.camera2.interop.Camera2CameraInfo
+import androidx.camera.camera2.interop.ExperimentalCamera2Interop
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageProxy
@@ -53,6 +57,11 @@ private const val CORES = 4
 private const val SURE = 0.5f
 /** The picture the model reads, upright, as 51b-ii ran it: 480 by 640. CameraX names a size as its sensor lies. */
 private val PICTURE = Size(640, 480)
+/** The screen's own picture of the camera, at most about this, upright 720 by 960. */
+private val SHOWN = Size(960, 720)
+/** The camera films no faster than this many pictures a second: the model reads about 20 (51b-ii, and 53a's own run). */
+private const val FRAMES_MOST = 24
+private const val FRAMES_LEAST = 15
 /** A camera that gives no picture for this long, while the app is in front, has stopped. */
 private const val QUIET_MS = 5_000L
 /** A gravity reading older than this says nothing about now. */
@@ -193,6 +202,20 @@ class PoseCameraView(context: Context, appContext: AppContext) : ExpoView(contex
       return PoseCameraCores.onCores(options, minOf(CORES, Runtime.getRuntime().availableProcessors()))
     }
 
+    /** Of the speeds the selfie camera offers, the fastest no faster than `FRAMES_MOST`, the slowest start among those
+     *  (so a dim room may still take longer pictures); null when it offers none, and the camera keeps its own. */
+    @androidx.annotation.OptIn(markerClass = [ExperimentalCamera2Interop::class])
+    private fun framesOf(cameras: ProcessCameraProvider): Range<Int>? = try {
+      val front = cameras.availableCameraInfos.firstOrNull { it.lensFacing == CameraSelector.LENS_FACING_FRONT }
+      val offered = front?.let { Camera2CameraInfo.from(it).getCameraCharacteristic(CameraCharacteristics.CONTROL_AE_AVAILABLE_TARGET_FPS_RANGES) }
+      offered
+        ?.filter { it.upper in FRAMES_LEAST..FRAMES_MOST }
+        ?.sortedWith(compareByDescending<Range<Int>> { it.upper }.thenBy { it.lower })
+        ?.firstOrNull()
+    } catch (e: Throwable) {
+      null
+    }
+
     private fun bind() {
       if (closed) return
       val future = ProcessCameraProvider.getInstance(context)
@@ -204,11 +227,27 @@ class PoseCameraView(context: Context, appContext: AppContext) : ExpoView(contex
             fail("camera", null)
             return@addListener
           }
-          val shape = ResolutionSelector.Builder().setAspectRatioStrategy(AspectRatioStrategy.RATIO_4_3_FALLBACK_AUTO_STRATEGY)
-          val shown = Preview.Builder().setResolutionSelector(shape.build()).build()
+          // No faster than the model reads, and the screen's picture no bigger than a person 3 m away needs: the camera's
+          // own work at 30 pictures a second was nearly a core, and with it the phone grew hot enough after 9 minutes to
+          // slow its chip to a third (53a, the 20-minute run).
+          val shownBuilder = Preview.Builder().setResolutionSelector(
+            ResolutionSelector.Builder()
+              .setAspectRatioStrategy(AspectRatioStrategy.RATIO_4_3_FALLBACK_AUTO_STRATEGY)
+              .setResolutionStrategy(ResolutionStrategy(SHOWN, ResolutionStrategy.FALLBACK_RULE_CLOSEST_LOWER_THEN_HIGHER))
+              .build(),
+          )
+          val frames = framesOf(cameras)
+          frames?.let { shownBuilder.setTargetFrameRate(it) }
+          if (debuggable) Log.i(TAG, "frames=${frames ?: "the camera's own"}")
+          val shown = shownBuilder.build()
           shown.setSurfaceProvider(preview.surfaceProvider)
           val analysis = ImageAnalysis.Builder()
-            .setResolutionSelector(shape.setResolutionStrategy(ResolutionStrategy(PICTURE, ResolutionStrategy.FALLBACK_RULE_CLOSEST_HIGHER_THEN_LOWER)).build())
+            .setResolutionSelector(
+              ResolutionSelector.Builder()
+                .setAspectRatioStrategy(AspectRatioStrategy.RATIO_4_3_FALLBACK_AUTO_STRATEGY)
+                .setResolutionStrategy(ResolutionStrategy(PICTURE, ResolutionStrategy.FALLBACK_RULE_CLOSEST_HIGHER_THEN_LOWER))
+                .build(),
+            )
             .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
             .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_RGBA_8888)
             .build()
@@ -284,15 +323,14 @@ class PoseCameraView(context: Context, appContext: AppContext) : ExpoView(contex
         }
         people.add(mapOf("points" to flat, "world" to flatWorld))
       }
-      val g = gravity
-      val fresh = g != null && SystemClock.elapsedRealtimeNanos() - gravityAt <= GRAVITY_STALE_NS
+      val g = gravity?.takeIf { SystemClock.elapsedRealtimeNanos() - gravityAt <= GRAVITY_STALE_NS }
       val event = mapOf(
         // The phone's own clock since it started (never back, and running on across a pause): the screen counts the
         // set's time from its first picture.
         "t" to result.timestampMs().toDouble(),
         "width" to image.width.toDouble(),
         "height" to image.height.toDouble(),
-        "gravity" to if (fresh && g != null) doubleArrayOf(g[0].toDouble(), g[1].toDouble(), g[2].toDouble()) else DoubleArray(0),
+        "gravity" to (g?.let { doubleArrayOf(it[0].toDouble(), it[1].toDouble(), it[2].toDouble()) } ?: DoubleArray(0)),
         "people" to people,
       )
       if (debuggable) {
