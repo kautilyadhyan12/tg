@@ -580,6 +580,28 @@ describe("still stretches, through the recorder", () => {
     expect(Math.abs(now.distanceM - 180)).toBeLessThanOrEqual(6);
   });
 
+  it("Auto-pause on, a stop handed over in one batch 25 s late as the app comes back: the screen's clock never goes back, and the stand is standing (round one, L1)", async () => {
+    const run = await startRun(RAVI.id, randomUUID(), true, Date.now());
+    await live(1, 30, (t) => 3 * t, null);
+    // Standing from 31 s; the phone hands the points over at 85 s, up to 84 s.
+    const now = run.startedAt + 85_000;
+    const before = runNow();
+    if (before === null) throw new Error("no run");
+    const shown = movingMsOf(before, now);
+    const locations = Array.from({ length: 54 }, (_, i) => ({
+      timestamp: run.startedAt + (31 + i) * 1000,
+      coords: { latitude: 26.1445 + 90 / 111_132, longitude: 91.7362, accuracy: 5, speed: 0 },
+    }));
+    await act(() => takeLocations({ locations }, now));
+    const after = runNow();
+    if (after === null) throw new Error("no run");
+    expect(after.phase).toBe("paused");
+    expect(movingMsOf(after, now)).toBeGreaterThanOrEqual(shown);
+    expect(after.pauses).toEqual([[85_000, null]]);
+    // The stand's own points are the run's, so it is standing to its last point, never moving time.
+    expect(sumsAt(after, 85_000, 70).movingS).toBeLessThanOrEqual(32);
+  });
+
   it("Auto-pause on, a pram's stop undone: no pause and no dated-back seconds are left", async () => {
     await startRun(RAVI.id, randomUUID(), true, Date.now());
     await live(1, 30, (t) => 3 * t, STILL_SD);

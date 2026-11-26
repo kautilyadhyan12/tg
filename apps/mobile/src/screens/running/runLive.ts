@@ -21,14 +21,9 @@ export function closedStill(run: LiveRun, nowMs: number): RunPause[] {
  *  the guide read them so, and the server works the saved run out from the same three. */
 export const sumsAt = (run: LiveRun, at: number, kg: number): RunSums => runSums(run.points, closedPauses(run, at), at, kg, closedStill(run, at));
 
-/** The guide's clock at `at` ms into the run (37d-ii): the pauses left out, and the seconds each Auto-pause was
- *  dated back over, so a step begun while the person already stood begins again after the pause. */
-export function guideMsAt(run: LiveRun, at: number): number {
-  const off = (spans: readonly (readonly [number, number | null])[]): number =>
-    spans.reduce((t, [from, to]) => t + Math.max(0, Math.min(to ?? at, at) - from), 0);
-  return Math.max(0, at - off(run.pauses) - off(run.datedBack));
-}
-export const guideMsOf = (run: LiveRun, now: number): number => guideMsAt(run, elapsedMs(run, now));
+/** The run's clock at `at` ms into it: the pauses before it left out. */
+export const clockAt = (run: LiveRun, at: number): number =>
+  Math.max(0, at - run.pauses.reduce((t, [from, to]) => t + Math.max(0, Math.min(to ?? at, at) - from), 0));
 
 /** Where a new still stretch may begin: never inside a pause or a stretch already kept. */
 const stillFloor = (run: LiveRun): number =>

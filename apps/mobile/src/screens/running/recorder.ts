@@ -28,7 +28,7 @@ import {
 } from "@app/shared";
 import { colours } from "../../look/colours";
 import { AUTO_START, autoPausedFrom, autoRunning, feelAt, nextAutoPause, type AutoPauseState } from "./autoPause";
-import { closeStill, closedPauses, elapsedMs, guideMsAt, guideMsOf, keepDatedBack, movingMsOf, openStill, sumsAt, undoDatedBack } from "./runLive";
+import { clockAt, closeStill, closedPauses, elapsedMs, keepDatedBack, movingMsOf, openStill, sumsAt, undoDatedBack } from "./runLive";
 import { beginLine, guideAdvance, guideDone, guideNextLook, guideSchedule, guideSkip, nowLine, skipLine } from "./runGuide";
 import { PAUSE_WORDS, START_HUSH_MS, VOICE_AFTER_LOAD, VOICE_START, heartLine, voiceCheck, type VoiceState } from "./runVoice";
 import { runVoiceNative } from "./runVoiceNative";
@@ -36,7 +36,7 @@ import { runMotionNative } from "./runMotionNative";
 import { holdHeart, loadMonitor, savedHeartNow, takeHeartReadings } from "../../heart/monitor";
 
 // The run's clock is its own pure rules (runLive.ts); the screens read it from here as before.
-export { closedPauses, elapsedMs, guideMsOf, movingMsOf };
+export { closedPauses, elapsedMs, movingMsOf };
 
 export const RUN_TASK = "run-location";
 
@@ -298,7 +298,6 @@ function markNow(run: LiveRun, settled: boolean): string[] {
  *  only when a step by distance could have ended. */
 let guideLookAt = 0;
 
-
 /** The moving ms when the run first had `m` metres, found among the points kept by halving: a step
  *  after a distance is timed from there, not from a late batch of points. */
 function reachedAt(run: LiveRun, m: number, nowMs: number): number {
@@ -315,12 +314,8 @@ function reachedAt(run: LiveRun, m: number, nowMs: number): number {
     if (metresTo(mid) >= m) high = mid;
     else low = mid + 1;
   }
-  return Math.min(nowMs, guideMsAt(run, points[low - 1]?.[0] ?? 0));
+  return Math.min(nowMs, clockAt(run, points[low - 1]?.[0] ?? 0));
 }
-
-/** The guide's place before its last step began: an Auto-pause dated back to the first still point
- *  can take that step's start back. */
-let guideBack: KeptRunGuide | null = null;
 
 const runMetres = (run: LiveRun): number => {
   const at = run.points[run.points.length - 1]?.[0] ?? 0;
@@ -332,7 +327,7 @@ function scheduleGuide(run: LiveRun | null, now: number): void {
   const native = runVoiceNative;
   const guide = run?.guide ?? null;
   if (native === null || run === null || guide === null) return;
-  const lines = run.phase === "running" && choices.voice && !guideDone(guide) ? guideSchedule(guide, guideMsOf(run, now), choices.units) : [];
+  const lines = run.phase === "running" && choices.voice && !guideDone(guide) ? guideSchedule(guide, movingMsOf(run, now), choices.units) : [];
   void native.sayAt(lines.map((l) => l.text), lines.map((l) => l.inMs)).catch(() => undefined);
 }
 
@@ -342,12 +337,11 @@ function scheduleGuide(run: LiveRun | null, now: number): void {
 function guideNow(run: LiveRun, now: number, force: boolean): { lines: string[]; moved: boolean } {
   const guide = run.guide;
   if (guide === null || run.phase !== "running" || guideDone(guide)) return { lines: [], moved: false };
-  const ms = guideMsOf(run, now);
+  const ms = movingMsOf(run, now);
   if (!force && ms < guideLookAt) return { lines: [], moved: false };
   let metres: number | null = null;
   const dist = () => (metres ??= runMetres(run));
   const { guide: next, begun } = guideAdvance(guide, ms, dist, (m) => reachedAt(run, m, ms));
-  if (begun.length > 0) guideBack = guide;
   run.guide = next;
   guideLookAt = guideNextLook(next, ms, dist);
   const last = begun[begun.length - 1];
@@ -365,7 +359,7 @@ function resumeLines(run: LiveRun, now: number): string[] {
   if (step.lines.length > 0) return step.lines;
   const on = guide.steps[guide.at.index];
   const metres = on !== undefined && !("s" in on.until) ? runMetres(run) : 0;
-  return [nowLine(guide, guideMsOf(run, now), metres, choices.units)];
+  return [nowLine(guide, movingMsOf(run, now), metres, choices.units)];
 }
 
 /** Tests hand in their own files and start from nothing. */
@@ -375,7 +369,6 @@ export function resetRecorder(withFiles: RunFiles = phoneRunFiles): void {
   choicesRead = null;
   voice = VOICE_START;
   guideLookAt = 0;
-  guideBack = null;
   warmedAt = 0;
   files = withFiles;
   current = null;
@@ -615,7 +608,7 @@ export async function loadRun(): Promise<LiveRun | null> {
       const was = current.guide.at.index;
       guideNow(current, now, true);
       if (current.guide.at.index !== was) {
-        say([nowLine(current.guide, guideMsOf(current, now), runMetres(current), choices.units)]);
+        say([nowLine(current.guide, movingMsOf(current, now), runMetres(current), choices.units)]);
         await writeState(current);
       }
       scheduleGuide(current, now);
@@ -676,11 +669,11 @@ export async function takeLocations(data: unknown, now: number = Date.now()): Pr
         else if (change?.kind === "resume") closeStill(run, change.at);
         if (change !== null) writtenAt = 0;
       } else if (change?.kind === "pause" && run.phase === "running") {
-        // The clock stops where it stands (37k): the seconds back to where the stop began are a still stretch,
-        // standing as a pause is, and the clock never goes back over them. A point handed over late (the
-        // screen off) stops it at the point.
+        // The clock stops where it stands (37k), even for points handed over late (the app brought back with a
+        // backlog: round one, L1): the seconds back to where the stop began are standing, as a pause is, and the
+        // points among them stay the run's, so the stand is seen to its end.
         const stopAt = Math.max(change.at, lastOpenEnd(run));
-        const pauseAt = Math.max(at, Math.min(elapsedMs(run, now), at + PAUSE_LIVE_MS), lastOpenEnd(run));
+        const pauseAt = Math.max(at, elapsedMs(run, now), lastOpenEnd(run));
         keepDatedBack(run, stopAt, pauseAt);
         run.pauses.push([pauseAt, null]);
         run.phase = "paused";
@@ -705,10 +698,11 @@ export async function takeLocations(data: unknown, now: number = Date.now()): Pr
       }
     }
     // While paused no point is kept but the last few, for the steps that may start the clock again:
-    // the server leaves points inside a pause out, and a run left paused never fills the phone.
-    if (run.phase === "paused") pausedTail = [...pausedTail, point].slice(-PAUSED_TAIL);
+    // the server leaves points inside a pause out, and a run left paused never fills the phone. A point from
+    // before the pause began (a batch handed over late) is the run's.
+    if (run.phase === "paused" && at >= (openPauseFrom(run) ?? 0)) pausedTail = [...pausedTail, point].slice(-PAUSED_TAIL);
     else {
-      pausedTail = [];
+      if (run.phase !== "paused") pausedTail = [];
       run.points.push(point);
       unwritten += 1;
     }
@@ -740,15 +734,13 @@ export async function takeLocations(data: unknown, now: number = Date.now()): Pr
     if (step.moved) writtenAt = 0;
     say([...markNow(current, false), ...step.lines]);
   } else if (was === "running") {
-    // Stopped at a crossing as a step began: the pause starts at the first still point, before it,
-    // so the step begins again after the pause (Resume says what is left of the one before).
-    // A step the person skipped while standing never comes back: it begins at the pause instead, so it
-    // is never longer than itself (37d-iii-a).
-    const moving = guideMsOf(current, now);
-    if (current.guide !== null && current.guide.at.fromMs > moving) {
-      if (guideBack !== null) current.guide = guideBack;
-      else current.guide = { ...current.guide, at: { ...current.guide.at, fromMs: moving } };
-      guideBack = null;
+    // Stopped at a crossing as a step began: a step begun after the person stopped (by the clock, or skipped
+    // while standing) begins again where the clock stopped, so once they move on it is never shorter or longer
+    // than itself (37d-iii-a). The guide reads the screen's own clock, which never goes back (37k, round one, L2).
+    const stoppedAt = stopFrom(current);
+    const moving = movingMsOf(current, now);
+    if (current.guide !== null && stoppedAt !== null && current.guide.at.fromMs > clockAt(current, stoppedAt)) {
+      current.guide = { ...current.guide, at: { ...current.guide.at, fromMs: moving } };
       guideLookAt = 0;
       writtenAt = 0;
     }
@@ -787,9 +779,6 @@ async function takeLate(run: LiveRun, locations: PhoneLocations["locations"], mi
 
 /** The end of the last closed pause: a new one never starts inside it. */
 const lastOpenEnd = (run: LiveRun): number => run.pauses[run.pauses.length - 1]?.[1] ?? 0;
-
-/** An Auto-pause decided from a point at most this old stops the clock at the time the screen shows. */
-const PAUSE_LIVE_MS = 2000;
 
 /** Where the open Auto-pause's stop began: the start of the seconds it was dated back over (37k), or the pause's
  *  own start; null when none is open. */
@@ -877,7 +866,6 @@ export async function startRun(userId: string, runId: string, autoPause: boolean
   startMotion();
   motionReadings();
   guideLookAt = 0;
-  guideBack = null;
   await writeState(run);
   tell();
   warmedAt = 0;
@@ -955,10 +943,9 @@ export async function skipStep(now: number = Date.now()): Promise<void> {
     }
     return;
   }
-  const next = guideSkip(guide, guideMsOf(run, now), runMetres(run));
+  const next = guideSkip(guide, movingMsOf(run, now), runMetres(run));
   run.guide = next;
   // An Auto-pause dated back never brings a skipped step back.
-  guideBack = null;
   guideLookAt = 0;
   current = { ...run };
   say([skipLine(next, choices.units)]);

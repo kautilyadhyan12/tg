@@ -306,7 +306,8 @@ d("record a run (real Postgres)", () => {
       const expected = runSums(run.points, run.pauses, run.elapsedMs, 70, [STAND]);
       const without = runSums(run.points, run.pauses, run.elapsedMs, 70);
       expect(saved.run).toMatchObject({ distanceM: expected.distanceM, movingS: expected.movingS, kcal: expected.kcal });
-      expect(saved.run.movingS).toBe(600);
+      // Standing to the stand's last point before the stretch's end (that one is the walk's first, as Auto-pause dates it).
+      expect(Math.abs(saved.run.movingS - 600)).toBeLessThanOrEqual(1);
       expect(without.distanceM - saved.run.distanceM).toBeGreaterThanOrEqual(10);
       expect(Math.abs(saved.run.distanceM - 1800)).toBeLessThanOrEqual(6);
       const row = (await sql<{ run_calc_version: number }[]>`SELECT run_calc_version FROM runs WHERE id = ${run.runId}`)[0];
@@ -327,6 +328,19 @@ d("record a run (real Postgres)", () => {
       expect(saved.run.distanceM).toBe(plain.distanceM);
       expect(saved.run.movingS).toBe(plain.movingS);
       expect(saved.run.distanceM).toBeGreaterThanOrEqual(3590);
+    });
+
+    it("made up as a stand every 13 s over a 3 m/s run (round one, H1), the run is saved as the person ran it: its distance, Moving time and splits", async () => {
+      const me = await makeUser("still-forged-short");
+      const still: [number, number][] = [];
+      for (let t = 1000; t + 12_400 <= 1_200_000; t += 13_000) still.push([t, t + 12_400]);
+      const run = body({ still });
+      const res = await save(me.cookies, run);
+      expect(res.statusCode, res.body).toBe(201);
+      const saved = saveRunResponseSchema.parse(JSON.parse(res.body));
+      const plain = runSums(run.points, run.pauses, run.elapsedMs, 70);
+      expect(saved.run).toMatchObject({ distanceM: plain.distanceM, movingS: plain.movingS, splitsKm: plain.splitsKm });
+      expect(saved.run.movingS).toBeGreaterThanOrEqual(1190);
     });
 
     it.each<[string, unknown]>([

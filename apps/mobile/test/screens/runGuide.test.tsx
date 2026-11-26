@@ -2,7 +2,7 @@ import { act, fireEvent, render, screen, waitFor, within } from "@testing-librar
 import { AppState } from "react-native";
 import { OPENFREEMAP, c25kParts, planWeekdayOf, runPlanOf, type RunPlanAnswers, type RunPlanResponse } from "@app/shared";
 import { App } from "../../src/App";
-import { chooseVoice, guideMsOf, loadRun, phoneRunFiles, resetRecorder, runNow, skipStep, startRun, takeLocations } from "../../src/screens/running/recorder";
+import { chooseVoice, loadRun, movingMsOf, phoneRunFiles, resetRecorder, runNow, skipStep, startRun, takeLocations } from "../../src/screens/running/recorder";
 import { guideOf, leftOf } from "../../src/screens/running/runGuide";
 import { phoneToday } from "../../src/screens/running/RunPlanBox";
 import { RAVI, fakeServer, kept, memoryStore, profile, tokens } from "../kit";
@@ -168,8 +168,34 @@ describe("the worst thing: a beginner told to keep running when the plan says wa
     await feed(230, 10, 1.6);
     expect(runNow()?.phase).toBe("running");
     expect(voice.said).toContain("Run resumed.");
-    expect(voice.said.at(-1)).toMatch(/^Now walk\. \d+ seconds left\.$|^Now walk\. 1 minute( \d+ seconds)? left\.$/);
+    expect(voice.said.at(-1)).toMatch(/^Now walk\. \d+ seconds? left\.$|^Now walk\. 1 minute( \d+ seconds?)? left\.$/);
     expect(voice.ahead[0]?.text).toBe("Now run for 1 minute.");
+  });
+
+  it("the time left the card shows for a step never grows back at an Auto-pause: it reads the screen's own clock (37k, round one, L2)", async () => {
+    const box = await openRunning(BEGINNER());
+    await fireEvent.press(within(box).getByRole("button", { name: "Start today’s run, with each step said" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Start now" }));
+    await waitFor(() => {
+      expect(runNow()?.guide).not.toBeNull();
+    });
+    /** The seconds the card says are left of the step, "4:20 left". */
+    const shown = (): number => {
+      const words = within(screen.getByTestId("run-guide")).getByText(/^\d+:\d\d left$/);
+      const text = words.children.filter((c): c is string => typeof c === "string").join("");
+      const m = /^(\d+):(\d\d)/.exec(text);
+      return m === null ? -1 : Number(m[1]) * 60 + Number(m[2]);
+    };
+    await feed(0, 100, 1.6);
+    const lefts = [shown()];
+    // Standing from 100 s, a point a second: the place dates the Auto-pause back 8 s.
+    for (let s = 100; s < 130; s++) {
+      await feed(s, 1, 0);
+      lefts.push(shown());
+    }
+    expect(runNow()?.phase).toBe("paused");
+    expect(lefts[0]).toBeGreaterThan(0);
+    expect(lefts.every((l, i) => i === 0 || l <= (lefts[i - 1] ?? Infinity))).toBe(true);
   });
 
   it("Skip step while standing, then an Auto-pause dated back before the press: the step is never longer than itself, and the skipped one never comes back (37d-iii-a)", async () => {
@@ -187,8 +213,7 @@ describe("the worst thing: a beginner told to keep running when the plan says wa
     if (run === null || run.guide === null) throw new Error("no guided run");
     expect(run.phase).toBe("paused");
     expect(run.guide.at.index).toBe(1);
-    // The guide's own clock, which leaves out the seconds an Auto-pause was dated back over (37k).
-    const moving = guideMsOf(run, startedAt + 130_000);
+    const moving = movingMsOf(run, startedAt + 130_000);
     expect(run.guide.at.fromMs).toBeLessThanOrEqual(moving);
     expect(leftOf(run.guide, moving, 0)).toEqual({ kind: "s", amount: 60 });
     // Moving again: what is left is the run's whole minute, never more.
@@ -212,7 +237,7 @@ describe("the worst thing: a beginner told to keep running when the plan says wa
     }
     const run = runNow();
     if (run === null) throw new Error("no run going");
-    const moving = guideMsOf(run, run.startedAt + (s - 1) * 1000);
+    const moving = movingMsOf(run, run.startedAt + (s - 1) * 1000);
     // The run begins at 300 s of the run's own time: handed over to be said then, or, where the clock reaches
     // it at the Resume itself (the Resume is dated back to the last step near where the person stood), begun
     // there and said with Run resumed.
