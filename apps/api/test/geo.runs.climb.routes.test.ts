@@ -144,6 +144,17 @@ d("a run's elevation gain (real Postgres)", () => {
       expect((await ask({}, askOf(body()))).statusCode).toBe(401);
     });
 
+    it("asked with the stretches the phone felt still (37k), as Save will send them; a broken one is refused", async () => {
+      heights.mode = "hill";
+      const me = await makeUser("ask-still");
+      const run = body();
+      const res = await ask(me.cookies, { ...askOf(run), still: [[60_000, 120_000]] });
+      expect(res.statusCode, res.body).toBe(200);
+      const late = await ask(me.cookies, { ...askOf(run), still: [[60_000, run.elapsedMs + 1]] });
+      expect([late.statusCode, (JSON.parse(late.body) as { error: string }).error]).toEqual([400, "validation_error"]);
+      expect(await sql`SELECT 1 FROM runs WHERE user_id = ${me.id}`).toHaveLength(0);
+    });
+
     it("who is asking and the limit come before the points are read, for the phone's sign-in and the browser's", async () => {
       // 21a-iii-c. A body that is not even JSON: a server that read it first would answer 400 to all.
       const broken = (headers: Record<string, string>, cookies: Cookies = {}) =>
@@ -167,9 +178,11 @@ d("a run's elevation gain (real Postgres)", () => {
       for (let i = 0; i < RUN_MAX_PAUSES; i++) pauses.push([i * 20_000 + 1000, i * 20_000 + 2000]);
       const longest = body({ points: northRun(RUN_MAX_POINTS - 1, 3), elapsedMs: RUN_MAX_POINTS * 1000, pauses });
       expect(longest.points.length).toBe(RUN_MAX_POINTS);
-      const res = await ask(me.cookies, askOf(longest));
+      // With as many still stretches as pauses (37k).
+      const still = pauses.map(([from, to]): [number, number] => [from + 2000, to + 2000]);
+      const res = await ask(me.cookies, { ...askOf(longest), still });
       expect(res.statusCode, res.body).toBe(200);
-      const past = await ask(me.cookies, askOf({ ...longest, points: northRun(RUN_MAX_POINTS, 3) }));
+      const past = await ask(me.cookies, { ...askOf({ ...longest, points: northRun(RUN_MAX_POINTS, 3) }), still });
       expect([past.statusCode, (JSON.parse(past.body) as { error: string }).error]).toEqual([413, "too_many_items"]);
     }, 30_000);
 

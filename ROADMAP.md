@@ -498,7 +498,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
      - V3b-ii. [x] **Staff** · merged 2026-11-25 · PR #645
    - V4a. **Sell**, in three (2026-11-25; boards `Sell*`, `PhoneSell`):
     - V4a-i. [x] **The tabs, the Register as a till, Sell a membership and Today's sales** · merged 2026-11-25 · PR #648
-    - V4a-ii. [ ] **A sale**: the Terminal waiting and each way it ends, Sale recorded, Void and Refund, another day (`SellSale`, `SellDay`); a sale's refund boxes and its receipt in the middle, on a member's Purchases too.
+    - V4a-ii. [x] **A sale** · merged 2026-11-26 · PR #650
     - V4a-iii. [ ] **Products, Tax and Discounts** (`SellProducts`, `SellTax`, `Discounts`)
    - V4b. [ ] **Memberships** (web folder 1): the price list, adding a type, discounts (`Memberships*`, `MembershipAdd`).
    - V5. [ ] **Overview and getting in** (web folder 1): Overview, its banners and plan prompts, your organisations, creating a gym, signing in, joining as staff (`Overview*`, `Banners`, `GymReady`, `Orgs`, `CreateGym`, `SignIn`, `StaffInvite`, `PhoneOverview`).
@@ -817,7 +817,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
       - 37l. [x] **A run keeps recording with the screen off** · merged 2026-11-24 · PR #638
       - CI. [x] **GitHub's checks run at once, each on a machine of its own** (not an item of this list; Kd asked here) · merged 2026-11-25 · PR #642
       - 37j. [x] **Auto-pause and Start use the phone's motion** · merged 2026-11-25 · PR #646
-      - 37k. [ ] **The line holds still with Auto-pause off**: the still stretches go with the run to the server; the server goes live before the store build that sends them.
+      - 37k. [x] **The line holds still with Auto-pause off** · merged 2026-11-26 · PR #649
 38. [ ] **The global board** (its reminders moved to item 19e on 2026-11-05): last, as Kd ruled on 2026-11-01 (`rulings/2026-11-01-17c-ii-a.md`): Active days and Running, the server's checks, a stranger's profile, and follow requests for somebody who chose Hide me, seen from outside their gym; Follow with Followers and Following counts everywhere, gyms included (`rulings/2026-11-01-17c-ii-b.md`). It waits for items 18, 37, 53 and 64.
 40. [ ] **Workouts and runs from your watch** (Kd, 2026-11-12, `rulings/2026-11-12-37f-i.md`), after 37f: Android's Health Connect and a file upload (GPX, TCX, FIT) first, then Garmin's and Polar's own connections (Kd applies to Garmin's); Apple Health with the iPhone version. Workouts and runs with their heart rate, calories and distance, and weight from a smart scale; never sleep or heart rate variability.
 39. [ ] **Share with your photo** (Kd, 2026-10-18; spec Part 2 §11.8): after a workout, a meal photo or a run, the person takes or picks a photo and the stats are drawn on it, made on the phone and sent through the phone's own share menu. A run's map drawn on it hides its start and end near the person's home, as Strava's does (37a's plan, 2026-11-05). Built once for all three, after items 33 and 37 and exercise folder 2's 64; it brings Part 7 §5's share cards forward from After launch.

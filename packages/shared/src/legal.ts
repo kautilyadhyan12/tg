@@ -19,7 +19,7 @@ export const LEGAL_PATHS = {
 } as const;
 
 /** The day the words below last changed, `YYYY-MM-DD`. */
-export const LEGAL_UPDATED_ON = "2026-11-22";
+export const LEGAL_UPDATED_ON = "2026-11-25";
 
 /** Who runs KWAZO (Kd, 2026-11-08: his full name; a sole proprietorship, RULINGS 2026-09-15). */
 export const LEGAL_OWNER = "Kautilya Darshan Baruah";
@@ -337,6 +337,7 @@ export function privacyPolicy(facts: LegalFacts = LEGAL_FACTS): LegalDocument {
             "Distances traveled.",
             "Running times.",
             "Your pace along each route, and the elevation gain and height of the ground along it, worked out from the route.",
+            "The times during a run when you stood still, worked out on your device from its motion sensor, so that standing is not counted in your route, distance or moving time. The motion sensor's readings stay on your device and are not sent.",
           ),
           p("Location information is accessed while a running session is being recorded and the Application is open or the active running notification is displayed, and while the Running page is open, to show the strength of the GPS signal. That reading stays on your device and is not kept."),
           p("KWAZO does not otherwise collect your location in the background outside these circumstances."),

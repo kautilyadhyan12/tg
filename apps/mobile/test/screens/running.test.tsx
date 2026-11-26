@@ -7,7 +7,8 @@ import { resetMapSource } from "../../src/screens/running/mapSource";
 import { RUN_BAR_ROOM } from "../../src/screens/running/RunLayer";
 import { MAP_CREDIT_PAGE, MAP_WAIT_MS } from "../../src/screens/running/RunMap";
 import { unitMarks } from "../../src/screens/running/routeShape";
-import { chooseAutoPause, closedPauses, finishRun, keepRunUnits, pauseRun, phoneRunFiles, resetRecorder, runNow, startRun, takeLocations } from "../../src/screens/running/recorder";
+import { chooseAutoPause, finishRun, keepRunUnits, pauseRun, phoneRunFiles, resetRecorder, runNow, startRun, takeLocations } from "../../src/screens/running/recorder";
+import { sumsAt } from "../../src/screens/running/runLive";
 import { spokenTime } from "../../src/screens/running/runVoice";
 import { readRunFile } from "../../src/screens/running/runQueue";
 import { clock, distance, runName } from "../../src/screens/running/runWords";
@@ -118,7 +119,7 @@ function runServer(user = RAVI, map: MapSource = OPENFREEMAP) {
       }
       const run = saveRunRequestSchema.parse(body);
       if (!saved.some((r) => r.runId === run.runId)) saved.push(run);
-      const sums = runSums(run.points, run.pauses, run.elapsedMs, 60);
+      const sums = runSums(run.points, run.pauses, run.elapsedMs, 60, run.still);
       return {
         status: 201,
         body: {
@@ -369,13 +370,15 @@ describe("Auto-pause", () => {
       takeLocations({ locations: Array.from({ length: 20 }, (_, i) => ({ timestamp: run.startedAt + (60 + i) * 1000, coords: { latitude: stillAt, longitude: 91.7362, accuracy: 5, speed: 0 } })) }),
     );
     expect(await screen.findByText("Auto-paused")).toBeTruthy();
-    // From where the person stopped: the last moving point, at 59 s.
-    expect(runNow()?.pauses).toEqual([[59_000, null]]);
+    // The clock stops at the point that decided it, 8 s on, never going back (37k); the seconds back to where the
+    // person stopped, the last moving point at 59 s, are standing.
+    expect(runNow()?.pauses).toEqual([[67_000, null]]);
+    expect(runNow()?.datedBack).toEqual([[59_000, 67_000]]);
     await feed(80, 10, 3, stillAt - (80 * 3) / 111_132);
     await waitFor(() => {
       expect(runNow()?.phase).toBe("running");
     });
-    expect(runNow()?.pauses).toEqual([[59_000, 80_000]]);
+    expect(runNow()?.pauses).toEqual([[67_000, 80_000]]);
     expect(screen.queryByText("Auto-paused")).toBeNull();
     expect(clock(0)).toBe("0:00");
   });
@@ -403,7 +406,7 @@ describe("Auto-pause", () => {
     const now = runNow();
     if (now === null) throw new Error("no run");
     const end = 279_000;
-    const kept = runSums(now.points, closedPauses(now, end), end, 0).distanceM;
+    const kept = sumsAt(now, end, 0).distanceM;
     const walked = runSums(fed, [], end, 0).distanceM;
     expect(walked).toBeGreaterThan(185);
     // Auto-pause leaves out the wait, never the steps either side of it: the clock starts again from the last
@@ -639,7 +642,7 @@ describe("the voice, through the whole app", () => {
     const run = runNow();
     if (run === null) throw new Error("no run");
     const end = run.points[run.points.length - 1]?.[0] ?? 0;
-    const final = runSums(run.points, closedPauses(run, end), end, 0);
+    const final = sumsAt(run, end, 0);
     const splits = unit === "mile" ? final.splitsMi : final.splitsKm;
     const whole = Math.floor(final.distanceM / (unit === "mile" ? 1609.344 : 1000));
     const said = marksSaid(unit);
@@ -728,7 +731,8 @@ describe("the voice, through the whole app", () => {
     const walking = (s: number) => standing(40) + 1.4 * (s - 40);
     await send(41, 60, walking, 4.5, 12);
     expect(runNow()?.phase).toBe("running");
-    expect(runNow()?.pauses).toEqual([[1000, 41_000]]);
+    expect(runNow()?.pauses).toEqual([[4000, 41_000]]);
+    expect(runNow()?.datedBack).toEqual([[1000, 4000]]);
     expect(voice.said).toEqual([]);
     // A stop a minute and a half in is said, once.
     const stopped = () => walking(100);
@@ -788,7 +792,8 @@ describe("the voice, through the whole app", () => {
     expect(runNow()?.phase).toBe("finished");
     expect(voice.said.slice(before)).toEqual([]);
     expect(runNow()?.points.length).toBe(points);
-    expect(runNow()?.pauses).toHaveLength(1);
+    // Finished as it stood: the stop is kept from where the person stopped.
+    expect(runNow()?.datedBack.map(([from]) => from)).toEqual([59_000]);
   });
 
   it("Voice off says nothing, stops what it was saying, and stays off for the next run", async () => {
@@ -898,7 +903,7 @@ describe("the voice, through the whole app", () => {
     if (done === null) throw new Error("no run");
     expect(done.pauses.length).toBe(1);
     const end = done.points[done.points.length - 1]?.[0] ?? 0;
-    const final = runSums(done.points, closedPauses(done, end), end, 0);
+    const final = sumsAt(done, end, 0);
     const second = voice.said.find((line) => line.startsWith("2 kilometres."));
     if (second === undefined) throw new Error("the second kilometre was not said");
     const saidS = secondsIn(second, "Time");
@@ -982,7 +987,7 @@ describe("the map under the run (37b-i)", () => {
     const run = runNow();
     if (run === null) throw new Error("no run");
     const at = run.finishedMs ?? 0;
-    return runSums(run.points, closedPauses(run, at), at, 60);
+    return sumsAt(run, at, 60);
   };
 
   it("the worst thing: the map asks only the map's own addresses, and nothing of the run is sent to draw it", async () => {
@@ -1447,7 +1452,7 @@ describe("Elevation gain on the summary (37b-ii)", () => {
     const run = runNow();
     if (run === null) throw new Error("no run");
     const at = (run.points[run.points.length - 1]?.[0] ?? 0) + 1000;
-    const places = runSums(run.points, closedPauses(run, at), at, 60).paceLine.length;
+    const places = sumsAt(run, at, 60).paceLine.length;
     expect(places).toBeGreaterThan(50);
     s.state.climb = { state: "done", m: 28, hills: Array.from({ length: places }, (_, i) => 40 + Math.round(i / 6)) };
     await fireEvent.press(await screen.findByRole("button", { name: "Finish" }));

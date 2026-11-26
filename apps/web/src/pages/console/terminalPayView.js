@@ -154,3 +154,21 @@ export const TERMINAL_SALE_LOST = "We couldn't hear back about this payment, and
 
 /** Whether the person may well have paid: the box then offers no Try again. */
 export const mayHavePaid = (payment) => payment.outcome === 'gone' || payment.outcome === 'not_recorded';
+
+/** How a Terminal payment's ending is drawn (V4a-ii, the board `SellSale`): green once paid, plain where
+ *  nothing happened, orange where staff must check something, red where money and the record differ. */
+export function terminalOutcomeTone(payment) {
+  switch (payment.outcome) {
+    case 'paid':
+      return 'good';
+    case 'cancelled':
+    case 'cancelled_on_terminal':
+    case 'timed_out':
+      return 'plain';
+    case 'no_answer':
+    case 'gone':
+      return 'warn';
+    default:
+      return 'bad';
+  }
+}

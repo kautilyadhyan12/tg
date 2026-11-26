@@ -13,7 +13,7 @@ import { randomUUID } from "node:crypto";
 import { cpus } from "node:os";
 import { performance } from "node:perf_hooks";
 import postgres from "postgres";
-import { RECORD_DISTANCES_M, fastestStretch, runSums, type RunMark, type RunPoint } from "@app/shared";
+import { RECORD_DISTANCES_M, RUN_MAX_PAUSES, fastestStretch, runSums, type RunMark, type RunPoint } from "@app/shared";
 import * as geo from "../src/modules/geo/service.js";
 
 const url = process.env["DATABASE_URL"] ?? "";
@@ -93,6 +93,19 @@ async function main(): Promise<void> {
   const twelve = points(43_199, 2);
   await measure("save's maths, an hour's run (with best efforts)", () => runSums(hour, [], 3_600_000, 70));
   await measure("save's maths, twelve hours (with best efforts)", () => runSums(twelve, [], 43_199_000, 70));
+  // The most still stretches a run may send (37k): twelve hours with a 15 s stand every 21.6 s, each one honoured
+  // (round one, L3: stretches over a walk are refused, and cost less), and the same over the walk, refused.
+  const stands: RunPoint[] = twelve.map(([at, lat, lng, acc]): RunPoint => {
+    const k = Math.floor(at / 21_600);
+    const into = at - k * 21_600;
+    const from = twelve[Math.round((k * 21_600) / 1000)] ?? [at, lat, lng, acc];
+    return into < 15_000 ? [at, from[1], from[2], acc] : [at, lat, lng, acc];
+  });
+  const still = Array.from({ length: RUN_MAX_PAUSES }, (_, i): [number, number] => [i * 21_600, i * 21_600 + 15_000]);
+  const honoured = runSums(stands, [], 43_199_000, 70, still);
+  console.log(`  (honoured: ${String(honoured.stillS)} s standing of ${String(RUN_MAX_PAUSES * 15)} s sent)`);
+  await measure("save's maths, twelve hours with 2,000 still stretches, honoured", () => runSums(stands, [], 43_199_000, 70, still));
+  await measure("save's maths, twelve hours with 2,000 still stretches, refused", () => runSums(twelve, [], 43_199_000, 70, still));
   // The best efforts alone, over twelve hours' marks, all four distances.
   const marks: RunMark[] = twelve.map(([t], i) => ({ d: i * 3, t }));
   await measure("best efforts alone, twelve hours, four distances", () =>

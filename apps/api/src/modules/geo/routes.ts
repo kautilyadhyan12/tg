@@ -176,9 +176,9 @@ export function registerGeoRoutes(
   // Ten a minute for a person, wherever they are (never by address: a gym's members share one). A
   // phone sends its waiting runs one after another; nobody records ten runs in a minute.
   // The longest run a phone may send, counted as `listLimit.ts` counts: each point is a list
-  // item holding four, each pause one holding two. A run's heart rate (37f-i), on its save alone, is
-  // one a second at most, each a list item holding two.
-  const RUN_LIST_ITEMS_MOST = RUN_MAX_POINTS * 5 + RUN_MAX_PAUSES * 3;
+  // item holding four, each pause one holding two, and each still stretch (37k) as a pause. A run's heart
+  // rate (37f-i), on its save alone, is one a second at most, each a list item holding two.
+  const RUN_LIST_ITEMS_MOST = RUN_MAX_POINTS * 5 + RUN_MAX_PAUSES * 3 * 2;
   const SAVE_RUN_LIST_ITEMS_MOST = RUN_LIST_ITEMS_MOST + RUN_MAX_POINTS * 3;
   const runLimit = createDualRateLimit({
     name: "geo_run_save",

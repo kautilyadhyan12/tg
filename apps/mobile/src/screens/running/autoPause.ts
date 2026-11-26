@@ -31,10 +31,11 @@
 // wheelchair, a bike) is "on wheels" for the rest of the run: its feel is ignored and the rule is the one
 // above. With no motion at all (an iPhone, a phone with no sensor) every feel is unknown and the rule is
 // the one above, answer for answer.
-import { GPS_WORST_ACCURACY_M, STILL_M, STILL_MS } from "@app/shared";
+import { GPS_WORST_ACCURACY_M, STILL_M, STILL_MS, TRAVEL_LEAST_M, TRAVEL_TIMES, travelMetresAt } from "@app/shared";
 
-// Standing is the shared maths' own test, so the clock and the saved moving time agree.
-export { STILL_M, STILL_MS };
+// Standing is the shared maths' own test, so the clock and the saved moving time agree; so is how far a phone
+// that feels still must go to have travelled, which the maths also uses to honour a still stretch (37k).
+export { STILL_M, STILL_MS, TRAVEL_LEAST_M, TRAVEL_TIMES };
 export const GO_M = 10;
 export const GO_MOST_M = 20;
 export const GO_MPS = 1.0;
@@ -183,14 +184,9 @@ const fast = (fix: Fix): boolean => fix.speed !== null && fix.speed >= GO_MPS;
 /** How far from where the person stopped this point must lie to count as moving: past what a phone
  *  this sure of itself wanders while it lies still. */
 export const goMetres = (fix: Fix): number => Math.max(GO_M, Math.min(2 * (fix.accuracyM ?? 0), GO_MOST_M));
-/** How far a phone that FEELS still must have gone from a place before it is believed to have travelled: four
- *  times how sure the point is, and never under TRAVEL_LEAST_M. The brief's 10 m was passed by Kd's phone lying
- *  on a table (2026-11-25, sure to 3 m): its place slid 11.5 m in 20 s, in a straight line, then stopped. Three
- *  times was passed by one standing phone in 1,000 sure to 30 m, whose place rose steadily 94 m in 130 s (the
- *  re-check). A pram keeps going; a phone's drift does not. */
-export const TRAVEL_LEAST_M = 40;
-export const TRAVEL_TIMES = 4;
-export const travelMetres = (fix: Fix): number => Math.max(TRAVEL_LEAST_M, TRAVEL_TIMES * (fix.accuracyM ?? 0));
+/** How far a phone that FEELS still must have gone from a place before it is believed to have travelled
+ *  (`travelMetresAt` in the shared maths: four times how sure the point is, and never under 40 m). */
+export const travelMetres = (fix: Fix): number => travelMetresAt(fix.accuracyM);
 /** How much farther from the stop a phone that feels moving must have gone in LEAVE_WINDOW_MS to be leaving it:
  *  half how sure the point is, and never under LEAVE_LEAST_M. Standing and shaken, sure to 5 m, a phone's place
  *  wandered the brief's 3 m from where it was 133 times in 400 within 30 s; over 10 s, 8 m, never in 400 over

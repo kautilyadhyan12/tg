@@ -12,8 +12,9 @@ import MoreMenu from '../../components/console/MoreMenu';
 import { consoleIsReadOnly } from './billingView';
 import { BasketRefundBox, SaleRefundLines, SquareRefundsToPlace } from './SaleRefunds';
 import { saleBasketMenu, saleRefundPick } from './saleRefundMenu';
-import { saleSaidNow, salesWaitOnSquare } from './saleRefundView';
+import { SALE_MENU_WORDS, saleSaidNow, salesWaitOnSquare } from './saleRefundView';
 import { useReadWhileSquareWaits } from './useReadWhileSquareWaits';
+import { MiddleBox } from '../../components/console/ConsoleBoxes';
 
 // WHAT ONE PERSON BOUGHT AT THE DESK, on their page (spec Part 3 §14.3; ROADMAP 18b-i),
 // for staff who may record a sale. A sale made on the Sell page for this person is read
@@ -35,6 +36,8 @@ export default function MemberPurchases({ gymId, gym, entryId, name, past, squar
   const [receiptFor, setReceiptFor] = useState(null);
   /** The sale whose Refund sale box is open, and what was last done, said under its sale. */
   const [refunding, setRefunding] = useState(null);
+  /** A refund on its way: its box in the middle waits for the answer before Escape closes it. */
+  const [sending, setSending] = useState(false);
   const [done, setDone] = useState(null);
   const [reads, setReads] = useState(0);
   // A person's page is also drawn where there is no address to go to: no link there.
@@ -117,7 +120,9 @@ export default function MemberPurchases({ gymId, gym, entryId, name, past, squar
                 ) : null}
                 {receiptFor === sale.id ? <ReceiptBox gymId={gymId} gym={gym} number={line.receiptNumber} onClose={() => setReceiptFor(null)} inMiddle /> : null}
                 {saleRefundPick(refunding, sale.id) !== null ? (
-                  <BasketRefundBox gymId={gymId} country={gym?.country} basket={basket} who={who} toCard={refunding.toCard} paymentsTo={paymentsTo} onDone={doneHere(sale.id)} onStopped={() => setReads((n) => n + 1)} onClose={() => setRefunding(null)} />
+                  <MiddleBox label={SALE_MENU_WORDS.refund.label} busy={sending} onClose={() => setRefunding(null)} testId="sale-refund-middle">
+                    <BasketRefundBox gymId={gymId} country={gym?.country} basket={basket} who={who} toCard={refunding.toCard} paymentsTo={paymentsTo} onSending={setSending} onDone={doneHere(sale.id)} onStopped={() => setReads((n) => n + 1)} onClose={() => setRefunding(null)} />
+                  </MiddleBox>
                 ) : null}
                 <SquareRefundsToPlace gymId={gymId} basket={basket} canAct={acts} onDone={doneHere(sale.id)} />
                 {basket.lines.map((l) => (

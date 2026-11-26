@@ -9,6 +9,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
 import { z } from "zod";
 import {
+  RUN_CALC_VERSION,
   RUN_MAX_PAUSES,
   RUN_MAX_POINTS,
   runDetailSchema,
@@ -251,10 +252,12 @@ d("record a run (real Postgres)", () => {
     // refuses it, before one point is read.
     const res = await save(me.cookies, run);
     expect([res.statusCode, (JSON.parse(res.body) as { error: string }).error]).toEqual([400, "validation_error"]);
-    // Past the longest run and its longest heart rate together, the list count refuses it unread.
+    // Past the longest run, its longest heart rate and its most still stretches (37k) together, the list count
+    // refuses it unread.
     const heart: [number, number][] = [];
     for (let i = 0; i <= RUN_MAX_POINTS; i++) heart.push([i * 1000, 120]);
-    const over = await save(me.cookies, { ...run, runId: randomUUID(), heart });
+    const still = pauses.map(([from, to]): [number, number] => [from + 2000, to + 2000]);
+    const over = await save(me.cookies, { ...run, runId: randomUUID(), heart, still });
     expect([over.statusCode, (JSON.parse(over.body) as { error: string }).error]).toEqual([413, "too_many_items"]);
     expect((await sql`SELECT 1 FROM runs WHERE user_id = ${me.id}`).length).toBe(0);
   }, 30_000);
@@ -278,6 +281,104 @@ d("record a run (real Postgres)", () => {
     const run = body();
     expect((await save(me.cookies, run, randomUUID())).statusCode).toBe(400);
     expect((await sql`SELECT 1 FROM runs WHERE user_id = ${me.id}`).length).toBe(0);
+  });
+
+  describe("the stretches the phone felt still (37k)", () => {
+    // Five minutes north at 3 m/s, two minutes standing sure to 15 m (its place wandering, which the maths
+    // alone does not judge at that accuracy), five minutes on.
+    const standRun = (): SaveRunRequest["points"] => {
+      const points: SaveRunRequest["points"] = [];
+      for (let i = 0; i <= 720; i++) {
+        const north = 3 * Math.min(i, 300) + 3 * Math.max(0, i - 420);
+        const wobble = i > 300 && i < 420 ? 6 * Math.sin(i / 9) : 0;
+        points.push([i * 1000, 26.1445 + (north + wobble) / 110_760, 91.7362 + (wobble * 0.7) / 99_800, 15]);
+      }
+      return points;
+    };
+    const STAND: [number, number] = [300_000, 420_000];
+
+    it("worked out with them, on the same rules the phone shows: the stand counts no metres and no moving time, and is kept nowhere", async () => {
+      const me = await makeUser("still");
+      const run = body({ points: standRun(), elapsedMs: 720_000, still: [STAND] });
+      const res = await save(me.cookies, run);
+      expect(res.statusCode, res.body).toBe(201);
+      const saved = saveRunResponseSchema.parse(JSON.parse(res.body));
+      const expected = runSums(run.points, run.pauses, run.elapsedMs, 70, [STAND]);
+      const without = runSums(run.points, run.pauses, run.elapsedMs, 70);
+      expect(saved.run).toMatchObject({ distanceM: expected.distanceM, movingS: expected.movingS, kcal: expected.kcal });
+      // Standing to the stand's last point before the stretch's end (that one is the walk's first, as Auto-pause dates it).
+      expect(Math.abs(saved.run.movingS - 600)).toBeLessThanOrEqual(1);
+      expect(without.distanceM - saved.run.distanceM).toBeGreaterThanOrEqual(10);
+      expect(Math.abs(saved.run.distanceM - 1800)).toBeLessThanOrEqual(6);
+      const row = (await sql<{ run_calc_version: number }[]>`SELECT run_calc_version FROM runs WHERE id = ${run.runId}`)[0];
+      expect(row?.run_calc_version).toBe(RUN_CALC_VERSION);
+      expect(RUN_CALC_VERSION).toBe(4);
+      // No column keeps them: the row holds nothing that names them.
+      const columns = await sql<{ column_name: string }[]>`SELECT column_name FROM information_schema.columns WHERE table_name = 'runs'`;
+      expect(columns.map((c) => c.column_name).filter((c) => c.includes("still"))).toEqual([]);
+    });
+
+    it("one the phone never made, over the whole run, takes no metres away: the sender's own run is all it could touch", async () => {
+      const me = await makeUser("still-forged");
+      const run = body({ still: [[0, 1_200_000]] });
+      const res = await save(me.cookies, run);
+      expect(res.statusCode, res.body).toBe(201);
+      const saved = saveRunResponseSchema.parse(JSON.parse(res.body));
+      const plain = runSums(run.points, run.pauses, run.elapsedMs, 70);
+      expect(saved.run.distanceM).toBe(plain.distanceM);
+      expect(saved.run.movingS).toBe(plain.movingS);
+      expect(saved.run.distanceM).toBeGreaterThanOrEqual(3590);
+    });
+
+    it("made up as a stand every 13 s over a 3 m/s run (round one, H1), the run is saved as the person ran it: its distance, Moving time and splits", async () => {
+      const me = await makeUser("still-forged-short");
+      const still: [number, number][] = [];
+      for (let t = 1000; t + 12_400 <= 1_200_000; t += 13_000) still.push([t, t + 12_400]);
+      const run = body({ still });
+      const res = await save(me.cookies, run);
+      expect(res.statusCode, res.body).toBe(201);
+      const saved = saveRunResponseSchema.parse(JSON.parse(res.body));
+      const plain = runSums(run.points, run.pauses, run.elapsedMs, 70);
+      expect(saved.run).toMatchObject({ distanceM: plain.distanceM, movingS: plain.movingS, splitsKm: plain.splitsKm });
+      expect(saved.run.movingS).toBeGreaterThanOrEqual(1190);
+    });
+
+    it.each<[string, unknown]>([
+      ["out of order", [[400_000, 500_000], [100_000, 200_000]]],
+      ["overlapping", [[100_000, 300_000], [200_000, 400_000]]],
+      ["ending where it begins", [[100_000, 100_000]]],
+      ["ending before it begins", [[200_000, 100_000]]],
+      ["past the run's end", [[1_100_000, 1_200_001]]],
+      ["not a pair", [[100_000]]],
+      ["not a list", { from: 1, to: 2 }],
+    ])("refused when %s, and nothing is saved", async (name, still) => {
+      const me = await makeUser(`still-bad-${name.replace(/[^a-z]/g, "")}`);
+      const res = await save(me.cookies, { ...body(), still } as SaveRunRequest);
+      expect([res.statusCode, (JSON.parse(res.body) as { error: string }).error]).toEqual([400, "validation_error"]);
+      expect((await sql`SELECT 1 FROM runs WHERE user_id = ${me.id}`).length).toBe(0);
+    });
+
+    it("as many as a run may pause is saved; one more is refused before one is read", async () => {
+      const me = await makeUser("still-most");
+      const most: [number, number][] = [];
+      for (let i = 0; i < RUN_MAX_PAUSES; i++) most.push([i * 500, i * 500 + 400]);
+      const ok = await save(me.cookies, body({ still: most }));
+      expect(ok.statusCode, ok.body).toBe(201);
+      const over = await save(me.cookies, body({ still: [...most, [1_000_000, 1_000_400]] }));
+      expect([over.statusCode, (JSON.parse(over.body) as { error: string }).error]).toEqual([400, "validation_error"]);
+      expect((await sql`SELECT 1 FROM runs WHERE user_id = ${me.id}`).length).toBe(1);
+    });
+
+    it("another person sending a run with the same id and still stretches changes nothing of the owner's", async () => {
+      const owner = await makeUser("still-owner");
+      const other = await makeUser("still-other");
+      const run = body({ points: standRun(), elapsedMs: 720_000, still: [STAND] });
+      const first = saveRunResponseSchema.parse(JSON.parse((await save(owner.cookies, run)).body));
+      const theirs = await save(other.cookies, { ...run, name: "Not theirs", still: [[0, 720_000]] });
+      expect(theirs.statusCode).toBe(404);
+      const row = (await sql<{ user_id: string; distance_m: number; name: string }[]>`SELECT user_id, distance_m, name FROM runs WHERE id = ${run.runId}`)[0];
+      expect(row).toEqual({ user_id: owner.id, distance_m: first.run.distanceM, name: "Morning Run" });
+    });
   });
 
   it("a run of 200 m or more keeps the streak and earns a workout's 50 XP; a few steps earn nothing", async () => {
