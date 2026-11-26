@@ -3,7 +3,7 @@
 //
 // The rule, in words Kd can read. For each movement counted by reps, each of its own videos it counts (its twins' among
 // them; never another movement's video it counts by mistake, an open case: his sit-and-stand on a chair turns the chair
-// round between two sits), as filmed and as each replay that must hold, with no turn ever forgetting the standing: from the set's first counted rep
+// round between two sits), as filmed and as each replay that must hold, with no turn ever replacing the standing: from the set's first counted rep
 // to the last rep it told the person about (counted, short, unseen or refused), at every picture between reps, how far
 // the way the person faces lies from the way they faced when their standing was taken. Each set gives its furthest. The
 // bound is beyond the furthest set by half its distance from the middle set, as the lock's numbers are (lockCheck.ts),
@@ -17,7 +17,7 @@ import { runOf } from "./measureCheck.js";
 import { countedTimes, proofVideos, readExercise, seedOf, withLeadIn, type ProofVideo } from "./movementCheck.js";
 import type { Replay } from "./replays.js";
 
-/** The matcher with no turn ever forgetting a standing: what a set's own facing does between its reps. */
+/** The matcher with no turn ever replacing a standing: what a set's own facing does between its reps. */
 export const NEVER_TURNED: MatchLimits = { ...MATCH_LIMITS, turned: Number.POSITIVE_INFINITY };
 
 export interface TurnRow {

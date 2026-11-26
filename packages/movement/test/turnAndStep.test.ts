@@ -268,7 +268,7 @@ describe("a turn in the middle of a set: his floor videos played whole, the came
     expect(said(run.reps).filter((s) => !s.startsWith("counted"))).toEqual([]);
   });
 
-  it("before this job, with no turn ever forgetting a standing, his raised set lost two squats after he turned to face the phone", () => {
+  it("before this job, with no turn ever replacing a standing, his raised set lost two squats after he turned to face the phone", () => {
     const never = { ...MATCH_LIMITS, turned: Number.POSITIVE_INFINITY };
     expect(runMovement(SQUAT, whole("usual_v11", 1.3, 39), EXERCISE, never).count).toBe(8);
   });

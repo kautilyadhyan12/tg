@@ -475,28 +475,28 @@ describe("what the lock changed on the proof, every case written", () => {
   // Measured 2026-11-25: every proof video under every movement the camera counts or times, as filmed and under each
   // replay (13,908 runs), the engine as before 52d-i against the lock: 16 differ, all on his own floor videos, where he
   // walks from the phone and is found again 1.3 to 1.8 times smaller, and the lock takes him afresh.
-  it("his sit-and-stand on a chair (usual_v08) counts nothing as filmed since 52d-ii (he turns the chair round between his sits, and the standing is learned afresh after the turn), and under each replay as written (open for 54)", () => {
+  it("his sit-and-stand on a chair (usual_v08) counts its one chair squat as filmed, the squat's twin (open for 54), and under each replay as written", () => {
     const squat = readMovement("squat");
     const v = VIDEOS.find((x) => x.video.label === "usual_v08");
     if (v === undefined) throw new Error("no usual_v08");
     const run = runMovement(squat, v.video);
-    expect(run.reps.filter((r) => r.verdict === "counted").map((r) => ((r.start - LEAD_IN - (v.video.frames[0]?.t ?? 0)) / 1000).toFixed(1))).toEqual([]);
+    expect(run.reps.filter((r) => r.verdict === "counted").map((r) => ((r.start - LEAD_IN - (v.video.frames[0]?.t ?? 0)) / 1000).toFixed(1))).toEqual(["13.8"]);
     const rows = HELD.map((r) => {
       const row = replayed(squat, v, r);
       return [r.name, row.count, said(row.reps).map((x) => x.trim())] as const;
     });
     expect(rows).toEqual([
-      ["nearer", 0, []],
-      ["farther", 0, []],
-      ["tilted left", 0, []],
-      ["tilted right", 1, ["counted"]],
+      ["nearer", 1, ["counted"]],
+      ["farther", 1, ["counted"]],
+      ["tilted left", 1, ["counted"]],
+      ["tilted right", 2, ["counted", "counted"]],
       ["15 a second", 0, []],
-      ["8 a second", 0, ["short Go lower to count."]],
+      ["8 a second", 0, ["short Go lower to count.", "short Go lower to count."]],
       ["uneven", 0, []],
       ["shaky", 0, []],
       ["chip's gap", 0, []],
-      ["passer-by", 0, ["unseen Keep your whole body in view."]],
-      ["passer-by at the bottom", 0, []],
+      ["passer-by", 1, ["unseen Keep your whole body in view.", "counted"]],
+      ["passer-by at the bottom", 0, ["unseen Keep your whole body in view."]],
       ["faster", 0, []],
       ["slower", 0, []],
       ["twice as slow", 0, []],

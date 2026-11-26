@@ -46,7 +46,7 @@ describe("his eleven videos of other positions, from the floor and raised", () =
     expect(others).toHaveLength(11);
   });
 
-  it("one is open: his sit-and-stand on a chair, a chair squat by eye (54); onePerson.test.ts pins what it counts", () => {
+  it("one is open: his sit-and-stand on a chair, a chair squat, counts its one as filmed since 52d-i (onePerson.test.ts pins it)", () => {
     expect(others.filter((v) => v.entry.open !== undefined).map((v) => v.video.label)).toEqual(["usual_v08"]);
   });
 

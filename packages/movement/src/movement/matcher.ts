@@ -111,8 +111,8 @@ export interface MatchLimits {
   /** For a movement counted in a fast rhythm or as a jump: where the person stands is also read on the move, from the
    *  frames of the last this long, ms, in which they stood upright on the floor (`movingStanding`). */
   readonly moving: number;
-  /** Between reps, a person facing further than this from the way they faced when their standing was taken has turned:
-   *  that standing is forgotten and learned afresh where they now stand, degrees (`facing.ts`). */
+  /** Between reps, a standing found facing further than this from the way the person faced when the highest standing was
+   *  taken replaces it at once, higher or lower: the person has turned, degrees (`facing.ts`). */
   readonly turned: number;
 }
 
@@ -213,7 +213,8 @@ export interface MatchFrame {
   /** A rep that was judged in this frame. */
   readonly rep: RepResult | null;
   /** Between reps, how far the person faces from the way they faced when their standing was taken, degrees (`facing.ts`);
-   *  null in a rep, with no standing, or when either way is not known. Past `MatchLimits.turned` the standing is forgotten. */
+   *  null in a rep, with no standing, or when either way is not known. Past `MatchLimits.turned`, the next standing found
+   *  replaces it. */
   readonly turned: number | null;
 }
 
@@ -662,14 +663,17 @@ export class MovementMatcher {
       if (this.rep !== null) return this.frame(t, drop, null);
     }
 
-    // Not in a rep. A person who has turned to face another way stands at another height on the picture, with their feet
-    // in other places: what was remembered of their standing belongs to the way they faced, so it is forgotten and
-    // learned afresh where they now stand, as at the start of a set, the count going on (a man's own squats, the camera
-    // left on as he turned between them: his first squats after the turn were lost against the standing of before).
+    // Not in a rep: standing ready is remembered afresh whenever it holds. A person who has turned to face another way
+    // stands at another height on the picture, with their feet in other places: what was remembered of their standing
+    // belongs to the way they faced. A standing found facing further than `turned` from the way the highest standing was
+    // taken replaces it at once, higher or lower, as at the start of a set, the count going on (a man's own squats, the
+    // camera left on as he turned between them: his first squats after the turn were lost against the standing of
+    // before). Until one is found the old one stays: forgotten at the turn instead, a man who squatted before he had stood
+    // still had no standing at all, and his first squat after turning from the phone was lost (his walk back, begun at
+    // six of its pictures).
     this.turnedNow = this.turnedFrom(this.standing);
-    if (this.turnedNow !== null && this.turnedNow > L.turned) this.forgetStanding();
-    // Standing ready is remembered afresh whenever it holds.
     const found = this.stillStanding();
+    if (found !== null && found.facing !== null && this.anchorFacing !== null && turnBetween(found.facing, this.anchorFacing) > L.turned) this.turnedAway();
     const anchor = this.anchor;
     let still: Standing | null = found;
     if (found !== null && anchor !== null && found.drive < anchor) {
@@ -791,18 +795,18 @@ export class MovementMatcher {
   }
 
   /** How far the person faces now, over the last `stillFor`, from the way they faced when `standing` was taken, degrees;
-   *  null with no standing, or where either way is not known. */
+   *  null with no standing, or where either way is not known (`MatchFrame.turned`). */
   private turnedFrom(standing: Standing | null): number | null {
     if (standing === null || standing.facing === null) return null;
     const now = facingMiddle(this.recent.flatMap((r) => (r.facing === null ? [] : [r.facing])));
     return now === null ? null : turnBetween(now, standing.facing);
   }
 
-  /** The person has turned: their standing, the highest standing since, the stillness held below it, where their feet
-   *  were last seen at a top and every standing read on the move are forgotten; the count, the frames of the last moment
-   *  and the feet of the last moment at the top (`tops`, all from the way they face now or turning to it) are kept. */
-  private forgetStanding(): void {
-    this.standing = null;
+  /** The person has turned, and stands still facing the new way: the highest standing, the stillness held below it, where
+   *  their feet were last seen at a top and every standing read on the move are forgotten, so that the standing found now
+   *  is taken as it is; the count, the frames of the last moment and the feet of the last moment at the top (`tops`, all
+   *  from the way they face now) are kept. */
+  private turnedAway(): void {
     this.anchor = null;
     this.anchorFacing = null;
     this.held = [];

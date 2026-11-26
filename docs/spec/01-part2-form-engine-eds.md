@@ -2603,12 +2603,13 @@ against the standing of before. **A turn.** `facing.ts` reads which way the body
 3D, turned about "down", against the line across the phone's view (0 facing the phone, about 90 or -90 side on, 180 with the back
 to it; none while the hips' line stands along "down"). A standing keeps the way the person faced when it was taken, and the highest
 standing keeps its own (otherwise a standing found within its shake half way through a turn took the turn's way, and his raised
-set's turn read 39 degrees where his facing had moved 74). Between reps, a person facing further than `MatchLimits.turned` from it, the
-middle of the last 0.2 s, has turned: their standing, the highest standing, the stillness held below it, where their feet were
-last seen at a top and every standing read on the move are forgotten, and learned afresh where they now stand, as at the start of
-a set, the count going on. **The number**, 45 degrees, is set by `turn-check` (`scripts/turnCheck.ts`) as the lock's are: on every
+set's turn read 39 degrees where his facing had moved 74). Between reps, a standing found facing further than `MatchLimits.turned` from
+the way the highest standing was taken has turned: it replaces it at once, higher or lower, and the highest standing, the
+stillness held below it, where the feet were last seen at a top and every standing read on the move are forgotten, as at the
+start of a set, the count going on. Until such a standing is found the old one stays (`MatchFrame.turned` says how far the
+person faces from it, the middle of the last 0.2 s). **The number**, 45 degrees, is set by `turn-check` (`scripts/turnCheck.ts`) as the lock's are: on every
 proof set of a movement counted by reps, of its own videos and its twins', as filmed and under each replay that must hold (715),
-with no turn forgetting anything, from the first counted rep to the last rep told, the furthest a person faced between reps from
+with no turn replacing anything, from the first counted rep to the last rep told, the furthest a person faced between reps from
 their standing's way: the furthest set 30.2 degrees (a kettlebell lunger, whose trunk turns as she steps), the middle set 4.5;
 beyond the furthest by half its distance from the middle, rounded up to 5 (`onePersonProof.test.ts` holds it to the rule). Between
 his sets he turns 22 to 143 degrees (from each set's middle way): all but the 22, which lost no squat, past 45. **Measured:** played whole, his raised set counts 10 of 10 (8 with the turn taken out),
@@ -2618,7 +2619,10 @@ takes his standing, and 0.15 s later the model reads his hips 0.09 of a leg lowe
 still settling, and takes in his squat (13.5 to 16.0 s, "feet stay down"). Tried and not kept: after a turn, waiting for the
 person to stand still half a second (the floor's own 0.3 s wait and the 0.2 s of standing) before a standing is taken; his
 shiny-floor squat then counted, but his raised set, whose hips sway 4 cm in the second before his first squat after a turn, lost
-it instead. For job 53's live tries, with more people turning.
+it instead. Tried first and not kept: the standing forgotten at the moment the person had turned, and learned afresh: on GitHub's run his
+raised set begun at six pictures of his walk back from the phone (0.63 to 0.90 s) counted 1 of its 2, since he turned side on
+and squatted before he had stood still long enough for a standing, and none was left to count from. For job 53's live tries,
+with more people turning.
 
 **A step.** Once a set has counted the lock now follows the person picture by picture wherever they walk, as it did before the
 set counted: a body that goes on from their newest look a moment before (`walks`: the plain sign of 51c finding no change, with
@@ -2652,16 +2656,7 @@ member walked away, or found within a stride of where the member was when the ca
 model has changed to a stranger at a place of the member's (52d-i's limit), the stranger is followed wherever they walk and
 counted there. Before 52d-ii a body seen outside the place, the member walking out of it included, was held and taken only after
 standing 3 s in the place: a member who stepped out and walked back waited 3 s; now they are followed in every picture.
-**The whole proof before and after** (every video under every movement the camera counts or times, as filmed and under all 18
-replays, 13,908 runs, the engine as merged against this job's): 15 differ. His sit-and-stand on a chair (`usual_v08`), 12 runs: he
-turns the chair round, and himself with it, between his two sits, and counts 0 as filmed (1 since 52d-i, open for 54) and 0 or 1
-under the held replays (`onePerson.test.ts` has each). His video sitting on a chair from the raised phone (`usual_v12`), under a
-passer-by at the bottom, no longer tells a dip of another movement "Keep your whole body in view.". Under the small model's gap,
-shown only (the app does not use that model), a barbell lunger's second take counts 1 of its 3 lunges (its hips' line read 45.4
-degrees from her standing's way between two lunges, past the turn) and his first raised pair 0 of its 2 (1 before).
-**The phone's own runs** (`test/phone-points`, the chosen set-up on the laptop's pictures) read as the laptop's as before, under
-every movement: under the squat 119 of 122 the same, the same three open; on his chair video only the phone's first sit, told
-to go lower, differs now (its second, counted on both from 52d-i, counts on neither).
+[[PROOF2]]
 **Deliberate breaks**, each run red and put back: the follow without the plain sign (12 of the worst-thing tests red); without
 its gap and reach (2 red, the second unseen; added after a break that stayed green, following a refused body's look, which
 52d-i's hold on a body that came all at once already refuses); the walked-to place following any body seen (14 red).
