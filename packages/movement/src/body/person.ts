@@ -365,9 +365,15 @@ export class OnePerson {
       // newest hold first: with several bodies in a picture each is followed on its own, and one beside a held body is
       // not held with it (52d-ii's round one and its re-check, H2: one body held, a second beside where the member had
       // walked to was taken once they had gone).
+      // A body that goes on from the person's newest look a moment before (`walks`) and lies nearer it than a hold's is the
+      // person's, never that hold's (the member back beside their last look, a body seen with them 0.4 m further on).
+      const apart = (a: readonly [number, number], b: readonly [number, number]): number => Math.hypot(a[0] - b[0], a[1] - b[1]);
+      const goesOn = (x: Seen & { readonly look: Look }): boolean => person !== null && this.walks(person, x.look, frame.down);
       const pairs: { readonly hold: Hold; readonly body: Seen & { readonly look: Look } }[] = [];
       for (const h of [...active].sort((a, b) => b.look.t - a.look.t)) {
-        const free = readable.filter((x) => !pairs.some((q) => q.body === x) && reaches(h, x));
+        const free = readable.filter(
+          (x) => !pairs.some((q) => q.body === x) && reaches(h, x) && !(person !== null && goesOn(x) && apart(x.look.middle, person.middle) < apart(x.look.middle, h.look.middle)),
+        );
         if (free.length > 0) pairs.push({ hold: h, body: nearest(free, h.look.middle) });
       }
       const held = pairs.map((q) => q.body);
@@ -384,7 +390,7 @@ export class OnePerson {
       };
       // The person walking away from their place (52d-ii), or doing their reps there: a body that goes on from their newest
       // look a moment before, picture by picture (`walks`), the one going on first, as before the set has counted.
-      const going = person === null ? [] : readable.filter((x) => !held.includes(x) && this.walks(person, x.look, frame.down));
+      const going = readable.filter((x) => !held.includes(x) && goesOn(x));
       if (person !== null && going.length > 0) return give(nearest(going, person.middle));
       const there = readable.filter((x) => !held.includes(x) && atPlace(x));
       if (there.length > 0) return give(nearest(there, (here ?? placed).middle));
