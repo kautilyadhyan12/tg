@@ -82,6 +82,41 @@ describe("one run the server cannot take (37m; the hunt's B1, B2, B7)", () => {
     expect(outbox.view()).toMatchObject({ failing: [run(1).runId], refused: [] });
   });
 
+  it("a run the server has, in words this copy cannot read, is let go and never said to be refused (round one, H1)", async () => {
+    const m = memory();
+    let clock = 0;
+    const outbox = createRunOutbox(m.store, () => Promise.resolve({ kind: "kept" }), () => clock);
+    await outbox.start();
+    await outbox.add(run(1));
+    for (let i = 0; i < 12; i++) {
+      clock += 60_000;
+      await outbox.send();
+    }
+    expect(outbox.view()).toMatchObject({ waiting: [], failing: [], refused: [], sent: 1 });
+    expect(readRunFile(m.file.text ?? "")).toEqual({ waiting: [], refused: [], whole: true });
+  });
+
+  it("only an unbroken spell of failures counts: two short outages with no signal between never refuse a run (round one, L4)", async () => {
+    const m = memory();
+    let clock = 0;
+    const answers: RunSendResult[] = [{ kind: "failed" }, { kind: "later" }, { kind: "failed" }, { kind: "failed" }, { kind: "failed" }, { kind: "failed" }];
+    const outbox = createRunOutbox(m.store, () => Promise.resolve(answers.shift() ?? { kind: "later" }), () => clock);
+    await outbox.start();
+    await outbox.add(run(1));
+    // One failure, 15 minutes with no signal, then four failures in a one-minute restart.
+    await outbox.send();
+    expect(outbox.view().failing).toEqual([run(1).runId]);
+    clock = 15 * 60_000;
+    await outbox.send();
+    expect(outbox.view().failing).toEqual([]);
+    for (let i = 0; i < 4; i++) {
+      clock += 15_000;
+      await outbox.send();
+    }
+    expect(outbox.view().refused).toEqual([]);
+    expect(outbox.view().waiting.map((r) => r.runId)).toEqual([run(1).runId]);
+  });
+
   it("with no answer at all, sends nothing past it and counts nothing: a phone offline never loses a run", async () => {
     const m = memory();
     let clock = 0;
@@ -139,7 +174,8 @@ describe("what each answer of the server becomes (37m)", () => {
   const refusal = (status: number) => ({ kind: "refused", status, error: "x", message: "No.", retryAfterSeconds: null, robotCheckKey: null, body: null });
   it.each([
     ["the run kept", { kind: "ok", data: { status: "created", run: saved(run(1)) } }, "done"],
-    ["a reply that is not a saved run", { kind: "ok", data: { status: "created" } }, "failed"],
+    // A 2xx is answered only once the run is stored: on the server, whatever its words (round one, H1).
+    ["the run kept, in words this copy cannot read", { kind: "ok", data: { status: "created" } }, "kept"],
     ["no answer", { kind: "no_answer" }, "later"],
     ["a sign-in being renewed", refusal(401), "later"],
     ["too many at once", refusal(429), "later"],

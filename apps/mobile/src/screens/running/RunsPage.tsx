@@ -28,8 +28,10 @@ interface Listed {
   total: { runs: number; distanceM: number } | null;
   /** The number of the first read these runs came from: "More runs" goes on from that read only. */
   read: number;
+  /** The day these runs are on and before; null for the newest. */
+  upTo: string | null;
 }
-const EMPTY: Listed = { items: [], next: null, months: new Map(), total: null, read: 0 };
+const EMPTY: Listed = { items: [], next: null, months: new Map(), total: null, read: 0, upTo: null };
 
 /** The most runs one read gives (the server's own limit). */
 const MOST_READ = 100;
@@ -66,9 +68,11 @@ export function RunsPage({ open, units, onClose, onStart }: { open: boolean; uni
   }, [session, me]);
 
   // How many runs the list holds, read through a ref: read again, it reads as many as were shown, so it
-  // stays where the person was.
+  // stays where the person was. A day picked, or Show newest, reads its first page only.
   const shownCount = useRef(0);
-  shownCount.current = listed.items.length;
+  shownCount.current = listed.upTo === upTo ? listed.items.length : 0;
+  const statusNow = useRef(status);
+  statusNow.current = status;
 
   const first = useCallback(async () => {
     reading.current += 1;
@@ -79,11 +83,13 @@ export function RunsPage({ open, units, onClose, onStart }: { open: boolean; uni
     const answer = await session.signedIn({ method: "GET", path: `${RUNS_PATH}?limit=${String(limit)}${upTo === null ? "" : `&upTo=${upTo}`}` }, runPageSchema);
     if (!stillMine(mine)) return;
     if (answer.kind !== "ok") {
-      // A list already shown stays, and says it could not be read again.
-      setStatus((was) => (was === "ok" || was === "stale" ? "stale" : "failed"));
+      // A list already shown stays, says it could not be read again, and More runs still goes on from it.
+      const shown = statusNow.current === "ok" || statusNow.current === "stale";
+      setStatus(shown ? "stale" : "failed");
+      if (shown) setListed((was) => ({ ...was, read: mine }));
       return;
     }
-    setListed({ items: answer.data.items, next: answer.data.nextCursor, months: new Map(answer.data.months.map((m) => [m.month, m])), total: answer.data.total, read: mine });
+    setListed({ items: answer.data.items, next: answer.data.nextCursor, months: new Map(answer.data.months.map((m) => [m.month, m])), total: answer.data.total, read: mine, upTo });
     setStatus("ok");
   }, [session, upTo, stillMine]);
 
@@ -119,7 +125,7 @@ export function RunsPage({ open, units, onClose, onStart }: { open: boolean; uni
       const months = new Map(was.months);
       for (const m of answer.data.months) months.set(m.month, m);
       const seen = new Set(was.items.map((r) => r.id));
-      return { items: [...was.items, ...answer.data.items.filter((r) => !seen.has(r.id))], next: answer.data.nextCursor, months, total: was.total, read: was.read };
+      return { items: [...was.items, ...answer.data.items.filter((r) => !seen.has(r.id))], next: answer.data.nextCursor, months, total: was.total, read: was.read, upTo: was.upTo };
     });
     setMore("idle");
   }, [listed.next, listed.read, more, session, stillMine]);

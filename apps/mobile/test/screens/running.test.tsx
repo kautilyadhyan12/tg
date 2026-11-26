@@ -163,7 +163,11 @@ function runServer(user = RAVI, map: MapSource = OPENFREEMAP) {
       return Promise.resolve();
     },
   });
-  return { ask, saved, posts, state, runStore, requests, climbAsks, file: () => file };
+  // What the phone's file of waiting runs holds before the app opens.
+  const setFile = (text: string) => {
+    file = text;
+  };
+  return { ask, saved, posts, state, runStore, requests, climbAsks, file: () => file, setFile };
 }
 
 async function openRunning(s: ReturnType<typeof runServer>, user = RAVI) {
@@ -325,10 +329,29 @@ describe("a run, Start to Save", () => {
     await feed(0, 61, 3);
     await fireEvent.press(await screen.findByRole("button", { name: "Pause" }));
     await fireEvent.press(await screen.findByRole("button", { name: "Finish" }));
+    const second = runName(new Date(runNow()?.startedAt ?? 0));
     await fireEvent.press(await screen.findByRole("button", { name: "Save run" }));
+    // The Running page gives it the same words as Your runs, never "when you're online" (round one, L3).
+    expect(await screen.findByText(`${second} is saved on this phone. Not sent yet. Trying again soon.`, {}, { timeout: 4000 })).toBeTruthy();
     await fireEvent.press(await screen.findByRole("button", { name: "See all your runs" }, { timeout: 4000 }));
     expect(await screen.findByText("Not sent yet. Trying again soon.", {}, { timeout: 4000 })).toBeTruthy();
     expect(s.saved).toHaveLength(1);
+  });
+
+  it("a run that couldn't be saved has Try again only when the server could take it; one the app cannot read has Remove (round one, L1)", async () => {
+    const s = runServer();
+    const whole: SaveRunRequest = { runId: "7a1d2c3b-4a5e-4f60-8a7b-9c0d1e2f3a4b", startedAt: "2026-11-20T06:00:00.000Z", elapsedMs: 60_000, name: "Canal loop", effort: null, note: null, points: [[0, 26.1, 91.7, 5], [1000, 26.10003, 91.7, 5]], pauses: [] };
+    const unread = { runId: "8a1d2c3b-4a5e-4f60-8a7b-9c0d1e2f3a4b", name: "Hill run", points: "cut short" };
+    s.setFile(JSON.stringify({ version: 1, waiting: [], refused: [
+      { runId: whole.runId, name: whole.name, message: "This run couldn't be saved.", run: whole },
+      { runId: unread.runId, name: unread.name, message: "This run couldn't be saved.", run: unread },
+    ] }));
+    await openRunning(s);
+    expect(await screen.findByText("Canal loop: This run couldn't be saved.")).toBeTruthy();
+    expect(screen.getByText("Hill run: This run couldn't be saved.")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Send Canal loop again" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Send Hill run again" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Remove Hill run" })).toBeTruthy();
   });
 
   it("after Finish, Save run and Discard run are always on screen, under the run's long page, never at its end (Kd, 2026-11-26)", async () => {

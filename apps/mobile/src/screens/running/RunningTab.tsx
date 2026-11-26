@@ -175,6 +175,8 @@ export function RunningTab({ units, parts }: { units: Units; parts: ReactNode })
   const justSaved = layer.done;
   const doneWaiting = justSaved !== null && view.waiting.some((r) => r.runId === justSaved.runId);
   const doneRefused = justSaved !== null && view.refused.some((r) => r.runId === justSaved.runId);
+  // The server answered and could not take it: the words Your runs gives it, never "when you're online".
+  const doneFailing = justSaved !== null && view.failing.includes(justSaved.runId);
   const saidUnderStart = ((said !== null || batteryOn) && !pressedBox) || layer.done !== null || view.refused.length > 0;
   useEffect(() => {
     if (saidUnderStart) showEnd();
@@ -397,7 +399,11 @@ export function RunningTab({ units, parts }: { units: Units; parts: ReactNode })
           {!pressedBox ? problemBox : null}
           {layer.done === null || doneRefused ? null : (
             <Txt kind="small" colour={doneWaiting ? "textSoft" : "goodText"} style={styles.said}>
-              {doneWaiting ? `${layer.done.name} is saved on this phone. It will be sent when you're online.` : `${layer.done.name} is saved.`}
+              {doneFailing
+                ? `${layer.done.name} is saved on this phone. Not sent yet. Trying again soon.`
+                : doneWaiting
+                  ? `${layer.done.name} is saved on this phone. It will be sent when you're online.`
+                  : `${layer.done.name} is saved.`}
             </Txt>
           )}
           <RefusedRuns />

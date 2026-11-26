@@ -242,6 +242,24 @@ describe("the worst thing: a beginner told to keep running when the plan says wa
     expect(voice.said.at(-1)).toBe("Now walk for 1 and a half minutes.");
   });
 
+  it("after a timed recovery jog, a late batch of points: the next repeat counts from where the clock ended the jog (the hunt's D5, through the recorder)", async () => {
+    await startRun(RAVI.id, "7b1d2c3b-4a5e-4f60-8a7b-9c0d1e2f3a4b", true, Date.now(), guideOf({ kind: "fast", m: 9000, reps: { count: 3, m: 800, restS: 90 } }, "t"));
+    // 3 m/s: the warm-up of 1,500 m and the first 800 m by about 767 s; the jog of 90 s ends near 857 s.
+    await feed(0, 850, 3);
+    expect(runNow()?.guide?.at.index).toBe(2);
+    const jogFrom = runNow()?.guide?.at.fromMs ?? 0;
+    // The next 20 s handed over at once, as Android does with the screen off.
+    await feed(850, 20, 3);
+    const run = runNow();
+    if (run === null || run.guide === null) throw new Error("no guided run");
+    expect(run.guide.at.index).toBe(3);
+    expect(run.guide.at.fromMs).toBe(jogFrom + 90_000);
+    const atEnd = run.guide.at.fromMs / 1000;
+    // From the jog's end, about 3 m a second of the clock, never from the last point 869 s in.
+    expect(run.guide.at.fromM).toBeGreaterThan(atEnd * 3 - 15);
+    expect(run.guide.at.fromM).toBeLessThan(869 * 3 - 15);
+  });
+
   it("stopped just as a run began: the Auto-pause starts before it, so the run begins again after the pause", async () => {
     await startRun(RAVI.id, "3a1d2c3b-4a5e-4f60-8a7b-9c0d1e2f3a4b", true, Date.now(), guideOf({ kind: "walk_run", week: 1, run: 1, parts: c25kParts(0) }, "Run 1 · 28½ min"));
     await feed(0, 297, 1.6);

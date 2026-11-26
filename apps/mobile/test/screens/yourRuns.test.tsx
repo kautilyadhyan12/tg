@@ -393,6 +393,24 @@ describe("Your runs read again (37m; the hunt's B3 to B6)", () => {
     await s.release();
     expect(await screen.findByRole("button", { name: "More runs" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Loading…" })).toBeNull();
+    // And it goes on from the list shown, though the read again failed (round one, L2).
+    s.rule.hold = () => false;
+    await fireEvent.press(screen.getByRole("button", { name: "More runs" }));
+    expect(await rowOf("Run 25")).toBeTruthy();
+  });
+
+  it("a day picked after More runs reads one page of that day, never as many as were shown (round one, L6)", async () => {
+    const s = holding(runsServer(many()));
+    await openList(s);
+    await fireEvent.press(await screen.findByRole("button", { name: "More runs" }));
+    expect(await rowOf("Run 25")).toBeTruthy();
+    await fireEvent.press(screen.getByRole("button", { name: "Pick a day" }));
+    const today = dayKey(new Date());
+    await fireEvent.press(await screen.findByTestId(`ran-${today}`, {}, { timeout: 4000 }));
+    await waitFor(() => {
+      expect(s.requests.some((r) => r.path === RUNS && r.search === `?limit=20&upTo=${today}`)).toBe(true);
+    });
+    expect(s.requests.filter((r) => r.path === RUNS && r.search.includes("upTo") && !r.search.startsWith("?limit=20&"))).toEqual([]);
   });
 
   it("a day picked: the list before it is never gone on from while the day's runs load", async () => {

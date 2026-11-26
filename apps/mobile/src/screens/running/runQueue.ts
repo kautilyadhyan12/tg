@@ -12,10 +12,12 @@ import type { Session } from "../../session/session";
 import type { TextStore } from "../food/outbox";
 
 /** `later`: nothing can go now (no answer, a sign-in being renewed, too many at once); tried again.
- *  `failed`: the server answered but could not take this run now, or its answer could not be read; this
- *  run is tried again, and the runs after it are sent all the same.
+ *  `failed`: the server answered but could not take this run now; this run is tried again, and the runs
+ *  after it are sent all the same.
+ *  `kept`: the server has it (a 2xx is only answered once the run is stored) in words this copy of the app
+ *  cannot read, as when a store build lags behind the server: let go, and lists of runs read again.
  *  `deleted`: the person deleted it, on this phone or another, while it waited to be sent (37c-i). */
-export type RunSendResult = { kind: "done"; run: SavedRun } | { kind: "later" } | { kind: "failed" } | { kind: "refused"; message: string } | { kind: "deleted" };
+export type RunSendResult = { kind: "done"; run: SavedRun } | { kind: "kept" } | { kind: "later" } | { kind: "failed" } | { kind: "refused"; message: string } | { kind: "deleted" };
 export type RunSender = (run: SaveRunRequest) => Promise<RunSendResult>;
 
 export type { RefusedRun };
@@ -71,7 +73,7 @@ export function runSender(session: Session): RunSender {
     const answer = await session.signedIn({ method: "POST", path: "/v1/geo/runs", body: run, key: run.runId, waitMs: 60_000 }, anyReply);
     if (answer.kind === "ok") {
       const saved = saveRunResponseSchema.safeParse(answer.data);
-      return saved.success ? { kind: "done", run: saved.data.run } : { kind: "failed" };
+      return saved.success ? { kind: "done", run: saved.data.run } : { kind: "kept" };
     }
     if (nothingGoes(answer) || answer.kind !== "refused") return { kind: "later" };
     if (notNow(answer)) return { kind: "failed" };
@@ -161,7 +163,11 @@ export function createRunOutbox(store: TextStore, send: RunSender, now: () => nu
       tried.add(next.runId);
       const result = await send(next);
       if (isStopped()) return;
-      if (result.kind === "later") return;
+      if (result.kind === "later") {
+        // Only an unbroken spell of failures counts: a time with no signal between two short outages starts it again.
+        if (fails.has(next.runId)) set({ ...view, failing: notFailing(next.runId) });
+        return;
+      }
       if (result.kind === "failed") {
         const was = fails.get(next.runId);
         const failed = { count: (was?.count ?? 0) + 1, since: was?.since ?? now() };
@@ -175,8 +181,9 @@ export function createRunOutbox(store: TextStore, send: RunSender, now: () => nu
       const failing = notFailing(next.runId);
       if (result.kind === "done") {
         set({ ...view, waiting, failing, saved: [result.run, ...view.saved.filter((r) => r.id !== result.run.id)], sent: view.sent + 1 });
-      } else if (result.kind === "deleted") {
-        // Deleted while it waited: let go, never said to be refused; lists of runs read again.
+      } else if (result.kind === "deleted" || result.kind === "kept") {
+        // Deleted while it waited, or on the server in words the app cannot read: let go, never said to be
+        // refused; lists of runs read again.
         set({ ...view, waiting, failing, saved: view.saved.filter((r) => r.id !== next.runId), sent: view.sent + 1 });
       } else {
         const message = result.kind === "refused" ? result.message : REFUSED_WORDS;
