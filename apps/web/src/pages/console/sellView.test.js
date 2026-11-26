@@ -140,9 +140,18 @@ describe("the day's takings by kind (18q-ii)", () => {
     }
   });
   it("the list's heading counts every row of the day, the newest first", () => {
-    expect(salesHeading(page(), [1, 2, 3])).toEqual({ title: "Today's sales", sub: '3 today · the newest first' });
-    expect(salesHeading(page({ day: '2026-10-09', today: '2026-10-12' }), [1])).toEqual({ title: 'Sales on 9 Oct 2026', sub: '1 that day · the newest first' });
-    expect(salesHeading(page(), [])).toEqual({ title: "Today's sales", sub: null });
+    // Every class: all shown; a past day; nothing; the server sent only the newest (All, and one kind); a kind's tab counts only its own rows.
+    const cases = [
+      ['all shown', page(), 3, 'all', "Today's sales", '3 today · the newest first'],
+      ['a past day', page({ day: '2026-10-09', today: '2026-10-12' }), 1, 'all', 'Sales on 9 Oct 2026', '1 that day · the newest first'],
+      ['nothing', page(), 0, 'all', "Today's sales", null],
+      ['130 product sales, 100 sent, and 2 payments', page({ salesNotShown: 30, paymentsNotShown: 0 }), 102, 'all', "Today's sales", 'The newest 102 of 132 today'],
+      ['payments past the hundred, on All', page({ salesNotShown: 0, paymentsNotShown: 5 }), 100, 'all', "Today's sales", 'The newest 100 of 105 today'],
+      ['the Products tab, 30 left out', page({ salesNotShown: 30, kinds: { products: kind({ count: 130, notShown: 30 }) } }), 100, 'products', "Today's sales", 'The newest 100 of 130 today'],
+      ['the Products tab with 2 of its own while 3 payments are on All', page({ kinds: { products: kind({ count: 2 }) } }), 2, 'products', "Today's sales", '2 today · the newest first'],
+      ['the Fees tab, nothing', page({ kinds: { fees: kind() } }), 0, 'fees', "Today's sales", null],
+    ];
+    for (const [name, p, n, key, title, sub] of cases) expect(salesHeading(p, Array.from({ length: n }, (_, i) => i), key), name).toEqual({ title, sub });
   });
   it('a question is split into its title and the rest, for a box in the middle', () => {
     expect(questionParts('Void this sale? 1 × Towel, $5.00.')).toEqual({ title: 'Void this sale?', body: '1 × Towel, $5.00.' });

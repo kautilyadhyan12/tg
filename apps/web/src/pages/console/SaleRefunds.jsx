@@ -384,11 +384,12 @@ export function BasketRefundBox({ gymId, country = null, basket, who, toCard = f
 }
 
 /** Choose product: which product a refund made in Square was for (18d-iv-d-ii). */
-function PlaceRefundBox({ gymId, lines, press, currency, onDone, onClose }) {
+function PlaceRefundBox({ gymId, lines, press, currency, onDone, onClose, onSending = null }) {
   const open = placeOpen(lines, press);
   const choices = placeChoices(lines, press);
   const [draft, setDraft] = useState({ pick: choices.length === 0 ? SEVERAL : '', amounts: {}, shelf: {}, tried: false });
   const [busy, setBusy] = useState(false);
+  useSaysSending(busy, onSending);
   const [error, setError] = useState(null);
   const { problem, body } = placeBody(lines, press.amountMinor, currency, draft);
   const picked = draft.pick === SEVERAL ? open.filter((line) => (draft.amounts[line.id] ?? '').trim() !== '') : lines.filter((line) => line.id === draft.pick);
@@ -487,6 +488,8 @@ function PlaceRefundBox({ gymId, lines, press, currency, onDone, onClose }) {
 
 /** Refunds made in Square on this sale whose product is not yet said, each with its box. `opened`: the one Overview opened. */
 export function SquareRefundsToPlace({ gymId, basket, canAct, opened = null, onDone }) {
+  /** A choice on its way: its box in the middle waits for the answer. */
+  const [sending, setSending] = useState(false);
   const [open, setOpen] = useState(opened);
   const lines = basket?.lines ?? [];
   const currency = lines[0]?.currency ?? 'USD';
@@ -501,12 +504,13 @@ export function SquareRefundsToPlace({ gymId, basket, canAct, opened = null, onD
         </button>
       ) : null}
       {canAct && open === press.pressId ? (
-        <MiddleBox label="Choose product" onClose={() => setOpen(null)} testId="place-refund-middle">
+        <MiddleBox label="Choose product" busy={sending} onClose={() => setOpen(null)} testId="place-refund-middle">
         <PlaceRefundBox
           gymId={gymId}
           lines={lines}
           press={press}
           currency={currency}
+          onSending={setSending}
           onDone={(words) => {
             setOpen(null);
             onDone(words);

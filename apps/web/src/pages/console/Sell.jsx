@@ -513,9 +513,9 @@ function ProductSale({ gymId, org, page: gymPage, locked, firstPerson, addMember
           <button
             type="button"
             className="c-btn c-btn-s"
-            aria-expanded={state.receiptOpen === true}
+            aria-haspopup="dialog"
             aria-label={receiptButtonLabel(number, 'this sale')}
-            onClick={() => setState((was) => ({ ...was, receiptOpen: !was.receiptOpen }))}
+            onClick={() => setState((was) => ({ ...was, receiptOpen: true }))}
           >
             <ReceiptText aria-hidden="true" className="w-4 h-4" />
             {RECEIPT_BUTTON}
@@ -1051,7 +1051,7 @@ function Takings({ gymId, org, page, pick, onDay, between = null, locked, canOpe
   }, [refundRow]);
 
   const revenue = shownPage === null ? null : dayRevenue(shownPage, org.country ?? null);
-  const heading = shownPage === null ? null : salesHeading(shownPage, takingsRows(shownPage, org.timezone, org.clockFormat));
+  const heading = shownPage === null ? null : salesHeading(shownPage, rows, tab);
   const loadingOrFailed =
     other.error !== null && shownPage === null ? (
       <Refusal>{other.error}</Refusal>

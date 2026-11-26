@@ -116,6 +116,25 @@ describe("refund a sale from the person's page (18p)", () => {
     expect(await within(box).findByText("Refunded")).toBeTruthy();
   });
 
+  it("a refund on its way keeps its box in the middle: Escape and a press outside wait for the answer (V4a-ii, round one)", async () => {
+    svc.purchases.mockResolvedValue({ sales: [sale({ canUndo: false, canRefund: true, refundedMinor: 0, refunds: [] })], notShown: 0 });
+    let answer;
+    svc.refundSale.mockReturnValue(new Promise((resolve) => (answer = resolve)));
+    open();
+    const box = await screen.findByRole("region", { name: "Purchases" });
+    fireEvent.click(within(box).getByRole("button", { name: "More for the sale of 2 × Water" }));
+    fireEvent.click(within(box).getByRole("menuitem", { name: /^Refund sale/ }));
+    const form = screen.getByTestId("sale-refund-form");
+    fireEvent.change(within(form).getByLabelText("Why it was refunded"), { target: { value: "charged_too_much" } });
+    fireEvent.click(within(form).getByRole("button", { name: "Note refund" }));
+    await waitFor(() => expect(svc.refundSale).toHaveBeenCalledTimes(1));
+    fireEvent.keyDown(document, { key: "Escape" });
+    fireEvent.click(screen.getByTestId("box-outside"));
+    expect(screen.getByTestId("sale-refund-middle")).toBeTruthy();
+    answer({ receiptNumber: 9 });
+    await waitFor(() => expect(screen.queryByTestId("sale-refund-middle")).toBeNull());
+  });
+
   it("a gym that needs a plan, or a voided sale, offers no Refund sale", async () => {
     svc.purchases.mockResolvedValue({ sales: [sale({ canRefund: true, refundedMinor: 0, refunds: [] })], notShown: 0 });
     open({ ...GYM, consoleReadOnly: true });

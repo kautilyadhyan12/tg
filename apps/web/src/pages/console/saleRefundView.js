@@ -269,10 +269,10 @@ export function saleSaidNow(done, basket, readSince) {
   return cardRefundSaidNow(sent, payment, done.words, readSince);
 }
 
-/** The Void refund box: what is voided, what changes, and its done line. */
+/** The Void refund box: what is voided (its product too, as the box opens over the row), what changes, and its done line. */
 export function voidSaleRefundWords(sale, refundId) {
   const refund = (sale.refunds ?? []).find((r) => r.id === refundId) ?? null;
-  const what = refund === null ? 'this refund' : `the ${formatMinor(refund.amountMinor, sale.currency)} refund noted on ${shortDay(refund.refundedOn)}`;
+  const what = refund === null ? 'this refund' : `the ${formatMinor(refund.amountMinor, sale.currency)} refund of ${String(sale.quantity)} × ${sale.itemName} noted on ${shortDay(refund.refundedOn)}`;
   const shelf = refund !== null && refund.restocked > 0 ? ` ${String(refund.restocked)} will come off the shelf count again.` : '';
   return {
     question: `Void ${what}? It will no longer count, and the sale counts that much again.${shelf} It stays in the list crossed out.`,

@@ -395,13 +395,18 @@ export function dayRevenue(page, country = null) {
   };
 }
 
-/** Over the day's list: "Today's sales", and how many, the newest first. */
-export function salesHeading(page, rows) {
+/** Over the day's list: "Today's sales", and how many the open tab holds, the newest first. Where the server
+ *  sent only the newest (`SALES_SHOWN` of each kind), it says the newest N of the day's whole number (round one, H1). */
+export function salesHeading(page, rows, key = 'all') {
   const past = pastDay(page);
   const n = rows.length;
+  const hidden = key === 'all' ? (page.salesNotShown ?? 0) + (page.paymentsNotShown ?? 0) : (kindTotals(page, key).notShown ?? 0);
+  const total = n + hidden;
+  const when = past ? 'that day' : 'today';
+  const num = (x) => x.toLocaleString('en');
   return {
     title: past ? `Sales on ${shortDay(page.day)}` : "Today's sales",
-    sub: n === 0 ? null : `${n.toLocaleString('en')} ${past ? 'that day' : 'today'} · the newest first`,
+    sub: total === 0 ? null : hidden > 0 ? `The newest ${num(n)} of ${num(total)} ${when}` : `${num(n)} ${when} · the newest first`,
   };
 }
 
