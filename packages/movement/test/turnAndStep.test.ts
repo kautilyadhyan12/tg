@@ -122,7 +122,8 @@ describe("the worst thing: once a member's set has counted, a stranger away from
   const CASES: readonly Case[] = [
     { how: "the member walks 1.0 m aside, and the model changes all at once to a stranger 1.8 m the other side of their place", member: (m) => m.walk(0, 1), at: -1.8, size: 1 },
     { how: "the member walks 1.0 m aside, and the model follows a passer-by nearer the phone, 1.6 times their size, who stops in the member's place", member: (m) => m.walk(0, 1), at: 0, size: 1.6 },
-    { how: "the member walks 1.0 m aside and the camera loses them for half a second; a stranger is found 1.8 m the other side of their place", member: (m) => [...m.walk(0, 1), ...nobody(m.still, 15)], at: -1.8, size: 1 },
+    // A second unseen: the plain sign alone would reach 5 m in it; the follow's own gap and reach refuse the stranger.
+    { how: "the member walks 1.0 m aside and the camera loses them for a second; a stranger is found 1.8 m the other side of their place", member: (m) => [...m.walk(0, 1), ...nobody(m.still, 30)], at: -1.8, size: 1 },
     { how: "the member walks 1.8 m aside and back and stands a second; the model changes all at once to a stranger where they had walked to", member: (m) => [...m.walk(0, 1.8), ...m.walk(1.8, 0), ...m.stand(0, 1)], at: 1.8, size: 1 },
   ];
   const cases = PAIRS.flatMap(([name, member, stranger]) => CASES.map((c) => [name, member, stranger, c.how] as const));

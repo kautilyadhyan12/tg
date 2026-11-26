@@ -1487,7 +1487,8 @@ sure the model is of each, the time, the picture's shape, and which way is down 
 own sensor; a reference video is taken as upright).
 
 1. **One person locked on** (§11.8's rule; job 52d). The frame format carries several people
-   from the first job. As built in 52d-i: §12.5 "As built, one person locked on".
+   from the first job. As built in 52d-i: §12.5 "As built, one person locked on"; a turn or a step in the middle of a
+   set, 52d-ii: §12.5 "As built, a turn or a step in the middle of a set".
 2. **Is this body possible?** Bones keep their length, joints do not jump, left and right do
    not swap. An impossible frame decides nothing. The model's own "how sure" is never
    trusted alone: a chair once read 0.99, and Kd's barbell video holds a mirror with the
@@ -2592,6 +2593,79 @@ member after them is not): job 53's screen shows whose body the camera follows a
 a hand (§11.8); a step to another place in the middle of a set leaves the place (52d-ii); walking to a machine, and a
 neighbour already in view while the member is at the phone, are tried on the phone at job 53.
 
+**As built, a turn or a step in the middle of a set (52d-ii, 2026-11-26; `rulings/2026-11-26-52d-ii.md`).** Nothing in it is any
+exercise's own: every movement gets both, with the same numbers, and no exercise's numbers changed. **Measured first:** his three
+floor videos played whole, the camera left on across his turns, counted 8 of 9, 3 of 3 and 8 of 10. The two squats lost from the
+raised phone were his first two after turning from side on to face the phone: the standing taken side on was kept (a standing
+found within its shake is the same standing, and a lower one is taken only once held a second, which his dips never left time
+for), and facing the phone his hips read 0.18 of a leg lower on the picture, so dips began while he stood and his squats were read
+against the standing of before. **A turn.** `facing.ts` reads which way the body faces: the line from the right hip to the left in
+3D, turned about "down", against the line across the phone's view (0 facing the phone, about 90 or -90 side on, 180 with the back
+to it; none while the hips' line stands along "down"). A standing keeps the way the person faced when it was taken, and the highest
+standing keeps its own (otherwise a standing found within its shake half way through a turn took the turn's way, and his raised
+set's turn read 39 degrees where his facing had moved 74). Between reps, a person facing further than `MatchLimits.turned` from it, the
+middle of the last 0.2 s, has turned: their standing, the highest standing, the stillness held below it, where their feet were
+last seen at a top and every standing read on the move are forgotten, and learned afresh where they now stand, as at the start of
+a set, the count going on. **The number**, 45 degrees, is set by `turn-check` (`scripts/turnCheck.ts`) as the lock's are: on every
+proof set of a movement counted by reps, of its own videos and its twins', as filmed and under each replay that must hold (715),
+with no turn forgetting anything, from the first counted rep to the last rep told, the furthest a person faced between reps from
+their standing's way: the furthest set 30.2 degrees (a kettlebell lunger, whose trunk turns as she steps), the middle set 4.5;
+beyond the furthest by half its distance from the middle, rounded up to 5 (`onePersonProof.test.ts` holds it to the rule). Between
+his sets he turns 22 to 143 degrees (from each set's middle way): all but the 22, which lost no squat, past 45. **Measured:** played whole, his raised set counts 10 of 10 (8 with the turn taken out),
+his dull-floor set 3 of 3, and his shiny-floor set 8 of 9, as before, each told nothing. **Open, in plain sight:** on his shiny
+floor his first squat after turning from side on to half turned is still lost: he stands still 0.2 s after the turn, the camera
+takes his standing, and 0.15 s later the model reads his hips 0.09 of a leg lower, so a rep begins while he stands, his feet
+still settling, and takes in his squat (13.5 to 16.0 s, "feet stay down"). Tried and not kept: after a turn, waiting for the
+person to stand still half a second (the floor's own 0.3 s wait and the 0.2 s of standing) before a standing is taken; his
+shiny-floor squat then counted, but his raised set, whose hips sway 4 cm in the second before his first squat after a turn, lost
+it instead. For job 53's live tries, with more people turning.
+
+**A step.** Once a set has counted the lock now follows the person picture by picture wherever they walk, as it did before the
+set counted: a body that goes on from their newest look a moment before (`walks`: the plain sign of 51c finding no change, with
+no more than `walkGap`, 250 ms, one lost picture at 8 a second, between two looks, and reaching no further than the plain sign's
+5 m/s over one picture at 8 a second, 0.625 m, however long the gap) is the person, and the one that goes on comes first. And the
+person has two places: where they exercised in the second before the set counted, which stays theirs for the set, and where they
+were over their last second followed (`OnePerson.where`), which goes with them. A body found after the camera lost the person for
+longer than `walkGap` is the person only at one of the two; every other body is held as 52d-i holds it. **Tried first and not
+kept, each measured:** a walk held as another body, its new place made theirs once it had stood there 3 s, as a stranger's is
+in the person's place: the stages after the lock then saw nobody for more than 3 s and forgot the body's bones, leg and trunk,
+and after a step the hip thrust and the sit-up counted nothing more; one place that goes with the person: once the model had
+changed to a neighbour lunging 1.1 m beside the member (52d-i's limit), the place went with the neighbour, and the set counted 3
+where 52d-i's lock and the lock as built count 5 (the neighbour's reps, the limit, among them): the member, back where they
+exercised, was no longer at their place. **The worst thing first** (`turnAndStep.test.ts`): six members' sets (two squats, a lunge, a squat
+jump, a sit-up, a hip thrust), each cut the picture after its first counted rep was judged, as the phone would see them standing
+further back, with a step drawn on their own picture (1 m/s, 30 pictures a second) and another person's real reps of the same
+movement put in as the model would follow them: the model changing all at once to a stranger 1.8 m the other side of the
+member's place as the member walks 1.0 m aside; a passer-by nearer the phone, 1.6 times the member's size, who stops in the
+member's place; the camera losing the walking member for a second (the plain sign alone would reach 5 m in it) and finding a
+stranger 1.8 m the other side; the member
+walking 1.8 m aside and back, then a stranger where they had walked to. On each of the 14 cases a picture has room for, the
+stranger counts and is told exactly as nobody there would be, the camera reads nobody in each of their pictures, and the proof's
+own run is the camera's. Not tried, measured: lying side on, a body fills the picture's width, and a stranger 1.8 m along it is
+off the picture or counts nothing alone there (the sit-up's and the hip thrust's three each); the lunge's and the squat jump's
+stranger 1.8 m the other way counts nothing alone there (two each). **Then the member:** each of the four standing members, who
+walks 1.5 m aside between two reps (the lunger 1.5, every one with room), stands a second and does the rest of the set there,
+counts and is told exactly as if they had stood as long in their own place, is followed in every picture, and the place they
+walked to is theirs; lost for half a second as they walk and found within a stride of where they were, they count as if they
+had stayed. **Limits, in plain sight** (pinned): a stranger the model changes to all at once in the member's own place after the
+member walked away, or found within a stride of where the member was when the camera lost them, is taken for them; and once the
+model has changed to a stranger at a place of the member's (52d-i's limit), the stranger is followed wherever they walk and
+counted there. Before 52d-ii a body seen outside the place, the member walking out of it included, was held and taken only after
+standing 3 s in the place: a member who stepped out and walked back waited 3 s; now they are followed in every picture.
+**The whole proof before and after** (every video under every movement the camera counts or times, as filmed and under all 18
+replays, 13,908 runs, the engine as merged against this job's): 15 differ. His sit-and-stand on a chair (`usual_v08`), 12 runs: he
+turns the chair round, and himself with it, between his two sits, and counts 0 as filmed (1 since 52d-i, open for 54) and 0 or 1
+under the held replays (`onePerson.test.ts` has each). His video sitting on a chair from the raised phone (`usual_v12`), under a
+passer-by at the bottom, no longer tells a dip of another movement "Keep your whole body in view.". Under the small model's gap,
+shown only (the app does not use that model), a barbell lunger's second take counts 1 of its 3 lunges (its hips' line read 45.4
+degrees from her standing's way between two lunges, past the turn) and his first raised pair 0 of its 2 (1 before).
+**The phone's own runs** (`test/phone-points`, the chosen set-up on the laptop's pictures) read as the laptop's as before, under
+every movement: under the squat 119 of 122 the same, the same three open; on his chair video only the phone's first sit, told
+to go lower, differs now (its second, counted on both from 52d-i, counts on neither).
+**Deliberate breaks**, each run red and put back: the follow without the plain sign (12 of the worst-thing tests red); without
+its gap and reach (2 red, the second unseen; added after a break that stayed green, following a refused body's look, which
+52d-i's hold on a body that came all at once already refuses); the walked-to place following any body seen (14 red).
+
 An exercise that does not pass is published as "count by hand", never with a wrong camera
 count. Kd tries one exercise of each kind of movement on the phone, about a dozen, never
 each one. After launch the server sees, for each exercise, how often members changed the
@@ -2679,8 +2753,9 @@ terminal (Kd, 2026-11-16).
 How the phone counts what its own live camera sees, rather than the laptop's pictures of a video (job 53; on the laptop's
 pictures of all 78 proof videos it counts and speaks as the laptop on 74, the other four open in §12.5, 52a-iii) · whether full on the main chip still holds 15 a second with the camera
 screen's engine, voice and drawing, and how the selfie camera reads a person in the room (job 53) · whether
-one long recording cuts cleanly into lines (job 53) · a busy room in front of the live phone: a neighbour, a passer-by, a mirror, a walk to a machine (52d-i is proven on
-real videos with a second person put into them; job 53) · whether a video redrawn from another
+one long recording cuts cleanly into lines (job 53) · a busy room in front of the live phone: a neighbour, a passer-by, a mirror, a walk to a machine, a step and a turn in a set
+(52d-i is proven on real videos with a second person put into them, 52d-ii's step drawn on them and its turn on his own floor
+videos; job 53) · whether a video redrawn from another
 phone place is faithful (52a-ii-b-ii-a: drawn as a change added to the picture, it comes back exactly from its own place; his raised squats, redrawn from the floor, move every phone-changed reading towards his real floor squats but not yet far enough at any of his six leans, so it is shown, not held; the pose model's foot wander measured on his four floor sets and added lost squats his real floor counts and still did not read as it, 52a-ii-b-ii-b-i, so it stays shown until more floor videos exist) · the lens of a web clip (taken as 26 mm) and how high a phone's lens stands on the floor (taken as 15 cm) · a floor phone on anybody but the one man of 2026-11-20, and on a floor that is neither his shiny nor his dull one (job 53's live tries) · what the hips do in a real one-leg lift: on the drawn
 one they moved at most 0.026 of the trunk's length, while the smallest rise in a real rep
 on twelve squat-family videos was 0.110 of the leg's length, under the old rules (job 52a
