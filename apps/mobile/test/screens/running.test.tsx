@@ -96,7 +96,15 @@ beforeEach(async () => {
 function runServer(user = RAVI, map: MapSource = OPENFREEMAP) {
   const saved: SaveRunRequest[] = [];
   const posts: { body: unknown; key: string | undefined }[] = [];
-  const state: { online: boolean; mapHeld: Promise<void> | null; climb: RunClimb; records: RunRecords | null } = { online: true, mapHeld: null, climb: { state: "done", m: 28, hills: [] }, records: null };
+  // `postHeld`: a save's answer waits for it; `postDown`: the server answers every save with a fault of its own.
+  const state: { online: boolean; mapHeld: Promise<void> | null; postHeld: Promise<void> | null; postDown: boolean; climb: RunClimb; records: RunRecords | null } = {
+    online: true,
+    mapHeld: null,
+    postHeld: null,
+    postDown: false,
+    climb: { state: "done", m: 28, hills: [] },
+    records: null,
+  };
   const climbAsks: unknown[] = [];
   const server = fakeServer({
     // The run's elevation gain, as the server's height map works it out (37b-ii).
@@ -142,6 +150,8 @@ function runServer(user = RAVI, map: MapSource = OPENFREEMAP) {
     if (path === PATH && init.method === "POST") {
       if (!state.online) throw new Error("no signal");
       posts.push({ body: init.body === undefined ? undefined : JSON.parse(init.body), key: init.headers?.["idempotency-key"] });
+      if (state.postHeld !== null) await state.postHeld;
+      if (state.postDown) return { ok: false, status: 503, json: () => Promise.resolve({ error: "unavailable", message: "Try again later." }) };
     }
     return server.ask(url, init);
   };
@@ -271,6 +281,54 @@ describe("a run, Start to Save", () => {
     await act(() => new Promise((resolve) => setTimeout(resolve, 50)));
     expect(s.posts).toHaveLength(1);
     expect(readRunFile(s.file() ?? "").waiting).toHaveLength(0);
+  });
+
+  it("on a slow signal, Save says at once the run is on the phone, then that it is saved when the server has it (37m; the hunt's B8)", async () => {
+    const s = runServer();
+    await openRunning(s);
+    await startRunning();
+    await feed(0, 61, 3);
+    await fireEvent.press(await screen.findByRole("button", { name: "Pause" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Finish" }));
+    const name = runName(new Date(runNow()?.startedAt ?? 0));
+    const answer: { give: () => void } = { give: () => undefined };
+    s.state.postHeld = new Promise<void>((resolve) => {
+      answer.give = resolve;
+    });
+    await fireEvent.press(await screen.findByRole("button", { name: "Save run" }));
+    // The server has not answered: the page says where the run is now, not nothing.
+    expect(await screen.findByText(`${name} is saved on this phone. It will be sent when you're online.`)).toBeTruthy();
+    expect(s.saved).toHaveLength(0);
+    await act(async () => {
+      answer.give();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(await screen.findByText(`${name} is saved.`)).toBeTruthy();
+    expect(screen.queryByText(/is saved on this phone/)).toBeNull();
+  });
+
+  it("a run the server keeps failing says so under Your runs, as not sent yet (37m; the hunt's B1)", async () => {
+    const s = runServer();
+    await openRunning(s);
+    // A first run saved, so the Running page has its box of runs.
+    await startRunning();
+    await feed(0, 61, 3);
+    await fireEvent.press(await screen.findByRole("button", { name: "Pause" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Finish" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Save run", }));
+    await waitFor(() => {
+      expect(s.saved).toHaveLength(1);
+    });
+    // The second, which the server fails.
+    s.state.postDown = true;
+    await startRunning();
+    await feed(0, 61, 3);
+    await fireEvent.press(await screen.findByRole("button", { name: "Pause" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Finish" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Save run" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "See all your runs" }, { timeout: 4000 }));
+    expect(await screen.findByText("Not sent yet. Trying again soon.", {}, { timeout: 4000 })).toBeTruthy();
+    expect(s.saved).toHaveLength(1);
   });
 
   it("Discard asks first, and then nothing is sent or kept", async () => {

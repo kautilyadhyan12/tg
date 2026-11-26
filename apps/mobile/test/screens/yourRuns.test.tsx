@@ -330,6 +330,92 @@ describe("Your runs", () => {
   });
 });
 
+/** The runs server with its list reads failed, or one kind held until released, on the test's word. */
+function holding(s: ReturnType<typeof runsServer>) {
+  const rule: { fail: (u: URL) => boolean; hold: (u: URL) => boolean } = { fail: () => false, hold: () => false };
+  const waiting: (() => void)[] = [];
+  const ask: Ask = async (url, init) => {
+    const u = new URL(url);
+    const listRead = u.pathname === RUNS && (init.method ?? "GET") === "GET";
+    if (listRead && rule.fail(u)) return { ok: false, status: 503, json: () => Promise.resolve({ error: "unavailable", message: "Try again later." }) };
+    if (listRead && rule.hold(u)) await new Promise<void>((resolve) => waiting.push(resolve));
+    return s.ask(url, init);
+  };
+  const release = async () => {
+    await act(async () => {
+      for (const go of waiting.splice(0)) go();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+  };
+  return { ...s, ask, rule, release };
+}
+
+async function renameFromList(name: string, to: string) {
+  await fireEvent.press(await rowOf(name));
+  await fireEvent.press(await screen.findByRole("button", { name: `Rename ${name}` }, { timeout: 4000 }));
+  await fireEvent.changeText(screen.getByLabelText("Run name"), to);
+  await fireEvent.press(newest(await screen.findAllByRole("button", { name: "Save changes" })));
+}
+
+describe("Your runs read again (37m; the hunt's B3 to B6)", () => {
+  const many = () => Array.from({ length: 25 }, (_, i) => makeRun(i + 1, `Run ${String(i + 1)}`, 5, 30, i));
+
+  it("read again after a rename, it keeps every run shown; a read that fails says so, and Try again reads it", async () => {
+    const s = holding(runsServer(many()));
+    await openList(s);
+    await fireEvent.press(await screen.findByRole("button", { name: "More runs" }));
+    expect(await rowOf("Run 25")).toBeTruthy();
+    s.rule.fail = () => true;
+    await renameFromList("Run 24", "Canal loop");
+    expect(await screen.findByText("Your runs couldn't refresh.", {}, { timeout: 4000 })).toBeTruthy();
+    // The list shown stays where the person was.
+    expect(await rowOf("Run 25")).toBeTruthy();
+    s.rule.fail = () => false;
+    await fireEvent.press(screen.getByRole("button", { name: "Refresh your runs" }));
+    await waitFor(() => {
+      expect(screen.queryByText("Your runs couldn't refresh.")).toBeNull();
+    });
+    expect(await rowOf("Canal loop")).toBeTruthy();
+    expect(await rowOf("Run 25")).toBeTruthy();
+    // As many as were shown, in one read: never back to the first twenty.
+    expect(s.requests.filter((r) => r.path === RUNS && r.method === "GET").at(-1)?.search).toBe("?limit=25");
+  });
+
+  it("More runs is never left on Loading… when the list is read again while it was on its way", async () => {
+    const s = holding(runsServer(many()));
+    await openList(s);
+    s.rule.hold = (u) => u.searchParams.has("cursor");
+    await fireEvent.press(await screen.findByRole("button", { name: "More runs" }));
+    expect(await screen.findByRole("button", { name: "Loading…" })).toBeTruthy();
+    s.rule.fail = (u) => !u.searchParams.has("cursor");
+    await renameFromList("Run 2", "Canal loop");
+    expect(await screen.findByText("Your runs couldn't refresh.", {}, { timeout: 4000 })).toBeTruthy();
+    await s.release();
+    expect(await screen.findByRole("button", { name: "More runs" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Loading…" })).toBeNull();
+  });
+
+  it("a day picked: the list before it is never gone on from while the day's runs load", async () => {
+    const s = holding(runsServer(many()));
+    await openList(s);
+    const listed = await rowOf("Run 1");
+    const before = s.requests.length;
+    s.rule.hold = (u) => u.searchParams.has("upTo");
+    await fireEvent.press(screen.getByRole("button", { name: "Pick a day" }));
+    const day = dayKey(new Date(Date.now() - 2 * 86_400_000));
+    if (day.slice(0, 7) !== dayKey(new Date()).slice(0, 7)) await fireEvent.press(await screen.findByRole("button", { name: "Month before" }));
+    await fireEvent.press(await screen.findByTestId(`ran-${day}`, {}, { timeout: 4000 }));
+    // Scrolled to the end while the day's runs are on their way: nothing goes on from the old list.
+    await fireEvent.scroll(await screen.findByText("Loading your runs…"), { nativeEvent: { layoutMeasurement: { height: 800 }, contentOffset: { y: 5000 }, contentSize: { height: 5200 } } });
+    expect(listed).toBeTruthy();
+    expect(s.requests.slice(before).filter((r) => r.search.includes("cursor"))).toEqual([]);
+    await s.release();
+    expect(await rowOf("Run 3")).toBeTruthy();
+    // Run 1 is after the day: only the Running page's own last run, under the list, still names it.
+    expect(screen.getAllByRole("button", { name: /^Run 1, / })).toHaveLength(1);
+  });
+});
+
 describe("Running records (37c-ii)", () => {
   const recordOf = (run: RunDetail, value: number, before: number | null = null) => ({ runId: run.id, name: run.name, startedAt: run.startedAt, day: run.day, value, before });
 

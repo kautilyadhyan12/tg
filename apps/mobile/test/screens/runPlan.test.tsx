@@ -1,4 +1,5 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react-native";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react-native";
+import { AppState } from "react-native";
 import { runPlanAnswersSchema, runPlanOf, type RunDay, type RunPlanAnswers, type RunPlanResponse } from "@app/shared";
 import { App } from "../../src/App";
 import { phoneToday } from "../../src/screens/running/RunPlanBox";
@@ -16,7 +17,8 @@ const RUNNER: RunPlanAnswers = { doesRun: "yes", jog: "30plus", days: [1, 3, 5, 
 
 /** The server: the answers kept, the plan worked out by the server's own rules from today. */
 function planServer(start: { answers: RunPlanAnswers | null; safe?: boolean; runs?: RunDay[] }) {
-  const state = { answers: start.answers, safe: start.safe === true };
+  // `readsFail`: every read of the plan fails (no signal), while a save still goes through.
+  const state = { answers: start.answers, safe: start.safe === true, readsFail: false };
   const puts: unknown[] = [];
   const healthPuts: unknown[] = [];
   const reply = (): RunPlanResponse => {
@@ -29,6 +31,7 @@ function planServer(start: { answers: RunPlanAnswers | null; safe?: boolean; run
     "/v1/auth/refresh": () => ({ status: 200, body: { tokens: tokens(2) } }),
     "/v1/users/me": () => ({ status: 200, body: profile(true, RAVI) }),
     [PLAN]: (body): Reply => {
+      if (body === undefined && state.readsFail) return { status: 503, body: { error: "unavailable", message: "Try again later." } };
       if (body !== undefined) {
         puts.push(body);
         state.answers = runPlanAnswersSchema.parse(body);
@@ -147,5 +150,84 @@ describe("a runner's plan", () => {
     await waitFor(() => {
       expect(s.puts).toEqual([RUNNER]);
     });
+  });
+});
+
+describe("changing the answers (37m; the hunt's D1 and D7)", () => {
+  it("the plan read again while the questions are open leaves the answers being given alone", async () => {
+    const heard: ((state: "active") => void)[] = [];
+    jest.spyOn(AppState, "addEventListener").mockImplementation((_type, handler) => {
+      heard.push(handler);
+      return { remove: () => undefined };
+    });
+    const s = planServer({ answers: RUNNER });
+    await openRunning(s);
+    await fireEvent.press(await screen.findByRole("button", { name: "View your training plan" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Edit your training plan" }));
+    await fireEvent.press(await screen.findByText("I already run"));
+    await fireEvent.press(await screen.findByText("30 minutes or more"));
+    await fireEvent.press(await screen.findByText("Sat"));
+    await fireEvent.press(await screen.findByRole("button", { name: "Next" }));
+    expect(await screen.findByText("Your current running")).toBeTruthy();
+    const reads = s.asked.filter((a) => a.path === PLAN).length;
+    // Away from the app and back: the plan is read again.
+    await act(async () => {
+      for (const h of heard) h("active");
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    });
+    await waitFor(() => {
+      expect(s.asked.filter((a) => a.path === PLAN).length).toBeGreaterThan(reads);
+    });
+    // Still on the question the person was answering, with Saturday still picked.
+    expect(screen.getByText("Your current running")).toBeTruthy();
+    expect(screen.queryByText("What’s your running experience?")).toBeNull();
+    await fireEvent.press(screen.getByRole("button", { name: "Create plan" }));
+    await waitFor(() => {
+      expect(s.puts).toEqual([{ ...RUNNER, days: [1, 3, 5, 6, 7] }]);
+    });
+  });
+
+  it("Couch to 5K's rest day line goes once the days are changed", async () => {
+    const s = planServer({ answers: RUNNER });
+    await openRunning(s);
+    await fireEvent.press(await screen.findByRole("button", { name: "View your training plan" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Edit your training plan" }));
+    await fireEvent.press(await screen.findByText("I already run"));
+    await fireEvent.press(await screen.findByText("30 minutes or more"));
+    // Monday and Tuesday, side by side; and no running in a week now, so Couch to 5K's last week.
+    for (const day of ["Wed", "Fri", "Sun", "Tue"]) await fireEvent.press(await screen.findByText(day));
+    await fireEvent.press(await screen.findByRole("button", { name: "Next" }));
+    const weekly = await screen.findByLabelText("Weekly distance");
+    for (let i = 0; i < 20; i++) await fireEvent(weekly, "accessibilityAction", { nativeEvent: { actionName: "decrement" } });
+    await fireEvent.press(screen.getByRole("button", { name: "Create plan" }));
+    const line = "Couch to 5K needs a rest day between runs. Go back and pick days with a day between them.";
+    expect(await screen.findByText(line)).toBeTruthy();
+    expect(s.puts).toEqual([]);
+    await fireEvent.press(screen.getByRole("button", { name: "Back to the last question" }));
+    expect(screen.getByText(line)).toBeTruthy();
+    await fireEvent.press(screen.getByText("Thu"));
+    expect(screen.queryByText(line)).toBeNull();
+  });
+});
+
+describe("a plan just made (37m; the hunt's D8)", () => {
+  it("shows at once, and stays when the read after it fails", async () => {
+    const s = planServer({ answers: null });
+    const box = await openRunning(s);
+    await fireEvent.press(within(box).getByRole("button", { name: "Create plan" }));
+    await fireEvent.press(await screen.findByText("New to running"));
+    await fireEvent.press(await screen.findByText("I can’t run yet"));
+    for (const day of ["Mon", "Wed", "Fri"]) await fireEvent.press(screen.getByText(day));
+    await fireEvent.press(screen.getByText("5K"));
+    s.state.readsFail = true;
+    await fireEvent.press(screen.getAllByRole("button", { name: "Create plan" }).at(-1) ?? screen.getByRole("button", { name: "none" }));
+    expect(await screen.findByText("Couch to 5K · Week 1 of 9")).toBeTruthy();
+    // The read after the save was sent, failed, and the plan the server made is still shown.
+    await waitFor(() => {
+      expect(s.asked.filter((a) => a.path === PLAN && a.method === "GET").length).toBeGreaterThan(1);
+    });
+    await act(() => new Promise((resolve) => setTimeout(resolve, 20)));
+    expect(screen.getByText("Couch to 5K · Week 1 of 9")).toBeTruthy();
+    expect(screen.queryByText("A weekly plan built from your current running.")).toBeNull();
   });
 });
