@@ -855,16 +855,17 @@ export const MOVEMENT_VIDEOS: readonly MovementVideo[] = [
       "54, where the chair squat is made on the squat: sitting down on a chair and getting up is a chair squat's movement, which this list " +
       "counts as a twin of the squat (chair_squat_reference). Drawn 2026-11-25 (52d-i), a picture a second: he walks from the phone, sits at " +
       "2 s, stands at 12 s turning the chair round, sits again facing the other way at 14 s and stands at 17 s, then walks to the phone. Under " +
-      "the squat his second sit-and-stand (13.8 to 17.1 s, the hips 0.24 of a leg down, the knees at 100 degrees) counts 1 as filmed, a chair " +
-      "squat by eye; the first, begun as he walks to the chair and ended turning it, is another movement. Before 52d-i nothing was counted: the " +
-      "standing taken while he was at the phone, found again 1.3 to 1.8 times smaller, was kept and no dip began; the lock now takes him afresh. " +
-      "Under the replays it counts 0 to 2 (onePerson.test.ts has each); at 8 pictures a second it tells two of his sits \"Go lower to count.\", " +
-      "false for a person on a chair, written down for 54 by Kd's choice (rulings/2026-11-25-52d-i.md).",
+      "the squat his second sit-and-stand (13.8 to 17.1 s, the hips 0.24 of a leg down, the knees at 100 degrees), a chair squat by eye, counted " +
+      "1 from 52d-i; since 52d-ii it counts 0 as filmed: he turns the chair round and himself with it between his two sits, and the standing " +
+      "taken before the turn is forgotten and not yet learned again when he sits. The first, begun as he walks to the chair and ended turning " +
+      "it, is another movement. Under the replays it counts 0 or 1 (onePerson.test.ts has each); at 8 pictures a second it tells one of his " +
+      "sits \"Go lower to count.\", false for a person on a chair, written down for 54 by Kd's choice (rulings/2026-11-25-52d-i.md).",
     phoneOpen: {
       why:
         "54, where the chair squat is made: on the phone's reading his first sit, begun as he walks to the chair, is read as a chair squat " +
-        "that stopped short and told to go lower, and his second sit-and-stand is judged 0.2 s later; the laptop reads the first as another movement.",
-      differences: ["the laptop says 13.8 s counted, the phone 2.9 s short (depth)", "the phone also says 14.0 s counted"],
+        "that stopped short and told to go lower; the laptop reads it as another movement. His second, after he turns the chair round, " +
+        "counts on neither since 52d-ii.",
+      differences: ["the phone also says 2.9 s short (depth)"],
     },
   },
   floorOther("usual_v09", "floor", "side", "The phone on the floor, upright: he stands at a chair, one leg lifted and bent."),

@@ -13,23 +13,28 @@
 //     1.8 times smaller. A body that came all at once with no picture of nobody between (a passer-by walking in front)
 //     is withheld while the person may come back, and the person then goes on as they were; followed for as long as
 //     bones are remembered while the person is not seen, it is the set's person instead, afresh.
-//   - **Once the set has counted** (`confirm`), the person is a body standing where they exercised in the second before,
-//     at their size on the picture: within `room` of that place and `sizeRoom` of that size. Any other body, anywhere else
-//     or nearer or further from the phone, counts nothing, however long it stays, and a body whose size cannot be read
-//     decides nothing. A body that came all at once from outside that place (the model changing bodies: a neighbour, a
-//     passer-by) stays another while it goes on bit by bit from there, into the place too, across pictures with nobody
-//     or whose size cannot be read, until it has stood in the place for `takeOver` (two bodies there at one size cannot
-//     be told apart, and one that stays there is the person far more often than one crossing it) or has not been seen for
-//     as long. Every body seen outside the place is held so, the person who stepped out of it too, who back in their
-//     place waits as long. A body found in the place after a moment of nobody is the person at once unless it lies within
-//     the held body's reach, a jump's speed over at most one picture at 8 a second (about 1 m). Nothing in this is any
+//   - **Once the set has counted** (`confirm`), the person is a body that goes on, picture by picture, from their newest
+//     look a moment before (`walks`: the plain sign finding no change, never more than a lost picture between), wherever
+//     it walks (a step to another place in the middle of a set, 52d-ii); or a body at one of their two places, at their
+//     size there: where they exercised in the second before the set counted, which stays theirs for the set, and where
+//     they were over their last second followed, which goes with them (within `room` of the place and `sizeRoom` of the
+//     size). Any other body, anywhere else or nearer or further from the phone, counts nothing, however long it stays, and
+//     a body whose size cannot be read decides nothing. A body that came all at once from outside that place (the model
+//     changing bodies: a neighbour, a passer-by) stays another while it goes on bit by bit from there, into the place too,
+//     across pictures with nobody or whose size cannot be read, until it has stood in the place for `takeOver` (two
+//     bodies there at one size cannot be told apart, and one that stays there is the person far more often than one
+//     crossing it) or has not been seen for as long. Every other body seen outside the places is held so, the person found
+//     away from them after the camera lost them too, who back in a place waits as long. A body found in the place after a moment of nobody is the person at once unless it lies within
+//     the held body's reach, a jump's speed over at most one picture at 8 a second (about 1 m). A body the camera did not
+//     see go on from the person, picture by picture, never takes their place anywhere else. Nothing in this is any
 //     exercise's own: every movement gets it, with the same numbers.
 //
 // What it uses, measured on the proof videos (lock-check): where the trunk's middle lies on the picture and how large the
 // body is (`bodySize`, picture heights for each metre of body). Not the body's own proportions: in 3D the model reads one
 // man's thigh 0.75 to 0.98 of his trunk across his own sets and every proof set's 0.73 to 0.90, so they cannot tell two
 // people apart. So what it cannot do: a body of the person's size whose trunk lies within `room` of their place when the
-// model changes to it (a neighbour less than about a stride away), or that stays there for `takeOver`, is taken for them.
+// model changes to it (a neighbour less than about a stride away), or that stays there for `takeOver`, is taken for them,
+// and followed wherever it then walks.
 import { KP, type Down, type MovementFrame, type SeenPerson } from "@app/shared";
 import { LIMITS } from "./possible.js";
 import { TRUNK } from "./points.js";
@@ -53,6 +58,9 @@ export interface PersonLimits {
   /** The longest step between two pictures the engine takes, ms: a body held as another reaches no further than a jump's
    *  speed over this, however long it was unseen. */
   readonly pictureStep: number;
+  /** Once the set has counted: a person walking away from their place is followed with no more than this between two
+   *  of their looks, ms; after a longer gap they are the person again only in their place. */
+  readonly walkGap: number;
   /** Once the set has counted: further than this from the person's place, metres at their size, a body is another. */
   readonly room: number;
   /** Once the set has counted: larger or smaller than this many times the person's size, a body is another. */
@@ -64,7 +72,8 @@ export interface PersonLimits {
  * their trunk is a jump's take-off, for a jump of 1.1 m √(2 · 9.81 · 1.1) = 4.6 m/s, so 5; straight up or down a jump's
  * take-off or landing reached 5.1 to 7.1 m/s on Kd's four squat-jump videos (52c-i), so 8 under 1 m/s across; on Kd's
  * six reference videos the size changed at most 1.12 times from one picture to the next, so 1.25. `pictureStep`: a picture
- * at the slowest rate the engine takes, 8 a second (the matcher's `SLOWEST_RATE`; the phone's slowest second, 51b-ii). `takeOver`: the
+ * at the slowest rate the engine takes, 8 a second (the matcher's `SLOWEST_RATE`; the phone's slowest second, 51b-ii); `walkGap`, two
+ * such steps: one picture lost while a person walks (a phone loses a walking body for a picture). `takeOver`: the
  * possible-body check's memory of bones (`LIMITS.boneMemory`): a person gone longer is a new body to it. `place`, `room`
  * and `sizeRoom` are set by `lock-check` from every proof set the camera counts or times, as filmed and under each replay that must hold: from
  * the moment the set first counted to the last rep or second it reported, how far the trunk's middle went from the
@@ -79,6 +88,7 @@ export const PERSON_LIMITS: PersonLimits = {
   takeOver: LIMITS.boneMemory,
   place: 1000,
   pictureStep: 125,
+  walkGap: 250,
   room: 0.95,
   sizeRoom: 1.35,
 };
@@ -172,6 +182,11 @@ const median = (values: readonly number[]): number => {
   return s.length % 2 === 1 ? (s[mid] ?? 0) : ((s[mid - 1] ?? 0) + (s[mid] ?? 0)) / 2;
 };
 
+/** Where looks lie: the middle of their trunks' middles, at the middle of their sizes. */
+function placeOf(looks: readonly Look[]): { readonly middle: readonly [number, number]; readonly size: number } {
+  return { middle: [median(looks.map((l) => l.middle[0])), median(looks.map((l) => l.middle[1]))], size: median(looks.map((l) => l.size)) };
+}
+
 interface Seen {
   readonly person: SeenPerson;
   readonly look: Look | null;
@@ -214,8 +229,11 @@ export class OnePerson {
    *  from outside the person's place, so it stays another while it goes on bit by bit, into the place too; `inPlace`:
    *  since when it has stood in the person's place, or null. */
   private other: { readonly look: Look; readonly since: number; readonly jumped: boolean; readonly inPlace: number | null } | null = null;
-  /** Where the person exercises and their size there, from the moment the set first counted. */
+  /** Where the person exercised and their size there, from the moment the set first counted: theirs for the set. */
   private placed: { readonly middle: readonly [number, number]; readonly size: number } | null = null;
+  /** Once the set has counted, where the person has been over their last `place` followed and their size there: it goes
+   *  with them (52d-ii). */
+  private here: { readonly middle: readonly [number, number]; readonly size: number } | null = null;
 
   constructor(limits: PersonLimits = PERSON_LIMITS) {
     this.limits = limits;
@@ -226,9 +244,14 @@ export class OnePerson {
     return this.placed !== null;
   }
 
-  /** Where the person exercises and their size there, once the set has counted. */
+  /** Where the person exercised and their size there, once the set has counted. */
   get place(): { readonly middle: readonly [number, number]; readonly size: number } | null {
     return this.placed;
+  }
+
+  /** Where the person has been over their last second followed, once the set has counted. */
+  get where(): { readonly middle: readonly [number, number]; readonly size: number } | null {
+    return this.here;
   }
 
   /** The set has counted (its first rep, or its first held second): from the next picture on the person is a body at the
@@ -242,7 +265,8 @@ export class OnePerson {
     const recent = this.recent.filter((l) => l.t > t - this.limits.place);
     const looks = recent.length > 0 ? recent : this.person === null ? [] : [this.person];
     if (looks.length === 0) return false;
-    this.placed = { middle: [median(looks.map((l) => l.middle[0])), median(looks.map((l) => l.middle[1]))], size: median(looks.map((l) => l.size)) };
+    this.placed = placeOf(looks);
+    this.here = this.placed;
     this.other = null;
     return true;
   }
@@ -265,7 +289,18 @@ export class OnePerson {
     this.other = null;
     this.recent = [];
     this.placed = null;
+    this.here = null;
     this.lastFrame = null;
+  }
+
+  /** Whether `now` goes on from `from` as a person walking does: the plain sign finds no change, with no more than
+   *  `walkGap` between them, and it reaches no further than the plain sign's speed over one picture at the slowest rate
+   *  (`pictureStep`), however long the gap. */
+  private walks(from: Look, now: Look, down: Down | null): boolean {
+    const ms = now.t - from.t;
+    if (!(ms > 0) || ms > this.limits.walkGap) return false;
+    const c = bodyChange(from, now, down, this.limits);
+    return c !== null && !c.changed && c.speed * ms <= this.limits.speed * Math.min(ms, this.limits.pictureStep);
   }
 
   private given(person: SeenPerson, look: Look | null, t: number, fresh: boolean): PersonFrame {
@@ -274,6 +309,8 @@ export class OnePerson {
     if (look !== null) {
       this.person = look;
       this.recent = [...this.recent.filter((l) => l.t > t - this.limits.place), look];
+      // Once the set has counted, where they are goes with them.
+      if (this.placed !== null) this.here = placeOf(this.recent);
     }
     return { t, person, status: "person", fresh };
   }
@@ -285,14 +322,16 @@ export class OnePerson {
     const seen: Seen[] = frame.people.map((person) => ({ person, look: lookAt(person, frame.aspect, t) }));
     const readable = seen.filter((s): s is Seen & { readonly look: Look } => s.look !== null);
 
-    // Once the set has counted: a body at the person's place and size, the nearest such, and never one held as another;
-    // nobody else.
+    // Once the set has counted: a body that goes on from the person, picture by picture, wherever it walks, or one at one
+    // of their places and their size there; never one held as another; nobody else.
     const placed = this.placed;
     if (placed !== null) {
-      const atPlace = (x: Seen & { readonly look: Look }): boolean => {
-        const d = fromPlace(x.look, placed);
+      const here = this.here ?? placed;
+      const within = (x: Seen & { readonly look: Look }, at: { readonly middle: readonly [number, number]; readonly size: number }): boolean => {
+        const d = fromPlace(x.look, at);
         return d.metres <= this.limits.room && d.size <= this.limits.sizeRoom;
       };
+      const atPlace = (x: Seen & { readonly look: Look }): boolean => within(x, placed) || within(x, here);
       // The hold on a body seen outside the place: kept across pictures with nobody or whose size cannot be read (a phone
       // loses a walking body for a picture), ended once it has stood in the place for `takeOver` or has not been seen for as
       // long.
@@ -313,16 +352,24 @@ export class OnePerson {
         return c.speed * seconds <= this.limits.jumpSpeed * Math.min(seconds, this.limits.pictureStep / 1000) && c.size <= this.limits.changedSize;
       };
       const held = holding ? readable.filter(stillHeld) : [];
+      // The person walking away from their place (52d-ii), or doing their reps there: a body that goes on from their newest
+      // look a moment before, picture by picture (`walks`), the one going on first, as before the set has counted.
+      const person = this.person;
+      const going = person === null ? [] : readable.filter((x) => !held.includes(x) && this.walks(person, x.look, frame.down));
+      if (person !== null && going.length > 0) {
+        const s = nearest(going, person.middle);
+        return this.given(s.person, s.look, t, false);
+      }
       const there = readable.filter((x) => !held.includes(x) && atPlace(x));
       if (there.length > 0) {
-        const s = nearest(there, placed.middle);
+        const s = nearest(there, here.middle);
         return this.given(s.person, s.look, t, false);
       }
       if (readable.length === 0) return none("unsure");
-      // Another body, the person walked out of their place included: followed, and held from its first picture outside the
-      // place, so that back in the place it is the person only after `takeOver` there (a person who steps out and walks back
-      // waits as long; one found in the place after a moment of nobody is the person at once unless it lies within the held
-      // body's reach, `stillHeld`).
+      // Another body, the person found away from their place after losing them for longer than `walkGap` included: followed,
+      // and held from its first picture outside the place, so that back in the place it is the person only after `takeOver`
+      // there (one found in the place after a moment of nobody is the person at once unless it lies within the held body's
+      // reach, `stillHeld`).
       const s = other !== null && held.length > 0 ? nearest(held, other.look.middle) : largest(readable);
       const goingOn = other !== null && held.includes(s);
       const inPlace = atPlace(s) ? (goingOn ? (other.inPlace ?? t) : t) : null;

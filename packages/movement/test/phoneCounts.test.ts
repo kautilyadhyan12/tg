@@ -172,7 +172,8 @@ describe("every proof video, as the phone's chosen set-up read it (51b-ii; kept 
   it("the open cases are three, two of a man's own floor squats and his sit-and-stand on a chair, and on the phone no other movement is counted", () => {
     // Since 52d-i his walk-back set counts 3 of 3 on the phone as on the laptop: the lock forgets the body learned while he
     // was at the lens, whose knee the body check refused until 4.9 s. His sit-and-stand on a chair (usual_v08) counts its
-    // chair squat on both, open for 54 (scripts/movementVideos.ts).
+    // chair squat on neither since 52d-ii (he turns the chair round before it), and the phone tells his first sit to go
+    // lower, open for 54 (scripts/movementVideos.ts).
     const open = rows.filter((r) => r.entry.phoneOpen !== undefined);
     expect(open.map((r) => r.label).sort()).toEqual(["floor_phone_test 13.9-21.1 s", "usual_v04 9.8-17.5 s", "usual_v08"]);
     for (const r of rows.filter((x) => x.entry.movement !== "squat" && x.entry.open === undefined)) expect([r.label, r.phone?.count]).toEqual([r.label, 0]);

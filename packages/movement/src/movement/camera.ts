@@ -67,6 +67,11 @@ export class CameraSet {
     return this.lock.place;
   }
 
+  /** Where the person has been over their last second followed (picture heights), once the set has counted; null before. */
+  get where(): OnePerson["where"] {
+    return this.lock.where;
+  }
+
   next(frame: MovementFrame): CameraFrame {
     const person = this.lock.next(frame);
     const checked = this.body.check(frame.t, frame.aspect, frame.down, person.person, person.fresh);
