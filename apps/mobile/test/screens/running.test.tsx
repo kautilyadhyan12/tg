@@ -331,6 +331,29 @@ describe("a run, Start to Save", () => {
     expect(s.saved).toHaveLength(1);
   });
 
+  it("after Finish, Save run and Discard run are always on screen, under the run's long page, never at its end (Kd, 2026-11-26)", async () => {
+    const s = runServer();
+    await openRunning(s);
+    await startRunning();
+    await feed(0, 61, 3);
+    await fireEvent.press(await screen.findByRole("button", { name: "Pause" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Finish" }));
+    const save = await screen.findByRole("button", { name: "Save run" });
+    const discard = screen.getByRole("button", { name: "Discard run" });
+    // Neither is inside the page that scrolls, as the run's name at its top is: no scrolling finds them.
+    const scrolls = (from: unknown): boolean => {
+      let at = from as { type?: unknown; parent?: unknown } | null;
+      while (at !== null && at !== undefined) {
+        if (at.type === "RCTScrollView") return true;
+        at = at.parent as typeof at;
+      }
+      return false;
+    };
+    expect(scrolls(screen.getByRole("button", { name: /^Rename / }))).toBe(true);
+    expect(scrolls(save)).toBe(false);
+    expect(scrolls(discard)).toBe(false);
+  });
+
   it("Discard asks first, and then nothing is sent or kept", async () => {
     const s = runServer();
     await openRunning(s);
