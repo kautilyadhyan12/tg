@@ -82,8 +82,8 @@ export const START_PROBLEM_WORDS: Record<StartProblem, string> = {
   battery: "Your phone's battery setting stops run recording when the screen is off.",
 };
 
-/** What a run tells the Running tab once it is saved, or waiting to be sent. */
-export type RunDone = { name: string; waiting: boolean } | null;
+/** The run just saved, for the Running tab to say whether it is on the server yet or waiting to be sent. */
+export type RunDone = { name: string; runId: string } | null;
 
 interface RunLayerValue {
   /** Start: asks for the location if it must, then counts down. null when the count has begun. With
@@ -256,8 +256,8 @@ export function RunLayerProvider({ children }: { children: ReactNode }) {
             run={run}
             units={units}
             kg={kg}
-            onSaved={(name, waiting) => {
-              setDone({ name, waiting });
+            onSaved={(name, runId) => {
+              setDone({ name, runId });
             }}
           />
         ) : (
@@ -621,7 +621,7 @@ function RoundButton({ label, kind, onPress, busy }: { label: "Pause" | "Resume"
 
 // ── After Finish ──────────────────────────────────────────────────────────────────────────────
 
-function Summary({ run, units, kg, onSaved }: { run: LiveRun; units: Units; kg: number; onSaved: (name: string, waiting: boolean) => void }) {
+function Summary({ run, units, kg, onSaved }: { run: LiveRun; units: Units; kg: number; onSaved: (name: string, runId: string) => void }) {
   const { outbox, view } = useRunOutbox();
   const insets = useSafeAreaInsets();
   const finished = run.finishedMs ?? 0;
@@ -699,8 +699,9 @@ function Summary({ run, units, kg, onSaved }: { run: LiveRun; units: Units; kg: 
       return;
     }
     await forgetRun();
-    await outbox.send();
-    onSaved(kept, outbox.view().waiting.some((r) => r.runId === body.runId));
+    // Said at once; the send goes on behind, and the Running page says when the server has it.
+    onSaved(kept, body.runId);
+    void outbox.send();
   };
 
   return (

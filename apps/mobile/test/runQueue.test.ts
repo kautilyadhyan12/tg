@@ -4,7 +4,8 @@
 import { describe, expect, it } from "vitest";
 import { RUN_MAX_POINTS, type SaveRunRequest, type SavedRun } from "@app/shared";
 import { configFor, copyFor } from "../app.config";
-import { createRunOutbox, readRunFile, type RunSendResult } from "../src/screens/running/runQueue";
+import { createRunOutbox, readRunFile, runSender, type RunSendResult } from "../src/screens/running/runQueue";
+type Session = Parameters<typeof runSender>[0];
 
 const run = (n: number): SaveRunRequest => ({
   runId: `0000000${String(n)}-0000-4000-8000-000000000000`,
@@ -36,6 +37,123 @@ function memory(text: string | null = null) {
     },
   };
 }
+
+describe("one run the server cannot take (37m; the hunt's B1, B2, B7)", () => {
+  // The worst thing: a run a person finished is thrown away, or never sent, without a word.
+  it("never holds back the runs saved after it; after 5 failures over 10 minutes it is a run that couldn't be saved, kept whole", async () => {
+    const m = memory();
+    let clock = 0;
+    const sent: string[] = [];
+    const outbox = createRunOutbox(
+      m.store,
+      (r): Promise<RunSendResult> => {
+        sent.push(r.runId);
+        return Promise.resolve(r.runId === run(1).runId ? { kind: "failed" } : { kind: "done", run: saved(r) });
+      },
+      () => clock,
+    );
+    await outbox.start();
+    await outbox.add(run(1));
+    await outbox.add(run(2));
+    await outbox.send();
+    // The run after it is on the server; the failing one waits, and says it is tried again.
+    expect(sent).toEqual([run(1).runId, run(2).runId]);
+    expect(outbox.view().saved.map((r) => r.id)).toEqual([run(2).runId]);
+    expect(outbox.view().waiting.map((r) => r.runId)).toEqual([run(1).runId]);
+    expect(outbox.view().failing).toEqual([run(1).runId]);
+    // Five failures within ten minutes: still waiting, never refused for a server down a few minutes.
+    for (let i = 0; i < 4; i++) {
+      clock += 60_000;
+      await outbox.send();
+    }
+    expect(outbox.view().waiting.map((r) => r.runId)).toEqual([run(1).runId]);
+    expect(outbox.view().refused).toEqual([]);
+    // Ten minutes on: moved to the runs that couldn't be saved, whole, with its file, for Try again or Remove.
+    clock = 10 * 60_000;
+    await outbox.send();
+    expect(outbox.view().waiting).toEqual([]);
+    expect(outbox.view().failing).toEqual([]);
+    expect(outbox.view().refused).toEqual([{ runId: run(1).runId, name: "Morning Run", message: "This run couldn't be saved.", run: run(1) }]);
+    expect(readRunFile(m.file.text ?? "").refused.map((r) => r.run)).toEqual([run(1)]);
+    // Try again: back in the queue, counted afresh.
+    await outbox.retryRefused(run(1).runId);
+    expect(outbox.view().waiting).toEqual([run(1)]);
+    await outbox.send();
+    expect(outbox.view()).toMatchObject({ failing: [run(1).runId], refused: [] });
+  });
+
+  it("with no answer at all, sends nothing past it and counts nothing: a phone offline never loses a run", async () => {
+    const m = memory();
+    let clock = 0;
+    const sent: string[] = [];
+    const outbox = createRunOutbox(m.store, (r) => {
+      sent.push(r.runId);
+      return Promise.resolve({ kind: "later" });
+    }, () => clock);
+    await outbox.start();
+    await outbox.add(run(1));
+    await outbox.add(run(2));
+    for (let i = 0; i < 20; i++) {
+      clock += 60_000;
+      await outbox.send();
+    }
+    expect(new Set(sent)).toEqual(new Set([run(1).runId]));
+    expect(outbox.view()).toMatchObject({ failing: [], refused: [] });
+    expect(outbox.view().waiting.map((r) => r.runId)).toEqual([run(1).runId, run(2).runId]);
+  });
+
+  it("keeps a file it cannot all read aside before writing over it, and a run in it it cannot read is shown as couldn't be saved", async () => {
+    const broken = { runId: run(3).runId, name: "Evening Run", points: "cut short" };
+    const text = JSON.stringify({ version: 1, waiting: [run(1), broken, { name: "no id" }], refused: [] });
+    const m = memory(text);
+    const asides: string[] = [];
+    const outbox = createRunOutbox({ ...m.store, aside: (t: string) => { asides.push(t); return Promise.resolve(); } }, () => Promise.resolve({ kind: "later" }));
+    await outbox.start();
+    expect(asides).toEqual([text]);
+    expect(outbox.view().waiting).toEqual([run(1)]);
+    expect(outbox.view().refused).toEqual([{ runId: run(3).runId, name: "Evening Run", message: "This run couldn't be saved.", run: broken }]);
+    // Written back with the unreadable run among those that couldn't be saved, for Remove.
+    expect(readRunFile(m.file.text ?? "").refused.map((r) => r.runId)).toEqual([run(3).runId]);
+    // A file cut short as the battery died: aside, whole, before the first run is written over it.
+    const cut = memory('{"version":1,"waiting":[{"runId":"0000');
+    const cutAside: string[] = [];
+    const second = createRunOutbox({ ...cut.store, aside: (t: string) => { cutAside.push(t); return Promise.resolve(); } }, () => Promise.resolve({ kind: "later" }));
+    await second.start();
+    expect(cutAside).toEqual(['{"version":1,"waiting":[{"runId":"0000']);
+    await second.add(run(2));
+    expect(readRunFile(cut.file.text ?? "").waiting).toEqual([run(2)]);
+  });
+
+  it("writes over nothing when the copy aside fails: the file stays as it was until it can be kept", async () => {
+    const text = "not json";
+    const m = memory(text);
+    const outbox = createRunOutbox({ ...m.store, aside: () => Promise.reject(new Error("disk full")) }, () => Promise.resolve({ kind: "later" }));
+    await expect(outbox.start()).rejects.toThrow("disk full");
+    await outbox.add(run(1));
+    expect(m.file.text).toBe(text);
+    expect(outbox.view().unsaved).toBe(true);
+  });
+});
+
+describe("what each answer of the server becomes (37m)", () => {
+  const refusal = (status: number) => ({ kind: "refused", status, error: "x", message: "No.", retryAfterSeconds: null, robotCheckKey: null, body: null });
+  it.each([
+    ["the run kept", { kind: "ok", data: { status: "created", run: saved(run(1)) } }, "done"],
+    ["a reply that is not a saved run", { kind: "ok", data: { status: "created" } }, "failed"],
+    ["no answer", { kind: "no_answer" }, "later"],
+    ["a sign-in being renewed", refusal(401), "later"],
+    ["too many at once", refusal(429), "later"],
+    ["the server's own timeout", refusal(408), "failed"],
+    ["too early", refusal(425), "failed"],
+    ["a fault of the server's", refusal(503), "failed"],
+    ["deleted while it waited", refusal(410), "deleted"],
+    ["a shape it will never take", refusal(400), "refused"],
+  ] as const)("a run answered %s is %s", async (_name, answer, kind) => {
+    // Only `signedIn` is used by the sender.
+    const session = { signedIn: () => Promise.resolve(answer) } as unknown as Session;
+    expect((await runSender(session)(run(1))).kind).toBe(kind);
+  });
+});
 
 describe("the run outbox", () => {
   it("never writes over the file before reading it: a run added first joins those already there", async () => {
@@ -107,13 +225,15 @@ describe("the run outbox", () => {
     await outbox.send();
     expect(outbox.view()).toMatchObject({ waiting: [], refused: [], sent: 2 });
     expect(outbox.view().saved.map((r) => r.id)).toEqual([run(2).runId]);
-    expect(readRunFile(m.file.text ?? "")).toEqual({ waiting: [], refused: [] });
+    expect(readRunFile(m.file.text ?? "")).toEqual({ waiting: [], refused: [], whole: true });
   });
 
-  it("reads a file it cannot read as holding nothing to send, and a bad run in it is left out", () => {
-    expect(readRunFile("not json")).toEqual({ waiting: [], refused: [] });
+  it("reads a file it cannot read as holding nothing to send, and not whole; a bad run in it is not sent", () => {
+    expect(readRunFile("not json")).toEqual({ waiting: [], refused: [], whole: false });
     const text = JSON.stringify({ version: 1, waiting: [run(1), { runId: "nope" }], refused: [] });
     expect(readRunFile(text).waiting.map((r) => r.runId)).toEqual([run(1).runId]);
+    expect(readRunFile(text).whole).toBe(false);
+    expect(readRunFile(JSON.stringify({ version: 1, waiting: [run(1)], refused: [] })).whole).toBe(true);
   });
 });
 

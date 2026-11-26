@@ -366,6 +366,9 @@ function spacedDays(picked: readonly number[], weekStart: string, from: string, 
   return out;
 }
 
+/** Couch to 5K's run number `index` (from 0), as the plan lists it. */
+const c25kSession = (index: number): PlanSession => ({ kind: "walk_run", week: Math.floor(index / C25K_RUNS_A_WEEK) + 1, run: (index % C25K_RUNS_A_WEEK) + 1, parts: c25kParts(index) });
+
 function couchTo5k(input: RunPlanInput, start: number, goal: RunGoal): RunPlan {
   // Each day's run counts as the next run of the plan once it is long enough: one a day.
   const done = new Map<string, number>();
@@ -385,7 +388,7 @@ function couchTo5k(input: RunPlanInput, start: number, goal: RunGoal): RunPlan {
     // Finished: the plan grows from the runs of the last week of it, towards the distance picked.
     const finishedOn = [...done.keys()].at(-1) ?? input.today;
     const last = input.runs.filter((x) => x.day > planDayPlus(finishedOn, -7) && x.day <= finishedOn);
-    return runner(input, goal, {
+    const grown = runner(input, goal, {
       startM: last.reduce((t, x) => t + x.distanceM, 0),
       longestM: Math.max(0, ...last.map((x) => x.longestM)),
       race: null,
@@ -393,6 +396,14 @@ function couchTo5k(input: RunPlanInput, start: number, goal: RunGoal): RunPlan {
       from: planDayPlus(finishedOn, 1),
       experienced: false,
     });
+    if (grown.kind !== "runner") return grown;
+    // The week it was finished in keeps the Couch to 5K runs done in it, ticked: the new plan begins the
+    // day after, and the last runs of Couch to 5K never vanish from the week they were run in.
+    const days = grown.days.map((d): PlanDay => {
+      const index = d.day <= finishedOn ? done.get(d.day) : undefined;
+      return index === undefined ? d : { ...d, session: c25kSession(index), done: true };
+    });
+    return { ...grown, days };
   }
   const weekStart = mondayOf(input.today);
   const doneThisWeek = [...done.entries()].filter(([day]) => day >= weekStart);
@@ -405,16 +416,14 @@ function couchTo5k(input: RunPlanInput, start: number, goal: RunGoal): RunPlan {
   for (let i = 0; i < 7; i += 1) {
     const day = planDayPlus(weekStart, i);
     const index = done.get(day) ?? (planned.includes(day) && upcoming < C25K_SESSIONS ? upcoming++ : null);
-    days.push({
-      day,
-      weekday: i + 1,
-      done: done.has(day),
-      session: index === null ? null : { kind: "walk_run", week: Math.floor(index / C25K_RUNS_A_WEEK) + 1, run: (index % C25K_RUNS_A_WEEK) + 1, parts: c25kParts(index) },
-    });
+    days.push({ day, weekday: i + 1, done: done.has(day), session: index === null ? null : c25kSession(index) });
   }
   const week = Math.floor(next / C25K_RUNS_A_WEEK) + 1;
+  // Upcoming weeks begin after the last week this week's runs reach into: a week begun this week is not
+  // listed again as to come.
+  const reached = Math.max(week, ...days.map((d) => (d.session?.kind === "walk_run" ? d.session.week : 0)));
   const ahead: PlanAhead[] = [];
-  for (let wk = week + 1; wk <= Math.min(C25K_WEEK_COUNT, week + 3); wk += 1) {
+  for (let wk = reached + 1; wk <= Math.min(C25K_WEEK_COUNT, reached + 3); wk += 1) {
     ahead.push({ week: wk, m: null, easier: false, parts: c25kParts((wk - 1) * C25K_RUNS_A_WEEK) });
   }
   return { kind: "c25k", week, days, ahead, goal, repeat };

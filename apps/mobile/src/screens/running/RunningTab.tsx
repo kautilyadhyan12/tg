@@ -171,6 +171,10 @@ export function RunningTab({ units, parts }: { units: Units; parts: ReactNode })
       heard.remove();
     };
   }, [problem]);
+  // The run just saved, as the outbox has it now: waiting to be sent, refused (its own box says so), or on the server.
+  const justSaved = layer.done;
+  const doneWaiting = justSaved !== null && view.waiting.some((r) => r.runId === justSaved.runId);
+  const doneRefused = justSaved !== null && view.refused.some((r) => r.runId === justSaved.runId);
   const saidUnderStart = ((said !== null || batteryOn) && !pressedBox) || layer.done !== null || view.refused.length > 0;
   useEffect(() => {
     if (saidUnderStart) showEnd();
@@ -391,9 +395,9 @@ export function RunningTab({ units, parts }: { units: Units; parts: ReactNode })
             </View>
           </View>
           {!pressedBox ? problemBox : null}
-          {layer.done === null ? null : (
-            <Txt kind="small" colour={layer.done.waiting ? "textSoft" : "goodText"} style={styles.said}>
-              {layer.done.waiting ? `${layer.done.name} is saved on this phone. It will be sent when you're online.` : `${layer.done.name} is saved.`}
+          {layer.done === null || doneRefused ? null : (
+            <Txt kind="small" colour={doneWaiting ? "textSoft" : "goodText"} style={styles.said}>
+              {doneWaiting ? `${layer.done.name} is saved on this phone. It will be sent when you're online.` : `${layer.done.name} is saved.`}
             </Txt>
           )}
           <RefusedRuns />
@@ -445,8 +449,10 @@ export function RunningTab({ units, parts }: { units: Units; parts: ReactNode })
             onClose={() => {
               setAsking(false);
             }}
-            onSaved={() => {
+            onSaved={(reply) => {
               setAsking(false);
+              // The plan the server just made is shown at once, and stays if the read after it fails.
+              took(reply);
               setPlanChanged((n) => n + 1);
               setPlanOpen(false);
             }}

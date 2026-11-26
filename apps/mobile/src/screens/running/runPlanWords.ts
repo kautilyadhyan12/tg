@@ -21,6 +21,13 @@ export function planDistance(metres: number, units: Units): string {
   return `${tenths.toFixed(tenths % 1 === 0 ? 0 : 1)} ${units === "imperial" ? "mi" : "km"}`;
 }
 
+/** A repeat as a track measures it, on the plan, the step's card and the voice alike: "1 km", "800 m";
+ *  1.6 km is a mile to someone in miles. */
+export function repDistance(metres: number, units: Units): string {
+  if (metres === 1600 && units === "imperial") return "1 mi";
+  return metres >= 1000 ? `${String(metres / 1000)} km` : `${String(metres)} m`;
+}
+
 const two = (n: number): string => String(n).padStart(2, "0");
 /** A pace given in seconds a kilometre, in the person's units: "6:03". */
 export function paceOf(perKm: number, units: Units): string {
@@ -70,8 +77,7 @@ export function sessionDetail(session: PlanSession, paces: Paces | null, units: 
   const easy = paces === null ? EASY_BY_FEEL : `Easy pace, ${range(paces.easy, units)}`;
   if (session.kind === "easy" || session.kind === "long" || session.reps === null) return easy;
   const reps = session.reps;
-  // Repeats are measured as a track measures them: 1 km, 800 m; 1.6 km is a mile to someone in miles.
-  const rep = reps.m === 1600 && units === "imperial" ? "1 mi" : reps.m >= 1000 ? `${String(reps.m / 1000)} km` : `${String(reps.m)} m`;
+  const rep = repDistance(reps.m, units);
   const rest = reps.restS >= 60 ? minutes(reps.restS) : `${String(reps.restS)} s`;
   const how =
     session.kind === "steady"

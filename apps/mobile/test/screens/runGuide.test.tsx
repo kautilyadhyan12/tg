@@ -222,6 +222,26 @@ describe("the worst thing: a beginner told to keep running when the plan says wa
     expect(voice.said.at(-1)).toMatch(/^Now run\. (1 minute|5\d seconds) left\.$/);
   });
 
+  it("Skip step during an Auto-pause that came just after a step began: the step skipped is the one on the clock (the hunt's D6)", async () => {
+    await startRun(RAVI.id, "6a1d2c3b-4a5e-4f60-8a7b-9c0d1e2f3a4b", true, Date.now(), guideOf({ kind: "walk_run", week: 1, run: 1, parts: c25kParts(0) }, "Run 1 · 28½ min"));
+    await feed(0, 290, 1.6);
+    expect(runNow()?.guide?.at.index).toBe(0);
+    // One late batch: walking on past 300 s, where the clock began the first run, then standing.
+    const run = runNow();
+    if (run === null) throw new Error("no run going");
+    const locations = Array.from({ length: 45 }, (_, i) => {
+      const s = 290 + i;
+      const moved = Math.min(s, 306) * 1.6;
+      return { timestamp: run.startedAt + s * 1000, coords: { latitude: 26.1445 + moved / 111_132, longitude: 91.7362, accuracy: 5, speed: s < 306 ? 1.6 : 0 } };
+    });
+    await act(() => takeLocations({ locations }, run.startedAt + 334_000));
+    expect(runNow()?.phase).toBe("paused");
+    await act(() => skipStep(run.startedAt + 335_000));
+    // The run had begun at 300 s: Skip step skips it, and the walk after it begins.
+    expect(runNow()?.guide?.at.index).toBe(2);
+    expect(voice.said.at(-1)).toBe("Now walk for 1 and a half minutes.");
+  });
+
   it("stopped just as a run began: the Auto-pause starts before it, so the run begins again after the pause", async () => {
     await startRun(RAVI.id, "3a1d2c3b-4a5e-4f60-8a7b-9c0d1e2f3a4b", true, Date.now(), guideOf({ kind: "walk_run", week: 1, run: 1, parts: c25kParts(0) }, "Run 1 · 28½ min"));
     await feed(0, 297, 1.6);

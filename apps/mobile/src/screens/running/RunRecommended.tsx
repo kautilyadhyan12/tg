@@ -160,9 +160,11 @@ export function RunRecommended({ units, onOpenRunning }: { units: Units; onOpenR
         onClose={() => {
           setAsking(false);
         }}
-        onSaved={() => {
+        onSaved={(reply) => {
           setAsking(false);
           setPlanOpen(false);
+          // The plan the server just made is shown at once, and stays if the read after it fails.
+          took(reply);
           setChanged((n) => n + 1);
         }}
       />
