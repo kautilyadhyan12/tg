@@ -1,9 +1,10 @@
 import { randomUUID } from "node:crypto";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react-native";
 import { AppState } from "react-native";
-import { saveRunRequestSchema, type SaveRunRequest } from "@app/shared";
+import { runSums, saveRunRequestSchema, type SaveRunRequest } from "@app/shared";
 import { App } from "../../src/App";
-import { finishRun, forgetRun, loadRun, pauseRun, phoneRunFiles, resetRecorder, resumeRun, runNow, startRun, takeLocations } from "../../src/screens/running/recorder";
+import { chooseAutoPause, finishRun, forgetRun, loadRun, movingMsOf, pauseRun, phoneRunFiles, resetRecorder, resumeRun, runNow, setAutoPause, startRun, takeLocations } from "../../src/screens/running/recorder";
+import { sumsAt } from "../../src/screens/running/runLive";
 import type { Ask, AskInit } from "../../src/session/calls";
 import { RAVI, fakeServer, kept, memoryStore, profile, tokens, type Reply } from "../kit";
 
@@ -435,7 +436,9 @@ describe("Auto-pause with the motion, through the recorder", () => {
   it("a pause read back after the app was closed waits 10 s from its own start before the motion starts the clock", async () => {
     const run = await startRun(RAVI.id, randomUUID(), true, Date.now());
     await points(1, 5, () => 0, STILL_SD);
-    expect(runNow()?.pauses).toEqual([[1000, null]]);
+    // The clock stops at the point that decided it (37k); the seconds back to the stop are standing.
+    expect(runNow()?.pauses).toEqual([[4000, null]]);
+    expect(runNow()?.datedBack).toEqual([[1000, 4000]]);
     // The app closed and opened again.
     resetRecorder();
     motion.reset();
@@ -445,7 +448,171 @@ describe("Auto-pause with the motion, through the recorder", () => {
     expect(runNow()?.phase).toBe("paused");
     await points(10, 3, walk, MOVING_SD);
     expect(runNow()?.phase).toBe("running");
-    expect(runNow()?.pauses).toEqual([[1000, 6000]]);
+    expect(runNow()?.pauses).toEqual([[4000, 6000]]);
+    expect(runNow()?.datedBack).toEqual([[1000, 4000]]);
     expect(run.runId).toBe(runNow()?.runId);
+  });
+});
+
+// The line holds still with Auto-pause off (37k): the rule is tested in test/stillStretches.test.ts; here, what the
+// recorder keeps and sends, and the clock through an Auto-pause, point by point as a phone hands them over.
+describe("still stretches, through the recorder", () => {
+  const STILL_SD = 0.05;
+  const MOVING_SD = 4.5;
+  /** One point a second from `fromS`, `north(s)` metres north of the start, each handed over alone at its own
+   *  second, with the motion of its second unless `sd` is null; the screen's clock read after each. */
+  async function live(fromS: number, seconds: number, north: (s: number) => number, sd: number | null): Promise<number[]> {
+    const run = runNow();
+    if (run === null) throw new Error("no run going");
+    const clocks: number[] = [];
+    for (let i = 0; i < seconds; i++) {
+      const at = run.startedAt + (fromS + i) * 1000;
+      if (sd !== null) motion.send(at, sd);
+      const locations = [{ timestamp: at, coords: { latitude: 26.1445 + north(fromS + i) / 111_132, longitude: 91.7362, accuracy: 5, speed: 0 } }];
+      await act(() => takeLocations({ locations }, at));
+      const now = runNow();
+      if (now !== null) clocks.push(movingMsOf(now, at));
+    }
+    return clocks;
+  }
+  const rises = (clocks: readonly number[]): boolean => clocks.every((c, i) => i === 0 || c >= (clocks[i - 1] ?? 0));
+
+  it("the worst thing, through the recorder: a pram with Auto-pause off keeps its metres, the clock running", async () => {
+    const run = await startRun(RAVI.id, randomUUID(), false, Date.now());
+    const clocks = await live(1, 120, (s) => 3 * s, STILL_SD);
+    const now = runNow();
+    if (now === null) throw new Error("no run");
+    expect(now.phase).toBe("running");
+    expect(now.pauses).toEqual([]);
+    expect(now.still).toEqual([]);
+    expect(rises(clocks)).toBe(true);
+    expect(sumsAt(now, 120_000, 70).distanceM).toBeGreaterThanOrEqual(3 * 119 - 6);
+    expect(run.runId).toBe(now.runId);
+  });
+
+  it("Auto-pause off: walk, stand, walk: the clock runs on, the stand is a still stretch, and it goes with the run", async () => {
+    await act(() => chooseAutoPause(false));
+    const s = runServer();
+    await openRunning(s);
+    await startRunning();
+    const walk = (t: number) => 3 * Math.min(t, 30) + 3 * Math.max(0, t - 60);
+    const clocks = [...(await live(1, 30, walk, MOVING_SD)), ...(await live(31, 30, walk, STILL_SD)), ...(await live(61, 30, walk, MOVING_SD))];
+    const run = runNow();
+    if (run === null) throw new Error("no run");
+    expect(run.phase).toBe("running");
+    expect(run.pauses).toEqual([]);
+    expect(rises(clocks)).toBe(true);
+    expect(run.still).toHaveLength(1);
+    const [from, to] = run.still[0] ?? [0, 0];
+    expect(from).toBeGreaterThanOrEqual(30_000);
+    expect(from).toBeLessThanOrEqual(32_000);
+    expect(to).toBeGreaterThanOrEqual(60_000);
+    expect(to).toBeLessThanOrEqual(73_000);
+    await fireEvent.press(screen.getByRole("button", { name: "Pause" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Finish" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Save run" }));
+    await waitFor(() => {
+      expect(s.saved).toHaveLength(1);
+    });
+    const body = saveRunRequestSchema.parse(s.posts[0]);
+    expect(body.still).toEqual([[from, to]]);
+    // The server works out what the phone showed: the same points, pauses and stretches.
+    const done = { ...run, finishedMs: body.elapsedMs };
+    expect(runSums(body.points, body.pauses, body.elapsedMs, 70, body.still).distanceM).toBe(sumsAt(done, body.elapsedMs, 70).distanceM);
+    expect(Math.abs(runSums(body.points, body.pauses, body.elapsedMs, 70, body.still).distanceM - 180)).toBeLessThanOrEqual(6);
+  });
+
+  it("Auto-pause off: the person's Pause, Auto-pause turned on, and Finish each close the open stretch; a reopened app keeps them", async () => {
+    const run = await startRun(RAVI.id, randomUUID(), false, Date.now());
+    await live(1, 10, (t) => 3 * t, MOVING_SD);
+    await live(11, 6, () => 30, STILL_SD);
+    expect(runNow()?.still).toEqual([[11_000, null]]);
+    await act(() => pauseRun(run.startedAt + 17_000));
+    expect(runNow()?.still).toEqual([[11_000, 17_000]]);
+    await act(() => resumeRun(run.startedAt + 20_000));
+    await live(21, 6, () => 30, STILL_SD);
+    expect(runNow()?.still).toEqual([[11_000, 17_000], [21_000, null]]);
+    // The app closed and opened again: the open stretch is read back open, and walking on closes it.
+    resetRecorder();
+    motion.reset();
+    await act(() => loadRun());
+    expect(runNow()?.still).toEqual([[11_000, 17_000], [21_000, null]]);
+    await live(27, 12, (t) => 30 + 3 * (t - 26), MOVING_SD);
+    const walkedOn = runNow()?.still[1];
+    expect(walkedOn?.[0]).toBe(21_000);
+    expect(walkedOn?.[1]).toBeGreaterThanOrEqual(27_000);
+    expect(walkedOn?.[1]).toBeLessThanOrEqual(38_000);
+    const walked = 30 + 3 * 12;
+    await live(39, 6, () => walked, STILL_SD);
+    expect(runNow()?.still.at(-1)).toEqual([39_000, null]);
+    await act(() => setAutoPause(true, run.startedAt + 46_000));
+    expect(runNow()?.still.at(-1)).toEqual([39_000, 46_000]);
+    await act(() => setAutoPause(false, run.startedAt + 47_000));
+    await live(48, 6, () => walked, STILL_SD);
+    expect(runNow()?.still.at(-1)).toEqual([48_000, null]);
+    await act(() => finishRun(run.startedAt + 60_000));
+    expect(runNow()?.still.at(-1)).toEqual([48_000, 60_000]);
+    expect(runNow()?.still).toHaveLength(4);
+  });
+
+  it("Auto-pause on, a stop the place dates 8 s back: the screen's clock never goes back, and Moving time is what it was", async () => {
+    await startRun(RAVI.id, randomUUID(), true, Date.now());
+    // No motion: the place rule, which dates a stop back 8 s.
+    const walk = (t: number) => 3 * Math.min(t, 30) + 3 * Math.max(0, t - 60);
+    const clocks = [...(await live(1, 30, walk, null)), ...(await live(31, 30, walk, null)), ...(await live(61, 30, walk, null))];
+    const run = runNow();
+    if (run === null) throw new Error("no run");
+    expect(rises(clocks)).toBe(true);
+    expect(run.pauses).toHaveLength(1);
+    expect(run.datedBack).toHaveLength(1);
+    const [stop, clockStop] = run.datedBack[0] ?? [0, 0];
+    const [pausedAt, resumedAt] = run.pauses[0] ?? [0, null];
+    expect(pausedAt).toBe(clockStop);
+    expect(clockStop - stop).toBeGreaterThanOrEqual(7000);
+    expect(stop).toBeLessThanOrEqual(32_000);
+    // Moving time as the pause dated back to the stop gave it before 37k.
+    const before = runSums(run.points, [[stop, resumedAt ?? 90_000]], 90_000, 70);
+    const now = sumsAt(run, 90_000, 70);
+    expect(Math.abs(now.movingS - before.movingS)).toBeLessThanOrEqual(1);
+    // The step onto the stop's own spot, which the pause dated back cut off, now counts: closer to the 180 m walked.
+    expect(now.distanceM).toBeGreaterThanOrEqual(before.distanceM);
+    expect(Math.abs(now.distanceM - 180)).toBeLessThanOrEqual(Math.abs(before.distanceM - 180));
+    expect(Math.abs(now.distanceM - 180)).toBeLessThanOrEqual(6);
+  });
+
+  it("Auto-pause on, a stop handed over in one batch 25 s late as the app comes back: the screen's clock never goes back, and the stand is standing (round one, L1)", async () => {
+    const run = await startRun(RAVI.id, randomUUID(), true, Date.now());
+    await live(1, 30, (t) => 3 * t, null);
+    // Standing from 31 s; the phone hands the points over at 85 s, up to 84 s.
+    const now = run.startedAt + 85_000;
+    const before = runNow();
+    if (before === null) throw new Error("no run");
+    const shown = movingMsOf(before, now);
+    const locations = Array.from({ length: 54 }, (_, i) => ({
+      timestamp: run.startedAt + (31 + i) * 1000,
+      coords: { latitude: 26.1445 + 90 / 111_132, longitude: 91.7362, accuracy: 5, speed: 0 },
+    }));
+    await act(() => takeLocations({ locations }, now));
+    const after = runNow();
+    if (after === null) throw new Error("no run");
+    expect(after.phase).toBe("paused");
+    expect(movingMsOf(after, now)).toBeGreaterThanOrEqual(shown);
+    expect(after.pauses).toEqual([[85_000, null]]);
+    // The stand's own points are the run's, so it is standing to its last point, never moving time.
+    expect(sumsAt(after, 85_000, 70).movingS).toBeLessThanOrEqual(32);
+  });
+
+  it("Auto-pause on, a pram's stop undone: no pause and no dated-back seconds are left", async () => {
+    await startRun(RAVI.id, randomUUID(), true, Date.now());
+    await live(1, 30, (t) => 3 * t, STILL_SD);
+    expect(runNow()?.pauses).toEqual([]);
+    expect(runNow()?.datedBack).toEqual([]);
+  });
+
+  it("no stop at all: nothing kept", async () => {
+    await startRun(RAVI.id, randomUUID(), false, Date.now());
+    await live(1, 30, (t) => 3 * t, MOVING_SD);
+    expect(runNow()?.still).toEqual([]);
+    expect(runNow()?.datedBack).toEqual([]);
   });
 });

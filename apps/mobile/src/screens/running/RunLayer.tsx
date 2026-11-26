@@ -11,7 +11,6 @@ import {
   heartSums,
   heartZoneSeconds,
   runRecordsSchema,
-  runSums,
   userProfileResponseSchema,
   type KeptRunGuide,
   type RunClimbRequest,
@@ -67,7 +66,7 @@ import { FeelCard, NoteCard, PaceCard, RouteCard, RunFigures, SplitsCard } from 
 import { newRecords, RECORDS_PATH } from "./runRecords";
 import { RunMap, useMapScheme } from "./RunMap";
 import { useRunOutbox } from "./RunOutbox";
-import { currentPace } from "./runLive";
+import { closedStill, currentPace, sumsAt } from "./runLive";
 import { clock, distance, pace, paceWord, runName, runWhen, unitWord, METRES_PER_MILE } from "./runWords";
 
 /** What stood in the way of Start, said under it with its button. */
@@ -341,7 +340,7 @@ function useLiveNumbers(run: LiveRun, kg: number): { now: number; sums: RunSums 
     const every = 2000 + count * 0.1;
     if (sums !== null && now - lastWork.current < every) return;
     lastWork.current = now;
-    setSums(runSums(run.points, closedPauses(run, elapsedMs(run, now)), elapsedMs(run, now), kg));
+    setSums(sumsAt(run, elapsedMs(run, now), kg));
   }, [now, count, run, kg, sums]);
   return { now, sums };
 }
@@ -626,7 +625,7 @@ function Summary({ run, units, kg, onSaved }: { run: LiveRun; units: Units; kg: 
   const { outbox, view } = useRunOutbox();
   const insets = useSafeAreaInsets();
   const finished = run.finishedMs ?? 0;
-  const sums = useMemo(() => runSums(run.points, closedPauses(run, finished), finished, kg), [run, finished, kg]);
+  const sums = useMemo(() => sumsAt(run, finished, kg), [run, finished, kg]);
   // The heart rate as the server will work it out (37f-i): the same rule, the same readings.
   const heart = useMemo(() => heartSums(run.heart, closedPauses(run, finished), finished), [run, finished]);
   // The heart rate chart and zones (37f-ii-a), as the server will work them out at Save, from the maximum
@@ -646,14 +645,20 @@ function Summary({ run, units, kg, onSaved }: { run: LiveRun; units: Units; kg: 
   const [busy, setBusy] = useState(false);
   const [notKept, setNotKept] = useState(false);
   // What the server is sent: asked for the climb now (37b-ii), and saved with the same points at Save.
-  const sent = useMemo(
-    (): RunClimbRequest => ({
-      elapsedMs: Math.round(finished),
+  const sent = useMemo((): RunClimbRequest => {
+    const end = Math.round(finished);
+    // The stretches the phone felt still (37k), sent only by a run that has one: a server from before them
+    // refuses the field.
+    const still = closedStill(run, finished)
+      .map(([a, b]): [number, number] => [Math.round(a), Math.min(end, Math.round(b))])
+      .filter(([a, b]) => b > a);
+    return {
+      elapsedMs: end,
       points: run.points.slice(0, RUN_MAX_POINTS).map(([at, lat, lng, acc]) => [Math.round(at), lat, lng, acc]),
       pauses: closedPauses(run, finished).map(([a, b]) => [Math.round(a), Math.round(b)]),
-    }),
-    [run, finished],
-  );
+      ...(still.length > 0 ? { still } : {}),
+    };
+  }, [run, finished]);
   const climb = useRunClimb(session, sent);
   // The person's records as the server last gave them (37c-ii): the boxes wait for them, and a read that
   // fails (no signal) shows none, never a record the run may not have set. Read again each time the server

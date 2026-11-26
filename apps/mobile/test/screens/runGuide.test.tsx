@@ -168,8 +168,34 @@ describe("the worst thing: a beginner told to keep running when the plan says wa
     await feed(230, 10, 1.6);
     expect(runNow()?.phase).toBe("running");
     expect(voice.said).toContain("Run resumed.");
-    expect(voice.said.at(-1)).toMatch(/^Now walk\. \d+ seconds left\.$|^Now walk\. 1 minute( \d+ seconds)? left\.$/);
+    expect(voice.said.at(-1)).toMatch(/^Now walk\. \d+ seconds? left\.$|^Now walk\. 1 minute( \d+ seconds?)? left\.$/);
     expect(voice.ahead[0]?.text).toBe("Now run for 1 minute.");
+  });
+
+  it("the time left the card shows for a step never grows back at an Auto-pause: it reads the screen's own clock (37k, round one, L2)", async () => {
+    const box = await openRunning(BEGINNER());
+    await fireEvent.press(within(box).getByRole("button", { name: "Start today’s run, with each step said" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Start now" }));
+    await waitFor(() => {
+      expect(runNow()?.guide).not.toBeNull();
+    });
+    /** The seconds the card says are left of the step, "4:20 left". */
+    const shown = (): number => {
+      const words = within(screen.getByTestId("run-guide")).getByText(/^\d+:\d\d left$/);
+      const text = words.children.filter((c): c is string => typeof c === "string").join("");
+      const m = /^(\d+):(\d\d)/.exec(text);
+      return m === null ? -1 : Number(m[1]) * 60 + Number(m[2]);
+    };
+    await feed(0, 100, 1.6);
+    const lefts = [shown()];
+    // Standing from 100 s, a point a second: the place dates the Auto-pause back 8 s.
+    for (let s = 100; s < 130; s++) {
+      await feed(s, 1, 0);
+      lefts.push(shown());
+    }
+    expect(runNow()?.phase).toBe("paused");
+    expect(lefts[0]).toBeGreaterThan(0);
+    expect(lefts.every((l, i) => i === 0 || l <= (lefts[i - 1] ?? Infinity))).toBe(true);
   });
 
   it("Skip step while standing, then an Auto-pause dated back before the press: the step is never longer than itself, and the skipped one never comes back (37d-iii-a)", async () => {
