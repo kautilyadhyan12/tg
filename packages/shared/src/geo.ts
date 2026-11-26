@@ -232,7 +232,17 @@ export const RUN_WORDS = {
 const msIntoRun = z.number().int().min(0).max(RUN_MAX_ELAPSED_MS);
 const noNul = (text: string): string => text.replace(/\u0000/g, "");
 
-export const saveRunRequestSchema = z
+/** Still stretches (37k): each one from before to, each after the one before it. */
+function stillInOrder(still: readonly (readonly [number, number])[]): boolean {
+  let end = -1;
+  for (const [from, to] of still) {
+    if (from >= to || from < end) return false;
+    end = to;
+  }
+  return true;
+}
+
+const saveRunObject = z
   .object({
     runId: z.uuid(),
     startedAt: z.iso.datetime(),
@@ -252,8 +262,21 @@ export const saveRunRequestSchema = z
     /** The heart rate from the person's strap or watch (37f-i), [ms into the run, bpm]; none sent by a
      *  phone without one, or before it. */
     heart: heartSamplesSchema.optional(),
+    /** The stretches the phone felt the person standing with no pause (37k), [from, to] ms into the run, in
+     *  order, none overlapping; none sent by a phone with none, or before it. The server works the run out
+     *  with them and keeps them nowhere. */
+    still: z
+      .custom<unknown[]>((value) => !Array.isArray(value) || value.length <= RUN_MAX_PAUSES, { message: "too many still stretches" })
+      .pipe(z.array(z.tuple([msIntoRun, msIntoRun])).refine(stillInOrder, { message: "still stretches out of order" }))
+      .optional(),
   })
   .strict();
+/** Each still stretch inside the run's own time. */
+const stillWithin = (run: { elapsedMs: number; still?: readonly (readonly [number, number])[] | undefined }): boolean =>
+  (run.still ?? []).every(([, to]) => to <= run.elapsedMs);
+const stillPastEnd = { message: "a still stretch past the run's end", path: ["still"] };
+
+export const saveRunRequestSchema = saveRunObject.refine(stillWithin, stillPastEnd);
 export type SaveRunRequest = z.infer<typeof saveRunRequestSchema>;
 
 
@@ -290,7 +313,7 @@ export type SavedRun = z.infer<typeof savedRunSchema>;
 // The run's summary asks with the same points it will save: the server works the line out with the
 // same rules, reads the heights under it, and keeps nothing. Saved, the run is worked out again the
 // same way, so the two numbers are one.
-export const runClimbRequestSchema = saveRunRequestSchema.pick({ elapsedMs: true, points: true, pauses: true }).strict();
+export const runClimbRequestSchema = saveRunObject.pick({ elapsedMs: true, points: true, pauses: true, still: true }).strict().refine(stillWithin, stillPastEnd);
 export type RunClimbRequest = z.infer<typeof runClimbRequestSchema>;
 
 export const runClimbSchema = z.discriminatedUnion("state", [
@@ -398,6 +421,10 @@ export const keptRunStateSchema = z.object({
   heartFiles: z.number().int().nonnegative().default(0),
   /** Its motion's files (37i); none for one kept before. */
   motionFiles: z.number().int().nonnegative().default(0),
+  /** The stretches the phone felt still (37k), the last one open while it lasts; none for one kept before. */
+  still: z.array(z.tuple([z.number(), z.number().nullable()])).default([]),
+  /** The seconds each Auto-pause was dated back over (37k); none for one kept before. */
+  datedBack: z.array(z.tuple([z.number(), z.number()])).default([]),
 });
 /** A run's heart rate kept beside its points: [ms into the run, bpm]. */
 export const keptRunHeartSchema = z.array(z.tuple([z.number(), z.number().int().min(HEART_BPM_LEAST).max(HEART_BPM_MOST)]));

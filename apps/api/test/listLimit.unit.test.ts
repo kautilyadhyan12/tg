@@ -142,7 +142,7 @@ describe("the most list items one request may carry", () => {
     });
   });
 
-  it("a run with too many points or pauses is refused before one is read", () => {
+  it("a run with too many points, pauses or still stretches is refused before one is read", () => {
     const whole = longestRun();
     const forClimb = { elapsedMs: whole.elapsedMs, points: whole.points, pauses: whole.pauses };
     for (const [schema, run] of [[saveRunRequestSchema, whole], [runClimbRequestSchema, forClimb]] as const) {
@@ -151,6 +151,9 @@ describe("the most list items one request may carry", () => {
       expect(tooManyPoints.error?.issues.length).toBe(1);
       const tooManyPauses = schema.safeParse({ ...run, pauses: new Array(RUN_MAX_PAUSES + 1).fill("x") });
       expect(tooManyPauses.error?.issues.length).toBe(1);
+      // The still stretches (37k) are counted before one is read, as the pauses are.
+      const tooManyStill = schema.safeParse({ ...run, still: new Array(RUN_MAX_PAUSES + 1).fill("x") });
+      expect(tooManyStill.error?.issues.map((issue) => issue.message)).toEqual(["too many still stretches"]);
       expect(schema.safeParse(run).success).toBe(true);
       const notAList = schema.safeParse({ ...run, points: "not a list" });
       expect(notAList.error?.issues.map((issue) => issue.message)).toEqual(["Invalid input: expected array, received string"]);
