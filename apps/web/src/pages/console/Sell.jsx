@@ -1189,29 +1189,30 @@ function Takings({ gymId, org, page, pick, onDay, between = null, locked, canOpe
                       <span className="c-sale-row-money" style={row.undone ? { textDecoration: 'line-through', color: 'var(--t2)' } : undefined}>
                         {row.amount}
                       </span>
-                      {phone ? (
-                        <MoreMenu label={null} alignRight ariaLabel={`More for the sale of ${row.title}`} items={phoneItems} disabled={state.busy} />
-                      ) : (
-                        <>
-                          {opensPerson ? (
-                            <button type="button" className="c-btn c-btn-s c-btn-sm" onClick={() => onOpenPerson(row.person.entryId)} aria-label={`Open ${row.person.name}'s page`}>
-                              Open their page
-                            </button>
-                          ) : null}
-                          <button
-                            type="button"
-                            className="c-btn c-btn-s c-btn-sm"
-                            aria-haspopup="dialog"
-                            aria-label={receiptButtonLabel(row.receiptNumber, row.title)}
-                            onClick={() => setReceiptFor(row.key)}
-                          >
-                            {RECEIPT_BUTTON}
-                          </button>
-                          {items.length > 0 ? <MoreMenu label={menu.label} compact={menu.label !== null} alignRight ariaLabel={menu.ariaLabel} items={items} disabled={state.busy} /> : null}
-                        </>
-                      )}
+                      {phone ? <MoreMenu label={null} alignRight ariaLabel={`More for the sale of ${row.title}`} items={phoneItems} disabled={state.busy} /> : null}
                     </div>
                   </div>
+                  {/* Kd's click-through: the amount alone at the right, the same edge on every row; the buttons on a line
+                      of their own, always in the same order, so nothing zig-zags from one row to the next. */}
+                  {phone ? null : (
+                    <div className="c-sale-row-acts">
+                      <button
+                        type="button"
+                        className="c-btn c-btn-s c-btn-sm"
+                        aria-haspopup="dialog"
+                        aria-label={receiptButtonLabel(row.receiptNumber, row.title)}
+                        onClick={() => setReceiptFor(row.key)}
+                      >
+                        {RECEIPT_BUTTON}
+                      </button>
+                      {opensPerson ? (
+                        <button type="button" className="c-btn c-btn-s c-btn-sm" onClick={() => onOpenPerson(row.person.entryId)} aria-label={`Open ${row.person.name}'s page`}>
+                          Open their page
+                        </button>
+                      ) : null}
+                      {items.length > 0 ? <MoreMenu label={menu.label} compact={menu.label !== null} alignRight={false} ariaLabel={menu.ariaLabel} items={items} disabled={state.busy} /> : null}
+                    </div>
+                  )}
                   {said !== null ? (
                     <p className="c-s14 c-t1 c-w6 m-0" role="status">
                       {said}

@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { MoreHorizontal } from 'lucide-react';
+import { ChevronDown, MoreHorizontal } from 'lucide-react';
 
 const PLAIN = 'c-btn c-btn-s';
 const SMALL = 'c-btn c-btn-s c-btn-sm';
@@ -48,7 +48,8 @@ export default function MoreMenu({ items, disabled = false, label = 'More', aria
         className={label === null || compact ? SMALL : PLAIN}
       >
         {label}
-        <MoreHorizontal aria-hidden="true" className="w-4 h-4" />
+        {/* A word on a small button ("Refund") opens its choices, as a list's arrow says; the ⋯ alone is More. */}
+        {compact && label !== null ? <ChevronDown aria-hidden="true" className="w-4 h-4" /> : <MoreHorizontal aria-hidden="true" className="w-4 h-4" />}
       </button>
       {open ? (
         <div
