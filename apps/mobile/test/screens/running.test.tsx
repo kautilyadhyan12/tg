@@ -342,10 +342,10 @@ describe("a run, Start to Save", () => {
     const discard = screen.getByRole("button", { name: "Discard run" });
     // Neither is inside the page that scrolls, as the run's name at its top is: no scrolling finds them.
     const scrolls = (from: unknown): boolean => {
-      let at = from as { type?: unknown; parent?: unknown } | null;
-      while (at !== null && at !== undefined) {
-        if (at.type === "RCTScrollView") return true;
-        at = at.parent as typeof at;
+      let at: unknown = from;
+      while (typeof at === "object" && at !== null) {
+        if ("type" in at && at.type === "RCTScrollView") return true;
+        at = "parent" in at ? at.parent : null;
       }
       return false;
     };
