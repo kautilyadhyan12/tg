@@ -71,7 +71,8 @@ describe("the worst thing first: the camera keeps and sends nothing of a person 
 
 describe("the camera as the phone test picked it (51b-ii)", () => {
   it("the model reads the picture as the camera took it, upright and never mirrored", () => {
-    expect(view).toContain("postRotate(proxy.imageInfo.rotationDegrees.toFloat())");
+    expect(view).toContain("val turn = proxy.imageInfo.rotationDegrees");
+    expect(view).toContain("postRotate(turn.toFloat(), raw.width / 2f, raw.height / 2f)");
     expect(view).not.toMatch(/postScale\(-1/);
     expect(view).toContain("CameraSelector.DEFAULT_FRONT_CAMERA");
   });

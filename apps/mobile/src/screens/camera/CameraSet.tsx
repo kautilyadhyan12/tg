@@ -1,4 +1,4 @@
-import { memo, useCallback, useRef, useState, type ReactNode } from "react";
+import { memo, useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { Pressable, StyleSheet, View, useWindowDimensions, type LayoutChangeEvent, type NativeSyntheticEvent } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Circle, Path } from "react-native-svg";
@@ -52,17 +52,25 @@ export function CameraSet({ live, title, digits, of, paused, sound, stopped, ref
   const sizes = cameraSizes(screen.height);
   const [view, setView] = useState<LiveView>(NO_VIEW);
   const [box, setBox] = useState<{ width: number; height: number } | null>(null);
-  const said = useRef({ reps: 0, heldMs: 0, flash: false });
+  const shown = useRef<LiveView>(NO_VIEW);
+  // Only the body's lines are drawn again for each picture (`BodyLayer`, told directly); the rest of the screen only when
+  // what it says changes. Drawing the whole screen for every picture took the phone's chip from the model (53a's
+  // 20-minute run).
+  const drawBody = useRef<((view: LiveView) => void) | null>(null);
   const Camera = PoseCameraView;
 
   const pose = useCallback(
     (e: NativeSyntheticEvent<PoseEvent>) => {
       const next = live.next(e.nativeEvent);
-      setView(next);
-      const last = said.current;
-      if (next.reps !== last.reps || next.heldMs !== last.heldMs) onCamera(next.reps, next.heldMs);
-      if (next.flash && !last.flash && sound) soundNative?.play("rep");
-      said.current = { reps: next.reps, heldMs: next.heldMs, flash: next.flash };
+      drawBody.current?.(next);
+      const last = shown.current;
+      if (saysOtherwise(last, next)) {
+        shown.current = next;
+        setView(next);
+        // A hold's time goes to the set in whole seconds: its target is a number of seconds.
+        if (next.reps !== last.reps || second(next.heldMs) !== second(last.heldMs)) onCamera(next.reps, second(next.heldMs) * 1000);
+        if (next.flash && !last.flash && sound) soundNative?.play("rep");
+      }
     },
     [live, onCamera, sound],
   );
@@ -90,7 +98,7 @@ export function CameraSet({ live, title, digits, of, paused, sound, stopped, ref
       ) : null}
       <Pressable testID="camera-tap" style={StyleSheet.absoluteFill} onPress={onTap} accessibilityRole="button" accessibilityLabel={TAP_WORDS}>
         {/* Paused, or once the set has ended, the camera rests: no line is left on a picture it no longer reads. */}
-        {on && !paused && box !== null ? <Body view={view} width={box.width} height={box.height} /> : null}
+        {on && !paused && box !== null ? <BodyLayer bind={drawBody} width={box.width} height={box.height} /> : null}
         <View pointerEvents="none" style={[styles.foot, styles.shade]} />
         <View style={[styles.corners, { top: insets.top + 10 }]} pointerEvents="none">
           <View style={styles.count} accessible accessibilityLabel={`${digits} ${of}`}>
@@ -150,6 +158,25 @@ function Foot({ line }: { line: FootLine }) {
       </Txt>
     </View>
   );
+}
+
+const second = (ms: number): number => Math.floor(ms / 1000);
+
+/** Whether the screen, apart from the body's lines, says anything else after this picture. */
+function saysOtherwise(a: LiveView, b: LiveView): boolean {
+  return a.stage !== b.stage || a.reps !== b.reps || second(a.heldMs) !== second(b.heldMs) || a.flash !== b.flash || a.line?.words !== b.line?.words || a.line?.tone !== b.line?.tone;
+}
+
+/** The body's lines, drawn again for each picture the screen is told of, alone. */
+function BodyLayer({ bind, width, height }: { bind: { current: ((view: LiveView) => void) | null }; width: number; height: number }) {
+  const [view, setView] = useState<LiveView | null>(null);
+  useEffect(() => {
+    bind.current = setView;
+    return () => {
+      bind.current = null;
+    };
+  }, [bind]);
+  return view === null ? null : <Body view={view} width={width} height={height} />;
 }
 
 /** The person the camera follows, drawn on their own picture: white-gold lines with a gold glow, a ring on each joint,

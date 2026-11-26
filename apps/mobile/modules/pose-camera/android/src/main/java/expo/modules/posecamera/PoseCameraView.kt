@@ -3,6 +3,7 @@ package expo.modules.posecamera
 import android.content.Context
 import android.content.pm.ApplicationInfo
 import android.graphics.Bitmap
+import android.graphics.Canvas
 import android.graphics.Matrix
 import android.hardware.Sensor
 import android.hardware.SensorEvent
@@ -57,6 +58,8 @@ private const val QUIET_MS = 5_000L
 /** A gravity reading older than this says nothing about now. */
 private const val GRAVITY_STALE_NS = 1_000_000_000L
 private const val TAG = "PoseCamera"
+/** How many turned pictures go round (`picture`). */
+private const val TURNED = 3
 
 /**
  * The selfie camera's picture across the whole view, as the camera screen shows it (mirrored, as every selfie camera
@@ -134,6 +137,21 @@ class PoseCameraView(context: Context, appContext: AppContext) : ExpoView(contex
     private var provider: ProcessCameraProvider? = null
     private var useCases: List<UseCase> = emptyList()
     private val lock = Any()
+    /** CameraX's picture, copied into memory made once (or into a new picture where its rows are laid out otherwise). */
+    private var rawPicture: Bitmap? = null
+    /** The turned pictures, used in turn (`picture`). */
+    private val turned = ArrayDeque<Bitmap>(TURNED)
+
+    private fun rawOf(proxy: ImageProxy): Bitmap {
+      val plane = proxy.planes.firstOrNull()
+      if (plane == null || plane.pixelStride != 4 || plane.rowStride != proxy.width * 4) return proxy.toBitmap()
+      val raw = rawPicture?.takeIf { it.width == proxy.width && it.height == proxy.height }
+        ?: Bitmap.createBitmap(proxy.width, proxy.height, Bitmap.Config.ARGB_8888).also { rawPicture = it }
+      val pixels = plane.buffer
+      pixels.rewind()
+      raw.copyPixelsFromBuffer(pixels)
+      return raw
+    }
     private var lastTimestamp = 0L
     // Counts for the laptop's log while a folder's copy is measured (51b-ii's numbers again): never a point.
     private var answered = 0
@@ -206,16 +224,29 @@ class PoseCameraView(context: Context, appContext: AppContext) : ExpoView(contex
     }
 
     /** One camera picture, on the worker: turned upright, never mirrored, and handed to the model, which drops it if it
-     *  is still busy with the one before (its live mode). */
+     *  is still busy with the one before (its live mode). The pictures' memory is made once and used again for every
+     *  picture: two new pictures each time (CameraX's own and the turned one) were about 40 MB of throwaway memory a
+     *  second, and on Kd's phone Android's clean-up of it took nearly half a core away from the model (53a, the 20-minute
+     *  run). The turned pictures go round three, so none is drawn over while the model may still be reading it: it reads
+     *  one at a time and drops the pictures that come meanwhile. */
     private fun picture(proxy: ImageProxy) {
       lastPicture = SystemClock.elapsedRealtime()
       try {
         val model = landmarker ?: return
         if (closed || failed) return
-        val raw = proxy.toBitmap()
-        val turn = Matrix().apply { postRotate(proxy.imageInfo.rotationDegrees.toFloat()) }
-        val upright = Bitmap.createBitmap(raw, 0, 0, raw.width, raw.height, turn, true)
-        if (upright !== raw) raw.recycle()
+        val raw = rawOf(proxy)
+        val turn = proxy.imageInfo.rotationDegrees
+        val sideways = turn % 180 != 0
+        val width = if (sideways) raw.height else raw.width
+        val height = if (sideways) raw.width else raw.height
+        val upright = (if (turned.size >= TURNED) turned.removeFirst() else null)?.takeIf { it.width == width && it.height == height }
+          ?: Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+        turned.addLast(upright)
+        val matrix = Matrix().apply {
+          postRotate(turn.toFloat(), raw.width / 2f, raw.height / 2f)
+          postTranslate((width - raw.width) / 2f, (height - raw.height) / 2f)
+        }
+        Canvas(upright).drawBitmap(raw, matrix, null)
         val timestamp = synchronized(lock) {
           val ts = maxOf(SystemClock.uptimeMillis(), lastTimestamp + 1)
           lastTimestamp = ts
@@ -236,19 +267,20 @@ class PoseCameraView(context: Context, appContext: AppContext) : ExpoView(contex
       val world = result.worldLandmarks().firstOrNull()?.takeIf { it.size == POINTS }
       val people = ArrayList<Map<String, Any>>(1)
       if (points != null) {
-        val flat = ArrayList<Double>(POINTS * 5)
-        for (p in points) {
-          flat.add(p.x().toDouble())
-          flat.add(p.y().toDouble())
-          flat.add(p.z().toDouble())
-          flat.add(p.visibility().orElse(0f).toDouble())
-          flat.add(p.presence().orElse(0f).toDouble())
+        // Plain number arrays: the screen gets them as they are, with no object made for each number.
+        val flat = DoubleArray(POINTS * 5)
+        for ((k, p) in points.withIndex()) {
+          flat[k * 5] = p.x().toDouble()
+          flat[k * 5 + 1] = p.y().toDouble()
+          flat[k * 5 + 2] = p.z().toDouble()
+          flat[k * 5 + 3] = p.visibility().orElse(0f).toDouble()
+          flat[k * 5 + 4] = p.presence().orElse(0f).toDouble()
         }
-        val flatWorld = ArrayList<Double>(if (world == null) 0 else POINTS * 3)
-        world?.forEach { p ->
-          flatWorld.add(p.x().toDouble())
-          flatWorld.add(p.y().toDouble())
-          flatWorld.add(p.z().toDouble())
+        val flatWorld = DoubleArray(if (world == null) 0 else POINTS * 3)
+        world?.forEachIndexed { k, p ->
+          flatWorld[k * 3] = p.x().toDouble()
+          flatWorld[k * 3 + 1] = p.y().toDouble()
+          flatWorld[k * 3 + 2] = p.z().toDouble()
         }
         people.add(mapOf("points" to flat, "world" to flatWorld))
       }
@@ -260,7 +292,7 @@ class PoseCameraView(context: Context, appContext: AppContext) : ExpoView(contex
         "t" to result.timestampMs().toDouble(),
         "width" to image.width.toDouble(),
         "height" to image.height.toDouble(),
-        "gravity" to if (fresh && g != null) listOf(g[0].toDouble(), g[1].toDouble(), g[2].toDouble()) else emptyList(),
+        "gravity" to if (fresh && g != null) doubleArrayOf(g[0].toDouble(), g[1].toDouble(), g[2].toDouble()) else DoubleArray(0),
         "people" to people,
       )
       if (debuggable) {
