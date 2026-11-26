@@ -125,6 +125,8 @@ describe("the worst thing: once a member's set has counted, a stranger away from
     // A second unseen: the plain sign alone would reach 5 m in it; the follow's own gap and reach refuse the stranger.
     { how: "the member walks 1.0 m aside and the camera loses them for a second; a stranger is found 1.8 m the other side of their place", member: (m) => [...m.walk(0, 1), ...nobody(m.still, 30)], at: -1.8, size: 1 },
     { how: "the member walks 1.8 m aside and back and stands a second; the model changes all at once to a stranger where they had walked to", member: (m) => [...m.walk(0, 1.8), ...m.walk(1.8, 0), ...m.stand(0, 1)], at: 1.8, size: 1 },
+    // Where they were a moment ago is theirs only for 3 s after their newest look (round one, H2).
+    { how: "the member walks 1.2 m aside and the camera loses them for 4 s; a stranger is found where they were", member: (m) => [...m.walk(0, 1.2), ...nobody(m.still, 120)], at: 1.2, size: 1 },
   ];
   const cases = PAIRS.flatMap(([name, member, stranger]) => CASES.map((c) => [name, member, stranger, c.how] as const));
 
@@ -155,14 +157,63 @@ describe("the worst thing: once a member's set has counted, a stranger away from
       return [member, CASES.filter((c) => strangerOf(m, stranger, c).counts).length] as const;
     });
     expect(tried).toEqual([
-      ["sumo_squat_2a", 4],
-      ["sumo_squat_2b", 4],
-      ["lunge_forward_kettlebell", 2],
-      ["squat_jump_3 0.69-8.6 s", 2],
-      ["sit_up_plate_0", 1],
+      ["sumo_squat_2a", 5],
+      ["sumo_squat_2b", 5],
+      ["lunge_forward_kettlebell", 3],
+      ["squat_jump_3 0.69-8.6 s", 3],
+      ["sit_up_plate_0", 2],
       ["hip_thrust_dumbbell", 1],
     ]);
   });
+});
+
+describe("the worst thing, with other people in the picture: a body seen beside the member is somebody else, after the member has gone too", () => {
+  /** Pictures holding the member's `mine` and another person's `theirs` together, index by index, then `theirs` alone. */
+  const together = (mine: readonly MovementFrame[], theirs: readonly MovementFrame[]): MovementFrame[] =>
+    theirs.map((f, k) => {
+      const own = mine[k];
+      return own === undefined ? f : { ...own, people: [...own.people, ...f.people] };
+    });
+
+  it.each(PAIRS.slice(0, 3).map(([name, member, stranger]) => [name, member, stranger] as const))(
+    "%s: %s walks 1.2 m towards %s, a neighbour doing their reps 2 m from the member's place, stands half a second and leaves the picture: the neighbour counts as nobody there would",
+    (name, memberLabel, strangerLabel) => {
+      // Round one, H2: the lock had seen the two side by side and given the member every picture, then took the neighbour,
+      // 0.8 m from where the member stood, the moment the member had gone (3 counted against 1).
+      const m = memberOf(name, memberLabel);
+      const neighbour = placed(videoOf(strangerLabel).frames, m.aspect, [m.own.middle[0] + m.towards * 2 * m.own.size, m.own.middle[1]], m.own.size);
+      expect(runMovement(m.movement, { ...m.member, frames: neighbour }).count).toBeGreaterThan(0);
+      const walked = [...m.walk(0, 1.2), ...m.stand(1.2, 0.5)];
+      const withNeighbour = withMiddle(m.member, m.cut, together(walked, neighbour));
+      const withNobody = withMiddle(m.member, m.cut, [...walked, ...nobody(m.still, neighbour.length - walked.length)]);
+      const a = runMovement(m.movement, withNeighbour);
+      const b = runMovement(m.movement, withNobody);
+      expect([a.count, said(a.reps)]).toEqual([b.count, said(b.reps)]);
+      expect(givenOf(m.movement, withNeighbour, new Set(neighbour.flatMap((f) => f.people))).filter((p) => p !== null && neighbour.some((f) => f.people.includes(p)))).toEqual([]);
+      expect(a).toEqual(cameraRun(m.movement, withLeadIn(withNeighbour)));
+    },
+  );
+
+  it.each(PAIRS.slice(0, 3).map(([name, member, stranger]) => [name, member, stranger] as const))(
+    "%s: %s steps 1.5 m aside while %s walks the same way 1 m behind them, through the member's place: every picture gives the member, never the other",
+    (name, memberLabel, strangerLabel) => {
+      const m = memberOf(name, memberLabel);
+      const other = placed(videoOf(strangerLabel).frames.slice(0, 1), m.aspect, m.own.middle, m.own.size)[0];
+      if (other === undefined) throw new Error("no picture");
+      const walk = m.walk(0, 1.5);
+      const behind = walk.map((_, k) => across(other, m.dx((1.5 * (k + 1)) / walk.length - 1)));
+      const video = withMiddle(m.member, m.cut, together(walk, behind));
+      const set = new CameraSet({ movement: m.movement, exercise: null });
+      const mine = new Set(walk.flatMap((f) => f.people));
+      const theirs = new Set(behind.flatMap((f) => f.people));
+      const given = withLeadIn(video).frames.flatMap((f) => {
+        const p = set.next(f).person.person;
+        return f.people.some((q) => mine.has(q)) ? [p === null ? "nobody" : mine.has(p) ? "member" : theirs.has(p) ? "other" : "?"] : [];
+      });
+      expect(given.length).toBe(walk.length);
+      expect(given.filter((g) => g !== "member")).toEqual([]);
+    },
+  );
 });
 
 describe("the limits, in plain sight: a body of the member's size within a stride of one of their places is taken for them", () => {

@@ -682,8 +682,8 @@ export class MovementMatcher {
       if (found.drive >= anchor - this.stillBy) still = { ...found, drive: anchor, facing: this.anchorFacing };
       else if (!this.heldLow()) still = null;
     }
-    if (still !== null && still.drive !== anchor) this.anchorFacing = still.facing;
-    if (still !== null && anchor === null) this.anchorFacing = still.facing;
+    // A new highest standing (higher, held lower, or the first) keeps the way it was taken facing; the same one, its own.
+    if (still !== null && (anchor === null || still.drive !== anchor)) this.anchorFacing = still.facing;
     if (still !== null) this.anchor = still.drive;
     if (still !== null) this.standing = still;
     // Never still, read on the move (a fast rhythm, a jump): where the person stood upright on the floor (`movingStanding`).

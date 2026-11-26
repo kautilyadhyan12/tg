@@ -3,11 +3,16 @@
 //
 // The rule, in words Kd can read. For each movement counted by reps, each of its own videos it counts (its twins' among
 // them; never another movement's video it counts by mistake, an open case: his sit-and-stand on a chair turns the chair
-// round between two sits), as filmed and as each replay that must hold, with no turn ever replacing the standing: from the set's first counted rep
-// to the last rep it told the person about (counted, short, unseen or refused), at every picture between reps, how far
-// the way the person faces lies from the way they faced when their standing was taken. Each set gives its furthest. The
-// bound is beyond the furthest set by half its distance from the middle set, as the lock's numbers are (lockCheck.ts),
-// rounded up to 5 degrees: a person facing further than that from their standing has turned.
+// round between two sits), as filmed and as each replay that must hold, with no turn ever replacing the standing: from the
+// set's first counted rep to the last rep it told the person about (counted, short, unseen or refused), at every picture
+// between reps, how far the way the person faces lies from the way they faced when their standing was taken. Each set
+// gives its furthest. The bound is beyond the furthest set by half its distance from the middle set, as the lock's numbers
+// are (lockCheck.ts), rounded up to 5 degrees: a person facing further than that from their standing has turned.
+//
+// Before the first counted rep is not read: a person getting to their place turns on purpose (walking back from the phone
+// and turning side on), and a standing found facing the new way is wanted there. That it costs no rep there is held by the
+// walk-back proof (movementWalkBack.test.ts: his sets begun at every picture of his walk back count every squat; round
+// one's H1, when the standing was forgotten at the turn instead of replaced, lost one from six of them).
 import type { Movement } from "@app/shared";
 import { MATCH_LIMITS, MovementMatcher, type MatchLimits } from "../src/index.js";
 import type { Video } from "./bodyCheck.js";
