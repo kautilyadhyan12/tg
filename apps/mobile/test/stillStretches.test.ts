@@ -11,7 +11,7 @@ import type { AutoPauseChange, Fix } from "../src/screens/running/autoPause";
 import type { LiveRun } from "../src/screens/running/recorder";
 import { closeStill, closedStill, openStill } from "../src/screens/running/runLive";
 import { realRuns } from "./realRuns";
-import { changesOf, endOf, pointsOf, walk, wander, type Stretch } from "./runWalks";
+import { changesOf, endOf, pausesOf, pointsOf, walk, wander, type Stretch } from "./runWalks";
 
 function liveRun(): LiveRun {
   return {
@@ -59,16 +59,18 @@ describe("the worst thing: with Auto-pause off, real metres left out because the
     [3, 15],
     [1, 5],
     [1, 15],
-  ])("a pram at %s m a second, the phone sure to %s m: the phone and the server count the same, to the metre what the run counts without the motion", (speed, accuracyM) => {
+  ])("a pram at %s m a second, the phone sure to %s m: the phone and the server count the same, never less than the same stops with Auto-pause on", (speed, accuracyM) => {
     const go = (seconds: number): Stretch => ({ seconds, speed, accuracyM, feel: "still" });
     const stop: Stretch = { seconds: 30, speed: 0, accuracyM, feel: "still" };
     const { fixes, metres } = walk([go(200), stop, go(170), stop, go(170)], speed * 100 + accuracyM);
     const { phone, server } = phoneAndServer(fixes);
     expect(server).toBe(phone);
-    const plain = runSums(pointsOf(fixes), [], endOf(fixes), 70).distanceM;
-    expect(phone).toBe(plain);
-    // Against the metres truly pushed: 2 to 8 m short, the two stops' own edges, as without the motion.
-    expect(metres - phone).toBeLessThanOrEqual(10);
+    const end = endOf(fixes);
+    // A stand is a pause to the route, so the two real stops lose what a pause loses at its edges, never more:
+    // measured 1614, 1612, 531 and 526 m against Auto-pause on's 1601, 1601, 527 and 521.
+    expect(phone).toBeGreaterThanOrEqual(runSums(pointsOf(fixes), pausesOf(changesOf(fixes), end), end, 70).distanceM);
+    expect(phone).toBeLessThanOrEqual(runSums(pointsOf(fixes), [], end, 70).distanceM + 6);
+    expect(metres - phone).toBeLessThanOrEqual(15);
   });
 
   it("a pram left standing two minutes after Start, then pushed off: every metre pushed is counted", () => {
@@ -120,7 +122,8 @@ describe("standing with Auto-pause off", () => {
     expect(to).toBeLessThanOrEqual(192_000);
     const sums = runSums(pointsOf(fixes), [], end, 70, still);
     expect(Math.abs(sums.distanceM - metres)).toBeLessThanOrEqual(6);
-    expect(sums.movingS).toBe(Math.round((end - (to - from)) / 1000));
+    // Standing from the stand's first point to its last: within a second of the stretch the phone kept.
+    expect(Math.abs(sums.movingS - Math.round((end - (to - from)) / 1000))).toBeLessThanOrEqual(1);
     // Without it (today, sure to 15 m: the maths alone does not judge a stop), the stand's wander is counted
     // and drawn, and its minute is moving time.
     const plain = runSums(pointsOf(fixes), [], end, 70);
@@ -189,7 +192,11 @@ describe("a still stretch the phone never made cannot take a run's metres away",
     const end = points[points.length - 1]?.[0] ?? 0;
     const minutes: RunPause[] = [];
     for (let t = 0; t + 60_000 <= end; t += 60_000) minutes.push([t, t + 60_000]);
-    expect(runSums(points, [], end, 70, minutes).distanceM).toBe(runSums(points, [], end, 70).distanceM);
+    const plain = runSums(points, [], end, 70);
+    const forged = runSums(points, [], end, 70, minutes);
+    expect(forged.distanceM).toBe(plain.distanceM);
+    expect(forged.movingS).toBe(plain.movingS);
+    expect(forged.splitsKm).toEqual(plain.splitsKm);
   });
 
   it("one over a stand and the walk after it is not honoured: the walk is counted, and the stand by the maths' own rule", () => {
@@ -231,9 +238,90 @@ describe("a still stretch the phone never made cannot take a run's metres away",
     const end = endOf(fixes);
     const pause: RunPause = [61_000, 91_000];
     const sums = runSums(pointsOf(fixes), [pause], end, 70, [[61_000, 121_000]]);
-    // 30 s paused and 30 s standing: never 60 s of standing on top of the pause.
-    expect(sums.movingS).toBe(Math.round((end - 60_000) / 1000));
-    expect(sums.stillS).toBe(30);
+    // 30 s paused and 30 s standing (to the stand's last point): never 60 s of standing on top of the pause.
+    expect(Math.abs(sums.movingS - Math.round((end - 60_000) / 1000))).toBeLessThanOrEqual(1);
+    expect(Math.abs(sums.stillS - 30)).toBeLessThanOrEqual(1);
+  });
+});
+
+describe("round one: the step out of a stand, and seconds with no point", () => {
+  const peak = (line: readonly number[]): number => line.reduce((m, v) => Math.max(m, v), 0);
+
+  // H1. Walk 5 minutes at 3 m/s, stand 90 s, walk 5 minutes on, the place wandering throughout as a real phone's
+  // does (the error drifts on through the walk and the stand alike; it never starts or stops with them).
+  // The stand is a pause to the route: against the same stop with Auto-pause on, never fewer metres, never a sprint
+  // it would not show, and never a metre more than the run without the stretch. Sure to 30 m, the worst a point may
+  // be, both settings cut the route at a raw point and Auto-pause notices the walk-off a few seconds late: there the
+  // chart's peak may differ from Auto-pause on's by up to 1.3 m/s either way (measured, 50 tries).
+  it.each([
+    [5, 10],
+    [15, 10],
+    [20, 10],
+    [30, 150],
+  ])("sure to %s m, 50 tries: never a sprint Auto-pause on would not show (within %s cm/s), nor the stand's drift as metres", (accuracyM, peakLeeway) => {
+    let worstPeak = -Infinity;
+    let worstOver = -Infinity;
+    let worstUnder = -Infinity;
+    for (let seed = 1; seed <= 50; seed++) {
+      const off = wander(690, accuracyM / 2, 30, seed * 7919 + accuracyM);
+      const { fixes, metres } = walk([
+        { seconds: 300, speed: 3, accuracyM, feel: "moving", off: off.slice(0, 300) },
+        { seconds: 90, speed: 0, accuracyM, feel: "still", off: off.slice(300, 390) },
+        { seconds: 300, speed: 3, accuracyM, feel: "moving", off: off.slice(390) },
+      ], seed);
+      const end = endOf(fixes);
+      const changes = changesOf(fixes);
+      const plain = runSums(pointsOf(fixes), [], end, 70);
+      const on = runSums(pointsOf(fixes), pausesOf(changes, end), end, 70);
+      const sums = runSums(pointsOf(fixes), [], end, 70, stillOf(changes, end));
+      expect(metres).toBeGreaterThan(0);
+      worstPeak = Math.max(worstPeak, peak(sums.paceLine) - peak(on.paceLine));
+      worstOver = Math.max(worstOver, sums.distanceM - plain.distanceM);
+      worstUnder = Math.max(worstUnder, on.distanceM - sums.distanceM);
+    }
+    expect(worstPeak).toBeLessThanOrEqual(peakLeeway);
+    expect(worstOver).toBeLessThanOrEqual(6);
+    expect(worstUnder).toBeLessThanOrEqual(10);
+  });
+
+  // H1. A straight 30-minute run at 3 m/s sent with a 12.4 s stretch every 13 s, each 37 m long (honoured).
+  it("a made-up stretch every 13 s takes its metres with its time: never a pace faster than the person ran", () => {
+    const { fixes } = walk([{ seconds: 1800, speed: 3, accuracyM: 5, feel: "moving" }]);
+    const end = endOf(fixes);
+    const made: RunPause[] = [];
+    for (let t = 1000; t + 12_400 <= end; t += 13_000) made.push([t, t + 12_400]);
+    const plain = runSums(pointsOf(fixes), [], end, 70);
+    const forged = runSums(pointsOf(fixes), [], end, 70, made);
+    expect(forged.movingS).toBeGreaterThan(0);
+    expect(forged.distanceM / forged.movingS).toBeLessThanOrEqual((plain.distanceM / plain.movingS) * 1.1);
+    expect(peak(forged.paceLine)).toBeLessThanOrEqual(peak(plain.paceLine) + 10);
+    for (const split of forged.splitsKm) if (split.m === 1000) expect(split.s).toBeGreaterThanOrEqual(300);
+  });
+
+  // H2. Stand 60 s, then walk on at 1.5 m/s with no signal for the first 60 s of it.
+  it("a signal lost as the person walks off is never taken for standing: Moving time and the pace chart are the walk's", () => {
+    const { fixes } = walk([
+      { seconds: 60, speed: 3, accuracyM: 5, feel: "moving" },
+      { seconds: 60, speed: 0, accuracyM: 5, feel: "still", off: wander(60, 2.5, 30, 3) },
+      { seconds: 300, speed: 1.5, accuracyM: 5, feel: "moving" },
+    ]);
+    const kept = fixes.filter((f) => f.at <= 120_000 || f.at > 180_000);
+    const end = endOf(kept);
+    const still = stillOf(changesOf(kept), end);
+    const plain = runSums(pointsOf(kept), [], end, 70);
+    const sums = runSums(pointsOf(kept), [], end, 70, still);
+    // 60 s walked, 60 s stood, 300 s walked, the first 60 of them unseen.
+    expect(Math.abs(sums.movingS - 360)).toBeLessThanOrEqual(5);
+    expect(peak(sums.paceLine)).toBeLessThanOrEqual(peak(plain.paceLine) + 10);
+  });
+
+  it("a made-up stretch over seconds with no point counts nothing as standing", () => {
+    const { fixes } = walk([{ seconds: 600, speed: 1.5, accuracyM: 5, feel: "moving" }]);
+    const kept = fixes.filter((f) => f.at <= 200_000 || f.at > 320_000);
+    const end = endOf(kept);
+    const plain = runSums(pointsOf(kept), [], end, 70);
+    expect(runSums(pointsOf(kept), [], end, 70, [[200_500, 319_500]]).movingS).toBe(plain.movingS);
+    expect(runSums(pointsOf(kept), [], end, 70, [[200_000, 321_000]]).movingS).toBe(plain.movingS);
   });
 });
 

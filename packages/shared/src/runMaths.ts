@@ -742,12 +742,12 @@ function standingWithin(spans: Spans, from: number, to: number): number {
   return total;
 }
 
-/** The parts of the still stretches (37k) inside a piece's own start and end that the run's points let stand:
- *  every point of the part within `travelMetresAt` of its first. A phone that felt still while its place went
- *  farther was carried (Auto-pause's "on wheels" takes the stretch back on the phone), and a stretch no phone
- *  made never takes a run's metres away wholesale: the most it hides is a stand's own wander. */
+/** The still stretches (37k) the run's points let stand, each from its first point to its last: the one at its end
+ *  left out where the person moved off (Auto-pause dates moving again to the first point that moved), kept where the
+ *  run's end or a pause ended it; two points at least, every one within `travelMetresAt` of the first, and going
+ *  nowhere at a walk. Seconds with no point in them are never taken for standing (round one, H2). */
 function stillHeld(piece: readonly Fix[], held: readonly [number, number][], from: number, to: number): [number, number][] {
-  const out: [number, number][] = [];
+  const kept: [number, number][] = [];
   // The stretches are in order and apart (cleanPauses), as are the piece's points: the first stretch ending after
   // the piece begins, and each stretch's first point, are found by halving.
   let h = firstAfter(held.length, (i) => (held[i]?.[1] ?? Infinity) > from);
@@ -757,19 +757,87 @@ function stillHeld(piece: readonly Fix[], held: readonly [number, number][], fro
     const start = Math.max(stretch[0], from);
     const end = Math.min(stretch[1], to);
     if (end <= start) continue;
-    let first: Fix | null = null;
+    const movedOff = stretch[1] < to;
+    const i0 = firstAfter(piece.length, (k) => (piece[k]?.at ?? Infinity) >= start);
+    const first = piece[i0];
+    if (first === undefined) continue;
+    let i1 = i0;
     let near = true;
-    for (let i = firstAfter(piece.length, (k) => (piece[k]?.at ?? Infinity) >= start); i < piece.length; i++) {
+    for (let i = i0 + 1; i < piece.length; i++) {
       const fix = piece[i];
-      if (fix === undefined || fix.at > end) break;
-      if (first === null) first = fix;
-      else if (quickMetres(first, fix) > travelMetresAt(Math.max(first.acc, fix.acc))) {
+      if (fix === undefined || fix.at > end || (movedOff && fix.at === end)) break;
+      if (quickMetres(first, fix) > travelMetresAt(Math.max(first.acc, fix.acc))) {
         near = false;
         break;
       }
+      i1 = i;
     }
-    if (near) out.push([start, end]);
+    const last = piece[i1];
+    if (!near || last === undefined || i1 === i0 || trendSpeed(piece, i0, i1) >= STAND_TREND_MPS) continue;
+    kept.push([first.at, last.at]);
   }
+  return kept;
+}
+
+/** A walk's pace (Auto-pause's GO_MPS): points going along this fast, or faster, are walking, not standing. */
+const STAND_TREND_MPS = 1;
+
+/** How fast the points `i0` to `i1` go along, in metres a second: the least-squares line through their places over
+ *  time. A standing phone's wander drifts far slower (about a quarter of a metre a second sure to 30 m, the bug
+ *  hunt's model), so a stretch made up over a walk or a ride is never taken for a stand, whatever accuracy it claims. */
+function trendSpeed(piece: readonly Fix[], i0: number, i1: number): number {
+  const origin = piece[i0];
+  if (origin === undefined) return 0;
+  const s0 = Math.sin(origin.lat * RAD);
+  const w = Math.sqrt(1 - WGS84_E2 * s0 * s0);
+  const northPerDeg = ((WGS84_A * (1 - WGS84_E2)) / (w * w * w)) * RAD;
+  const eastPerDeg = (WGS84_A / w) * Math.cos(origin.lat * RAD) * RAD;
+  let n = 0;
+  let st = 0;
+  let sx = 0;
+  let sy = 0;
+  let stt = 0;
+  let stx = 0;
+  let sty = 0;
+  for (let i = i0; i <= i1; i++) {
+    const fix = piece[i];
+    if (fix === undefined) continue;
+    const t = (fix.at - origin.at) / 1000;
+    const x = (fix.lng - origin.lng) * eastPerDeg;
+    const y = (fix.lat - origin.lat) * northPerDeg;
+    n++;
+    st += t;
+    sx += x;
+    sy += y;
+    stt += t * t;
+    stx += t * x;
+    sty += t * y;
+  }
+  const spread = n * stt - st * st;
+  return n < 2 || spread <= 0 ? 0 : Math.hypot((n * stx - st * sx) / spread, (n * sty - st * sy) / spread);
+}
+
+/** A piece cut where it stands (37k): the walk to each stand ends at its first point, the walk from it begins at its
+ *  last, and the points between are none of the route's. To the distance and the line a stand is a pause, with the
+ *  walk on each side kept as at a pause (round one, H1: a stand's drift is never counted, never as a sprint, and a
+ *  stretch made up over a walk takes its metres with its time, as a made-up pause does); to the clock it is
+ *  standing, so Moving time leaves it out and the clock runs on. */
+function heldApart(piece: readonly Fix[], kept: readonly [number, number][]): Fix[][] {
+  if (kept.length === 0) return [[...piece]];
+  const out: Fix[][] = [];
+  let current: Fix[] = [];
+  let k = 0;
+  for (const fix of piece) {
+    const stand = kept[k];
+    if (stand !== undefined && fix.at > stand[0]) {
+      if (fix.at < stand[1]) continue;
+      out.push(current);
+      current = [];
+      k++;
+    }
+    current.push(fix);
+  }
+  out.push(current);
   return out;
 }
 
@@ -807,61 +875,66 @@ export function runSums(points: readonly RunPoint[], pauses: readonly RunPause[]
   // Every place the distance was counted to, with its clock, in order: the pace line's places in time.
   const marks: RunMark[] = [];
   for (const { fixes: raw, from, to } of piecesBetweenPauses(points, cleaned, elapsed)) {
-    const piece = withoutSpikes(raw);
-    // On the smoothed path: the raw points of a phone standing still wander past STILL_M, and the stop
-    // was counted as moving and drawn as a crawl on the pace chart (round one of 37c-iii, H3).
-    const found = standingSpans(smoothed(piece));
-    // And where the phone felt the person stand (37k), joined with those in time order.
-    const kept = stillHeld(piece, held, from, to);
-    const spans = kept.length === 0 ? found : cleanPauses([...found, ...kept], elapsed);
-    for (const span of spans) {
-      stillMs += span[1] - span[0];
-      still.list.push(span);
-    }
-    const flagged = tooFastSteps(piece);
-    // The piece is cut where a too-fast stretch is left out; each part is smoothed on its own.
-    let part: Fix[] = [];
-    const parts: Fix[][] = [];
-    for (let i = 0; i < piece.length; i++) {
-      const fix = piece[i];
-      if (fix === undefined) continue;
-      part.push(fix);
-      const next = piece[i + 1];
-      if (flagged[i] === true && next !== undefined) {
-        leftOutM += geodesicMetres(fix.lat, fix.lng, next.lat, next.lng);
-        leftOutMs += next.at - fix.at;
-        parts.push(part);
-        part = [];
+    const whole = withoutSpikes(raw);
+    // Where the phone felt the person stand (37k): a pause to the route, standing to the clock.
+    const kept = stillHeld(whole, held, from, to);
+    for (const [k, piece] of heldApart(whole, kept).entries()) {
+      const stand = kept[k - 1];
+      if (stand !== undefined) {
+        stillMs += stand[1] - stand[0];
+        still.list.push(stand);
       }
-    }
-    parts.push(part);
-    for (const [index, p] of parts.entries()) {
-      if (index > 0 && segment.length > 0) {
-        segments.push(segment);
-        segment = [];
+      // On the smoothed path: the raw points of a phone standing still wander past STILL_M, and the stop
+      // was counted as moving and drawn as a crawl on the pace chart (round one of 37c-iii, H3).
+      for (const span of standingSpans(smoothed(piece))) {
+        stillMs += span[1] - span[0];
+        still.list.push(span);
       }
-      if (p.length < 2) continue; // a lone point between two left-out steps covers no ground
-      const path = smoothed(p);
-      let last = path[0];
-      if (last === undefined) continue;
-      trackStarts.push(track.length);
-      track.push([last.lat, last.lng]);
-      segment.push({ d: walked, t: last.at });
-      marks.push({ d: walked, t: last.at });
-      for (let i = 1; i < path.length; i++) {
-        const fix = path[i];
+      const flagged = tooFastSteps(piece);
+      // The piece is cut where a too-fast stretch is left out; each part is smoothed on its own.
+      let part: Fix[] = [];
+      const parts: Fix[][] = [];
+      for (let i = 0; i < piece.length; i++) {
+        const fix = piece[i];
         if (fix === undefined) continue;
-        // Standing, the route holds still: the phone's wander adds no metres and draws no line, and the
-        // step out of the stop is measured from where the person stood.
-        if (standingThrough(still, last.at, fix.at)) continue;
-        const m = geodesicMetres(last.lat, last.lng, fix.lat, fix.lng);
-        if (m < MIN_STEP_M && i < path.length - 1) continue;
-        steps.push({ m, s: (fix.at - last.at - standingWithin(still, last.at, fix.at)) / 1000 });
-        track.push([fix.lat, fix.lng]);
-        walked += m;
-        segment.push({ d: walked, t: fix.at });
-        marks.push({ d: walked, t: fix.at });
-        last = fix;
+        part.push(fix);
+        const next = piece[i + 1];
+        if (flagged[i] === true && next !== undefined) {
+          leftOutM += geodesicMetres(fix.lat, fix.lng, next.lat, next.lng);
+          leftOutMs += next.at - fix.at;
+          parts.push(part);
+          part = [];
+        }
+      }
+      parts.push(part);
+      for (const [index, p] of parts.entries()) {
+        if (index > 0 && segment.length > 0) {
+          segments.push(segment);
+          segment = [];
+        }
+        if (p.length < 2) continue; // a lone point between two left-out steps covers no ground
+        const path = smoothed(p);
+        let last = path[0];
+        if (last === undefined) continue;
+        trackStarts.push(track.length);
+        track.push([last.lat, last.lng]);
+        segment.push({ d: walked, t: last.at });
+        marks.push({ d: walked, t: last.at });
+        for (let i = 1; i < path.length; i++) {
+          const fix = path[i];
+          if (fix === undefined) continue;
+          // Standing, the route holds still: the phone's wander adds no metres and draws no line, and the
+          // step out of the stop is measured from where the person stood.
+          if (standingThrough(still, last.at, fix.at)) continue;
+          const m = geodesicMetres(last.lat, last.lng, fix.lat, fix.lng);
+          if (m < MIN_STEP_M && i < path.length - 1) continue;
+          steps.push({ m, s: (fix.at - last.at - standingWithin(still, last.at, fix.at)) / 1000 });
+          track.push([fix.lat, fix.lng]);
+          walked += m;
+          segment.push({ d: walked, t: fix.at });
+          marks.push({ d: walked, t: fix.at });
+          last = fix;
+        }
       }
     }
   }
