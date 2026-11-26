@@ -168,11 +168,13 @@ describe("the worst thing: once a member's set has counted, a stranger away from
 });
 
 describe("the worst thing, with other people in the picture: a body seen beside the member is somebody else, after the member has gone too", () => {
-  /** Pictures holding the member's `mine` and another person's `theirs` together, index by index, then `theirs` alone. */
-  const together = (mine: readonly MovementFrame[], theirs: readonly MovementFrame[]): MovementFrame[] =>
-    theirs.map((f, k) => {
+  /** Pictures holding the member's `mine` and other people's `theirs` together, index by index, then theirs alone (as many
+   *  pictures as the first of them has). */
+  const together = (mine: readonly MovementFrame[], ...theirs: readonly (readonly MovementFrame[])[]): MovementFrame[] =>
+    (theirs[0] ?? []).map((f, k) => {
       const own = mine[k];
-      return own === undefined ? f : { ...own, people: [...own.people, ...f.people] };
+      const people = theirs.flatMap((frames) => frames[k]?.people ?? []);
+      return own === undefined ? { ...f, people } : { ...own, people: [...own.people, ...people] };
     });
 
   it.each(PAIRS.slice(0, 3).map(([name, member, stranger]) => [name, member, stranger] as const))(
@@ -191,6 +193,28 @@ describe("the worst thing, with other people in the picture: a body seen beside 
       expect([a.count, said(a.reps)]).toEqual([b.count, said(b.reps)]);
       expect(givenOf(m.movement, withNeighbour, new Set(neighbour.flatMap((f) => f.people))).filter((p) => p !== null && neighbour.some((f) => f.people.includes(p)))).toEqual([]);
       expect(a).toEqual(cameraRun(m.movement, withLeadIn(withNeighbour)));
+    },
+  );
+
+  it.each(PAIRS.slice(0, 3).map(([name, member, stranger]) => [name, member, stranger] as const))(
+    "%s: %s walks 1.2 m aside, stands half a second and leaves the picture, with somebody standing still just behind where they stopped and %s doing their reps 0.8 m beside it: both count as nobody there would",
+    (name, memberLabel, strangerLabel) => {
+      // Round one's re-check, H2: only the body nearest the member was held, and the second, once the member had gone, was
+      // taken where they had stopped (4 counted against 1).
+      const m = memberOf(name, memberLabel);
+      const neighbour = placed(videoOf(strangerLabel).frames, m.aspect, [m.own.middle[0] + m.towards * 2 * m.own.size, m.own.middle[1]], m.own.size);
+      const first = neighbour[0];
+      if (first === undefined) throw new Error("no picture");
+      const standing = neighbour.map(() => placed([first], m.aspect, [m.own.middle[0] + m.towards * 1.55 * m.own.size, m.own.middle[1]], 0.85 * m.own.size)[0] ?? first);
+      const walked = [...m.walk(0, 1.2), ...m.stand(1.2, 0.5)];
+      const withThem = withMiddle(m.member, m.cut, together(walked, neighbour, standing));
+      const withNobody = withMiddle(m.member, m.cut, [...walked, ...nobody(m.still, neighbour.length - walked.length)]);
+      const a = runMovement(m.movement, withThem);
+      const b = runMovement(m.movement, withNobody);
+      expect([a.count, said(a.reps)]).toEqual([b.count, said(b.reps)]);
+      const theirs = new Set([...neighbour, ...standing].flatMap((f) => f.people));
+      expect(givenOf(m.movement, withThem, theirs).filter((p) => p !== null && theirs.has(p))).toEqual([]);
+      expect(a).toEqual(cameraRun(m.movement, withLeadIn(withThem)));
     },
   );
 
