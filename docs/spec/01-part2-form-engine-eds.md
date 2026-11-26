@@ -2720,6 +2720,22 @@ module keeping each answer in the app's own folder (red), and anywhere else thro
 then named every way of writing a file, and it went red); the screen posting each answer to the internet (347 calls caught);
 the screen keeping each answer in a person's file (red); the store's app built without taking away the usage reports (two
 tests red).
+**On Kd's phone** (moto g35, a folder's development copy, 2026-11-26 and 27): the selfie camera fills the screen and the
+model answers 26 to 31 times a second with nobody in front, 17 to 21 with a body; the laptop playing a prisoner squat video
+to it, the squat counted 10, ended the set by itself and said "Set done · 10 reps · Form score 100", the body's lines and
+corners on the person; the reference picture, and the goblet squat's clip playing, in the corner; the four shapes (his own,
+an opened folding phone, a small phone, the largest text) fit, his settings put back as read. **Twenty minutes in front of
+the video, on the laptop's cable** (the squat jump chosen, so the set never ends): the first run fell from 17 to 5 to 10
+answers a second after 8 minutes, with the script thread at 49% of a core and Android's memory clean-up at 47% (two new
+pictures a frame, the whole screen drawn for each), the app's memory climbing from 845 to 1,030 MB; mended (the camera's
+picture memory made once, a ring of three turned pictures, plain number arrays, only the body redrawn for each picture), the
+second run kept its memory level (778 to 900 MB) and its script thread at 18%, yet fell the same way after 9 minutes: the
+phone, charging and at 55 °C on its chip, had capped its chip at 768 of 2,002 to 2,210 MHz, the camera's own driver using
+nearly a core at 30 pictures a second. So the camera now films no faster than 24 pictures a second (the fastest the selfie
+camera offers up to 24) and the screen's picture is at most 720 by 960. The fair run of 51b-ii, 20 minutes off the charger,
+is still to be made with these, as is how much battery 20 minutes takes; a set is a minute or two and the camera rests
+between sets (§11.8), so the 20 minutes are the hardest case, never the usual one. On this development copy the script runs
+in its slower checking mode; a store build's would be faster.
 
 An exercise that does not pass is published as "count by hand", never with a wrong camera
 count. Kd tries one exercise of each kind of movement on the phone, about a dozen, never
