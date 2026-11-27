@@ -67,7 +67,8 @@ import { FeelCard, NoteCard, PaceCard, RouteCard, RunFigures, SplitsCard } from 
 import { newRecords, RECORDS_PATH } from "./runRecords";
 import { RunMap, useMapScheme } from "./RunMap";
 import { useRunOutbox } from "./RunOutbox";
-import { closedStill, currentPace, sumsAt } from "./runLive";
+import { endRunAtLeaving } from "./runLeaving";
+import { closedStill, currentPace, saveRequestOf, sentOf, sumsAt } from "./runLive";
 import { clock, distance, pace, paceWord, runName, runWhen, unitWord, METRES_PER_MILE } from "./runWords";
 
 /** What stood in the way of Start, said under it with its button. */
@@ -150,6 +151,19 @@ export function RunLayerProvider({ children }: { children: ReactNode }) {
     setStartFailed(false);
   }, [me]);
 
+  // Signed out with a run going on (37o): it is finished and kept for the person, never left recording.
+  const { outbox } = useRunOutbox();
+  useEffect(
+    () =>
+      session.beforeLeaving((who, why) =>
+        endRunAtLeaving(who, why, outbox === null ? null : async (saved) => {
+          await outbox.start();
+          return outbox.add(saved);
+        }),
+      ),
+    [session, outbox],
+  );
+
   // The person's heart rate monitor (37f-i), kept on this phone for them.
   useEffect(() => {
     if (me !== null) void loadMonitor(me);
@@ -170,6 +184,11 @@ export function RunLayerProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (me === null) return;
     void loadRun().then(async (kept) => {
+      // Somebody else's run still going (a sign-out that could not stop it): it stops, and waits for them.
+      if (kept !== null && kept.userId !== me && kept.phase !== "finished") {
+        await finishRun();
+        return;
+      }
       if (kept === null || kept.userId !== me || kept.phase !== "running") return;
       if (await Location.hasStartedLocationUpdatesAsync(RUN_TASK)) return;
       await pauseRun(kept.lastFix?.at ?? kept.startedAt);
@@ -668,20 +687,7 @@ function Summary({ run, units, kg, onSaved }: { run: LiveRun; units: Units; kg: 
   const [busy, setBusy] = useState(false);
   const [notKept, setNotKept] = useState(false);
   // What the server is sent: asked for the climb now (37b-ii), and saved with the same points at Save.
-  const sent = useMemo((): RunClimbRequest => {
-    const end = Math.round(finished);
-    // The stretches the phone felt still (37k), sent only by a run that has one: a server from before them
-    // refuses the field.
-    const still = closedStill(run, finished)
-      .map(([a, b]): [number, number] => [Math.round(a), Math.min(end, Math.round(b))])
-      .filter(([a, b]) => b > a);
-    return {
-      elapsedMs: end,
-      points: run.points.slice(0, RUN_MAX_POINTS).map(([at, lat, lng, acc]) => [Math.round(at), lat, lng, acc]),
-      pauses: closedPauses(run, finished).map(([a, b]) => [Math.round(a), Math.round(b)]),
-      ...(still.length > 0 ? { still } : {}),
-    };
-  }, [run, finished]);
+  const sent = useMemo((): RunClimbRequest => sentOf(run), [run]);
   const climb = useRunClimb(session, sent);
   // The person's records as the server last gave them (37c-ii): the boxes wait for them, and a read that
   // fails (no signal) shows none, never a record the run may not have set. Read again each time the server
@@ -706,15 +712,7 @@ function Summary({ run, units, kg, onSaved }: { run: LiveRun; units: Units; kg: 
     if (outbox === null || busy) return;
     setBusy(true);
     const kept = name.trim() === "" ? runName(startedAt) : name.trim().slice(0, 60);
-    const body: SaveRunRequest = {
-      runId: run.runId,
-      startedAt: startedAt.toISOString(),
-      ...sent,
-      ...(run.heart.length > 0 ? { heart: run.heart.slice(0, RUN_MAX_POINTS) } : {}),
-      name: kept,
-      effort,
-      note: note.trim() === "" ? null : note.trim().slice(0, 1000),
-    };
+    const body = saveRequestOf(run, sent, kept, effort, note.trim() === "" ? null : note.trim().slice(0, 1000));
     // The recorder's own files go only once the outbox holds the run on the phone (round one, L1).
     if (!(await outbox.add(body))) {
       setBusy(false);

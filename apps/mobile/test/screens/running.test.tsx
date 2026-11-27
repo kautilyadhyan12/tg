@@ -9,6 +9,7 @@ import { MAP_CREDIT_PAGE, MAP_WAIT_MS } from "../../src/screens/running/RunMap";
 import { unitMarks } from "../../src/screens/running/routeShape";
 import { chooseAutoPause, finishRun, keepRunUnits, pauseRun, phoneRunFiles, resetRecorder, runNow, startRun, takeLocations } from "../../src/screens/running/recorder";
 import { sumsAt } from "../../src/screens/running/runLive";
+import { endRunAtLeaving } from "../../src/screens/running/runLeaving";
 import { spokenTime } from "../../src/screens/running/runVoice";
 import { readRunFile } from "../../src/screens/running/runQueue";
 import { clock, distance, runName } from "../../src/screens/running/runWords";
@@ -208,6 +209,105 @@ describe("the worst thing: somebody's run shown to another person on the same ph
     expect(screen.queryByText("Your run is going.")).toBeNull();
     expect(screen.queryByText("Time")).toBeNull();
     expect(screen.queryByTestId("live-route")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Open run" })).toBeNull();
+  });
+});
+
+describe("the worst thing (37o): a run left recording somebody's location after they sign out, or lost (the hunt's A7)", () => {
+  /** The fifth tab's Settings, then Sign out and the box's own Sign out, reading the box's line first. */
+  async function signOutFromSettings(): Promise<string | null> {
+    const tab = (await screen.findAllByRole("tab"))[4];
+    if (tab === undefined) throw new Error("no fifth tab");
+    await fireEvent.press(tab);
+    await fireEvent.press(await screen.findByLabelText("Settings"));
+    await fireEvent.press(await screen.findByRole("button", { name: "Sign out" }));
+    const line = screen.queryByText(/^Your run will be/)?.props.children ?? null;
+    const inTheBox = screen.getAllByRole("button", { name: "Sign out" })[1];
+    if (inTheBox === undefined) throw new Error("the box's Sign out was expected");
+    await fireEvent.press(inTheBox);
+    expect(await screen.findByLabelText("Email")).toBeTruthy();
+    return typeof line === "string" ? line : null;
+  }
+
+  it("Sign out mid-run: the box says the run is finished and saved first; the location and the voice stop; the run waits in the person's saved runs, whole, and is sent when they sign in again", async () => {
+    const s = runServer();
+    s.state.online = false;
+    await openRunning(s);
+    await startRunning();
+    const points = await feed(0, 61, 3);
+    const run = runNow();
+    if (run === null) throw new Error("no run going");
+    await fireEvent.press(screen.getByRole("button", { name: "Back to the app" }));
+    expect(await signOutFromSettings()).toBe("Your run will be finished and saved first.");
+    expect(location.running).toBe(false);
+    expect(runNow()).toBeNull();
+    expect(await phoneRunFiles.read("run-now.json")).toBeNull();
+    // Points Android hands over after the sign-out are nobody's run.
+    await act(() => takeLocations({ locations: [{ timestamp: run.startedAt + 70_000, coords: { latitude: 26.2, longitude: 91.8, accuracy: 5, speed: 3 } }] }));
+    expect(runNow()).toBeNull();
+    const waiting = readRunFile(s.file() ?? "").waiting;
+    expect(waiting).toHaveLength(1);
+    expect(waiting[0]).toMatchObject({ runId: run.runId, name: runName(new Date(run.startedAt)), effort: null, note: null });
+    expect(waiting[0]?.points).toHaveLength(points.length);
+    expect(s.posts).toHaveLength(0);
+  });
+
+  it("a finished run not saved yet is saved at Sign out, and the box says so", async () => {
+    const s = runServer();
+    s.state.online = false;
+    await openRunning(s);
+    await startRunning();
+    await feed(0, 31, 3);
+    await fireEvent.press(screen.getByRole("button", { name: "Pause" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Finish" }));
+    const run = runNow();
+    if (run === null) throw new Error("no run");
+    expect(await screen.findByRole("button", { name: "Save run" })).toBeTruthy();
+    // The phone's own back, as Android hands it to the run's screen.
+    const runScreen = screen.container.queryAll((node) => node.props["visible"] === true && typeof node.props["onRequestClose"] === "function").at(-1);
+    if (runScreen === undefined) throw new Error("no run screen");
+    await fireEvent(runScreen, "requestClose");
+    expect(await signOutFromSettings()).toBe("Your run will be saved first.");
+    expect(runNow()).toBeNull();
+    expect(readRunFile(s.file() ?? "").waiting.map((r) => r.runId)).toEqual([run.runId]);
+  });
+
+  it("an account deleted mid-run: the run is thrown away, the location stops, nothing is put in its saved runs; another person's run is left alone", async () => {
+    const s = runServer();
+    await openRunning(s);
+    await startRunning();
+    await feed(0, 31, 3);
+    const added: unknown[] = [];
+    const add = (r: SaveRunRequest) => {
+      added.push(r);
+      return Promise.resolve(true);
+    };
+    await act(() => endRunAtLeaving("5f0c8a52-6f0e-4d59-9a3c-1f2e3d4c5b6b", "out", add));
+    expect(runNow()?.phase).toBe("running");
+    await act(() => endRunAtLeaving(RAVI.id, "deleted", add));
+    expect(runNow()).toBeNull();
+    expect(location.running).toBe(false);
+    expect(await phoneRunFiles.read("run-now.json")).toBeNull();
+    expect(added).toEqual([]);
+  });
+
+  it("with no run on the phone, the box has no line about one", async () => {
+    const s = runServer();
+    await openRunning(s);
+    expect(await signOutFromSettings()).toBeNull();
+  });
+
+  it("another person's run still recording when this one signs in is stopped, and kept for them, never shown", async () => {
+    await phoneRunFiles.write("run-now.json", JSON.stringify({ runId: "1b9d6bcd-bbfd-4b2d-9b5d-ab8dfbbd4bed", userId: "5f0c8a52-6f0e-4d59-9a3c-1f2e3d4c5b6b", startedAt: Date.now() - 600_000, phase: "running", pausedByPerson: false, autoPause: true, pauses: [], finishedMs: null, files: 1 }));
+    await phoneRunFiles.write("run-now-0.json", JSON.stringify([[0, 26.2, 91.8, 5], [1000, 26.2001, 91.8, 5]]));
+    location.running = true;
+    const s = runServer();
+    await openRunning(s);
+    await waitFor(() => {
+      expect(runNow()?.phase).toBe("finished");
+    });
+    expect(location.running).toBe(false);
+    expect(runNow()?.userId).toBe("5f0c8a52-6f0e-4d59-9a3c-1f2e3d4c5b6b");
     expect(screen.queryByRole("button", { name: "Open run" })).toBeNull();
   });
 });

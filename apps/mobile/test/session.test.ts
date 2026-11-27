@@ -655,3 +655,53 @@ describe("the keys for passes with no signal", () => {
     expect(session.passKeys()).toEqual([]);
   });
 });
+
+describe("told before anybody leaves, while they are still the one signed in (37o: a run going on is finished and kept)", () => {
+  /** A listener that writes down who left, why, and whether they were still signed in as it ran. */
+  function listen(session: ReturnType<typeof phone>["session"]) {
+    const told: [string, string, string][] = [];
+    session.beforeLeaving((who, why) => {
+      told.push([who, why, session.state().kind]);
+      return Promise.resolve();
+    });
+    return told;
+  }
+
+  it.each<[string, Route]>([
+    ["signed in on another phone", () => refusal(401, SIGNED_IN_ELSEWHERE.error, SIGNED_IN_ELSEWHERE.message)],
+    ["a sign-in the server ended", () => refusal(401, "invalid_refresh", "Invalid refresh token")],
+  ])("%s: told 'out' first, then signed out", async (_name, route) => {
+    const { session } = phone({ "/v1/auth/refresh": route }, kept(1));
+    const told = listen(session);
+    await session.start();
+    expect(told).toEqual([[RAVI.id, "out", "in"]]);
+    expect(session.state().kind).toBe("out");
+  });
+
+  it("their own Sign out: told 'out' first; a listener that fails never stops it", async () => {
+    const { session } = phone({ "/v1/auth/refresh": () => ({ status: 200, body: { tokens: tokens(2) } }), "/v1/auth/logout": () => ({ status: 200, body: {} }) }, kept(1));
+    session.beforeLeaving(() => Promise.reject(new Error("broken")));
+    const told = listen(session);
+    await session.start();
+    await session.signOut();
+    expect(told).toEqual([[RAVI.id, "out", "in"]]);
+    expect(session.state()).toEqual({ kind: "out", note: "You’re signed out." });
+  });
+
+  it("an account deleted: told 'deleted'; an undone listener is told nothing; nobody signed in, nobody told", async () => {
+    const { session } = phone({ "/v1/auth/refresh": () => ({ status: 200, body: { tokens: tokens(2) } }) }, kept(1));
+    const gone: string[] = [];
+    const undo = session.beforeLeaving((who) => {
+      gone.push(who);
+      return Promise.resolve();
+    });
+    undo();
+    const told = listen(session);
+    await session.start();
+    await session.accountDeleted("Your account will be deleted on 18 November.");
+    expect(told).toEqual([[RAVI.id, "deleted", "in"]]);
+    expect(gone).toEqual([]);
+    await session.signOut();
+    expect(told).toHaveLength(1);
+  });
+});
