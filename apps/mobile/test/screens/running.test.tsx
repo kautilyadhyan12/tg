@@ -14,7 +14,8 @@ import { spokenTime } from "../../src/screens/running/runVoice";
 import { readRunFile } from "../../src/screens/running/runQueue";
 import { clock, distance, runName } from "../../src/screens/running/runWords";
 import type { Ask, AskInit } from "../../src/session/calls";
-import { RAVI, fakeServer, kept, memoryStore, profile, tokens, type Reply } from "../kit";
+import { SIGNED_IN_ELSEWHERE } from "@app/shared";
+import { RAVI, fakeServer, kept, memoryStore, profile, refusal, tokens, type Reply } from "../kit";
 import { realRuns, type RealPoint } from "../realRuns";
 
 // Record a run (ROADMAP Stage 5 37a), through the whole app. The worst thing on the phone's side:
@@ -156,19 +157,20 @@ function runServer(user = RAVI, map: MapSource = OPENFREEMAP) {
     }
     return server.ask(url, init);
   };
-  let file: string | null = null;
-  const runStore = () => ({
-    read: () => Promise.resolve(file),
+  // Each person's file of waiting runs, as the phone keeps one for each (37o, round one H3).
+  const files = new Map<string, string>();
+  const runStore = (who: string) => ({
+    read: () => Promise.resolve(files.get(who) ?? null),
     write: (t: string) => {
-      file = t;
+      files.set(who, t);
       return Promise.resolve();
     },
   });
   // What the phone's file of waiting runs holds before the app opens.
   const setFile = (text: string) => {
-    file = text;
+    files.set(user.id, text);
   };
-  return { ask, saved, posts, state, runStore, requests, climbAsks, file: () => file, setFile };
+  return { ask, saved, posts, state, runStore, requests, climbAsks, file: (who: string = user.id) => files.get(who) ?? null, setFile };
 }
 
 async function openRunning(s: ReturnType<typeof runServer>, user = RAVI) {
@@ -297,18 +299,45 @@ describe("the worst thing (37o): a run left recording somebody's location after 
     expect(await signOutFromSettings()).toBeNull();
   });
 
-  it("another person's run still recording when this one signs in is stopped, and kept for them, never shown", async () => {
-    await phoneRunFiles.write("run-now.json", JSON.stringify({ runId: "1b9d6bcd-bbfd-4b2d-9b5d-ab8dfbbd4bed", userId: "5f0c8a52-6f0e-4d59-9a3c-1f2e3d4c5b6b", startedAt: Date.now() - 600_000, phase: "running", pausedByPerson: false, autoPause: true, pauses: [], finishedMs: null, files: 1 }));
+  const OTHER = "5f0c8a52-6f0e-4d59-9a3c-1f2e3d4c5b6b";
+  const OTHER_RUN = "1b9d6bcd-bbfd-4b2d-9b5d-ab8dfbbd4bed";
+  /** Another person's run left on this phone, going or finished and not saved. */
+  async function othersRun(phase: "running" | "finished") {
+    await phoneRunFiles.write("run-now.json", JSON.stringify({ runId: OTHER_RUN, userId: OTHER, startedAt: Date.now() - 600_000, phase, pausedByPerson: false, autoPause: true, pauses: [], finishedMs: phase === "finished" ? 1000 : null, files: 1 }));
     await phoneRunFiles.write("run-now-0.json", JSON.stringify([[0, 26.2, 91.8, 5], [1000, 26.2001, 91.8, 5]]));
-    location.running = true;
+  }
+
+  it.each<["running" | "finished"]>([["running"], ["finished"]])("another person's run (%s) found when this one signs in stops, goes to that person's own saved runs whole, is never shown, and this person's Start writes over nothing (round one, H3)", async (phase) => {
+    await othersRun(phase);
+    location.running = phase === "running";
     const s = runServer();
     await openRunning(s);
     await waitFor(() => {
-      expect(runNow()?.phase).toBe("finished");
+      expect(readRunFile(s.file(OTHER) ?? "").waiting.map((r) => r.runId)).toEqual([OTHER_RUN]);
     });
     expect(location.running).toBe(false);
-    expect(runNow()?.userId).toBe("5f0c8a52-6f0e-4d59-9a3c-1f2e3d4c5b6b");
+    expect(runNow()).toBeNull();
+    expect(readRunFile(s.file() ?? "").waiting).toEqual([]);
     expect(screen.queryByRole("button", { name: "Open run" })).toBeNull();
+    await startRunning();
+    expect(runNow()?.userId).toBe(RAVI.id);
+    expect(readRunFile(s.file(OTHER) ?? "").waiting.map((r) => r.points.length)).toEqual([2]);
+  });
+
+  it("signed out by the server as the app opens, before any screen of the tabs (round one, H3): the run stops and waits in its person's saved runs", async () => {
+    await phoneRunFiles.write("run-now.json", JSON.stringify({ runId: OTHER_RUN, userId: RAVI.id, startedAt: Date.now() - 600_000, phase: "running", pausedByPerson: false, autoPause: true, pauses: [], finishedMs: null, files: 1 }));
+    await phoneRunFiles.write("run-now-0.json", JSON.stringify([[0, 26.2, 91.8, 5], [1000, 26.2001, 91.8, 5]]));
+    location.running = true;
+    const s = runServer();
+    const refreshed = fakeServer({ "/v1/auth/refresh": () => refusal(401, SIGNED_IN_ELSEWHERE.error, SIGNED_IN_ELSEWHERE.message) });
+    const ask: Ask = (url, init) => (new URL(url).pathname === "/v1/auth/refresh" ? refreshed.ask(url, init) : s.ask(url, init));
+    await render(<App extra={extra} store={memoryStore(kept(1, RAVI))} ask={ask} runStore={s.runStore} />);
+    expect(await screen.findByLabelText("Email")).toBeTruthy();
+    await waitFor(() => {
+      expect(readRunFile(s.file() ?? "").waiting.map((r) => r.runId)).toEqual([OTHER_RUN]);
+    });
+    expect(location.running).toBe(false);
+    expect(runNow()).toBeNull();
   });
 });
 

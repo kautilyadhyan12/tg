@@ -66,7 +66,6 @@ import { FeelCard, NoteCard, PaceCard, RouteCard, RunFigures, SplitsCard } from 
 import { newRecords, RECORDS_PATH } from "./runRecords";
 import { RunMap, useMapScheme } from "./RunMap";
 import { useRunOutbox } from "./RunOutbox";
-import { endRunAtLeaving } from "./runLeaving";
 import { currentPace, saveRequestOf, sentOf, sumsAt, sumsInSlices, trueStart } from "./runLive";
 import { clock, distance, pace, paceWord, runName, runWhen, unitWord, METRES_PER_MILE } from "./runWords";
 
@@ -152,19 +151,6 @@ export function RunLayerProvider({ children }: { children: ReactNode }) {
     setStartFailed(false);
   }, [me]);
 
-  // Signed out with a run going on (37o): it is finished and kept for the person, never left recording.
-  const { outbox } = useRunOutbox();
-  useEffect(
-    () =>
-      session.beforeLeaving((who, why) =>
-        endRunAtLeaving(who, why, outbox === null ? null : async (saved) => {
-          await outbox.start();
-          return outbox.add(saved);
-        }),
-      ),
-    [session, outbox],
-  );
-
   // The person's heart rate monitor (37f-i), kept on this phone for them.
   useEffect(() => {
     if (me !== null) void loadMonitor(me);
@@ -185,11 +171,6 @@ export function RunLayerProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (me === null) return;
     void loadRun().then(async (kept) => {
-      // Somebody else's run still going (a sign-out that could not stop it): it stops, and waits for them.
-      if (kept !== null && kept.userId !== me && kept.phase !== "finished") {
-        await finishRun();
-        return;
-      }
       if (kept === null || kept.userId !== me || kept.phase !== "running") return;
       if (await Location.hasStartedLocationUpdatesAsync(RUN_TASK)) return;
       await pauseRun(kept.lastFix?.at ?? kept.startedAt);

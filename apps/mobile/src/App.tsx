@@ -44,7 +44,8 @@ import { FoodScreen } from "./screens/Food";
 import { bodyFile, mealFile, minutesFile, photoSheetFile, runFile } from "./screens/food/fileStore";
 import { RunLayerProvider } from "./screens/running/RunLayer";
 import { WorkoutLayerProvider } from "./screens/workout/WorkoutLayer";
-import { RunOutboxProvider } from "./screens/running/RunOutbox";
+import { RunOutboxProvider, keepRunFor } from "./screens/running/RunOutbox";
+import { endRunAtLeaving, handOverOthersRun } from "./screens/running/runLeaving";
 import { BodyOutboxProvider } from "./screens/progress/BodyOutbox";
 import { MealOutboxProvider } from "./screens/food/MealOutbox";
 import { PhotoSheetStoreProvider } from "./screens/food/PhotoSheetStore";
@@ -106,7 +107,18 @@ interface AppProps {
 type Stores = { mealStore: (userId: string) => TextStore; bodyStore: (userId: string) => TextStore; runStore: (userId: string) => TextStore };
 
 function SignedInOrOut({ mealStore, bodyStore, runStore, minutesStore, lookMs, waitingStore }: Stores & { minutesStore: (userId: string) => TextStore; lookMs: number | undefined; waitingStore: KeyStore }) {
-  const { state } = useSession();
+  const { session, state } = useSession();
+  // A run going on is finished and kept for its person before they are signed out, whatever screen is up (37o): told here,
+  // above "Before you start", invitations and setup, as the server can sign them out while one of those is asking.
+  useEffect(
+    () => session.beforeLeaving((who, why) => endRunAtLeaving(who, why, keepRunFor(who, runStore))),
+    [session, runStore],
+  );
+  // Signed in as somebody else, or nobody: another person's run left on the phone goes to their own saved runs.
+  const holder = state.kind === "in" ? state.user.id : state.kind === "out" ? null : undefined;
+  useEffect(() => {
+    if (holder !== undefined) void handOverOthersRun(holder, (who) => keepRunFor(who, runStore));
+  }, [holder, runStore]);
   // With nobody signed in, nothing of the last person's stays: an app killed with Updates open left its photos.
   useEffect(() => {
     if (state.kind !== "out") return;

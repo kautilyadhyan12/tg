@@ -20,3 +20,12 @@ export async function endRunAtLeaving(userId: string, why: "out" | "deleted", ad
   const saved = saveRequestOf(done, sentOf(done), runName(trueStart(done)), null, null);
   if (await add(saved)) await forgetRun();
 }
+
+/** Whoever is signed in now (`me`, or nobody): a run of another person's left on this phone, going or finished and not
+ *  saved, is finished and put in that person's saved runs, so nobody else's Start writes over it and nothing records
+ *  for them (37o, round one H3). `keep` gives the adding for a person. */
+export async function handOverOthersRun(me: string | null, keep: (userId: string) => (run: SaveRunRequest) => Promise<boolean>, now: number = Date.now()): Promise<void> {
+  const run = runNow() ?? (await loadRun());
+  if (run === null || run.userId === me) return;
+  await endRunAtLeaving(run.userId, "out", keep(run.userId), now);
+}
