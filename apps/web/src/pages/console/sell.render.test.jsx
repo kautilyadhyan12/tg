@@ -1848,13 +1848,16 @@ describe('V4a-iii round one', () => {
     expect(within(taxBox()).getByRole('alert').textContent).toBe('That tax rate is not on your list any more.');
   });
 
-  it('L5: a tax rate being typed inside Add a product counts as not saved', async () => {
+  it('L5 and L6: a tax rate being typed inside Add a product counts as not saved, and an empty one does not', async () => {
     open();
     await screen.findByRole('tab', { name: /^Products/ });
     fireEvent.click(within(products()).getByRole('button', { name: 'Add a product' }));
     const box = within(screen.getByTestId('product-panel'));
     expect(box.queryByText("You have changes that aren't saved.")).toBeNull();
     fireEvent.click(box.getByRole('button', { name: 'Add a tax rate' }));
+    // Open and empty is no change (re-check, L6); a name typed in it is.
+    expect(box.queryByText("You have changes that aren't saved.")).toBeNull();
+    fireEvent.change(within(box.getByRole('group', { name: 'Add a tax rate' })).getByLabelText('Tax name'), { target: { value: 'City tax' } });
     expect(box.getByText("You have changes that aren't saved.")).toBeTruthy();
   });
 

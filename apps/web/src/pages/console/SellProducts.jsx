@@ -47,7 +47,7 @@ export function SavedNote({ children }) {
 }
 
 /** `addingRate`: the tax rate box inside the form is open; held by the page, as what is typed in it is not saved either. */
-function ProductForm({ formId, gymId, country, currency, rates, onPage, draft, setDraft, busy, onSave, addingRate, setAddingRate }) {
+function ProductForm({ formId, gymId, country, currency, rates, onPage, draft, setDraft, busy, onSave, addingRate, setAddingRate, onRateTyped }) {
   const formRef = useRef(null);
   const problems = draft.pressed ? productProblems(draft, currency, rates) : {};
   useFirstProblem(formRef, draft.pressed);
@@ -111,6 +111,7 @@ function ProductForm({ formId, gymId, country, currency, rates, onPage, draft, s
             tick(rate.id, true);
           }}
           onCancel={() => setAddingRate(false)}
+          onTyped={onRateTyped}
         />
       ) : null}
       <div className="flex flex-col gap-1">
@@ -143,6 +144,8 @@ export default function SellProducts({ gymId, country = null, page, locked, lock
   // Where the last sentence is said: under the product it is about, or at the top for one added.
   const [noteAt, setNoteAt] = useState(null);
   const [addingRate, setAddingRate] = useState(false);
+  // Something typed in that tax rate box: only then is it a change not saved.
+  const [rateTyped, setRateTyped] = useState(false);
   const [asking, setAsking] = useState(null);
   const [showArchived, setShowArchived] = useState(false);
   const full = page.products.length >= PRODUCTS_MAX;
@@ -350,7 +353,7 @@ export default function SellProducts({ gymId, country = null, page, locked, lock
           title={draft.id === null ? 'Add a product' : 'Change product'}
           sub={draft.id === null ? 'It shows on the Register straight away.' : null}
           onClose={close}
-          unsaved={draftKey(draft) !== startedAs || addingRate}
+          unsaved={draftKey(draft) !== startedAs || (addingRate && rateTyped)}
           formId={formId}
           saveLabel={draft.id === null ? 'Add product' : 'Save product'}
           busy={state.busy}
@@ -368,7 +371,7 @@ export default function SellProducts({ gymId, country = null, page, locked, lock
             ) : null
           }
         >
-          <ProductForm formId={formId} gymId={gymId} country={country} currency={page.currency} rates={page.tax.rates} onPage={onPage} draft={draft} setDraft={setDraft} busy={state.busy} onSave={() => void save()} addingRate={addingRate} setAddingRate={setAddingRate} />
+          <ProductForm formId={formId} gymId={gymId} country={country} currency={page.currency} rates={page.tax.rates} onPage={onPage} draft={draft} setDraft={setDraft} busy={state.busy} onSave={() => void save()} addingRate={addingRate} setAddingRate={setAddingRate} onRateTyped={setRateTyped} />
         </SidePanel>
       ) : null}
     </section>

@@ -1,4 +1,4 @@
-import { useId, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import { Loader2, Plus } from 'lucide-react';
 import { registerService } from '../../api/registerApi';
 import { errorText } from '../../api/orgsApi';
@@ -6,6 +6,7 @@ import { ConfirmInline } from '../../components/console/ConsoleStates';
 import PlaceLink from '../../components/console/PlaceLink';
 import { Refusal } from './MemberListTags';
 import { SavedNote } from './SellProducts';
+import { draftKey } from './useFirstProblem';
 import {
   RATE_CHANGE_NOTE,
   rateChangeNote,
@@ -95,8 +96,13 @@ function RateForm({ draft, setDraft, busy, error, onSave, onCancel, nested = fal
 /** A tax rate added from inside another form (a product's, a membership type's): the box
  *  opens where Add a tax rate was pressed, and the new rate is picked there at once.
  *  `onPage` takes the Sell page the server answers with; `onAdded` the new rate. */
-export function NewRateInline({ gymId, country = null, onPage = null, onAdded, onCancel }) {
+/** `onTyped(true)` once something is typed in it, `onTyped(false)` while it is empty. */
+export function NewRateInline({ gymId, country = null, onPage = null, onAdded, onCancel, onTyped = null }) {
   const [draft, setDraft] = useState(emptyRateDraft);
+  const typed = draftKey(draft) !== draftKey(emptyRateDraft());
+  useEffect(() => {
+    if (onTyped !== null) onTyped(typed);
+  }, [typed, onTyped]);
   const [state, setState] = useState({ busy: false, error: null });
   const save = async () => {
     if (Object.keys(rateProblems(draft, country)).length > 0) {
