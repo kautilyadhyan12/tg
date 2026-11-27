@@ -825,6 +825,28 @@ describe("I see why my monitor has no signal, and fix it from that screen", () =
     expect(await screen.findByText("118 bpm", {}, { timeout: 3000 })).toBeTruthy();
   }, 15_000);
 
+  it("mid-run, Nearby devices taken back: the pill and the big figure say so, and the pill opens the box with Allow", async () => {
+    const s = runServer();
+    await openRunning(s);
+    await startRunning();
+    strap.allowed = false;
+    expect(await screen.findByRole("button", { name: "Heart rate: nearby devices off. Open heart rate monitor" }, { timeout: 3000 })).toBeTruthy();
+    await fireEvent.press(screen.getByRole("button", { name: "Numbers" }));
+    // The pill and the big Heart rate figure: one answer.
+    expect(await screen.findAllByText("Nearby devices off", {}, { timeout: 3000 })).toHaveLength(2);
+    await fireEvent.press(screen.getByRole("button", { name: "Heart rate: nearby devices off. Open heart rate monitor" }));
+    expect(await screen.findByText("Allow Nearby devices to connect your monitor.")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Allow" })).toBeTruthy();
+    // During a run the monitor is not changed or removed from here.
+    expect(screen.queryByRole("button", { name: "Change monitor" })).toBeNull();
+    strap.allowed = true;
+    strap.send(MINE, polar(141));
+    // With a heart rate the pill is the number again, not a button.
+    await waitFor(() => {
+      expect(screen.queryByRole("button", { name: /^Heart rate: / })).toBeNull();
+    }, { timeout: 3000 });
+  });
+
   it("the run's pill says why there is no heart rate: Bluetooth off, Nearby devices off, Location off; otherwise No signal", async () => {
     const shown = await render(<HeartPill bpm={null} max={null} bluetooth="off" />);
     expect(screen.getByText("Bluetooth off")).toBeTruthy();

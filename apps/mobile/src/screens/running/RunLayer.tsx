@@ -29,7 +29,8 @@ import { Sheet } from "../../look/Sheet";
 import { fonts, Txt } from "../../look/Txt";
 import { useSession } from "../../session/SessionProvider";
 import { useHeartMax } from "../../heart/heartMax";
-import { HeartPill } from "../../heart/HeartPill";
+import { HeartMonitorSheet } from "../../heart/HeartMonitor";
+import { HeartPill, noSignalWords } from "../../heart/HeartPill";
 import { HeartCard, HeartMaxSheet } from "../../heart/HeartZones";
 import { loadMonitor, useHeartNow } from "../../heart/monitor";
 import { newGoalId } from "../goals/words";
@@ -425,6 +426,8 @@ function Live({ run, units, kg, onHide }: { run: LiveRun; units: Units; kg: numb
   const onMap = view === "map";
   // The heart rate now from the person's monitor (37f-i); none shown without one.
   const heartNowShown = useHeartNow(true);
+  // With no heart rate, the pill opens the monitor box, where what stands in the way is said with its button (37n).
+  const [monitorOpen, setMonitorOpen] = useState(false);
   // The maximum the zones are worked from (37f-ii-a): read once as the run opens, kept if the signal goes.
   const heartMaxRead = useHeartMax().read;
   // Kept with the run's choices for this person, so the voice says the zone with the app closed (37f-ii-b);
@@ -451,9 +454,29 @@ function Live({ run, units, kg, onHide }: { run: LiveRun; units: Units; kg: numb
       ) : (
         <View style={styles.pills}>
           <GpsPill gps={gpsLight(run.lastFix, now)} />
-          {heartNowShown.monitor === null ? null : <HeartPill bpm={heartNowShown.bpm} max={heartMaxNow} bluetooth={heartNowShown.bluetooth} />}
+          {heartNowShown.monitor === null ? null : (
+            <HeartPill
+              bpm={heartNowShown.bpm}
+              max={heartMaxNow}
+              bluetooth={heartNowShown.bluetooth}
+              {...(heartNowShown.bpm === null
+                ? {
+                    onPress: () => {
+                      setMonitorOpen(true);
+                    },
+                  }
+                : {})}
+            />
+          )}
         </View>
       )}
+      <HeartMonitorSheet
+        open={monitorOpen}
+        monitor={heartNowShown.monitor}
+        onClose={() => {
+          setMonitorOpen(false);
+        }}
+      />
       <Pressable accessibilityRole="button" accessibilityLabel="Back to the app" onPress={onHide} hitSlop={10} style={[styles.hide, onMap ? styles.hideOnMap : null]}>
         <Icon name="down" size={22} colour={onMap ? "text" : "textSoft"} />
       </Pressable>
@@ -548,7 +571,7 @@ function Live({ run, units, kg, onHide }: { run: LiveRun; units: Units; kg: numb
         </View>
         {heartNowShown.monitor === null ? null : (
           <View style={styles.pairs}>
-            <Figure label="Heart rate" value={heartNowShown.bpm === null ? "No signal" : String(heartNowShown.bpm)} {...(heartNowShown.bpm === null ? {} : { unit: "bpm" })} dim={isPaused} />
+            <Figure label="Heart rate" value={heartNowShown.bpm === null ? noSignalWords(heartNowShown.bluetooth) : String(heartNowShown.bpm)} {...(heartNowShown.bpm === null ? {} : { unit: "bpm" })} dim={isPaused} />
           </View>
         )}
         <View style={styles.pairs}>
