@@ -344,9 +344,8 @@ function SetUpChooser({ word, types, canCreate, busy, onExisting, onNew, onCance
 }
 
 /** The list's names that are no type yet, each with Set up. `rows` come from
- *  `notSetUp`; `choosing` is the name whose question is open; `formFor` is the name being
- *  added as a new type, and `form` its form, drawn in that name's row. */
-export function NotSetUp({ rows, types, canCreate, off, busy, choosing, formFor = null, form = null, onChoose, onExisting, onNew, onUndo }) {
+ *  `notSetUp`; `choosing` is the name whose question is open. Set up as a new type opens the type's own page. */
+export function NotSetUp({ rows, types, canCreate, off, busy, choosing, onChoose, onExisting, onNew, onUndo }) {
   const [asking, setAsking] = useState(null);
   if (rows.length === 0) return null;
   return (
@@ -363,10 +362,10 @@ export function NotSetUp({ rows, types, canCreate, off, busy, choosing, formFor 
           const archived = archivedLine(word);
           const again = againWords(word);
           return (
-            <li key={word.word} className="c-item">
+            <li key={word.word} className="c-item" data-word-row={word.word}>
               <div className="flex flex-wrap items-center gap-3">
                 <span className="c-s15 c-w6 c-t1 flex-grow min-w-0 break-words">{nameLine(word)}</span>
-                {choosing === word.word || asking === word.word || formFor === word.word ? null : (
+                {choosing === word.word || asking === word.word ? null : (
                   <button
                     type="button"
                     // With nothing for sale and no way to add (no country set, the list full), there is nothing to set it up as.
@@ -405,7 +404,6 @@ export function NotSetUp({ rows, types, canCreate, off, busy, choosing, formFor 
                   onCancel={() => onChoose(null)}
                 />
               ) : null}
-              {formFor === word.word ? form : null}
             </li>
           );
         })}

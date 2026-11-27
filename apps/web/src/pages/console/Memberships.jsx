@@ -1,4 +1,5 @@
-import { Link, useLocation, useParams, useSearchParams } from 'react-router-dom';
+import { useRef } from 'react';
+import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { ConsoleFailed, ConsoleLoading } from '../../components/console/ConsoleStates';
 import MembershipTypesPanel from '../../components/console/MembershipTypesPanel';
 import { useConsoleOrg } from './useConsoleOrg';
@@ -24,6 +25,41 @@ export default function Memberships() {
   const give = searchParams.get('give');
   const name = searchParams.get('name');
   const openBox = give !== null && give !== '' && name !== null && name !== '' ? { typeId: give, word: name } : null;
+  // A membership type's page (V4b-ii) is an entry of its own in the browser's history: Back closes it, as Cancel does.
+  // Cancel and Save step back off the entry this page added, so one more Back leaves Memberships; an entry it did not
+  // add (a reload, Forward) is tidied in place.
+  const navigate = useNavigate();
+  const pushed = useRef(false);
+  const typePageOpen = searchParams.get('page') === 'membership-type';
+  const typePage = {
+    open: typePageOpen,
+    set: (on) => {
+      if (on === typePageOpen) {
+        if (!on) pushed.current = false;
+        return;
+      }
+      if (on) {
+        const params = new URLSearchParams(searchParams);
+        params.set('page', 'membership-type');
+        // Opened from a tab's address (#discounts), the step back is to the price list, where its row is.
+        if (location.hash !== '') navigate({ pathname: location.pathname, search: location.search }, { replace: true });
+        navigate({ pathname: location.pathname, search: `?${params.toString()}` });
+        pushed.current = true;
+      } else if (pushed.current) {
+        pushed.current = false;
+        navigate(-1);
+      } else {
+        setSearchParams(
+          (was) => {
+            const params = new URLSearchParams(was);
+            params.delete('page');
+            return params;
+          },
+          { replace: true },
+        );
+      }
+    },
+  };
   const boxOpened = () =>
     setSearchParams(
       (was) => {
@@ -79,5 +115,5 @@ export default function Memberships() {
   }
 
   // Keyed on the gym: the address is one route for every gym, and the page holds a form.
-  return <MembershipTypesPanel key={`memberships-${org.id}`} org={org} readOnly={consoleIsReadOnly(org)} openBox={openBox} onBoxOpened={boxOpened} section={section} />;
+  return <MembershipTypesPanel key={`memberships-${org.id}`} org={org} readOnly={consoleIsReadOnly(org)} openBox={openBox} onBoxOpened={boxOpened} section={section} typePage={typePage} />;
 }
