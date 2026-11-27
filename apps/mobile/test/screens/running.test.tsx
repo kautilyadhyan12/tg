@@ -221,7 +221,7 @@ describe("the worst thing (37o): a run left recording somebody's location after 
     await fireEvent.press(tab);
     await fireEvent.press(await screen.findByLabelText("Settings"));
     await fireEvent.press(await screen.findByRole("button", { name: "Sign out" }));
-    const line = screen.queryByText(/^Your run will be/)?.props.children ?? null;
+    const line: unknown = screen.queryByText(/^Your run will be/)?.props["children"] ?? null;
     const inTheBox = screen.getAllByRole("button", { name: "Sign out" })[1];
     if (inTheBox === undefined) throw new Error("the box's Sign out was expected");
     await fireEvent.press(inTheBox);

@@ -13,7 +13,7 @@ import { randomUUID } from "node:crypto";
 import { cpus } from "node:os";
 import { monitorEventLoopDelay, performance } from "node:perf_hooks";
 import postgres from "postgres";
-import { RUN_MAX_PAUSES, RUN_MAX_POINTS, saveRunRequestSchema, type RunPoint, type SaveRunRequest } from "@app/shared";
+import { RUN_MAX_PAUSES, RUN_MAX_POINTS, saveRunRequestSchema, type SaveRunRequest } from "@app/shared";
 import * as geo from "../src/modules/geo/service.js";
 import type { HeightMap } from "../src/modules/geo/heights.adapter.js";
 
@@ -28,8 +28,8 @@ const TIMES = 5;
 const EMAIL = "run-save-cost@example.com";
 
 /** A run of `seconds`, a point a second, winding as a person's does. */
-function points(seconds: number, seed: number): RunPoint[] {
-  const out: RunPoint[] = [];
+function points(seconds: number, seed: number): SaveRunRequest["points"] {
+  const out: SaveRunRequest["points"] = [];
   let lat = 26.1445 + seed * 1e-5;
   let lng = 91.7362;
   let h = seed;

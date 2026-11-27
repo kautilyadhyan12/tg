@@ -7,7 +7,6 @@ import * as Location from "expo-location";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   GPS_WORST_ACCURACY_M,
-  RUN_MAX_POINTS,
   heartLineOf,
   heartSums,
   heartZoneSeconds,
@@ -17,7 +16,6 @@ import {
   type RunClimbRequest,
   type RunRecords,
   type RunSums,
-  type SaveRunRequest,
   type Units,
 } from "@app/shared";
 import { BottomRoom } from "../../look/BottomRoom";
@@ -69,7 +67,7 @@ import { newRecords, RECORDS_PATH } from "./runRecords";
 import { RunMap, useMapScheme } from "./RunMap";
 import { useRunOutbox } from "./RunOutbox";
 import { endRunAtLeaving } from "./runLeaving";
-import { closedStill, currentPace, saveRequestOf, sentOf, sumsAt, trueStart } from "./runLive";
+import { currentPace, saveRequestOf, sentOf, sumsAt, trueStart } from "./runLive";
 import { clock, distance, pace, paceWord, runName, runWhen, unitWord, METRES_PER_MILE } from "./runWords";
 
 /** What stood in the way of Start, said under it with its button. */
