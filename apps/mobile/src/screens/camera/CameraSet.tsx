@@ -1,10 +1,11 @@
 import { useCallback, useRef, useState, type ReactNode } from "react";
 import { Pressable, StyleSheet, View, processColor, useWindowDimensions, type NativeSyntheticEvent } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { NO_VIEW, type LineTone, type LiveSet, type LiveView } from "../../camera/liveSet";
+import { NO_VIEW, type LineTone, type LiveSet, type LiveView, type SetNow } from "../../camera/liveSet";
 import { PoseCameraView, type BodyDrawing } from "../../camera/poseCameraNative";
 import type { PoseEvent } from "../../camera/poseFrame";
 import { BODY_RULES } from "../../camera/skeleton";
+import { clipOf } from "../../camera/voice";
 import { colours, shadows } from "../../look/colours";
 import { MOST_TEXT_GROWTH, cameraSizes } from "../../look/sizing";
 import { EYEBROW, Txt, fonts } from "../../look/Txt";
@@ -56,8 +57,10 @@ export interface CameraSetProps {
   digits: string;
   of: string;
   paused: boolean;
-  /** A short sound for each counted rep. */
+  /** A short sound for each counted rep, and the coach's voice. */
   sound: boolean;
+  /** The set as the screen shows it apart from the camera: the person's own changes to the count, and its target. */
+  now: SetNow;
   /** The camera is off for the rest of the set: it stopped, or the person counts it themselves. */
   stopped: "failed" | "byHand" | null;
   /** The exercise's reference picture or clip in its tile; null where it has none (the tile is not drawn). */
@@ -70,20 +73,28 @@ export interface CameraSetProps {
   children?: ReactNode;
 }
 
-export function CameraSet({ live, title, digits, of, paused, sound, stopped, reference, onCamera, onProblem, onTap, children }: CameraSetProps) {
+export function CameraSet({ live, title, digits, of, paused, sound, now, stopped, reference, onCamera, onProblem, onTap, children }: CameraSetProps) {
   const insets = useSafeAreaInsets();
   const screen = useWindowDimensions();
   const sizes = cameraSizes(screen.height);
   const [view, setView] = useState<LiveView>(NO_VIEW);
   const shown = useRef<LiveView>(NO_VIEW);
   const Camera = PoseCameraView;
+  // Read at each answer without making a new handler for every change of the count or the target.
+  const set = useRef(now);
+  set.current = now;
 
   // The phone draws the body with each picture itself (`BODY_DRAWING`); the screen is drawn again only when what it says
   // changes. Drawing the whole screen for every picture took the phone's chip from the model (53a's 20-minute run).
   const pose = useCallback(
     (e: NativeSyntheticEvent<PoseEvent>) => {
-      const next = live.next(e.nativeEvent);
+      const next = live.next(e.nativeEvent, set.current);
       const last = shown.current;
+      // The coach speaks what the camera has just seen (53b-i), whether or not the screen changes with it.
+      if (next.say !== null && sound) {
+        const clip = clipOf(next.say);
+        if (clip !== null) soundNative?.speak(clip);
+      }
       if (saysOtherwise(last, next)) {
         shown.current = next;
         setView(next);
@@ -160,8 +171,8 @@ interface FootLine {
   readonly tone: LineTone | "stopped";
 }
 
-/** The one line at the foot: amber for a rep that did not count, red for what the camera cannot see, dark once the camera
- *  has stopped. */
+/** The one line at the foot: amber for a rep that did not count, red for what the camera cannot see, dark for the coach's
+ *  correction or praise and once the camera has stopped. */
 function Foot({ line }: { line: FootLine }) {
   const amber = line.tone === "short";
   return (

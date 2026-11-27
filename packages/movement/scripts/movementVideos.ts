@@ -639,7 +639,11 @@ export const MOVEMENT_VIDEOS: readonly MovementVideo[] = [
           why:
             "None: a video reported, never judged. From in front and above, the laptop's reading loses his hips' height at the top of his " +
             "first thrust for longer than a break, the phone's does not, so the phone counts it where the laptop says it could not see it.",
-          differences: ["the laptop counts 0, the phone 1", "the laptop says 2.6 s unseen (depth), the phone 2.6 s counted"],
+          differences: [
+            "the laptop counts 0, the phone 1",
+            "the laptop says 2.6 s unseen (depth), the phone 2.6 s counted",
+            'the coach says "Keep your whole body in view." on the laptop, "" on the phone',
+          ],
         },
       },
     },
@@ -674,7 +678,7 @@ export const MOVEMENT_VIDEOS: readonly MovementVideo[] = [
             "53 and 54: facing the phone, as she lowers after her second thrust the phone's reading puts her hips back up 0.17 of a leg before " +
             "the video ends, so it would tell her \"Push your hips higher to count.\" for a thrust she never began (the laptop reads her down). " +
             "A hip thrust's phone stands side-on; the side-on woman's thrusts read the same on both.",
-          differences: ["the phone also says 8.3 s short (hips open)"],
+          differences: ["the phone also says 8.3 s short (hips open)", 'the coach says "" on the laptop, "Push your hips higher to count." on the phone'],
         },
       },
     },
@@ -863,8 +867,13 @@ export const MOVEMENT_VIDEOS: readonly MovementVideo[] = [
     phoneOpen: {
       why:
         "54, where the chair squat is made: on the phone's reading his first sit, begun as he walks to the chair, is read as a chair squat " +
-        "that stopped short and told to go lower, and his second sit-and-stand is judged 0.2 s later; the laptop reads the first as another movement.",
-      differences: ["the laptop says 13.8 s counted, the phone 2.9 s short (depth)", "the phone also says 14.0 s counted"],
+        "that stopped short and told to go lower, and his second sit-and-stand is judged 0.2 s later; the laptop reads the first as another movement. " +
+        "So the coach (53b-i) says on the phone what its screen says, and \"That one counts.\" at the second.",
+      differences: [
+        "the laptop says 13.8 s counted, the phone 2.9 s short (depth)",
+        "the phone also says 14.0 s counted",
+        'the coach says "" on the laptop, "Go lower to count. / That one counts." on the phone',
+      ],
     },
   },
   floorOther("usual_v09", "floor", "side", "The phone on the floor, upright: he stands at a chair, one leg lifted and bent."),

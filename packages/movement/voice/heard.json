@@ -1,0 +1,287 @@
+{
+  "version": 1,
+  "voice": "Korina, Eleven v4",
+  "reader": "whisper.cpp 1.9.5: ggml-base.en, then ggml-small.en where the one before did not hear the clip",
+  "clips": [
+    {
+      "file": "go_lower_1.m4a",
+      "words": "Go lower to count.",
+      "heard": "Go lower to count.",
+      "by": "ggml-base.en",
+      "sha256": "1f7b22a6d3523393d4f1017eaf446d5aa18d6c56f30c0a00353714f9a7417e71",
+      "seconds": 1.58
+    },
+    {
+      "file": "go_lower_2.m4a",
+      "words": "A little lower to count.",
+      "heard": "A little lower to count.",
+      "by": "ggml-base.en",
+      "sha256": "417c1a03f88c262ec6e65022971e5175271402ebf95b338771ebc963f9d38bee",
+      "seconds": 1.83
+    },
+    {
+      "file": "go_lower_3.m4a",
+      "words": "Go a little deeper to count.",
+      "heard": "Go a little deeper to count.",
+      "by": "ggml-base.en",
+      "sha256": "34735ce7282cf26e27a102b33eca641b4f9fcb77ae0da68a840648b2b5656c33",
+      "seconds": 1.95
+    },
+    {
+      "file": "sit_up_higher_1.m4a",
+      "words": "Sit up higher to count.",
+      "heard": "Sit up higher to count.",
+      "by": "ggml-base.en",
+      "sha256": "12c14939ae948e4e9a9a5e477e4bdb99b3fb576bd2a9197b3d1dcb6eed0c98f7",
+      "seconds": 1.68
+    },
+    {
+      "file": "sit_up_higher_2.m4a",
+      "words": "Come up a little higher to count.",
+      "heard": "Come up a little higher to count.",
+      "by": "ggml-base.en",
+      "sha256": "f048dd7017576e8c7df6d27937c674da65731b5ef1efd32761e1f23043723422",
+      "seconds": 1.97
+    },
+    {
+      "file": "hips_higher_1.m4a",
+      "words": "Push your hips higher to count.",
+      "heard": "Push your hips higher to count.",
+      "by": "ggml-base.en",
+      "sha256": "c8e70ed65737aa2d1f05d72002bc3b0db03847c224475409c419608400382301",
+      "seconds": 2.01
+    },
+    {
+      "file": "hips_higher_2.m4a",
+      "words": "Drive your hips a little higher to count.",
+      "heard": "Drive your hips a little higher to count.",
+      "by": "ggml-base.en",
+      "sha256": "ecbc701c0c38bb31f658607005cf67c91b17299e472fe11e492bab7ab9ee98b5",
+      "seconds": 2.42
+    },
+    {
+      "file": "whole_body_1.m4a",
+      "words": "Keep your whole body in view.",
+      "heard": "Keep your whole body in view.",
+      "by": "ggml-base.en",
+      "sha256": "0f105229fed37e9f009c3deeb14b15461433010b95bcbf37f371ce99fa5b1bc7",
+      "seconds": 1.93
+    },
+    {
+      "file": "whole_body_2.m4a",
+      "words": "Make sure the camera can see your whole body.",
+      "heard": "Make sure the camera can see your whole body.",
+      "by": "ggml-base.en",
+      "sha256": "deb86be2eb6179171b0bdfb3c2f3a2f50dcde9028428c4862e7cf7344992c2ed",
+      "seconds": 2.45
+    },
+    {
+      "file": "chest_up_1.m4a",
+      "words": "Keep your chest up.",
+      "heard": "Keep your chest up.",
+      "by": "ggml-base.en",
+      "sha256": "e88f59766582a5667749c1e1ba28dbda7e2eeb1b9c5d51d6fc6365009e750615",
+      "seconds": 1.27
+    },
+    {
+      "file": "chest_up_2.m4a",
+      "words": "Lift your chest.",
+      "heard": "Lift your chest.",
+      "by": "ggml-base.en",
+      "sha256": "deb911c6087077086ba59e9cb293c4dcbc6825d4d22bdbe6b85a95b2f3da222a",
+      "seconds": 1.24
+    },
+    {
+      "file": "chest_up_3.m4a",
+      "words": "Chest up.",
+      "heard": "Chest up.",
+      "by": "ggml-base.en",
+      "sha256": "7fc85d8217e9ec6bf4f31e96f57976d028f1b94b79c3d094b88195341458fa13",
+      "seconds": 0.85
+    },
+    {
+      "file": "knees_out_1.m4a",
+      "words": "Keep your knees in line with your toes.",
+      "heard": "Keep your knees in line with your toes.",
+      "by": "ggml-base.en",
+      "sha256": "cda1ad5eb1647e06ce9b4c09e12655dc36d3a15b2db49c666bd11a39a39f8b0d",
+      "seconds": 2.38
+    },
+    {
+      "file": "knees_out_2.m4a",
+      "words": "Push your knees out over your toes.",
+      "heard": "Push your knees out over your toes.",
+      "by": "ggml-base.en",
+      "sha256": "75e279f3918b862470091f8d653113150909a26aadc24a05a8f5ec34c9c3bb22",
+      "seconds": 2.47
+    },
+    {
+      "file": "knees_out_3.m4a",
+      "words": "Knees in line with your toes.",
+      "heard": "Knees in line with your toes.",
+      "by": "ggml-base.en",
+      "sha256": "69d1dc87a88eebc5fbb72b968996853cb344730ed96f7646d92b3396c81911b4",
+      "seconds": 1.74
+    },
+    {
+      "file": "halfway_1.m4a",
+      "words": "Halfway.",
+      "heard": "halfway.",
+      "by": "ggml-base.en",
+      "sha256": "ee6b0429e92d4b5a589d9f1de9a3bd9f0a16847f8136e01733a495292b40b8f3",
+      "seconds": 0.84
+    },
+    {
+      "file": "halfway_2.m4a",
+      "words": "Halfway there.",
+      "heard": "Halfway there!",
+      "by": "ggml-base.en",
+      "sha256": "8b4f1e08f415defcd38ebc57f4dcb086138b0cafc43eef19ecb1838b9870dbb3",
+      "seconds": 1.09
+    },
+    {
+      "file": "two_more_1.m4a",
+      "words": "Two more.",
+      "heard": "Two more.",
+      "by": "ggml-base.en",
+      "sha256": "8bad1f533a0a20efc441f4f8d880db19171af03d0bead49c637358783665a070",
+      "seconds": 0.81
+    },
+    {
+      "file": "two_more_2.m4a",
+      "words": "Two more to go.",
+      "heard": "Two more to go.",
+      "by": "ggml-base.en",
+      "sha256": "495a9b09dce04e6bed4840ebac4095dfe074653e67575ca7ff7906a55d7f0d8f",
+      "seconds": 1.04
+    },
+    {
+      "file": "last_one_1.m4a",
+      "words": "Last one.",
+      "heard": "Last one.",
+      "by": "ggml-base.en",
+      "sha256": "b49016fb57abbc18a6bc35f202d222f2d0b4f9b886fe7443c8eeea657600f0b3",
+      "seconds": 1
+    },
+    {
+      "file": "last_one_2.m4a",
+      "words": "Last rep.",
+      "heard": "Last rep.",
+      "by": "ggml-base.en",
+      "sha256": "543b5e542cd2fea50849f7d02e3e593232afd21fc7c925fc73f3a0332c173ae0",
+      "seconds": 0.92
+    },
+    {
+      "file": "set_complete_1.m4a",
+      "words": "Set complete.",
+      "heard": "Set complete!",
+      "by": "ggml-base.en",
+      "sha256": "14cc5d394a522500045eb68a4fa342aac92d305c204fd93f85551a594dab72f0",
+      "seconds": 1.14
+    },
+    {
+      "file": "set_complete_2.m4a",
+      "words": "That's the set.",
+      "heard": "That's the set.",
+      "by": "ggml-base.en",
+      "sha256": "ea12fa87a64822819815450e732991106db5e3f1eb199d17b2ee2f9c35a4622a",
+      "seconds": 1.01
+    },
+    {
+      "file": "lost_1.m4a",
+      "words": "The camera can't see you.",
+      "heard": "The camera can't see you.",
+      "by": "ggml-base.en",
+      "sha256": "3609fe4142637d023aea81861514de8ec6b195b3804919b45b896e40eda0f02f",
+      "seconds": 1.51
+    },
+    {
+      "file": "lost_2.m4a",
+      "words": "Step back into view of the camera.",
+      "heard": "Step back into view of the camera.",
+      "by": "ggml-base.en",
+      "sha256": "b3e40371ce559aec2f54e0fa2041b253c9ea9aee6aa007d03c2605a981b2f0b6",
+      "seconds": 2
+    },
+    {
+      "file": "counts_now_1.m4a",
+      "words": "That one counts.",
+      "heard": "That one counts.",
+      "by": "ggml-base.en",
+      "sha256": "2569280a660c0353b834387d91bf9584afed17f1c777152636d7789015297c3c",
+      "seconds": 1.18
+    },
+    {
+      "file": "counts_now_2.m4a",
+      "words": "Better. That one counts.",
+      "heard": "Better. That one counts.",
+      "by": "ggml-base.en",
+      "sha256": "0fbc8c4884d0de5a543a437c246a9c8e41538bdb7482d96853e420f45d0700a1",
+      "seconds": 1.99
+    },
+    {
+      "file": "better_1.m4a",
+      "words": "Better.",
+      "heard": "Better.",
+      "by": "ggml-base.en",
+      "sha256": "cacbe3a464cc77bb7313a5a059ff192d9093be2c32699605d7defb6c2c398683",
+      "seconds": 0.59
+    },
+    {
+      "file": "better_2.m4a",
+      "words": "That's better.",
+      "heard": "That's better.",
+      "by": "ggml-base.en",
+      "sha256": "9ffac43de69dcaddb3a057a739f13cbeb0b7806e2e3dbdd3dac322127945fb84",
+      "seconds": 0.95
+    },
+    {
+      "file": "get_ready_1.m4a",
+      "words": "Get ready.",
+      "heard": "Get ready!",
+      "by": "ggml-base.en",
+      "sha256": "6751651aa8df503153a6205f07e4dbce253e94d261a7439d692e5d3d3912be03",
+      "seconds": 0.86
+    },
+    {
+      "file": "rest_1.m4a",
+      "words": "Rest.",
+      "heard": "Rest.",
+      "by": "ggml-base.en",
+      "sha256": "fe33ebfd5bfd8ea3eeadbcc78067a028280e8b4645a735c7ac16ebbc5fbbf897",
+      "seconds": 0.84
+    },
+    {
+      "file": "rest_2.m4a",
+      "words": "Take a rest.",
+      "heard": "Take a rest.",
+      "by": "ggml-base.en",
+      "sha256": "55e4b296c5108aa10939ecde5ffa3853b924e8ff40f1d47ecafde2e897203aff",
+      "seconds": 1.07
+    },
+    {
+      "file": "next_exercise_1.m4a",
+      "words": "Next exercise.",
+      "heard": "Next exercise.",
+      "by": "ggml-base.en",
+      "sha256": "ed91bed5c11b0fc76f78345abcd0a09368a00abfedff7b57d9af3e4f75e57a3f",
+      "seconds": 1.35
+    },
+    {
+      "file": "workout_complete_1.m4a",
+      "words": "Workout complete.",
+      "heard": "Workout complete.",
+      "by": "ggml-small.en",
+      "sha256": "c4bdba93c26dbccc57865b38aa8828914efe5fdfadad02199da7ca6f49416b86",
+      "seconds": 1.42
+    },
+    {
+      "file": "workout_complete_2.m4a",
+      "words": "That's the workout.",
+      "heard": "That's the workout.",
+      "by": "ggml-base.en",
+      "sha256": "69c535570033346e246dee3d18c1b7a32bf300d407052ca50ab27c4d3fb0e62d",
+      "seconds": 1.19
+    }
+  ]
+}
