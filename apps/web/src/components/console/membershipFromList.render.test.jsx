@@ -217,7 +217,9 @@ describe('Set up, in a gym that has set no price yet', () => {
     // Nothing to choose between: no question, the form at once.
     expect(screen.queryByText('What is “Gold” here?')).toBeNull();
     const form = screen.getByRole('form', { name: 'Add “Gold” as a membership type' });
-    expect(within(form).getByText('4 people on your member list have “Gold”. Add its price and how it is paid. Next you choose who gets it.')).toBeTruthy();
+    // A page of its own, its title and the line under it the name's own.
+    expect(screen.getByRole('heading', { level: 1, name: 'Add “Gold” as a membership type' })).toBeTruthy();
+    expect(screen.getByText('4 people on your member list have “Gold”. Add its price and how it is paid. Next you choose who gets it.')).toBeTruthy();
     expect(within(form).getByLabelText('Name').value).toBe('Gold');
     expect(orgService.createMembershipType).not.toHaveBeenCalled();
 
@@ -230,6 +232,8 @@ describe('Set up, in a gym that has set no price yet', () => {
     // The box is for the type just made, found by its id and not by its name.
     await waitFor(() => expect(orgService.previewMembershipLink).toHaveBeenCalledWith(GYM, { word: 'Gold', typeId: MADE.id }));
     const box = await screen.findByRole('dialog', { name: 'Give Gold to the people who have it on your member list?' });
+    // The next step is in front of them: the box is drawn over the page, wherever it is scrolled, with the keys in it.
+    await waitFor(() => expect(box.contains(document.activeElement)).toBe(true));
     expect(orgService.linkMembershipWord).not.toHaveBeenCalled();
 
     orgService.linkMembershipWord.mockResolvedValue({
@@ -346,32 +350,40 @@ describe('Set up, in a gym that already has membership types', () => {
   });
 });
 
-// 23c-i: a name being added as a new type opens its form in its own row.
+// V4b-ii: a name being added as a new type opens the type's own page, with that name filled in.
 describe('where the form for a name opens', () => {
-  it("in that name's row, under the price list, and its Set up button makes way for it", async () => {
+  it("on a page of its own for that name, never the other; Cancel is back at the list's names", async () => {
     await open([GOLD], [name(), name({ word: 'Silver', people: 2 })]);
     fireEvent.click(await screen.findByRole('button', { name: 'Set up Silver' }));
     fireEvent.click(screen.getByLabelText("A new membership. I'll add its price now."));
     fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
     const form = screen.getByRole('form', { name: 'Add “Silver” as a membership type' });
-    const region = await block();
-    expect(region.contains(form)).toBe(true);
-    const row = form.closest('li');
-    expect(within(row).getByText(/“Silver”/, { selector: 'span' })).toBeTruthy();
-    expect(within(row).queryByText(/“Gold”/)).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Set up Silver' })).toBeNull();
-    // The other name waits, as everything does while a form is open.
-    expect(screen.getByRole('button', { name: 'Set up Gold' }).disabled).toBe(true);
-    fireEvent.click(within(form).getByRole('button', { name: 'Cancel' }));
-    expect(screen.getByRole('button', { name: 'Set up Silver' }).disabled).toBe(false);
+    expect(within(form).getByLabelText('Name').value).toBe('Silver');
+    expect(screen.queryByRole('region', { name: 'On your member list, not set up yet' })).toBeNull();
+    // Nothing else can be pressed while it is open: the other name is not on the screen.
+    expect(screen.queryByRole('button', { name: 'Set up Gold' })).toBeNull();
+    const had = Element.prototype.scrollIntoView;
+    const into = vi.fn();
+    Element.prototype.scrollIntoView = into;
+    try {
+      fireEvent.click(within(form).getByRole('button', { name: 'Cancel' }));
+      const setUp = screen.getByRole('button', { name: 'Set up Silver' });
+      expect((await block()).contains(setUp)).toBe(true);
+      expect(setUp.disabled).toBe(false);
+      // Back at the name whose Set up was pressed, the keys on its button.
+      await waitFor(() => expect(into.mock.instances).toContain(setUp.closest('li')));
+      expect(document.activeElement).toBe(setUp);
+    } finally {
+      Element.prototype.scrollIntoView = had;
+    }
     expect(orgService.createMembershipType).not.toHaveBeenCalled();
   });
 });
 
-// Round one, H1: the reviewer's own case. The list says "Gold", the gym's Gold is archived,
-// and Set up has opened the form in that name's row. Put back would take the row away.
+// The list says "Gold", the gym's Gold is archived, and Set up has opened the page for that name: Put back is not
+// on the screen until it is closed.
 describe("while a name's form is open", () => {
-  it('Put back on an archived type waits, so the row and its form cannot go; Cancel frees it', async () => {
+  it('Put back on an archived type is not on the page; Cancel brings it back', async () => {
     const OLD = { ...type(7, { name: 'Gold' }), archivedAt: '2026-10-01T09:00:00.000Z' };
     orgService.getMembershipTypes.mockResolvedValue({ data: listOf({ types: [], archived: [OLD], archivedTotal: 1 }) });
     orgService.getMembershipWords.mockResolvedValue(wordsOf([name()]));
@@ -380,8 +392,7 @@ describe("while a name's form is open", () => {
     expect(screen.getByRole('button', { name: 'Put back Gold' }).disabled).toBe(false);
     fireEvent.click(await screen.findByRole('button', { name: 'Set up Gold' }));
     const form = screen.getByRole('form', { name: 'Add “Gold” as a membership type' });
-    expect(screen.getByRole('button', { name: 'Put back Gold' }).disabled).toBe(true);
-    fireEvent.click(screen.getByRole('button', { name: 'Put back Gold' }));
+    expect(screen.queryByRole('button', { name: 'Put back Gold' })).toBeNull();
     expect(orgService.restoreMembershipType).not.toHaveBeenCalled();
     fireEvent.click(within(form).getByRole('button', { name: 'Cancel' }));
     expect(screen.getByRole('button', { name: 'Put back Gold' }).disabled).toBe(false);

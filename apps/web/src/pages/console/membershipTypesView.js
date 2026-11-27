@@ -26,7 +26,7 @@ import {
   SALES_TAX_PCM_MAX,
   canSellInApp,
 } from '@app/shared';
-import { reminderDayOptions } from './renewalReminderView';
+import { reminderDayOptions, reminderLines } from './renewalReminderView';
 import { RAISE_DRAFT, raiseBody, raiseProblem } from './priceRaiseView';
 
 /** Whether this person may change the price list. The tick, never the job title: an
@@ -708,4 +708,40 @@ export function withChoice(draft, choice) {
   // "No classes, gym only" and the tick.
   const classScope = choice !== 'pack' && draft.classScope === 'none' ? 'all' : draft.classScope;
   return { ...draft, choice, termUnit, classScope };
+}
+
+/** THE SUMMARY BESIDE A MEMBERSHIP TYPE'S PAGE (V4b-ii, board `MembershipAdd`): "You're adding" (or "You're
+ *  changing") filled in as staff type, in the price list's own words. A part still wrong or empty reads as not set
+ *  yet, never as a wrong price. `list`: the price list's answer, for the gym's tax rates; `options`: its classes.
+ *  Gives `lines` ({ label, value }, a value an array of lines or null) and `short`, the same in one line. */
+export function typeSummary(draft, currency, list, orgType, options = []) {
+  const problems = draftProblems(draft, currency, list?.taxRates ?? []) ?? {};
+  const ok = (...keys) => keys.every((k) => problems[k] === undefined);
+  const body = draftBody(draft, currency);
+  const classTypes = Array.isArray(body.classTypeIds) ? body.classTypeIds.map((id) => options.find((o) => o.id === id)).filter((o) => o !== undefined) : null;
+  const preview = { ...body, currency, classTypes };
+  const kind = KIND_CHOICES.find((k) => k.value === draft.choice)?.label ?? null;
+  const name = draft.name.trim() === '' || !ok('name') ? null : draft.name.trim();
+  const priced = ok('price', 'termCount', 'packClasses', 'packDays');
+  const price = priced ? [termLine(preview), ...(ok('joiningFee') && joiningFeeLine(preview) !== null ? [joiningFeeLine(preview)] : [])] : null;
+  const tax = ok('tax') ? (typeTaxLine(preview, list) ?? 'No tax') : null;
+  const includes = ok('bookingsLimit', 'classes', 'ptLimit') ? includesLine(preview, orgType) : null;
+  const terms = [
+    ok('termCount', 'contractPeriods') ? contractLine(preview) : null,
+    ok('contractPeriods', 'leaveFee') ? leaveFeeLine(preview) : null,
+    ok('noticeDays') ? noticeLine(preview) : null,
+    ok('price', 'coolingOffDays') ? coolingOffLine(preview) : null,
+    ...(ok('renewalReminderDays', 'termReminderDays') ? reminderLines(preview) : []),
+  ].filter((line) => line !== null);
+  const how = kind === null ? null : draftSellsInApp(draft) ? `${kind} · Sold in the app` : kind;
+  const lines = [
+    { label: 'Name', value: name },
+    { label: 'How it is paid', value: how },
+    { label: 'Price', value: price },
+    { label: 'Tax', value: tax },
+    { label: 'What it includes', value: includes },
+    ...(terms.length > 0 ? [{ label: 'Terms', value: terms }] : []),
+  ];
+  const short = [name, kind, price === null ? null : price[0]].filter((part) => part !== null).join(' · ');
+  return { lines, short };
 }
