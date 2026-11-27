@@ -330,17 +330,19 @@ export default function SellDiscounts({ gymId, page, locked, lockedNote, use = '
     setDraft(null);
     setState(clear);
   };
+  // A row the list no longer has (somebody else archived it) is spoken of at the top.
+  const noteHere = noteAt === 'top' || noteAt === 'archived' || shown.some((d) => d.id === noteAt) ? noteAt : 'top';
   const said = (at) => (
     <>
-      {state.done !== null && noteAt === at ? <SavedNote>{state.done}</SavedNote> : null}
-      {state.done !== null && noteAt === at && away && otherTo !== null ? <PlaceLink to={otherTo}>{use === 'products' ? 'Open Memberships' : 'Open Sell'}</PlaceLink> : null}
-      {state.error !== null && draft === null && noteAt === at ? <Refusal>{state.error}</Refusal> : null}
+      {state.done !== null && noteHere === at ? <SavedNote>{state.done}</SavedNote> : null}
+      {state.done !== null && noteHere === at && away && otherTo !== null ? <PlaceLink to={otherTo}>{use === 'products' ? 'Open Memberships' : 'Open Sell'}</PlaceLink> : null}
+      {state.error !== null && draft === null && noteHere === at ? <Refusal>{state.error}</Refusal> : null}
     </>
   );
   const problemsShown = draft !== null && draft.pressed && Object.keys(discountProblems(draft, page.currency, page.products, page.membershipTypes)).length > 0;
 
   return (
-    <section className="c-card p-4 md:p-6 flex flex-col gap-4" aria-label="Discounts" id="discounts">
+    <section className="c-card c-touch-44 p-4 md:p-6 flex flex-col gap-4" aria-label="Discounts" id="discounts">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex flex-col gap-1 min-w-0">
           <h2 className="c-h2">Discounts</h2>
@@ -436,7 +438,7 @@ export default function SellDiscounts({ gymId, page, locked, lockedNote, use = '
                     busy={state.busy}
                     onConfirm={() => {
                       setAsking(null);
-                      void run(() => registerService.archiveDiscount(gymId, discount.id), `${discount.name} archived. Find it under Show archived.`, discount.id, 'archived');
+                      void run(() => registerService.archiveDiscount(gymId, discount.id), `${discount.name} archived. It is listed under Archived, below.`, discount.id, 'archived').then((ok) => ok && setShowArchived(true));
                     }}
                     onCancel={() => setAsking(null)}
                   />

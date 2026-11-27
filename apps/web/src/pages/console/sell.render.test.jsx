@@ -991,7 +991,8 @@ describe('products and tax', () => {
     fireEvent.click(within(products()).getByRole('button', { name: 'Archive Water' }));
     fireEvent.click(within(products()).getByRole('button', { name: 'Archive' }));
     await waitFor(() => expect(svc.archiveProduct).toHaveBeenCalledWith('g1', 'p-water'));
-    fireEvent.click(await within(products()).findByRole('button', { name: 'Show archived (1)' }));
+    expect(await within(products()).findByText('Water archived. It is listed under Archived, below.')).toBeTruthy();
+    expect(within(products()).getByRole('button', { name: 'Hide archived (1)' }).getAttribute('aria-expanded')).toBe('true');
     fireEvent.click(within(products()).getByRole('button', { name: 'Put Water back' }));
     await waitFor(() => expect(svc.restoreProduct).toHaveBeenCalledWith('g1', 'p-water'));
   });
@@ -1034,7 +1035,7 @@ describe('products and tax', () => {
     svc.changeTaxRate.mockResolvedValue(page({ tax: { included: false, rates: [{ ...GST, pcm: 12000 }, RATE] } }));
     open();
     await screen.findByRole('tab', { name: /^Tax/ });
-    expect(within(taxBox()).getByText(/^Tax is added on top of the price of each product and membership that charges it. Memberships use/)).toBeTruthy();
+    expect(within(taxBox()).getByText(/^Tax is added on top of the price of each product and membership that charges it. Memberships use these same tax rates, on the Memberships page.$/)).toBeTruthy();
     expect(within(taxBox()).getAllByTestId('tax-rate-row').map((r) => r.textContent)).toEqual([expect.stringContaining('Sales tax 8.25%Charged on 2 products.')]);
     fireEvent.click(within(taxBox()).getByRole('button', { name: 'Add a tax rate' }));
     const form = within(within(taxBox()).getByRole('form', { name: 'Add a tax rate' }));
@@ -1194,7 +1195,7 @@ describe('who sees what', () => {
     expect(within(products()).getByText('The owner, or staff who can change membership types and prices, can add and change products and tax.')).toBeTruthy();
     expect(within(products()).queryByRole('button', { name: 'Add a product' })).toBeNull();
     // The tax is read, never changed.
-    expect(within(taxBox()).getByText(/^Tax is added on top of the price of each product and membership that charges it. Memberships use/)).toBeTruthy();
+    expect(within(taxBox()).getByText(/^Tax is added on top of the price of each product and membership that charges it. Memberships use these same tax rates, on the Memberships page.$/)).toBeTruthy();
     expect(within(taxBox()).getByText('Sales tax 8.25%')).toBeTruthy();
     expect(within(taxBox()).queryByRole('button', { name: 'Add a tax rate' })).toBeNull();
     expect(within(taxBox()).queryByRole('button', { name: 'Edit Sales tax' })).toBeNull();
@@ -1808,5 +1809,62 @@ describe('Products and Tax in the third look (V4a-iii)', () => {
     const modeSave = within(taxBox()).getAllByRole('button', { name: 'Save' }).at(-1);
     expect(modeSave.parentElement.className).toContain('c-box-foot');
     expect(within(modeSave.parentElement).getByText('Not saved yet.')).toBeTruthy();
+  });
+});
+
+describe('V4a-iii round one', () => {
+  it('H1: the Tax tab names the Memberships page, where the box really is, with a button that opens it', async () => {
+    open();
+    await screen.findByRole('tab', { name: /^Tax/ });
+    expect(within(taxBox()).queryByText(/Tax tab/)).toBeNull();
+    expect(within(taxBox()).getByText(/Memberships use these same tax rates, on the Memberships page\.$/)).toBeTruthy();
+    expect(within(taxBox()).getByRole('link', { name: 'Open Memberships' }).getAttribute('href')).toBe('/console/iron-house/memberships#tax');
+  });
+
+  it('L2: an archive refused because somebody else already archived it is said at the top, as its row is gone', async () => {
+    svc.archiveProduct.mockRejectedValue(refusal(404, 'That product is not on your list any more.'));
+    open();
+    await screen.findByRole('tab', { name: /^Products/ });
+    svc.get.mockResolvedValue(page({ products: [TOWEL] }));
+    fireEvent.click(within(products()).getByRole('button', { name: 'Archive Water' }));
+    fireEvent.click(within(products()).getByRole('button', { name: 'Archive' }));
+    await waitFor(() => expect(within(products()).getAllByTestId('product-row')).toHaveLength(1));
+    expect(within(products()).getByRole('alert').textContent).toBe('That product is not on your list any more.');
+  });
+
+  it('L3: an Edit refused on a rate somebody else removed closes with it, and leaves nothing greyed out', async () => {
+    const CITY = { id: 'r2', name: 'City tax', pcm: 2000, products: 0, membershipTypes: 0, memberships: 0 };
+    svc.get.mockResolvedValue(page({ tax: { included: false, rates: [RATE, CITY] } }));
+    svc.changeTaxRate.mockRejectedValue(refusal(404, 'That tax rate is not on your list any more.'));
+    open();
+    await screen.findByRole('tab', { name: /^Tax/ });
+    fireEvent.click(within(taxBox()).getByRole('button', { name: 'Edit City tax' }));
+    svc.get.mockResolvedValue(page());
+    fireEvent.click(within(taxBox()).getByRole('button', { name: 'Save tax rate' }));
+    await waitFor(() => expect(within(taxBox()).getAllByTestId('tax-rate-row')).toHaveLength(1));
+    expect(within(taxBox()).queryByRole('form', { name: 'Change tax rate' })).toBeNull();
+    expect(within(taxBox()).getByRole('button', { name: 'Add a tax rate' }).disabled).toBe(false);
+    expect(within(taxBox()).getByRole('button', { name: 'Edit Sales tax' }).disabled).toBe(false);
+    expect(within(taxBox()).getByRole('alert').textContent).toBe('That tax rate is not on your list any more.');
+  });
+
+  it('L5: a tax rate being typed inside Add a product counts as not saved', async () => {
+    open();
+    await screen.findByRole('tab', { name: /^Products/ });
+    fireEvent.click(within(products()).getByRole('button', { name: 'Add a product' }));
+    const box = within(screen.getByTestId('product-panel'));
+    expect(box.queryByText("You have changes that aren't saved.")).toBeNull();
+    fireEvent.click(box.getByRole('button', { name: 'Add a tax rate' }));
+    expect(box.getByText("You have changes that aren't saved.")).toBeTruthy();
+  });
+
+  it('Save with a field wrong puts the keys in the first field marked red', async () => {
+    open();
+    await screen.findByRole('tab', { name: /^Products/ });
+    fireEvent.click(within(products()).getByRole('button', { name: 'Add a product' }));
+    const box = within(screen.getByTestId('product-panel'));
+    fireEvent.change(box.getByLabelText('Product name'), { target: { value: 'Gloves' } });
+    fireEvent.click(box.getByRole('button', { name: 'Add product' }));
+    await waitFor(() => expect(document.activeElement).toBe(box.getByLabelText('Price in USD')));
   });
 });

@@ -46,8 +46,8 @@ export function SavedNote({ children }) {
   );
 }
 
-function ProductForm({ formId, gymId, country, currency, rates, onPage, draft, setDraft, busy, onSave }) {
-  const [addingRate, setAddingRate] = useState(false);
+/** `addingRate`: the tax rate box inside the form is open; held by the page, as what is typed in it is not saved either. */
+function ProductForm({ formId, gymId, country, currency, rates, onPage, draft, setDraft, busy, onSave, addingRate, setAddingRate }) {
   const formRef = useRef(null);
   const problems = draft.pressed ? productProblems(draft, currency, rates) : {};
   useFirstProblem(formRef, draft.pressed);
@@ -142,12 +142,14 @@ export default function SellProducts({ gymId, country = null, page, locked, lock
   const [state, setState] = useState({ busy: false, error: null, done: null });
   // Where the last sentence is said: under the product it is about, or at the top for one added.
   const [noteAt, setNoteAt] = useState(null);
+  const [addingRate, setAddingRate] = useState(false);
   const [asking, setAsking] = useState(null);
   const [showArchived, setShowArchived] = useState(false);
   const full = page.products.length >= PRODUCTS_MAX;
   const formId = useId();
 
   const open = (next) => {
+    setAddingRate(false);
     setDraft(next);
     setStartedAs(draftKey(next));
   };
@@ -203,16 +205,18 @@ export default function SellProducts({ gymId, country = null, page, locked, lock
     setDraft(null);
     setState({ busy: false, error: null, done: null });
   };
+  // A row the list no longer has (somebody else archived it) is spoken of at the top.
+  const noteHere = noteAt === null || noteAt === 'top' || noteAt === 'archived' || page.products.some((p) => p.id === noteAt) ? noteAt : 'top';
   const said = (at) => (
     <>
-      {state.done !== null && noteAt === at ? <SavedNote>{state.done}</SavedNote> : null}
-      {state.error !== null && draft === null && noteAt === at ? <Refusal>{state.error}</Refusal> : null}
+      {state.done !== null && noteHere === at ? <SavedNote>{state.done}</SavedNote> : null}
+      {state.error !== null && draft === null && noteHere === at ? <Refusal>{state.error}</Refusal> : null}
     </>
   );
   const problemsShown = draft !== null && draft.pressed && Object.keys(productProblems(draft, page.currency, page.tax.rates)).length > 0;
 
   return (
-    <section className="c-card p-4 md:p-6 flex flex-col gap-4" aria-label="Products" id="products">
+    <section className="c-card c-touch-44 p-4 md:p-6 flex flex-col gap-4" aria-label="Products" id="products">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex flex-col gap-1 min-w-0">
           <h2 className="c-h2">Products</h2>
@@ -295,7 +299,7 @@ export default function SellProducts({ gymId, country = null, page, locked, lock
                   busy={state.busy}
                   onConfirm={() => {
                     setAsking(null);
-                    void run(() => registerService.archiveProduct(gymId, product.id), `${product.name} archived. Find it under Show archived.`, product.id, 'archived');
+                    void run(() => registerService.archiveProduct(gymId, product.id), `${product.name} archived. It is listed under Archived, below.`, product.id, 'archived').then((ok) => ok && setShowArchived(true));
                   }}
                   onCancel={() => setAsking(null)}
                 />
@@ -346,7 +350,7 @@ export default function SellProducts({ gymId, country = null, page, locked, lock
           title={draft.id === null ? 'Add a product' : 'Change product'}
           sub={draft.id === null ? 'It shows on the Register straight away.' : null}
           onClose={close}
-          unsaved={draftKey(draft) !== startedAs}
+          unsaved={draftKey(draft) !== startedAs || addingRate}
           formId={formId}
           saveLabel={draft.id === null ? 'Add product' : 'Save product'}
           busy={state.busy}
@@ -364,7 +368,7 @@ export default function SellProducts({ gymId, country = null, page, locked, lock
             ) : null
           }
         >
-          <ProductForm formId={formId} gymId={gymId} country={country} currency={page.currency} rates={page.tax.rates} onPage={onPage} draft={draft} setDraft={setDraft} busy={state.busy} onSave={() => void save()} />
+          <ProductForm formId={formId} gymId={gymId} country={country} currency={page.currency} rates={page.tax.rates} onPage={onPage} draft={draft} setDraft={setDraft} busy={state.busy} onSave={() => void save()} addingRate={addingRate} setAddingRate={setAddingRate} />
         </SidePanel>
       ) : null}
     </section>

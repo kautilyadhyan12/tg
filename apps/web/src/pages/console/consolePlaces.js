@@ -81,6 +81,8 @@ const PLACES = {
   noCardOnFile: { path: '/members?show=no-card', may: (privileges) => has(privileges, 'billing.members') },
   sell: { path: '/sell', may: canOpenSell },
   sellDiscounts: { path: '/sell#discounts', may: canOpenSell },
+  // Sell's Tax tab, from the Tax box on Memberships (V4a-iii).
+  sellTax: { path: '/sell#tax', may: canOpenSell },
   failedPayments: { path: '/failed-payments', may: canSeeFailedPayments },
   members: { path: '/members', may: onStaff },
   // Possible duplicates (5b-iv-a): two records of one person, joined there.

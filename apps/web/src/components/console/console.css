@@ -2707,3 +2707,10 @@
 @media (min-width: 768px) {
   .c-box-foot { bottom: 0; }
 }
+/* Products, Tax and Discounts take a finger on every page they are drawn on, Memberships too (V4a-iii round one, L1). */
+@media (pointer: coarse) {
+  .c-touch-44 .c-btn {
+    height: auto;
+    min-height: 44px;
+  }
+}

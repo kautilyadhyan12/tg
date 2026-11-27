@@ -413,8 +413,8 @@ describe('the Discounts list', () => {
     svc.archiveDiscount.mockResolvedValue(page({ discounts: [], archivedDiscounts: [gone], archivedDiscountsTotal: 1 }));
     fireEvent.click(within(discounts()).getByRole('button', { name: 'Archive' }));
     await waitFor(() => expect(svc.archiveDiscount).toHaveBeenCalledWith('g1', 'd-summer'));
-    expect(await within(discounts()).findByText('Summer sale archived. Find it under Show archived.')).toBeTruthy();
-    fireEvent.click(within(discounts()).getByRole('button', { name: 'Show archived (1)' }));
+    expect(await within(discounts()).findByText('Summer sale archived. It is listed under Archived, below.')).toBeTruthy();
+    expect(within(discounts()).getByRole('button', { name: 'Hide archived (1)' }).getAttribute('aria-expanded')).toBe('true');
     expect(within(discounts()).getByTestId('archived-discount-row').textContent).toContain('Summer sale25% off');
     svc.restoreDiscount.mockResolvedValue(page({ discounts: [discount({ percentBp: 2500, uses: 4 })] }));
     fireEvent.click(within(discounts()).getByRole('button', { name: 'Put Summer sale back' }));

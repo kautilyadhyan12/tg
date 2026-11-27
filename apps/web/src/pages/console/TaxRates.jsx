@@ -3,6 +3,7 @@ import { Loader2, Plus } from 'lucide-react';
 import { registerService } from '../../api/registerApi';
 import { errorText } from '../../api/orgsApi';
 import { ConfirmInline } from '../../components/console/ConsoleStates';
+import PlaceLink from '../../components/console/PlaceLink';
 import { Refusal } from './MemberListTags';
 import { SavedNote } from './SellProducts';
 import {
@@ -249,7 +250,8 @@ function TaxMode({ gymId, page, locked, onPage }) {
   );
 }
 
-export default function TaxRates({ gymId, country = null, page, locked, lockedNote = null, addAsk = 0, use = 'products', onPage }) {
+/** `otherTo`: the other page that charges these same rates (Memberships from Sell, Sell from Memberships), for whoever may open it; null for anybody else. */
+export default function TaxRates({ gymId, country = null, page, locked, lockedNote = null, addAsk = 0, use = 'products', otherTo = null, onPage }) {
   const canManage = page.canManage;
   const rates = page.tax.rates;
   const full = rates.length >= TAX_RATES_MAX;
@@ -259,6 +261,10 @@ export default function TaxRates({ gymId, country = null, page, locked, lockedNo
   const [choosing, setChoosing] = useState(null);
   // The rate the last sentence said is about: it is said under that rate, where its box was.
   const [noteAt, setNoteAt] = useState(null);
+  // A rate somebody else removed while its Edit was open: the form goes with it, so nothing stays greyed out.
+  if (draft !== null && draft.id !== null && !state.busy && !rates.some((r) => r.id === draft.id)) setDraft(null);
+  // A rate the list no longer has is spoken of at the top.
+  const noteHere = noteAt !== null && rates.some((r) => r.id === noteAt) ? noteAt : null;
   const chooseWord = use === 'memberships' ? 'Choose memberships' : 'Choose products';
 
   // A button elsewhere on the page asked for the Add form: open it once for each ask.
@@ -320,11 +326,12 @@ export default function TaxRates({ gymId, country = null, page, locked, lockedNo
   };
 
   return (
-    <section className="c-card p-4 md:p-6 flex flex-col gap-4" aria-label="Tax" id="tax">
+    <section className="c-card c-touch-44 p-4 md:p-6 flex flex-col gap-4" aria-label="Tax" id="tax">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex flex-col gap-1 min-w-0">
           <h2 className="c-h2">Tax rates</h2>
-          <p className="c-s14 c-t2 m-0">{`${taxLine(page.tax)} ${use === 'memberships' ? 'Products on the Sell page use these same tax rates.' : 'Memberships use these same tax rates, on their own Tax tab.'}`}</p>
+          <p className="c-s14 c-t2 m-0">{`${taxLine(page.tax)} ${use === 'memberships' ? 'Products on the Sell page use these same tax rates.' : 'Memberships use these same tax rates, on the Memberships page.'}`}</p>
+          {otherTo !== null ? <PlaceLink to={otherTo}>{use === 'memberships' ? 'Open Sell' : 'Open Memberships'}</PlaceLink> : null}
         </div>
         {canManage ? (
           <button type="button" className="c-btn c-btn-p" disabled={locked || full || state.busy || draft !== null} onClick={() => { setDraft(emptyRateDraft()); setAsking(null); clear(); }}>
@@ -337,8 +344,8 @@ export default function TaxRates({ gymId, country = null, page, locked, lockedNo
       {canManage && full ? <p className="c-s14 c-t2 m-0">{TOO_MANY_RATES}</p> : null}
 
       {draft !== null && draft.id === null ? <RateForm rates={rates} country={country} draft={draft} setDraft={setDraft} busy={state.busy} error={state.error} onSave={() => void save()} onCancel={cancel} /> : null}
-      {state.done !== null && noteAt === null ? <SavedNote>{state.done}</SavedNote> : null}
-      {state.error !== null && draft === null && noteAt === null ? <Refusal>{state.error}</Refusal> : null}
+      {state.done !== null && noteHere === null ? <SavedNote>{state.done}</SavedNote> : null}
+      {state.error !== null && draft === null && noteHere === null ? <Refusal>{state.error}</Refusal> : null}
 
       {rates.length > 0 ? (
         <ul className="c-items">
@@ -369,8 +376,8 @@ export default function TaxRates({ gymId, country = null, page, locked, lockedNo
                     ) : null}
                   </div>
                 )}
-                {state.done !== null && noteAt === rate.id ? <SavedNote>{state.done}</SavedNote> : null}
-                {state.error !== null && draft === null && noteAt === rate.id ? <Refusal>{state.error}</Refusal> : null}
+                {state.done !== null && noteHere === rate.id ? <SavedNote>{state.done}</SavedNote> : null}
+                {state.error !== null && draft === null && noteHere === rate.id ? <Refusal>{state.error}</Refusal> : null}
                 {choosing === rate.id && canManage && !locked ? (
                   <ChargeBox
                     gymId={gymId}

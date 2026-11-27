@@ -95,6 +95,7 @@ describe('where each place is', () => {
 
   it("Sell's Discounts tab has its own address, for the links that name it (V4a-i)", () => {
     expect(placeTo('iron-house', 'sellDiscounts')).toBe('/console/iron-house/sell#discounts');
+    expect(placeTo('iron-house', 'sellTax')).toBe('/console/iron-house/sell#tax');
   });
 
   it('there is no address without a gym, or for a place that is not on the list', () => {
