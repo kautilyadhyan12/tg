@@ -51,7 +51,7 @@ describe("the worst thing first: the camera keeps and sends nothing of a person 
   it("the phone's log is told counts and a failure's kind, never a point", () => {
     const logs = code.split("\n").filter((l) => /Log\.[a-z]\(/.test(l)).map((l) => l.trim());
     expect(logs).toEqual([
-      "if (debuggable) Log.i(TAG, \"frames=${frames ?: \"the camera's own\"}\")",
+      "if (debuggable) Log.i(TAG, \"chip=$chip frames=${frames ?: \"the camera's own\"}\")",
       'Log.i(TAG, "answers=$a found=$f")',
       'Log.w(TAG, "The $reason stopped: ${e?.javaClass?.simpleName ?: "no picture"}")',
     ]);
@@ -59,9 +59,9 @@ describe("the worst thing first: the camera keeps and sends nothing of a person 
     expect(view).toMatch(/if \(debuggable\) \{\n\s+val \(a, f\)/);
   });
 
-  it("each answer goes to the screen and nowhere else", () => {
+  it("each answer goes to the screen, with the picture it was read from, and nowhere else", () => {
     expect(view.match(/onPose\(/g)).toHaveLength(1);
-    expect(view).toContain("main.post { if (!closed) onPose(event) }");
+    expect(view).toContain("if (picture != null) shown.setImageBitmap(picture)\n        onPose(event)");
   });
 
   it("the module asks for no permission of its own: the camera's is the meal photo's", () => {
@@ -81,11 +81,15 @@ describe("the camera as the phone test picked it (51b-ii)", () => {
     expect(view).toContain("CameraSelector.DEFAULT_FRONT_CAMERA");
   });
 
-  it("the camera films no faster than the model reads, and the screen's picture is small (53a's 20-minute run)", () => {
+  it("one stream, the model's: the screen shows the very picture the model read, at a steady speed no faster than it reads (53a's runs)", () => {
+    expect(view).toContain("cameras.bindToLifecycle(owner, CameraSelector.DEFAULT_FRONT_CAMERA, analysis)");
+    expect(view).not.toMatch(/PreviewView|Preview\.Builder/);
     expect(view).toContain("private const val FRAMES_MOST = 24");
     expect(view).toContain("?.filter { it.upper in FRAMES_LEAST..FRAMES_MOST }");
-    expect(view).toContain("frames?.let { shownBuilder.setTargetFrameRate(it) }");
-    expect(view).toContain("private val SHOWN = Size(960, 720)");
+    expect(view).toContain("compareByDescending<Range<Int>> { it.lower >= FRAMES_LEAST }");
+    expect(view).toContain("Camera2Interop.Extender(builder).setCaptureRequestOption(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, it)");
+    // A picture is handed over only once the one before is answered: none is turned for nothing.
+    expect(view).toContain("if (since != 0L && SystemClock.uptimeMillis() - since < BUSY_MOST_MS) return");
   });
 
   it("the full model, asked for one person, at the sureness every kept file was measured with, on the main chip's 4 cores", () => {
@@ -93,7 +97,10 @@ describe("the camera as the phone test picked it (51b-ii)", () => {
     expect(view).toContain(".setNumPoses(1)");
     expect(view).toContain("private const val SURE = 0.5f");
     expect(view).toContain("private const val CORES = 4");
-    expect(view).toContain("setDelegate(Delegate.CPU)");
+    // The graphics chip first, which 51b-ii measured faster and cooler; the main chip's 4 cores where it cannot start.
+    expect(view).toContain("PoseLandmarker.createFromOptions(context, options(Delegate.GPU))");
+    expect(view).toContain("PoseLandmarker.createFromOptions(context, options(Delegate.CPU))");
+    expect(view).toContain("if (delegate != Delegate.CPU) return options");
     expect(view).toContain("PoseCameraCores.onCores(options, minOf(CORES, Runtime.getRuntime().availableProcessors()))");
     expect(view).toContain("RunningMode.LIVE_STREAM");
     const cores = text(join(MODULE, "src", "main", "java", "com", "google", "mediapipe", "tasks", "vision", "poselandmarker", "PoseCameraCores.java"));
