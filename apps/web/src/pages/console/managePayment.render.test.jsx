@@ -212,7 +212,7 @@ describe("the plan card's way to Paddle's page", () => {
       resetConsoleOrgs();
       orgService.getMine.mockResolvedValue(mineIs(org));
       const { unmount } = renderOverview();
-      await screen.findByRole('heading', { name: 'Iron House' });
+      await screen.findByText('Iron House', { exact: false, selector: '[data-testid="ov-business"]' });
       // The owner sees the plan card; a trainer, the Overview without its buttons.
       if (org.staffRole === 'owner') expect((await screen.findAllByText(/^Ends |stops on/)).length).toBeGreaterThan(0);
       expect(screen.queryByRole('button', { name: 'Keep my plan' })).toBeNull();
@@ -244,7 +244,7 @@ describe("the plan card's way to Paddle's page", () => {
     orgService.getMine.mockResolvedValue(mineIs({ ...TRAINER, subscription: plan() }));
     renderOverview();
     await waitFor(() => expect(orgService.getMine).toHaveBeenCalled());
-    await screen.findByRole('heading', { name: 'Iron House' });
+    await screen.findByText('Iron House', { exact: false, selector: '[data-testid="ov-business"]' });
     expect(screen.queryByRole('button', { name: /manage payment|update payment method/i })).toBeNull();
   });
 });

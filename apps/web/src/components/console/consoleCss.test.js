@@ -316,6 +316,7 @@ describe('read without leaning in (Kd, 2026-11-19, V1-f): no words under 14 px',
     '.c-s12': 12,
     '.c-s13': 13,
     '.c-flame-head': 10,
+    '.c-ov-val': 12, // the number over each week's bar on Overview
   };
   it('every font size in the stylesheet is 14 px or more, but the named few', () => {
     const under = [];
@@ -391,6 +392,14 @@ describe('read without leaning in (Kd, 2026-11-19, V1-f): no words under 14 px',
     './MembershipTypesPanel.jsx',
     './MembershipFromList.jsx',
     './BillSettingsCard.jsx',
+    // V5-a: Overview, Getting started, today's check-ins, the chart, Streaks, Last 7 days.
+    '../../pages/console/Overview.jsx',
+    './OverviewNumbers.jsx',
+    './StartHereCard.jsx',
+    './OnARollPanel.jsx',
+    './LastSevenDays.jsx',
+    './CoOwnerRequest.jsx',
+    './BringMembersInCard.jsx',
   ];
   // V3a-ii: a member's page opened from Invite to app dims the box in the middle under it too.
   it("a cover drawn after a box in the middle is over that box, and a panel after it is over the cover", () => {

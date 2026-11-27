@@ -955,7 +955,7 @@ describe('who the prompt stops', () => {
     orgService.getMine.mockResolvedValue(mineIs(TRAINER_ORG));
     renderConsole(Overview);
 
-    await screen.findByRole('heading', { name: 'Iron House' });
+    await screen.findByText('Iron House', { exact: false, selector: '[data-testid="ov-business"]' });
     expect(screen.queryByTestId('plan-modal')).toBeNull();
     expect(orgService.getPlans).not.toHaveBeenCalled();
   });
@@ -968,7 +968,7 @@ describe('who the prompt stops', () => {
     orgService.getMine.mockResolvedValue(mineIs(WITHOUT));
     renderConsole(Overview);
 
-    await screen.findByRole('heading', { name: 'Iron House' });
+    await screen.findByText('Iron House', { exact: false, selector: '[data-testid="ov-business"]' });
     expect(screen.queryByTestId('plan-modal')).toBeNull();
   });
 
@@ -999,7 +999,7 @@ describe('who the prompt stops', () => {
     orgService.getMine.mockResolvedValue(mineIs(WITHOUT));
     renderConsole(Overview);
 
-    await screen.findByRole('heading', { name: 'Iron House' });
+    await screen.findByText('Iron House', { exact: false, selector: '[data-testid="ov-business"]' });
     expect(screen.queryByText(/couldn’t check this gym’s plan|couldn't check this gym's plan/i)).toBeNull();
     expect(screen.queryByTestId('plan-modal')).toBeNull();
   });

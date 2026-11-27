@@ -238,7 +238,7 @@ function renderConsole(initial = '/console/gym-a') {
 
 const walkTo = async (name) => {
   fireEvent.click(screen.getByText(`go to ${name}`));
-  await screen.findByRole('heading', { name: `Gym ${name}` });
+  await screen.findByText(`Gym ${name}`, { exact: false, selector: "[data-testid=\"ov-business\"]" });
 };
 
 beforeEach(() => {
