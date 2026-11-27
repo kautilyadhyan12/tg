@@ -6,6 +6,7 @@ import { AppState, Linking, Pressable, ScrollView, StyleSheet, TextInput, Vibrat
 import * as Location from "expo-location";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
+  GPS_WORST_ACCURACY_M,
   RUN_MAX_POINTS,
   heartLineOf,
   heartSums,
@@ -113,6 +114,8 @@ export function useRunLayer(): RunLayerValue {
 }
 
 const COUNT_FROM = 3;
+/** The oldest place Android kept that the map opens on before a run's first point (A9). */
+export const LAST_KNOWN_MS = 2 * 60_000;
 
 /** The person's own run: shown only to them. */
 function useMyRun(me: string | null): LiveRun | null {
@@ -430,9 +433,26 @@ function Live({ run, units, kg, onHide }: { run: LiveRun; units: Units; kg: numb
   const [panel, setPanel] = useState(0);
   const source = useMapSource(session);
   const lastPoint = run.points[run.points.length - 1];
+  // Before the run's first point, the map opens where Android last knew the phone was, in the last two minutes
+  // and sure to GPS_WORST_ACCURACY_M, never a dark space (the hunt's A9); the GPS light still says Finding GPS.
+  const noPlace = run.here === null && lastPoint === undefined;
+  const [before, setBefore] = useState<readonly [number, number] | null>(null);
+  useEffect(() => {
+    if (!noPlace) return undefined;
+    let live = true;
+    Location.getLastKnownPositionAsync({ maxAge: LAST_KNOWN_MS, requiredAccuracy: GPS_WORST_ACCURACY_M }).then(
+      (where) => {
+        if (live && where !== null) setBefore([where.coords.latitude, where.coords.longitude]);
+      },
+      () => undefined,
+    );
+    return () => {
+      live = false;
+    };
+  }, [noPlace]);
   // The dot is where the phone last said the person is, which a pause or a stop never holds back; the
   // route ends where the run last counted a point.
-  const here: readonly [number, number] | null = run.here ?? (lastPoint === undefined ? null : [lastPoint[1], lastPoint[2]]);
+  const here: readonly [number, number] | null = run.here ?? (lastPoint === undefined ? (noPlace ? before : null) : [lastPoint[1], lastPoint[2]]);
   const scheme = useMapScheme(here);
   const track = sums !== null && sums.track.length > 0 ? sums.track : here === null ? [] : [here];
   const press = (work: () => Promise<unknown>) => () => {

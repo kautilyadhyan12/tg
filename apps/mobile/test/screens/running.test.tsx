@@ -1,7 +1,7 @@
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react-native";
 import { AppState, Linking } from "react-native";
 import type { StyleSpecification } from "@maplibre/maplibre-react-native";
-import { HEIGHT_MAP_CREDITS, OPENFREEMAP, RUN_MAX_POINTS, geodesicMetres, runSums, saveRunRequestSchema, type MapSource, type RunClimb, type RunPoint, type RunRecords, type SaveRunRequest } from "@app/shared";
+import { GPS_WORST_ACCURACY_M, HEIGHT_MAP_CREDITS, OPENFREEMAP, RUN_MAX_POINTS, geodesicMetres, runSums, saveRunRequestSchema, type MapSource, type RunClimb, type RunPoint, type RunRecords, type SaveRunRequest } from "@app/shared";
 import { App } from "../../src/App";
 import { resetMapSource } from "../../src/screens/running/mapSource";
 import { RUN_BAR_ROOM } from "../../src/screens/running/RunLayer";
@@ -27,7 +27,7 @@ const PATH = "/v1/geo/runs";
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
 // The phone's location, as the setup's stand-in holds it.
-const location = jest.requireMock<{ state: { services: boolean; granted: boolean; canAskAgain: boolean; accuracy: string; asked: number; started: { task: string; options: { foregroundService?: { notificationTitle: string } } }[]; running: boolean; acceptsTurnOn: boolean; refusesStart: boolean } }>("expo-location").state;
+const location = jest.requireMock<{ state: { services: boolean; granted: boolean; canAskAgain: boolean; accuracy: string; asked: number; started: { task: string; options: { foregroundService?: { notificationTitle: string } } }[]; running: boolean; acceptsTurnOn: boolean; refusesStart: boolean; lastKnown: { coords: { latitude: number; longitude: number } } | null; lastKnownAsked: unknown[] } }>("expo-location").state;
 
 // Each map drawn, as the setup's stand-in keeps it (37b-i).
 type DrawnMap = {
@@ -84,7 +84,7 @@ beforeEach(async () => {
     handlers.push(handler);
     return { remove: () => undefined };
   });
-  Object.assign(location, { services: true, granted: true, canAskAgain: true, accuracy: "fine", asked: 0, started: [], running: false, acceptsTurnOn: true, refusesStart: false });
+  Object.assign(location, { services: true, granted: true, canAskAgain: true, accuracy: "fine", asked: 0, started: [], running: false, acceptsTurnOn: true, refusesStart: false, lastKnown: null, lastKnownAsked: [] });
   stopping.whileStopping = null;
   for (const name of ["run-now.json", "run-now-0.json", "run-now-1.json", "run-settings.json", "run-map.json"]) phoneRunFiles.remove(name);
   resetRecorder();
@@ -1287,6 +1287,32 @@ describe("the map under the run (37b-i)", () => {
     expect(asked.every((r) => r.method === "GET" && r.search === "" && r.body === undefined)).toBe(true);
     const lat = (points[100]?.[1] ?? 0).toFixed(5);
     expect(s.requests.filter((r) => r.path !== PATH && (r.body ?? "").includes(lat))).toEqual([]);
+  });
+
+  it("before the first point, the map opens where Android last knew the phone was, in the last two minutes; the light says Finding GPS (37o, the hunt's A9)", async () => {
+    location.lastKnown = { coords: { latitude: 26.1445, longitude: 91.7362 } };
+    const s = runServer();
+    await openRunning(s);
+    await startRunning();
+    const map = await waitFor(() => drawnMap("live-map-view"));
+    expect(map.markers.at(-1)).toEqual([91.7362, 26.1445]);
+    expect(screen.getByLabelText("Finding GPS")).toBeTruthy();
+    expect(location.lastKnownAsked).toEqual([{ maxAge: 120_000, requiredAccuracy: GPS_WORST_ACCURACY_M }]);
+    // The first point: the dot is the run's own.
+    await feed(0, 1, 0, 26.15);
+    await waitFor(() => {
+      expect(drawnMap("live-map-view").markers.at(-1)).toEqual([91.7362, 26.15]);
+    });
+  });
+
+  it("with no place Android kept, nothing is drawn until the first point", async () => {
+    const s = runServer();
+    await openRunning(s);
+    await startRunning();
+    await waitFor(() => {
+      expect(location.lastKnownAsked).toHaveLength(1);
+    });
+    expect(maplibre.maps.filter((m) => !m.gone && m.props.testID === "live-map-view")).toHaveLength(0);
   });
 
   it("standing after Go, the distance stays 0.00 and no route is drawn (testers on Google Play, 2026-11-17)", async () => {
