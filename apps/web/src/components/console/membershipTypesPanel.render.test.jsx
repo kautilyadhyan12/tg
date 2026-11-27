@@ -780,6 +780,27 @@ describe('where the form opens', () => {
     expect(within(sum).queryByText(/every month/)).toBeNull();
   });
 
+  it("what Add and Save did is said in the type's own row, back on the price list", async () => {
+    const gold = type();
+    const made = type({ name: 'Click Gold', priceMinor: 4500 });
+    orgService.createMembershipType.mockResolvedValue({ data: listOf({ types: [gold, made] }) });
+    open(listOf({ types: [gold] }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Add a membership type' }));
+    type_('Name', 'Click Gold');
+    type_('Price (GBP)', '45');
+    fireEvent.click(screen.getByRole('button', { name: 'Add membership type' }));
+    const rowOf = (name) => screen.getByRole('button', { name: `Edit ${name}` }).closest('li');
+    await waitFor(() => expect(within(rowOf('Click Gold')).getByText('Added to your price list.')).toBeTruthy());
+    expect(within(rowOf('Gold Monthly')).queryByText('Added to your price list.')).toBeNull();
+
+    orgService.updateMembershipType.mockResolvedValue({ data: listOf({ types: [{ ...gold, priceMinor: 3999 }, made] }) });
+    fireEvent.click(screen.getByRole('button', { name: 'Edit Gold Monthly' }));
+    type_('Price (GBP)', '39.99');
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+    await waitFor(() => expect(within(rowOf('Gold Monthly')).getByText('Saved.')).toBeTruthy());
+    expect(within(rowOf('Click Gold')).queryByText('Added to your price list.')).toBeNull();
+  });
+
   it('a change not saved yet is said beside Save', async () => {
     open(listOf({ types: [type()] }));
     fireEvent.click(await screen.findByRole('button', { name: 'Edit Gold Monthly' }));

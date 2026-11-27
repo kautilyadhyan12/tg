@@ -1182,10 +1182,13 @@ export default function MembershipTypesPanel({ org, readOnly, openBox = null, on
         ? await run(() => orgService.createMembershipType(gymId, body), "We couldn't add that membership type. Please try again.")
         : await run(() => orgService.updateMembershipType(gymId, draft.id, body), "We couldn't save that change. Please try again.");
     if (saved === null) return;
+    const made = draft.id === null ? saved.types.find((t) => !had.has(t.id)) : undefined;
+    // Back on the price list at the type's own row, where what happened is said.
+    if (made !== undefined) backTo.current = made.id;
     closeForm();
-    if (draft.id !== null && body.raise !== undefined) setSavedNote({ typeId: draft.id, text: raisedNote(saved.raised ?? 0, body.raise.noticeDays) });
+    if (draft.id !== null) setSavedNote({ typeId: draft.id, text: body.raise !== undefined ? raisedNote(saved.raised ?? 0, body.raise.noticeDays) : 'Saved.' });
+    else if (forWord === null && made !== undefined) setSavedNote({ typeId: made.id, text: 'Added to your price list.' });
     // Added for a name from the member list: next, who gets it.
-    const made = forWord === null ? undefined : saved.types.find((t) => !had.has(t.id));
     if (forWord !== null && made !== undefined) void fromList.open(forWord.word, made.id);
   };
 
