@@ -2812,6 +2812,45 @@ size, but a phone knocked over in a set would stay silent for the rest of it: jo
 correction or praise shown at the foot (no clip of a real mistake), and the four shapes (the foot's line is the piece 53a
 fitted).
 
+**As built, Follow along (53b-ii, 2026-11-27; `rulings/2026-11-27-53b-ii.md`).** The other way to do a set, for a room where
+the camera may not be able to follow the person (RULINGS 2026-08-17): the person picks it, the app never switches by itself,
+and nothing is ever counted from the clip. **The way in** (Kd's drawing of 2026-11-27): on the camera screen the exercise's
+clip in the corner, and a "Follow along" button under it, open it; while the person sets up, "In a busy room? Tap the clip to
+follow along." stands under the set-up words, before every camera set, whatever the room, since the app cannot know a room
+is crowded. An exercise with no clip and no picture offers none. **The camera off:** following, the camera screen is gone, so
+its camera view is no longer drawn and the phone's camera is let go, and a camera screen that has gone does nothing with an
+answer still on its way (no count, no sound, no word). "Camera off · Tap to turn on" brings the camera back until the set has
+ended. **The screen:** the clip fills the phone under the timer, shown whole as its picture is, the timer's lit digits in the
+top left (GET READY amber, TIME LEFT red, PAUSED), the exercise and its set at the foot; its box (the time, the weight, Set
+done with the time followed, Pause, Sound, End, Reset set, Count this set myself, Skip exercise) opens from a button at the
+foot, "Time, weight, pause", or a tap anywhere. **The box's button** (Kd's click-through: a tap anywhere opened the camera's
+box, and nobody would know): the camera screen's foot now has one too, "Reps, weight, pause" ("Time, weight, pause" for a
+hold), while the person sets up as well, so a target is set before the first rep; it waits under the box while it is open. **The timer**
+(`apps/mobile/src/camera/followAlong.ts`, pure, table-tested): 10 s to get ready, as a timed set in a workout has (Start now
+skips it), then the set's own time: a set of reps at 3 s a rep (10 reps, 30 s; at least 5 s, at most an hour), a hold its own
+time; changed in the camera box's steps of a time (5 s under a minute); the set's clock moves on by the time that passed,
+never back, and not while paused; shortened past what was followed, it ends there. **At its end** the person is asked "How
+many reps did you do?", the count starting from the time followed at the same 3 s a rep and moved only by their own presses;
+a hold asks nothing. **What it sounds:** a beep at each of the last 3 s of the get-ready and of the set, the rising "go" as
+the set starts, "Get ready." as it begins and on Reset set, "Halfway." at half of a set of 20 s or more (the coach's own rule
+for a hold), "Set complete." at the end; none while paused, and none for a reading that comes more than 1.5 s late (the app
+away); Sound off silences it. **A switch starts the set again**, with its target and weight: Follow along, "Camera off · Tap to
+turn on", and Count this set myself from it; a set is counted one way, never the camera's reps and the person's own count of
+the clip added together. Nothing of it is saved in Try the camera; what a workout keeps of a set followed is 64b's. **Found
+in passing:** once the camera had stopped or the set was counted by hand, the camera's box was drawn at the top of the
+screen (nothing above it held its place); it now stays at the foot. **Measured:** the timer's 21 cases; the camera screen's
+28, 10 of them Follow along's, the worst thing first (Follow along takes the camera away, and a whole set of squats the
+camera saw just before counts nothing, sounds nothing and is not the set's when the camera comes back; with the gone
+screen's check taken out both its tests go red). **On Kd's phone** (moto g35, Exercise 1, 2026-11-27, the Kettlebell Goblet
+Squat): the clip in the corner and its button opened Follow along; Android's own camera record showed the camera let go as
+it opened and taken again on "Camera off · Tap to turn on", and its camera light was off in every picture of Follow along;
+the get-ready, the set, the time lengthened to 35 s, Pause held at 00:06, the end asked from 12 reps; Android's record of
+sound focus has "Get ready.", "Halfway." 25 s later and "Set complete." at the end; Count this set myself and End as above.
+Fixed on the walk: the button's words on one line at his text size, the timer's digits made 72 high so "Camera off · Tap to
+turn on" sits beside them on his phone, no way back to the camera once the set has ended. The four shapes fit (his own, an
+opened folding phone, a small phone where the camera's button goes under the timer, the largest text), his settings put
+back as read (1080x2400, 400, 1.15, animations 1.0).
+
 An exercise that does not pass is published as "count by hand", never with a wrong camera
 count. Kd tries one exercise of each kind of movement on the phone, about a dozen, never
 each one. After launch the server sees, for each exercise, how often members changed the
