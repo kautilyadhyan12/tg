@@ -504,7 +504,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
     - V4b-i. [x] **The page: tabs, the price list, who gets it, Billing rules** · merged 2026-11-27 · PR #656
     - V4b-ii. [x] **A membership type on a page of its own** · merged 2026-11-27 · PR #658
    - V5. **Overview and getting in**, in four (2026-11-27; boards `Overview*`, `Phone`, `Banners`, `GymReady`, `Orgs`, `CreateGym`, `SignIn`, `StaffInvite`, `PhoneOverview`):
-    - V5-a. [ ] **Overview, the page**: the greeting, Getting started, the figures, Needs attention, today's check-ins, the chart, Streaks, Last 7 days
+    - V5-a. [x] **Overview, the page** · merged 2026-11-27 · PR #662
     - V5-b. [ ] **Overview's money boxes and the plan box** (`OverviewMoney`, `OverviewMoneyStates`, `OverviewPlan`)
     - V5-c. [ ] **The banner above every page, and choosing a plan or its size** (`Banners`, `OverviewPlan`)
     - V5-d. [ ] **Getting in**: your organisations, creating a business, signing in, a staff invitation (`Orgs`, `CreateGym`, `GymReady`, `SignIn`, `StaffInvite`)
