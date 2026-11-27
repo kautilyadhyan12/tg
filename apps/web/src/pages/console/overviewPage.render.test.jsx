@@ -278,10 +278,39 @@ describe('what the review found (V5-a, round one)', () => {
     open();
     await screen.findByText('$1,240.00');
     expect(register.get).toHaveBeenCalledTimes(1);
+    await new Promise((r) => setTimeout(r, 1100));
     register.get.mockResolvedValue({ ...takings, totals: { ...takings.totals, totalMinor: 150000 } });
     window.dispatchEvent(new Event('focus'));
     expect(await screen.findByText('$1,500.00')).toBeTruthy();
     expect(register.get).toHaveBeenCalledTimes(2);
+  });
+
+  it("Revenue today is read again when the bell's read is taken again, and only once on a return to the window", async () => {
+    orgApi.getMine.mockResolvedValue({ data: { orgs: [ORG], formerOrgs: [] } });
+    const page = (attention) => (
+      <MemoryRouter initialEntries={['/console/iron-house']}>
+        <AttentionContext.Provider value={{ attention, counts: {}, reload: () => undefined, paymentSetup: false }}>
+          <Routes>
+            <Route path="/console/:orgSlug" element={<Overview />} />
+          </Routes>
+        </AttentionContext.Provider>
+      </MemoryRouter>
+    );
+    const { rerender } = render(page(ATTENTION));
+    await screen.findByText('$1,240.00');
+    expect(register.get).toHaveBeenCalledTimes(1);
+    await new Promise((r) => setTimeout(r, 1100));
+    register.get.mockResolvedValue({ ...takings, totals: { ...takings.totals, totalMinor: 150000 } });
+    rerender(page({ ...ATTENTION }));
+    expect(await screen.findByText('$1,500.00')).toBeTruthy();
+    expect(register.get).toHaveBeenCalledTimes(2);
+    await new Promise((r) => setTimeout(r, 1100));
+    // A return: the window's own read, and the bell read again at once; one register read for both.
+    window.dispatchEvent(new Event('focus'));
+    rerender(page({ ...ATTENTION }));
+    await waitFor(() => expect(register.get).toHaveBeenCalledTimes(3));
+    await new Promise((r) => setTimeout(r, 200));
+    expect(register.get).toHaveBeenCalledTimes(3);
   });
 
   it('Getting started shows every button of the next step: Import and Add when it is bringing members in', async () => {

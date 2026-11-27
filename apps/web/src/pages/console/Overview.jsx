@@ -202,11 +202,18 @@ export default function Overview() {
   const [register, setRegister] = useState({ gymId: null, data: null });
   // Read again when staff come back to the window, as Payments overview does, and each time
   // the bell's own read is taken again (after a payment, or when the live line says money moved).
+  // A return to the window can ask for both (the bell's read is then old too): one read is enough.
   const [registerAsk, setRegisterAsk] = useState(0);
-  useCameBack(readsSell, () => setRegisterAsk((n) => n + 1));
+  const registerAt = useRef(0);
+  const askRegister = () => {
+    if (Date.now() - registerAt.current < 1000) return;
+    registerAt.current = Date.now();
+    setRegisterAsk((n) => n + 1);
+  };
+  useCameBack(readsSell, askRegister);
   const seenAttention = useRef(null);
   useEffect(() => {
-    if (seenAttention.current !== null && attention !== seenAttention.current) setRegisterAsk((n) => n + 1);
+    if (seenAttention.current !== null && attention !== seenAttention.current) askRegister();
     seenAttention.current = attention;
   }, [attention]);
 
@@ -289,6 +296,7 @@ export default function Overview() {
   useEffect(() => {
     if (gymId === null || !readsSell) return undefined;
     let live = true;
+    registerAt.current = Date.now();
     registerService.get(gymId).then(
       (data) => {
         if (live) setRegister({ gymId, data });
