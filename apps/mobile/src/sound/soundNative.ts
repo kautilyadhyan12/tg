@@ -7,6 +7,7 @@
 // nothing plays (read 2026-11-27), and goes back to mixing when the clip ends. A copy of the app built before expo-audio
 // has no player, so it plays nothing and never fails; nor do the tests, which hand in their own (test/screens/setup.js).
 import { requireOptionalNativeModule } from "expo";
+import { AppState } from "react-native";
 import type * as ExpoAudio from "expo-audio";
 import type { AudioMode, AudioPlayer } from "expo-audio";
 import count from "../../assets/sounds/count.wav";
@@ -50,11 +51,13 @@ function phonePlayer(): SoundNative | null {
   // One clip at a time (voiceQueue.ts); the clip's own end, or its time running out, lets the next one speak.
   const queue: VoiceQueue = new VoiceQueue(
     {
-      play: async (file) => {
+      play: async (file, current) => {
         if (audio === null) return;
         await audio.setAudioModeAsync(DUCK);
         const made = voices.get(file);
         if (made !== undefined) await made.seekTo(0);
+        // Hushed or replaced while it was starting up: it never plays (the re-check's A).
+        if (!current()) return;
         const player = made ?? audio.createAudioPlayer(file);
         if (made === undefined) {
           player.addListener("playbackStatusUpdate", (status) => {
@@ -79,6 +82,7 @@ function phonePlayer(): SoundNative | null {
       clearTimeout(timer);
     },
   );
+  queue.hushWhenAway((listener) => AppState.addEventListener("change", listener));
 
   return {
     // Each play on its own, never behind the one before: a seek that never settled would otherwise silence every sound

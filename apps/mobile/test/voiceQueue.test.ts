@@ -7,10 +7,16 @@ import { LONGEST_CLIP_MS, VoiceQueue, type VoiceDeck } from "../src/sound/voiceQ
 function rig(fails: readonly number[] = []) {
   const log: string[] = [];
   const timers: { then: () => void; ms: number; live: boolean }[] = [];
+  /** Each clip asked to play: whether its turn is still current, and a way to make it fail late. */
+  const plays: { file: number; current: () => boolean; fail: () => void }[] = [];
   const deck: VoiceDeck = {
-    play: (file) => {
+    play: (file, current) => {
       log.push(`play ${String(file)}`);
-      return fails.includes(file) ? Promise.reject(new Error("no")) : Promise.resolve();
+      if (fails.includes(file)) return Promise.reject(new Error("no"));
+      // Held open, as a clip starting up is: `fail` makes it fail late; a test that never fails it leaves it pending.
+      return new Promise<void>((_resolve, reject) => {
+        plays.push({ file, current, fail: () => { reject(new Error("late")); } });
+      });
     },
     stop: () => log.push("stop"),
     rest: () => log.push("rest"),
@@ -30,7 +36,7 @@ function rig(fails: readonly number[] = []) {
     timer.live = false;
     timer.then();
   };
-  return { queue, log, timers, runOut };
+  return { queue, log, timers, runOut, plays };
 }
 
 describe("one clip at a time", () => {
@@ -96,5 +102,49 @@ describe("one clip at a time", () => {
     await Promise.resolve();
     await Promise.resolve();
     expect(log).toEqual(["play 1", "play 2"]);
+  });
+
+  it("a clip still starting up when the voice is hushed never plays: its turn has passed (the re-check's A)", () => {
+    const { queue, plays } = rig();
+    queue.speak(1);
+    expect(plays.map((p) => [p.file, p.current()])).toEqual([[1, true]]);
+    queue.hush();
+    expect(plays.map((p) => [p.file, p.current()])).toEqual([[1, false]]);
+  });
+
+  it("a clip that fails late, after another took its place, ends nobody else's clip (the re-check's A)", async () => {
+    const { queue, log, runOut, plays } = rig();
+    queue.speak(1);
+    runOut();
+    queue.speak(2);
+    queue.speak(3);
+    plays[0]?.fail();
+    await Promise.resolve();
+    await Promise.resolve();
+    // Clip 2 still speaks and clip 3 still waits for it.
+    expect(log).toEqual(["play 1", "rest", "play 2"]);
+    expect(plays.map((p) => [p.file, p.current()])).toEqual([
+      [1, false],
+      [2, true],
+    ]);
+  });
+
+  it("the app sent to the background hushes the voice; coming back says nothing more (the re-check's B)", () => {
+    const { queue, log } = rig();
+    let told: ((state: string) => void) | null = null;
+    queue.hushWhenAway((listener) => {
+      told = listener;
+    });
+    queue.speak(1);
+    queue.speak(2);
+    const tell = (state: string) => {
+      if (told === null) throw new Error("not watching");
+      told(state);
+    };
+    tell("background");
+    expect(log).toEqual(["play 1", "stop", "rest"]);
+    tell("active");
+    tell("inactive");
+    expect(log).toEqual(["play 1", "stop", "rest"]);
   });
 });
