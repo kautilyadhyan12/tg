@@ -36,7 +36,7 @@ export function CheckinsBox({ day, orgSlug, attendanceTo, anybodyCame }) {
     <section className="c-card c-ov-box" data-testid="todays-checkins" aria-label="Today's check-ins">
       <div className="c-ov-box-head">
         <h2 className="c-h2">
-          <button type="button" className="inline-flex items-center gap-1.5" aria-expanded={open} onClick={() => setOpen((was) => !was)}>
+          <button type="button" className="c-ov-fold" aria-expanded={open} onClick={() => setOpen((was) => !was)}>
             Today&apos;s check-ins
             {open ? <ChevronUp size={18} className="c-t3" aria-hidden="true" /> : <ChevronDown size={18} className="c-t3" aria-hidden="true" />}
           </button>
@@ -47,8 +47,8 @@ export function CheckinsBox({ day, orgSlug, attendanceTo, anybodyCame }) {
         <p className="c-s14 c-t2 c-ov-box-body">Nobody has checked in yet today.</p>
       ) : (
         <>
-          {shown.map((person) => (
-            <PersonRow key={person.userId} person={person} timezone={day.timezone} clockFormat={day.clockFormat} />
+          {shown.map((person, i) => (
+            <PersonRow key={person.userId ?? person.entryId ?? `row-${String(i)}`} person={person} timezone={day.timezone} clockFormat={day.clockFormat} />
           ))}
           <div className="c-ov-line">
             <Link to={to} className="c-s14 c-w6 c-lk inline-flex items-center gap-1">
@@ -68,7 +68,7 @@ function PersonRow({ person, timezone, clockFormat }) {
   const chips = personTimes(person, { timezone, clockFormat });
   return (
     <div className="c-ov-line" data-testid="checkin-person">
-      <span className="c-avatar-sm" aria-hidden="true">
+      <span className="c-avatar c-avatar-sm" aria-hidden="true">
         {initials(person.displayName)}
       </span>
       <span className="c-s15 c-w5 c-t1 c-ell" style={{ flex: '1 1 120px', minWidth: 0 }}>
@@ -77,7 +77,7 @@ function PersonRow({ person, timezone, clockFormat }) {
       <span className="c-ov-times">
         {chips.map((chip, i) => (
           <span
-            key={`${person.userId}-${String(i)}-${chip.markedAt}`}
+            key={`${String(i)}-${chip.markedAt}`}
             className={`c-tag ${isExceptionStatus(chip.hoursStatus) ? 'c-tag-warn' : 'c-tag-plain'}`}
           >
             {chip.time}

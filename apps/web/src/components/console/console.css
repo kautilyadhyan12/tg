@@ -2428,6 +2428,15 @@
 .c-ov-col:not(:has(> :not(:empty))) { display: none; }
 .c-ov-split:not(:has(> .c-ov-col > :not(:empty))) { display: none; }
 .c-ov-box { min-width: 0; }
+/* A box's title that folds its list away: as tall as a button. */
+.c-ov-fold {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  color: inherit;
+  font: inherit;
+}
 .c-ov-box-head {
   display: flex;
   flex-wrap: wrap;
@@ -2570,12 +2579,15 @@
   .c-ov-line .c-btn,
   .c-ov-box .c-btn { height: 44px; }
   .c-ov-cheer { min-width: 44px; height: 44px; }
+  .c-ov-fold { min-height: 44px; }
 }
 @media (max-width: 767px) {
   .c-ov-start .c-btn,
   .c-ov-step .c-btn,
   .c-ov-line .c-btn,
   .c-ov-box .c-btn { height: 44px; }
+  .c-ov-cheer { min-width: 44px; height: 44px; }
+  .c-ov-fold { min-height: 44px; }
   .c-ov-head > .c-btn { width: 100%; }
 }
 @media (max-width: 599px) {
