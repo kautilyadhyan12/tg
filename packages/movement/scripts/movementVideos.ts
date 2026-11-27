@@ -863,8 +863,13 @@ export const MOVEMENT_VIDEOS: readonly MovementVideo[] = [
     phoneOpen: {
       why:
         "54, where the chair squat is made: on the phone's reading his first sit, begun as he walks to the chair, is read as a chair squat " +
-        "that stopped short and told to go lower, and his second sit-and-stand is judged 0.2 s later; the laptop reads the first as another movement.",
-      differences: ["the laptop says 13.8 s counted, the phone 2.9 s short (depth)", "the phone also says 14.0 s counted"],
+        "that stopped short and told to go lower, and his second sit-and-stand is judged 0.2 s later; the laptop reads the first as another movement. " +
+        "So the coach (53b-i) says on the phone what its screen says, and \"That one counts.\" at the second.",
+      differences: [
+        "the laptop says 13.8 s counted, the phone 2.9 s short (depth)",
+        "the phone also says 14.0 s counted",
+        'the coach says "" on the laptop, "Go lower to count. / That one counts." on the phone',
+      ],
     },
   },
   floorOther("usual_v09", "floor", "side", "The phone on the floor, upright: he stands at a chair, one leg lifted and bent."),
