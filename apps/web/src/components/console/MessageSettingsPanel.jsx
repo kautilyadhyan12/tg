@@ -164,7 +164,7 @@ function Message({ kind, org, draft, edit, locked, use, attendanceTo }) {
             {placeFor(org.slug, privileges, 'memberships') === null ? OVERDUE_DAYS_ASK : OVERDUE_DAYS_NOTE}
           </p>
           <PlaceLink to={placeFor(org.slug, privileges, 'memberships')} guard>
-            Open the Bills box
+            Open Billing rules
           </PlaceLink>
         </div>
       ) : null}

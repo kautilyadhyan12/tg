@@ -69,7 +69,7 @@ const PLACES = {
   memberships: { path: '/memberships', may: canManageMemberships },
   // The Discounts box on Memberships, where a promo code for a membership is made.
   membershipDiscounts: { path: '/memberships#discounts', may: canManageMemberships },
-  // The Bills box on Memberships, where the grace period before a bill reads Overdue is set.
+  // Billing rules on Memberships, where the grace period before a bill reads Overdue is set.
   membershipBills: { path: '/memberships#bills', may: canManageMemberships },
   // The Tax box on Memberships (18b-v), and Settings' signed forms of deleted members (18u-iii).
   membershipTax: { path: '/memberships#tax', may: canManageMemberships },

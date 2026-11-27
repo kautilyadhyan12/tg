@@ -106,7 +106,8 @@ describe('the list', () => {
     expect(await screen.findByText('New prices are in GBP.', { exact: false })).toBeTruthy();
     const rows = screen.getAllByRole('listitem');
     expect(within(rows[0]).getByText('Day pass', { selector: 'span.c-w6' })).toBeTruthy();
-    expect(within(rows[0]).getByText('£15.00 · 1 visit, on the day')).toBeTruthy();
+    expect(within(rows[0]).getByText('£15.00')).toBeTruthy();
+    expect(within(rows[0]).getByText('1 visit, on the day')).toBeTruthy();
     expect(within(rows[1]).getByText('Recurring')).toBeTruthy();
     expect(within(rows[1]).getByText('£49.99 every month')).toBeTruthy();
     expect(within(rows[1]).getByText('8 classes a month · only Yoga')).toBeTruthy();
@@ -463,7 +464,7 @@ describe('a renewal reminder (18v-iv)', () => {
     });
     orgService.updateMembershipType.mockResolvedValue({ data: listOf({ types: [{ ...gold, renewalReminderDays: 30 }] }) });
     open(listOf({ types: [gold] }));
-    fireEvent.click(await screen.findByRole('button', { name: 'Change Gold Yearly' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit Gold Yearly' }));
     // No minimum term: only before every renewal is offered.
     expect(screen.queryByLabelText('Reminder before the minimum term ends')).toBeNull();
     type_('Reminder before every renewal', '30');
@@ -488,7 +489,7 @@ describe('a renewal reminder (18v-iv)', () => {
     );
     orgService.updateMembershipType.mockResolvedValue({ data: listOf({ types: [{ ...gold, renewalReminderDays: 7, termReminderDays: 30 }] }) });
     open(listOf({ types: [gold] }));
-    fireEvent.click(await screen.findByRole('button', { name: 'Change Gold Term' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit Gold Term' }));
     type_('Reminder before every renewal', '7');
     type_('Reminder before the minimum term ends', '30');
     expect(within(await screen.findByTestId('reminder-box-every_renewal')).getByText('Ana Ruiz · to be emailed 27 Nov · renews 3 Dec')).toBeTruthy();
@@ -521,7 +522,7 @@ describe('a higher price for members already on it (18w)', () => {
     orgService.previewPriceRaise.mockResolvedValue({ data: offer });
     orgService.updateMembershipType.mockResolvedValue({ data: { ...listOf({ types: [{ ...gold, priceMinor: 5499 }] }), raised: 1 } });
     open(listOf({ types: [gold] }));
-    fireEvent.click(await screen.findByRole('button', { name: 'Change Gold Monthly' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit Gold Monthly' }));
     // A lower price asks nothing.
     type_('Price (GBP)', '45.00');
     expect(screen.queryByTestId('raise-field')).toBeNull();
@@ -556,7 +557,7 @@ describe('a higher price for members already on it (18w)', () => {
     orgService.previewPriceRaise.mockResolvedValue({ data: offer });
     orgService.updateMembershipType.mockResolvedValue({ data: listOf({ types: [{ ...gold, priceMinor: 5499 }] }) });
     open(listOf({ types: [gold] }));
-    fireEvent.click(await screen.findByRole('button', { name: 'Change Gold Monthly' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit Gold Monthly' }));
     type_('Price (GBP)', '54.99');
     const field = await screen.findByTestId('raise-field');
     fireEvent.click(within(field).getByRole('radio', { name: /^Move them to the new price/ }));
@@ -570,7 +571,7 @@ describe('a higher price for members already on it (18w)', () => {
 
     orgService.previewPriceRaise.mockResolvedValue({ data: { currency: 'GBP', people: [] } });
     open(listOf({ types: [gold] }));
-    fireEvent.click(await screen.findByRole('button', { name: 'Change Gold Monthly' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit Gold Monthly' }));
     type_('Price (GBP)', '54.99');
     await waitFor(() => expect(orgService.previewPriceRaise).toHaveBeenCalled());
     await new Promise((resolve) => setTimeout(resolve, 50));
@@ -585,7 +586,7 @@ describe('changing, archiving and putting back', () => {
     const gold = type({ name: 'Gold Monthly', currency: 'JPY', priceMinor: 4999, termCount: 3 });
     orgService.updateMembershipType.mockResolvedValue({ data: listOf({ types: [{ ...gold, priceMinor: 55 }] }) });
     open(listOf({ types: [gold] }));
-    fireEvent.click(await screen.findByRole('button', { name: 'Change Gold Monthly' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit Gold Monthly' }));
     expect(screen.getByLabelText('Name').value).toBe('Gold Monthly');
     expect(screen.getByLabelText('Price (JPY)').value).toBe('4999');
     expect(screen.getByLabelText('Charged every').value).toBe('3');
@@ -612,7 +613,7 @@ describe('changing, archiving and putting back', () => {
       response: { status: 409, data: { error: 'membership_type_changed', message: 'Somebody changed this membership type while you had it open. Nothing was saved: check it and try again.' } },
     });
     open(listOf({ types: [gold] }));
-    fireEvent.click(await screen.findByRole('button', { name: 'Change Gold Monthly' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit Gold Monthly' }));
     orgService.getMembershipTypes.mockResolvedValue({ data: listOf({ types: [{ ...gold, priceMinor: 6000, updatedAt: '2026-10-04T09:30:00.000Z' }] }) });
     type_('Name', 'Gold Plus');
     fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
@@ -623,21 +624,21 @@ describe('changing, archiving and putting back', () => {
 
   it('while a form is open, the rows cannot be changed or archived, so nothing typed is thrown away', async () => {
     open(listOf({ types: [type(), type({ name: 'Silver' })] }));
-    fireEvent.click(await screen.findByRole('button', { name: 'Change Gold Monthly' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit Gold Monthly' }));
     type_('Price (GBP)', '60');
-    for (const name of ['Change Silver', 'Archive Silver', 'Change Gold Monthly', 'Archive Gold Monthly']) {
+    for (const name of ['Edit Silver', 'Archive Silver', 'Edit Gold Monthly', 'Archive Gold Monthly']) {
       expect(screen.getByRole('button', { name }).disabled, name).toBe(true);
     }
-    fireEvent.click(screen.getByRole('button', { name: 'Change Silver' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Edit Silver' }));
     expect(screen.getByLabelText('Price (GBP)').value).toBe('60');
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
-    expect(screen.getByRole('button', { name: 'Change Silver' }).disabled).toBe(false);
+    expect(screen.getByRole('button', { name: 'Edit Silver' }).disabled).toBe(false);
   });
 
   it('Cancel changes nothing', async () => {
     const gold = type();
     open(listOf({ types: [gold] }));
-    fireEvent.click(await screen.findByRole('button', { name: 'Change Gold Monthly' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit Gold Monthly' }));
     type_('Price (GBP)', '1');
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
     expect(screen.queryByLabelText('Name')).toBeNull();
@@ -668,13 +669,13 @@ describe('changing, archiving and putting back', () => {
     expect(screen.getByText('Showing the newest 1 of 3.')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Put back Gold Monthly' }));
     await waitFor(() => expect(orgService.restoreMembershipType).toHaveBeenCalledWith(ORG.id, gold.id));
-    expect(await screen.findByRole('button', { name: 'Change Gold Monthly' })).toBeTruthy();
+    expect(await screen.findByRole('button', { name: 'Edit Gold Monthly' })).toBeTruthy();
   });
 });
 
 // 23c-i: the page is open from top to bottom, so a form opens where it was asked for.
 describe('where the form opens', () => {
-  const rowOf = (name) => screen.getByRole('button', { name: `Change ${name}` }).closest('li');
+  const rowOf = (name) => screen.getByRole('button', { name: `Edit ${name}` }).closest('li');
 
   it('a new type: under the title, above the list, and the Add button makes way for it', async () => {
     open(listOf({ types: [type()] }));
@@ -694,8 +695,8 @@ describe('where the form opens', () => {
 
   it("a type being changed: in its own row, never another type's", async () => {
     open(listOf({ types: [type(), type({ name: 'Silver' })] }));
-    fireEvent.click(await screen.findByRole('button', { name: 'Change Silver' }));
-    const form = screen.getByRole('form', { name: 'Change membership type' });
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit Silver' }));
+    const form = screen.getByRole('form', { name: 'Edit membership type' });
     expect(rowOf('Silver').contains(form)).toBe(true);
     expect(rowOf('Gold Monthly').contains(form)).toBe(false);
     expect(within(form).getByLabelText('Name').value).toBe('Silver');
@@ -706,12 +707,12 @@ describe('where the form opens', () => {
       response: { status: 409, data: { error: 'membership_type_name_taken', message: 'You already have a membership type with this name. Pick another name.' } },
     });
     open(listOf({ types: [type(), type({ name: 'Silver' })] }));
-    fireEvent.click(await screen.findByRole('button', { name: 'Change Silver' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit Silver' }));
     type_('Name', 'Gold Monthly');
     fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
     const said = await screen.findByRole('alert');
     expect(said.textContent).toBe('You already have a membership type with this name. Pick another name.');
-    expect(screen.getByRole('form', { name: 'Change membership type' }).contains(said)).toBe(true);
+    expect(screen.getByRole('form', { name: 'Edit membership type' }).contains(said)).toBe(true);
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
     expect(screen.queryByRole('alert')).toBeNull();
     expect(screen.queryByRole('form')).toBeNull();
@@ -740,10 +741,10 @@ describe('where the form opens', () => {
 describe('while a form is open, nothing can take its row away', () => {
   const OLD = { ...type({ name: 'Old' }), archivedAt: '2026-10-01T09:00:00.000Z' };
 
-  it('Put back waits, as Change and Archive do, and is back once the form is cancelled', async () => {
+  it('Put back waits, as Edit and Archive do, and is back once the form is cancelled', async () => {
     open(listOf({ types: [type()], archived: [OLD], archivedTotal: 1 }));
     fireEvent.click(await screen.findByRole('button', { name: 'Show archived (1)' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Change Gold Monthly' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Edit Gold Monthly' }));
     expect(screen.getByRole('button', { name: 'Put back Old' }).disabled).toBe(true);
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
     expect(screen.getByRole('button', { name: 'Put back Old' }).disabled).toBe(false);
@@ -799,7 +800,7 @@ describe('sell in the app (18k-i)', () => {
     const rows = await screen.findAllByRole('listitem');
     await waitFor(() => expect(within(rows[1]).getByText('Sold in the app')).toBeTruthy());
     expect(within(rows[0]).queryByText('Sold in the app')).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: 'Change Quarter' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Edit Quarter' }));
     expect(screen.getByRole('checkbox', { name: /Sell in the app/ }).checked).toBe(true);
     fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
     await waitFor(() => expect(orgService.updateMembershipType).toHaveBeenCalledTimes(1));
@@ -876,7 +877,7 @@ describe('sell in the app (18k-i)', () => {
     openWith(listOf({ types: [quarter({ soldInApp: true })] }), box({ square: null }));
     const row = (await screen.findAllByRole('listitem'))[0];
     await within(row).findByText("Members can't buy it in the app until Square is connected.");
-    fireEvent.click(screen.getByRole('button', { name: 'Change Quarter' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Edit Quarter' }));
     const tick = screen.getByRole('checkbox', { name: /Sell in the app/ });
     expect(tick.disabled).toBe(false);
     fireEvent.click(tick);
@@ -906,7 +907,7 @@ describe('a gym with no live plan', () => {
     expect(await screen.findByText('£49.99 every month')).toBeTruthy();
     expect(screen.getByText(readOnlyNote('gym'))).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Add a membership type' }).disabled).toBe(true);
-    expect(screen.getByRole('button', { name: 'Change Gold Monthly' }).disabled).toBe(true);
+    expect(screen.getByRole('button', { name: 'Edit Gold Monthly' }).disabled).toBe(true);
     expect(screen.getByRole('button', { name: 'Archive Gold Monthly' }).disabled).toBe(true);
     fireEvent.click(screen.getByRole('button', { name: 'Show archived (1)' }));
     expect(screen.getByRole('button', { name: 'Put back Old' }).disabled).toBe(true);

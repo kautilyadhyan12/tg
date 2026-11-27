@@ -213,7 +213,7 @@ export const gymMessageSettingsResponseSchema = z.object({
   /** A payment was recorded in the app in the last `GYM_MESSAGE_PAYMENTS_DAYS`. Without
    *  one Payment overdue is sent to nobody. */
   payments: z.boolean(),
-  /** The gym's grace period for a bill, as the Bills box keeps it. The box works out the
+  /** The gym's grace period for a bill, as Billing rules keeps it. The box works out the
    *  day the notice goes from it with `paymentNoticeAfterDays`, as the sender does. */
   billsOverdueDays: z.number().int().min(0),
   classReminderHours: z.number().int().min(1),

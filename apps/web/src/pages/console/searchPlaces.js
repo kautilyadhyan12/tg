@@ -92,7 +92,7 @@ const SETTINGS = [
   { place: 'leadEmails', title: () => 'Follow-up emails to leads', where: () => 'Settings', words: ['lead', 'follow up', 'nurture', 'emails'] },
   { place: 'membershipTax', title: () => 'Tax', where: () => 'Memberships', words: ['vat', 'gst', 'sales tax', 'tax rate', 'money'] },
   { place: 'membershipDiscounts', title: () => 'Discounts', where: () => 'Memberships', words: ['promo', 'promo code', 'coupon', 'code', 'offer', 'money'] },
-  { place: 'membershipBills', title: () => 'Bills', where: () => 'Memberships', words: ['invoice', 'invoices', 'grace period', 'overdue', 'due', 'money', 'billing'] },
+  { place: 'membershipBills', title: () => 'Billing rules', where: () => 'Memberships', words: ['bills', 'invoice', 'invoices', 'grace period', 'overdue', 'due', 'money', 'billing'] },
   { place: 'plan', title: () => 'Your KWAZO plan', where: () => 'Overview', words: ['subscription', 'kwazo', 'upgrade', 'trial', 'billing', 'pay us', 'money', 'invoice'] },
 ];
 

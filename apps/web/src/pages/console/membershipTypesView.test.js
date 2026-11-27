@@ -21,6 +21,8 @@ import {
   kindTag,
   priceExample,
   termLine,
+  priceParts,
+  membershipTabFor,
   termUnitOptions,
   typesSummary,
   wholeNumber,
@@ -88,6 +90,27 @@ describe('the price a gym typed is the price that is sent and shown', () => {
     expect(draftProblems({ ...emptyDraft(), name: 'Gold', price: '5000.5' }, 'JPY')?.price).toBe(
       'Type the price as a number, like 5000. Type 0 for free.',
     );
+  });
+});
+
+describe("a row's price on the right (V4b-i)", () => {
+  it.each([
+    ['a repeating one', { kind: 'recurring', priceMinor: 4999, termCount: 1, termUnit: 'month' }, { price: '$49.99 every month', detail: null }],
+    ['a free repeating one', { kind: 'recurring', priceMinor: 0, termCount: 3, termUnit: 'month' }, { price: 'Free', detail: 'renews every 3 months' }],
+    ['paid once', { kind: 'one_time', priceMinor: 4999, termCount: 90, termUnit: 'day' }, { price: '$49.99 once', detail: 'lasts 90 days' }],
+    ['a class pack', { kind: 'pack', priceMinor: 9000, termCount: null, termUnit: null, packClasses: 10, packDays: 60 }, { price: '$90.00', detail: '10 classes, used within 60 days' }],
+  ])('%s: the price, and what it holds under it, say all that termLine says', (_what, over, parts) => {
+    const t = type(over);
+    expect(priceParts(t)).toEqual(parts);
+    expect([parts.price, parts.detail].filter((x) => x !== null).join(' · ')).toBe(termLine(t));
+  });
+
+  it('an address opens its tab, and anything else the price list', () => {
+    expect(membershipTabFor('#tax')).toBe('tax');
+    expect(membershipTabFor('#discounts')).toBe('discounts');
+    expect(membershipTabFor('#bills')).toBe('price');
+    expect(membershipTabFor('')).toBe('price');
+    expect(membershipTabFor(undefined)).toBe('price');
   });
 });
 
@@ -480,7 +503,7 @@ describe('a type’s tax (18b-iii)', () => {
     const before = { id: 't', name: 'Bronze', taxRateIds: ['c', 'b'] };
     const rates = [{ id: 'b', name: 'B', pcm: 25000 }, { id: 'c', name: 'C', pcm: 5000 }];
     expect(restoredTypeWords(before, { taxRates: rates, types: [{ id: 't', taxRateIds: ['c'] }] })).toBe(
-      'Bronze is back on your price list. B 25% was taken off it, as its taxes came to more than 30% together. Press Change on Bronze to check its tax.',
+      'Bronze is back on your price list. B 25% was taken off it, as its taxes came to more than 30% together. Press Edit on Bronze to check its tax.',
     );
     expect(restoredTypeWords(before, { taxRates: rates, types: [{ id: 't', taxRateIds: ['c', 'b'] }] })).toBeNull();
   });

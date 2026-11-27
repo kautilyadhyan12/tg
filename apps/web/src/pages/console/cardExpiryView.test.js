@@ -1,4 +1,4 @@
-// What the Bills box lists under the reminder's tick, and Card on file's line (ROADMAP 18d-iii-c).
+// What Billing rules lists under the reminder's tick, and Card on file's line (ROADMAP 18d-iii-c).
 import { describe, expect, it } from 'vitest';
 import { CARD_EXPIRY_WORDS, cardExpiryBox, cardReminderLine, monthWords } from './cardExpiryView';
 

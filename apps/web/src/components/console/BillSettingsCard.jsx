@@ -16,7 +16,7 @@ import {
 } from '../../pages/console/memberBillsView';
 import { CARD_EXPIRY_WORDS, EXPIRY_FEW, cardExpiryBox } from '../../pages/console/cardExpiryView';
 
-// BILLS, on the Memberships page (spec Part 3 §14.2; ROADMAP 18a-i): the gym's settings
+// BILLING RULES, on the Memberships page under the price list (named "Bills" until V4b-i) (spec Part 3 §14.2; ROADMAP 18a-i): the gym's settings
 // for them, how many days of grace an unpaid bill has before it reads Overdue, and the day of
 // the month it bills every new membership on (18y), the fee for each month a membership is frozen (18z), and the reminder
 // emailed before a saved card expires (18d-iii-c), with who it goes to this month. They wait for Save. Staff without the payments tick read it and are told who can
@@ -133,7 +133,7 @@ export default function BillSettingsCard({ gymId, readOnly, readOnlyLine = null 
   return (
     <section id="bills" className="c-card p-5 md:p-6 flex flex-col gap-3" data-testid="bill-settings">
       {routed ? <ToBills ready={saved !== null} /> : null}
-      <h2 className="c-h2">Bills</h2>
+      <h2 className="c-h2">Billing rules</h2>
       <p className="c-s14 c-t2 m-0">
         A membership with a price gets a bill for each period, by itself. You record what a person paid on their page, under Memberships.
       </p>

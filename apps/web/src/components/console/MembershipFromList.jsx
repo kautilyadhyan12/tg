@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import {
   NAMES_PAGE,
@@ -24,6 +24,7 @@ import {
   undoWords,
 } from '../../pages/console/membershipWordsView';
 import { ConfirmInline } from './ConsoleStates';
+import { AskSheet } from './ConsoleBoxes';
 
 // THE MEMBER LIST'S MEMBERSHIPS, on the Memberships page (spec Part 3 §13.2; ROADMAP
 // 17a-iii). A gym's member list says which membership each person has ("Gold").
@@ -93,11 +94,12 @@ function Names({ preview, group }) {
   );
 }
 
-/** Who gets the membership and who does not, before anybody is given it. `counted` is
- *  whether the list's name already counts as this type. `inRow`: drawn inside its
- *  membership type's own row, where it was opened from. */
+/** Who gets the membership and who does not, before anybody is given it, in a box in the
+ *  middle of the screen (from the bottom on a phone) whose buttons stay at its foot while the
+ *  names scroll (V4b-i, board `MembershipsGive`). `counted` is whether the list's name already
+ *  counts as this type. */
 /** `taxLine`: the tax the type's bills charge, said under its name (18b-iii); null for none. */
-export function GiveBox({ preview, counted, busy, error, inRow = false, taxLine = null, onGive, onCancel }) {
+export function GiveBox({ preview, counted, busy, error, taxLine = null, onGive, onCancel }) {
   const [ticks, setTicks] = useState(() => startTicks(preview));
   const [paid, setPaid] = useState(null);
   const [pressed, setPressed] = useState(false);
@@ -110,29 +112,37 @@ export function GiveBox({ preview, counted, busy, error, inRow = false, taxLine 
   const renew = renewNote(preview);
   const lead = renewLead(preview);
   const labels = boxLabels(preview);
-  const Heading = inRow ? 'h3' : 'h2';
   const id = (name) => `membership-give-${name}-${preview.type.id}`;
-  const boxRef = useRef(null);
-
-  // The box may open a long way from the button that opened it: bring it into view.
-  useEffect(() => {
-    const box = boxRef.current;
-    if (box && typeof box.scrollIntoView === 'function') box.scrollIntoView({ block: 'nearest' });
-  }, []);
+  const footer = (
+    <>
+      {words.button !== null ? (
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => {
+            setPressed(true);
+            if (problem === null) onGive(linkBody(preview, ticks, paid));
+          }}
+          className="c-btn c-btn-p"
+        >
+          {busy ? <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" /> : null}
+          {words.button}
+        </button>
+      ) : null}
+      <button type="button" disabled={busy} onClick={onCancel} className="c-btn c-btn-s">
+        {words.button === null ? 'Close' : 'Cancel'}
+      </button>
+    </>
+  );
 
   return (
-    <div
-      ref={boxRef}
-      role="group"
-      aria-label={words.heading}
-      className={inRow ? 'rounded-[14px] p-4 md:p-5 flex flex-col gap-5' : 'c-card p-5 md:p-6 flex flex-col gap-5'}
-      style={inRow ? { background: 'var(--raise)', border: '1px solid var(--accent)' } : { borderColor: 'var(--accent)' }}
-    >
-      <div className="flex flex-col gap-2">
-        <Heading className="c-h2">{words.heading}</Heading>
-        {lead !== null ? <p className="c-s14 c-t2 m-0">{lead}</p> : null}
-        {taxLine !== null ? <p className="c-s14 c-t2 m-0">{taxLine}</p> : null}
-      </div>
+    <AskSheet title={words.heading} testId="membership-give" onClose={onCancel} busy={busy} footer={footer}>
+      {lead !== null || taxLine !== null ? (
+        <div className="flex flex-col gap-2">
+          {lead !== null ? <p className="c-s14 c-t2 m-0">{lead}</p> : null}
+          {taxLine !== null ? <p className="c-s14 c-t2 m-0">{taxLine}</p> : null}
+        </div>
+      ) : null}
 
       {groups.length > 0 ? (
         <div className="flex flex-col gap-3">
@@ -213,27 +223,7 @@ export function GiveBox({ preview, counted, busy, error, inRow = false, taxLine 
           {error}
         </p>
       ) : null}
-
-      <div className="flex flex-wrap gap-2">
-        {words.button !== null ? (
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() => {
-              setPressed(true);
-              if (problem === null) onGive(linkBody(preview, ticks, paid));
-            }}
-            className="c-btn c-btn-p"
-          >
-            {busy ? <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" /> : null}
-            {words.button}
-          </button>
-        ) : null}
-        <button type="button" disabled={busy} onClick={onCancel} className="c-btn c-btn-s">
-          {words.button === null ? 'Close' : 'Cancel'}
-        </button>
-      </div>
-    </div>
+    </AskSheet>
   );
 }
 
@@ -368,12 +358,12 @@ export function NotSetUp({ rows, types, canCreate, off, busy, choosing, formFor 
           and the people who have it get it, with the renewal or end date from your list.
         </p>
       </div>
-      <ul className="flex flex-col m-0 p-0 list-none">
+      <ul className="c-items px-4 pb-4 md:px-6 md:pb-6">
         {rows.map((word) => {
           const archived = archivedLine(word);
           const again = againWords(word);
           return (
-            <li key={word.word} className="px-5 py-4 md:px-6 flex flex-col gap-3" style={LINE}>
+            <li key={word.word} className="c-item">
               <div className="flex flex-wrap items-center gap-3">
                 <span className="c-s15 c-w6 c-t1 flex-grow min-w-0 break-words">{nameLine(word)}</span>
                 {choosing === word.word || asking === word.word || formFor === word.word ? null : (
