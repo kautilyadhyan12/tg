@@ -2684,10 +2684,14 @@ for round one's two rules, the walked-to place never forgotten (7 red) and a bod
 for its re-check, only the nearest body beside the member held (3 red).
 
 **As built, the camera screen counts a set (53a, 2026-11-26; `rulings/2026-11-26-53a.md`).** The app itself now holds the
-camera: `modules/pose-camera` (the store's app included) shows the selfie camera's picture across its view, mirrored as a
-selfie camera shows a person, and gives each newest picture to Google's pose library in its live mode, as 51b-ii picked it:
-the full model, asked for one person, at the sureness every kept file was measured with (0.5), on the main chip's 4 cores
-(`PoseCameraCores`, the phone test's `PhoneTestCores` under its own name), at 480 by 640. The model reads the picture as the
+camera: `modules/pose-camera` (the store's app included) gives each newest picture of the selfie camera to Google's pose
+library in its live mode, as 51b-ii picked it: the full model, asked for one person, at the sureness every kept file was
+measured with (0.5), at 480 by 640, on the phone's graphics chip, or on the main chip's 4 cores where the graphics chip
+cannot start (`PoseCameraCores`, the phone test's `PhoneTestCores` under its own name). The screen shows each picture the
+model has read, across its view and mirrored as a selfie camera shows a person, and the phone itself draws the body's lines,
+joints, corners and "TRACKING YOU" on it in the same frame, by the app's own rules, words and colours handed over once
+(`BODY_RULES`, `BODY_DRAWING`): drawn by the app's script they reached the screen after the picture and fell further behind
+(Kd: "the lines lagging a lot again"). The model reads the picture as the
 camera took it, upright and **never mirrored**, as the proof videos were filmed, so its left is the person's own left (51b-ii
 mirrored it, as Google's sample does). The model file is fetched by the build at its pinned address and refused unless its
 size and SHA-256 are the laptop's (`build.gradle`, the same numbers as `phoneRun.ts`); it is never in git. Each answer goes to
@@ -2731,10 +2735,14 @@ pictures a frame, the whole screen drawn for each), the app's memory climbing fr
 picture memory made once, a ring of three turned pictures, plain number arrays, only the body redrawn for each picture), the
 second run kept its memory level (778 to 900 MB) and its script thread at 18%, yet fell the same way after 9 minutes: the
 phone, charging and at 55 °C on its chip, had capped its chip at 768 of 2,002 to 2,210 MHz, the camera's own driver using
-nearly a core at 30 pictures a second. So the camera now films no faster than 24 pictures a second (the fastest the selfie
-camera offers up to 24) and the screen's picture is at most 720 by 960. The fair run of 51b-ii, 20 minutes off the charger,
-is still to be made with these, as is how much battery 20 minutes takes; a set is a minute or two and the camera rests
-between sets (§11.8), so the 20 minutes are the hardest case, never the usual one. On this development copy the script runs
+nearly a core at 30 pictures a second. The third run, off the charger, held 15 to 20 answers a second for 8 minutes and
+fell to 6 to 8 once the phone had capped its chip at 768 MHz, and Kd saw the lines trail the body. So the camera now films
+one stream only, the model's, at its steadiest speed no faster than 24 (the selfie camera's 20 to 20, where it had taken 8
+to 20), and the model reads on the graphics chip: off the charger, held back until each answer, it answered 10.4 to 11.8
+times a second for 12 minutes with the chip barely capped; every picture handed over, 19.2 to 20.2 a second for 8½ minutes
+(the camera's own speed) with her body in every answer; each run took 1% of the battery;
+Kd then saw the lines stay on her body through a whole set of 10 (2026-11-27). A set is a minute or two and the camera rests
+between sets (§11.8), so the long runs are the hardest case, never the usual one. On this development copy the script runs
 in its slower checking mode; a store build's would be faster.
 
 An exercise that does not pass is published as "count by hand", never with a wrong camera
