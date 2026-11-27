@@ -1,4 +1,4 @@
-// The Bills box on the Memberships page (ROADMAP 18a-i; the billing day, 18y): the day is picked,
+// Billing rules on the Memberships page (ROADMAP 18a-i; the billing day, 18y): the day is picked,
 // said with a real date, and waits for Save; staff without the payments tick read it only.
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';

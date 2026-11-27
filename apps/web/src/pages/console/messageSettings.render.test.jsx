@@ -217,7 +217,7 @@ describe('Automatic messages', () => {
     fireEvent.click(within(missing('payment_overdue')).getByRole('button', { name: 'Open Members' }));
     expect(within(missing('payment_overdue')).getByRole('link', { name: 'Leave this page' }).getAttribute('href')).toBe('/console/iron-house/members');
     // The gym's own grace period is said, with a button to the box that changes it.
-    // Seven days' grace: the bill reads Overdue on the eighth day after, as the Bills box says.
+    // Seven days' grace: the bill reads Overdue on the eighth day after, as Billing rules says.
     expect(within(box('Payment overdue')).getByText(/^Sent in the morning, 8 days after its due date: by then the bill reads Overdue/)).toBeTruthy();
     expect(within(box('Payment overdue')).getByText('It follows the grace period you set in Billing rules on Memberships.')).toBeTruthy();
     fireEvent.click(within(box('Payment overdue')).getByRole('button', { name: 'Open Billing rules' }));
@@ -451,7 +451,7 @@ describe('the box\'s own rules', () => {
     for (const field of ['trialCheckInDay', 'trialEndingDays', 'membershipEndingDays', 'classReminderHours', 'reviewVisits']) expect(view.messageDraftChanged({ ...kept, [field]: 3 }, kept), field).toBe(true);
     // A reply with no numbers in it starts at the app's own.
     expect(view.messageDraft({ messages: [] })).toMatchObject({ trialCheckInDay: 2, trialEndingDays: 2, membershipEndingDays: 7, missYouDays: 10 });
-    // The row's day is the sender's own, for every grace period the Bills box offers: on that
+    // The row's day is the sender's own, for every grace period Billing rules offers: on that
     // day the bill already reads Overdue on the person's page, and it is never before the third.
     for (const grace of [0, 1, 2, 3, 5, 7, 14, 30, 60]) {
       const after = paymentNoticeAfterDays(grace);
