@@ -1,15 +1,21 @@
 package expo.modules.runmotion
 
 import android.content.Context
+import android.hardware.GeomagneticField
 import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
+import android.location.Location
 import android.os.Handler
 import android.os.HandlerThread
+import android.os.SystemClock
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
+import kotlin.math.abs
+import kotlin.math.atan2
 import kotlin.math.floor
+import kotlin.math.hypot
 import kotlin.math.sqrt
 
 // The phone's motion during a run (ROADMAP Stage 5 item 37i): Android's own accelerometer, which needs no
@@ -38,8 +44,141 @@ class RunMotionModule : Module() {
     /** The seconds finished since the last take, oldest first: { at, sd, n }. */
     Function("take") { Motion.take() }
 
-    OnDestroy { Motion.stop() }
+    Events("heading")
+
+    /** Start reading the compass (37p), while a run's map is on screen: false on a phone with none. Each turn of the
+     *  phone is sent as "heading": { deg, sure }. Started twice, it is one listener. */
+    Function("compassStart") { context?.let { ctx -> Compass.start(ctx) { said -> sendEvent("heading", said) } } ?: false }
+
+    /** Stop reading the compass. */
+    Function("compassStop") { Compass.stop() }
+
+    /** Where the person is, for the gap between magnetic and true north there. */
+    Function("compassPlace") { lat: Double, lng: Double -> Compass.place(lat, lng) }
+
+    OnDestroy {
+      Motion.stop()
+      Compass.stop()
+    }
   }
+}
+
+// The way the phone points, for the beam on a run's map (ROADMAP Stage 5 item 37p), as Strava's and Google Maps' beam
+// turns with the phone. Android's rotation vector, which fuses the compass with the gyroscope and the accelerometer
+// (smooth, where the compass alone jumps), and needs no permission. The way the top of the phone points when it lies
+// flat, and the way its back points when it is held up to read; held between, both point the same way and are added,
+// so the answer never fails on a tilted phone. Turned from magnetic north to true north (the map's) at the person's
+// place. Read only while the map is on screen; nothing is kept.
+object Compass : SensorEventListener {
+  /** About 20 readings a second. */
+  private const val SAMPLE_US = 50_000
+  /** A heading is sent once it has turned this far, or its sureness changed, and never more often than this. */
+  private const val LEAST_DEG = 1.0
+  private const val LEAST_MS = 50L
+  /** The gap to true north is worked out again once the person is this far from where it was. */
+  private const val REPLACE_M = 1_000f
+  /** Held face down and tilted past upright, the two ways cancel: no heading is sent. */
+  private const val LEAST_LEVEL = 0.2
+
+  private var manager: SensorManager? = null
+  private var thread: HandlerThread? = null
+  private var send: ((Map<String, Any>) -> Unit)? = null
+  private val matrix = FloatArray(9)
+  private var declination = 0.0
+  private var placeLat = Double.NaN
+  private var placeLng = Double.NaN
+  private var lastDeg = Double.NaN
+  private var lastSure = Int.MIN_VALUE
+  private var lastAt = 0L
+
+  @Synchronized
+  fun start(ctx: Context, onHeading: (Map<String, Any>) -> Unit): Boolean {
+    send = onHeading
+    if (manager != null) return true
+    var started: HandlerThread? = null
+    return try {
+      val sensors = ctx.getSystemService(Context.SENSOR_SERVICE) as? SensorManager ?: return false
+      val rotation = sensors.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR) ?: return false
+      started = HandlerThread("run-compass").also { it.start() }
+      if (!sensors.registerListener(this, rotation, SAMPLE_US, Handler(started.looper))) {
+        started.quitSafely()
+        return false
+      }
+      manager = sensors
+      thread = started
+      true
+    } catch (e: Exception) {
+      // A compass that fails leaves the beam showing the way travelled.
+      started?.quitSafely()
+      false
+    }
+  }
+
+  @Synchronized
+  fun stop() {
+    try {
+      manager?.unregisterListener(this)
+    } catch (e: Exception) {
+      // Already let go by Android.
+    }
+    try {
+      thread?.quitSafely()
+    } catch (e: Exception) {
+      // Already ended.
+    }
+    manager = null
+    thread = null
+    send = null
+    lastDeg = Double.NaN
+    lastSure = Int.MIN_VALUE
+  }
+
+  @Synchronized
+  fun place(lat: Double, lng: Double) {
+    if (!lat.isFinite() || !lng.isFinite() || lat < -90 || lat > 90 || lng < -180 || lng > 180) return
+    try {
+      if (placeLat.isFinite()) {
+        val apart = FloatArray(1)
+        Location.distanceBetween(placeLat, placeLng, lat, lng, apart)
+        if (apart[0] < REPLACE_M) return
+      }
+      declination = GeomagneticField(lat.toFloat(), lng.toFloat(), 0f, System.currentTimeMillis()).declination.toDouble()
+      placeLat = lat
+      placeLng = lng
+    } catch (e: Exception) {
+      // The gap stays as it was.
+    }
+  }
+
+  @Synchronized
+  override fun onSensorChanged(event: SensorEvent) {
+    // A reading already on its way when the map closed is nobody's.
+    if (manager == null) return
+    try {
+      // Some phones refuse more than four numbers here.
+      val values = if (event.values.size > 4) event.values.copyOf(4) else event.values
+      SensorManager.getRotationMatrixFromVector(matrix, values)
+      // The phone's top (its y axis) and its back (less its z axis), each as east and north on the ground.
+      val east = (matrix[1] - matrix[2]).toDouble()
+      val north = (matrix[4] - matrix[5]).toDouble()
+      if (hypot(east, north) < LEAST_LEVEL) return
+      val magnetic = Math.toDegrees(atan2(east, north))
+      val deg = ((magnetic + declination) % 360.0 + 360.0) % 360.0
+      if (!deg.isFinite()) return
+      val sure = event.accuracy
+      val now = SystemClock.elapsedRealtime()
+      val turned = if (lastDeg.isNaN()) 360.0 else abs(((deg - lastDeg + 540.0) % 360.0) - 180.0)
+      if (sure == lastSure && (turned < LEAST_DEG || now - lastAt < LEAST_MS)) return
+      lastDeg = deg
+      lastSure = sure
+      lastAt = now
+      send?.invoke(mapOf("deg" to deg, "sure" to sure))
+    } catch (e: Exception) {
+      // One reading that cannot be read is left out.
+    }
+  }
+
+  override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) = Unit
 }
 
 object Motion : SensorEventListener {

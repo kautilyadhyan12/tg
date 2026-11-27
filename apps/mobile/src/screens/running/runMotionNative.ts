@@ -10,6 +10,13 @@ export interface RunMotionNative {
   stop(): void;
   /** The seconds finished since the last take (read through phoneMotionSchema). */
   take(): unknown;
+  /** The compass for the map's beam (37p): false on a phone with none. A copy built before 37p has none of these. */
+  compassStart?(): boolean;
+  compassStop?(): void;
+  /** Where the person is, for the gap between magnetic and true north there. */
+  compassPlace?(lat: number, lng: number): void;
+  /** "heading": each turn of the phone while the compass reads (read through phoneHeadingSchema). */
+  addListener?(event: "heading", listener: (said: unknown) => void): { remove: () => void };
 }
 
 export const runMotionNative: RunMotionNative | null = requireOptionalNativeModule<RunMotionNative>("RunMotion");

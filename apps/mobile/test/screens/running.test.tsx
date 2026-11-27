@@ -7,6 +7,7 @@ import { resetMapSource } from "../../src/screens/running/mapSource";
 import { RUN_BAR_ROOM } from "../../src/screens/running/RunLayer";
 import { MAP_CREDIT_PAGE, MAP_WAIT_MS } from "../../src/screens/running/RunMap";
 import { unitMarks } from "../../src/screens/running/routeShape";
+import { fanPath } from "../../src/screens/running/runMapShapes";
 import { chooseAutoPause, finishRun, keepRunUnits, loadRun, pauseRun, phoneRunFiles, resetRecorder, runNow, startRun, takeLocations } from "../../src/screens/running/recorder";
 import * as runLiveModule from "../../src/screens/running/runLive";
 import { saveRequestOf, sentOf, sumsAt } from "../../src/screens/running/runLive";
@@ -75,7 +76,7 @@ const drawnMap = (testID: string): DrawnMap => {
   return map;
 };
 
-let handlers: ((state: "active") => void)[] = [];
+let handlers: ((state: "active" | "background") => void)[] = [];
 const comeBack = () => {
   for (const handler of handlers) handler("active");
 };
@@ -1924,4 +1925,136 @@ describe("Elevation gain on the summary (37b-ii)", () => {
       expect(s.saved).toHaveLength(1);
     });
   });
+});
+
+// 37p (Kd, 2026-11-27: "whenevr the mobile is pointed the torch like circle also moves in that direction"): the beam
+// at the front of the live map turns with the phone, as Strava's and Google Maps' do.
+describe("the dot's beam follows the phone (37p)", () => {
+  type Compass = { none: boolean; old: boolean; reading: boolean; starts: number; stops: number; places: [number, number][]; listeners: ((said: unknown) => void)[] };
+  const compassMotion = jest.requireMock<{ motion: { turn: (deg: number, sure?: number) => void; reset: () => void; compass: Compass } }>("../../src/screens/running/runMotionNative").motion;
+  const beam = () => screen.queryByTestId("front-beam");
+  /** The beam's fan and the way it points, read back from what the drawing library hands the screen: its
+   *  rotation as a matrix, [cos, sin, -sin, cos, 0, 0]. */
+  const beamProps = () => {
+    const found = beam();
+    if (found === null) throw new Error("no beam");
+    const matrix: unknown = found.props.matrix;
+    if (!Array.isArray(matrix)) throw new Error(`no matrix: ${Object.keys(found.props).join(", ")}`);
+    const deg = (((Math.atan2(Number(matrix[1]), Number(matrix[0])) * 180) / Math.PI) % 360 + 360) % 360;
+    return { d: String(found.props.d), transform: `rotate(${(Math.round(deg * 10) / 10 % 360).toFixed(1)})` };
+  };
+  const turn = async (deg: number, sure?: number) => {
+    await act(() => {
+      compassMotion.turn(deg, sure);
+    });
+  };
+  const leave = async (state: "active" | "background") => {
+    await act(() => {
+      for (const handler of handlers) handler(state);
+    });
+  };
+
+  beforeEach(() => {
+    compassMotion.reset();
+  });
+
+  it("the worst thing touches nobody: the way the phone points is shown only, never kept with the run or sent", async () => {
+    const s = runServer();
+    await openRunning(s);
+    await startRunning();
+    await feed(0, 61, 3);
+    await waitFor(() => {
+      expect(compassMotion.compass.reading).toBe(true);
+    });
+    await turn(123.4);
+    await fireEvent.press(await screen.findByRole("button", { name: "Pause" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Finish" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Save run" }));
+    await waitFor(() => {
+      expect(s.saved).toHaveLength(1);
+    });
+    const sent = JSON.stringify(s.saved);
+    expect(sent).not.toMatch(/"deg"|"sure"|"heading"|123\.4/);
+    expect(s.requests.filter((r) => (r.body ?? "").includes("123.4"))).toEqual([]);
+    expect(compassMotion.compass.reading).toBe(false);
+  });
+
+  it("the beam turns with the phone, and spreads wider the less sure the compass is", async () => {
+    const s = runServer();
+    await openRunning(s);
+    await startRunning();
+    await feed(0, 1, 0, 26.15);
+    await waitFor(() => {
+      expect(compassMotion.compass.reading).toBe(true);
+    });
+    // Standing, before any way travelled: the compass alone points it.
+    expect(beam()).toBeNull();
+    await turn(90, 3);
+    expect(beamProps()).toEqual({ d: fanPath(25, 66), transform: "rotate(90.0)" });
+    await turn(271.26, 2);
+    expect(beamProps()).toEqual({ d: fanPath(35, 66), transform: "rotate(271.3)" });
+    await turn(10, 0);
+    expect(beamProps()).toEqual({ d: fanPath(60, 66), transform: "rotate(10.0)" });
+    // True north at the person's place: the compass is told where they are.
+    expect(compassMotion.compass.places.at(-1)).toEqual([26.15, 91.7362]);
+    // A reading that is not a heading is left out.
+    await act(() => {
+      for (const listener of compassMotion.compass.listeners) listener({ deg: "north", sure: 3 });
+    });
+    expect(beamProps().transform).toBe("rotate(10.0)");
+    expect(compassMotion.compass.starts).toBe(1);
+  });
+
+  it("the compass reads only while the map is on screen and the app in front", async () => {
+    const s = runServer();
+    await openRunning(s);
+    await startRunning();
+    await feed(0, 1, 0, 26.15);
+    await waitFor(() => {
+      expect(compassMotion.compass.reading).toBe(true);
+    });
+    await turn(45);
+    await leave("background");
+    expect(compassMotion.compass.reading).toBe(false);
+    expect(compassMotion.compass.listeners).toHaveLength(0);
+    await leave("active");
+    await waitFor(() => {
+      expect(compassMotion.compass.reading).toBe(true);
+    });
+    expect(compassMotion.compass.starts).toBe(2);
+    // Back in front, the beam waits for a fresh reading, never the one from before.
+    expect(beam()).toBeNull();
+    await turn(300);
+    expect(beamProps().transform).toBe("rotate(300.0)");
+    await fireEvent.press(await screen.findByRole("button", { name: "Pause" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Finish" }));
+    await waitFor(() => {
+      expect(compassMotion.compass.reading).toBe(false);
+    });
+    expect(compassMotion.compass.listeners).toHaveLength(0);
+  });
+
+  for (const phone of ["none", "old"] as const) {
+    it(`${phone === "none" ? "a phone with no compass" : "a copy built before 37p"}: the beam shows the way travelled, as before`, async () => {
+      compassMotion.compass[phone] = true;
+      const s = runServer();
+      await openRunning(s);
+      await startRunning();
+      await feed(0, 1, 0, 26.15);
+      await waitFor(() => {
+        expect(drawnMap("live-map-view").markers.length).toBeGreaterThan(0);
+      });
+      expect(beam()).toBeNull();
+      expect(compassMotion.compass.reading).toBe(false);
+      // Going north: the beam points north once the person has moved.
+      await feed(1, 20, 3, 26.15 + 3 / 111_132);
+      await waitFor(
+        () => {
+          expect(beamProps()).toEqual({ d: fanPath(25, 66), transform: "rotate(0.0)" });
+        },
+        { timeout: 5000 },
+      );
+      expect(compassMotion.compass.starts).toBe(phone === "none" ? 1 : 0);
+    });
+  }
 });

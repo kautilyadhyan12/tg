@@ -477,6 +477,12 @@ export type PhoneLocations = z.infer<typeof phoneLocationsSchema>;
 export const phoneMotionSchema = z.array(z.object({ at: z.number(), sd: z.number().nonnegative(), n: z.number().int().nonnegative() })).max(10_000);
 export type PhoneMotion = z.infer<typeof phoneMotionSchema>;
 
+/** What the phone's compass code hands over while a run's map is on screen (37p, `apps/mobile/modules/run-motion`):
+ *  the way the phone points, in degrees clockwise from true north, and how sure Android is of it (its sensor status:
+ *  3 high, 2 medium, 1 low, 0 unreliable, -1 no contact). Shown on the screen only; never kept or sent. */
+export const phoneHeadingSchema = z.object({ deg: z.number().min(0).max(360), sure: z.number().int().min(-1).max(3) });
+export type PhoneHeading = z.infer<typeof phoneHeadingSchema>;
+
 /** A saved run the server refused, kept whole on the phone: the person may send it again or
  *  remove it, and nothing they ran is ever thrown away by the app (round one of 37a, H1). */
 // Kept as it was sent, read only on Try again: a run refused for its size must still read back.
