@@ -241,11 +241,7 @@ function TrySetScreen({ me, exercise, onClose }: { me: string; exercise: CameraE
       now={{ byHand: shownOffset(set), target: set.target }}
       stopped={stopped}
       reference={referenceOf("tile", !set.paused && result === null)}
-      onCamera={(reps, heldMs) => {
-        // Following the clip, nothing the camera saw is the set's, even an answer still on its way as the camera went.
-        if (following.current !== null) return;
-        press({ kind: "camera", reps, heldMs });
-      }}
+      onCamera={(reps, heldMs) => { press({ kind: "camera", reps, heldMs }); }}
       onProblem={() => { setStopped("failed"); press({ kind: "stopped" }); }}
       onTap={() => { setBox(true); }}
       onFollow={result === null ? startFollowing : undefined}

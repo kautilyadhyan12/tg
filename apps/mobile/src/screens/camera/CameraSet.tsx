@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { Pressable, StyleSheet, View, processColor, useWindowDimensions, type NativeSyntheticEvent } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { NO_VIEW, type LineTone, type LiveSet, type LiveView, type SetNow } from "../../camera/liveSet";
@@ -91,11 +91,21 @@ export function CameraSet({ live, title, digits, of, paused, sound, now, stopped
   // Read at each answer without making a new handler for every change of the count or the target.
   const set = useRef(now);
   set.current = now;
+  // Gone, the screen does nothing with an answer still on its way from the camera: no count, no sound, no word (53b-ii:
+  // Follow along takes this screen and the camera away, and nothing the camera saw is the set's).
+  const gone = useRef(false);
+  useEffect(() => {
+    gone.current = false;
+    return () => {
+      gone.current = true;
+    };
+  }, []);
 
   // The phone draws the body with each picture itself (`BODY_DRAWING`); the screen is drawn again only when what it says
   // changes. Drawing the whole screen for every picture took the phone's chip from the model (53a's 20-minute run).
   const pose = useCallback(
     (e: NativeSyntheticEvent<PoseEvent>) => {
+      if (gone.current) return;
       const next = live.next(e.nativeEvent, set.current);
       const last = shown.current;
       // The coach speaks what the camera has just seen (53b-i), whether or not the screen changes with it.

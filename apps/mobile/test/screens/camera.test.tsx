@@ -483,18 +483,28 @@ describe("Follow along (53b-ii): the worst thing first, the camera is off and co
     await fireEvent.press(screen.getByTestId("camera-tap"));
     for (let n = 0; n < 7; n++) await fireEvent.press(screen.getByRole("button", { name: "Lower the target" }));
     await fireEvent.press(screen.getByTestId("camera-box-close"));
+    // The person's own Sound choice is kept on the phone: a test before may have left it off. On, so a sound would be heard.
+    await fireEvent.press(screen.getByTestId("camera-tap"));
+    const off = screen.queryByRole("button", { name: "Sound off" });
+    if (off !== null) await fireEvent.press(off);
+    await fireEvent.press(screen.getByTestId("camera-box-close"));
     const late = poseCamera.props as unknown as { onPose: (e: { nativeEvent: PoseEvent }) => void };
     await fireEvent.press(screen.getByRole("button", { name: FOLLOW_WORDS }));
     // The camera is gone: its view is no longer drawn, so the phone's camera is let go.
     expect(screen.queryByTestId("pose-camera")).toBeNull();
     expect(poseCamera.props).toBeNull();
     expect(screen.getByRole("button", { name: CAMERA_BACK })).toBeTruthy();
+    sounds.played.length = 0;
+    sounds.spoken.length = 0;
     // Answers still on their way from the camera as it went: a whole set of squats.
     for (const e of SQUATS) {
       await act(() => {
         late.onPose({ nativeEvent: e });
       });
     }
+    // Not one of them heard: no rep's sound, no coach, no "Set complete." of the camera's set.
+    expect(sounds.played).toEqual([]);
+    expect(sounds.spoken).toEqual([]);
     expect(screen.getByTestId("follow-screen")).toBeTruthy();
     expect(screen.queryByTestId("camera-done")).toBeNull();
     expect(timerSays()).toBe("get ready 00:10");
@@ -505,6 +515,25 @@ describe("Follow along (53b-ii): the worst thing first, the camera is off and co
     expect(within(done).getByText(`9 s · ${ASK_REPS_WORDS}`)).toBeTruthy();
     expect(within(done).getByRole("button", { name: "Done · 3 reps" })).toBeTruthy();
     expect(screen.queryByTestId("pose-camera")).toBeNull();
+  });
+
+  it("back to the camera after answers still on their way, its set is a new one: none of them counted", async () => {
+    await openTry();
+    await turnOn();
+    await fireEvent.press(screen.getByTestId("camera-tap"));
+    for (let n = 0; n < 7; n++) await fireEvent.press(screen.getByRole("button", { name: "Lower the target" }));
+    await fireEvent.press(screen.getByTestId("camera-box-close"));
+    const late = poseCamera.props as unknown as { onPose: (e: { nativeEvent: PoseEvent }) => void };
+    await fireEvent.press(screen.getByRole("button", { name: FOLLOW_WORDS }));
+    for (const e of SQUATS) {
+      await act(() => {
+        late.onPose({ nativeEvent: e });
+      });
+    }
+    await fireEvent.press(screen.getByRole("button", { name: CAMERA_BACK }));
+    expect(await screen.findByTestId("pose-camera")).toBeTruthy();
+    expect(screen.queryByTestId("camera-done")).toBeNull();
+    expect(countSays()).toBe("00 / 3");
   });
 
   it("back to the camera, the camera's set starts again: nothing it saw before Follow along is kept", async () => {
