@@ -2686,8 +2686,9 @@ for its re-check, only the nearest body beside the member held (3 red).
 **As built, the camera screen counts a set (53a, 2026-11-26; `rulings/2026-11-26-53a.md`).** The app itself now holds the
 camera: `modules/pose-camera` (the store's app included) gives each newest picture of the selfie camera to Google's pose
 library in its live mode, as 51b-ii picked it: the full model, asked for one person, at the sureness every kept file was
-measured with (0.5), at 480 by 640, on the phone's graphics chip, or on the main chip's 4 cores where the graphics chip
-cannot start (`PoseCameraCores`, the phone test's `PhoneTestCores` under its own name). The screen shows each picture the
+measured with (0.5), at 480 by 640, on the main chip's 4 cores (`PoseCameraCores`, the phone test's `PhoneTestCores` under
+its own name): the pick the phone proof counts with (`phoneCounts.ts`, "cpu.t4"); the graphics chip is taken only once the
+proof passes on its own points (53a's round one). The screen shows each picture the
 model has read, across its view and mirrored as a selfie camera shows a person, and the phone itself draws the body's lines,
 joints, corners and "TRACKING YOU" on it in the same frame, by the app's own rules, words and colours handed over once
 (`BODY_RULES`, `BODY_DRAWING`): drawn by the app's script they reached the screen after the picture and fell further behind
@@ -2700,7 +2701,9 @@ reaches nothing on the internet and logs only counts (`test/poseCamera.test.ts` 
 app), and every build takes away the library's own sender of usage reports (`plugins/noUsageReports.js`, the store's app
 too since 53a). **On the screen's side** (`apps/mobile/src/camera`), each answer is made the engine's frame and checked by its
 schema (`frameOf`; anything broken is no frame at all), "down" being the gravity reading turned into the selfie picture's own
-frame (`downOf`: (gx, gy, −gz) over its size, none while the phone is moved, its size more than 2 m/s² from Earth's), and the
+frame (`downOf`: the reading turned first from the phone's own axes into the screen's, by the screen's turn the module sends
+with each answer, as on a tablet held upright; then (gx, gy, −gz) over its size; none while the phone is moved, its size more
+than 2 m/s² from Earth's, or with a turn that is not a quarter turn), and the
 set is the engine's own `CameraSet` (`LiveSet`), which also keeps its summary where the exercise has a camera file. Every
 exercise gets this one screen; only what it counts is the exercise's own. **What it shows** (Kd's drawing of 2026-11-26):
 until the person first stands ready, "Step back until the camera sees you like the picture." and where the phone may stand;
@@ -2709,8 +2712,9 @@ each counted rep; the exercise's reference clip in the top right; the person's o
 lock follows them; and one line at the foot, only while there is something to say: a rep's reason in its movement's own words
 for 4 s (amber for a rep that fell short, red for what the camera could not see), or "The camera can't see you." once the
 person has been unseen 2 s. A tap opens a box from the bottom with the count by hand, the target and the weight, Set done,
-Pause (the camera and model then rest, and nothing seen counts), Sound, End, Reset set, Count this set myself and Skip
-exercise. A camera or model that stops says "The camera stopped. Count this set yourself." and the set goes on by hand with
+Pause (the camera and model then rest, and nothing seen counts), Sound, End, Reset set (the set starts again: its count, its
+time held and its form score), Count this set myself and Skip exercise, and the line "The video stays on your phone. It is
+never saved or sent." (§11.8, step 7), there and never over the person. A camera or model that stops says "The camera stopped. Count this set yourself." and the set goes on by hand with
 what it had counted. **Until 64b** a folder's copy tries it from Me, "Try the camera": one set of the squat, the kettlebell
 goblet squat (its twin), the squat jump, the lunge, the sit-up, the hip thrust or the L-sit's hold, nothing of it saved; the
 movement files ride in the app until the Library's download carries them (§13.3). **Measured on the laptop:** played to the
@@ -2738,10 +2742,10 @@ phone, charging and at 55 °C on its chip, had capped its chip at 768 of 2,002 t
 nearly a core at 30 pictures a second. The third run, off the charger, held 15 to 20 answers a second for 8 minutes and
 fell to 6 to 8 once the phone had capped its chip at 768 MHz, and Kd saw the lines trail the body. So the camera now films
 one stream only, the model's, at its steadiest speed no faster than 24 (the selfie camera's 20 to 20, where it had taken 8
-to 20), and the model reads on the graphics chip: off the charger, held back until each answer, it answered 10.4 to 11.8
-times a second for 12 minutes with the chip barely capped; every picture handed over, 19.2 to 20.2 a second for 8½ minutes
-(the camera's own speed) with her body in every answer; each run took 1% of the battery;
-Kd then saw the lines stay on her body through a whole set of 10 (2026-11-27). A set is a minute or two and the camera rests
+to 20), and the phone draws the body on each picture the model read. On the graphics chip, off the charger, the model
+answered 19.2 to 20.2 a second for 8½ minutes with her body in every answer, for 1% of the battery, and Kd saw the lines stay
+on her body through a whole set of 10 (2026-11-27); but no proof row is read on the graphics chip, so the app reads on the
+main chip until one is (round one). A set is a minute or two and the camera rests
 between sets (§11.8), so the long runs are the hardest case, never the usual one. On this development copy the script runs
 in its slower checking mode; a store build's would be faster.
 
