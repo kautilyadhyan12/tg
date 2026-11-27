@@ -1,11 +1,11 @@
 import { useCameraPermissions } from "expo-camera";
 import { activateKeepAwakeAsync, deactivateKeepAwake } from "expo-keep-awake";
-import { useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { Image, Pressable, StyleSheet, View } from "react-native";
 import { CAMERA_EXERCISES, type CameraExercise } from "../../camera/cameraExercises";
 import { LiveSet } from "../../camera/liveSet";
 import { PoseCameraView } from "../../camera/poseCameraNative";
-import { pressTry, shownReps, startTry, type TryPress, type TrySet } from "../../camera/trySet";
+import { ended, pressTry, shownReps, startTry, type TryPress, type TrySet } from "../../camera/trySet";
 import { cameraToldFile, workoutSoundsFile } from "../../library/files";
 import { holdWords } from "../../library/records";
 import { Button } from "../../look/Button";
@@ -87,7 +87,8 @@ export function TryCameraLink() {
 function TrySetScreen({ me, exercise, onClose }: { me: string; exercise: CameraExercise; onClose: () => void }) {
   const { state } = useSession();
   const units = (state.kind === "in" ? accountUnits(state.user.units) : null) ?? "metric";
-  const live = useMemo(() => new LiveSet(exercise.counts, exercise.camera, 1), [exercise]);
+  // A new one when the set starts again (Reset set): its count and its form score are the new set's alone.
+  const [live, setLive] = useState(() => new LiveSet(exercise.counts, exercise.camera, 1));
   const [set, setSet] = useState<TrySet>(() => startTry(exercise.measuredIn, exercise.target));
   const [box, setBox] = useState(false);
   const [stopped, setStopped] = useState<"failed" | "byHand" | null>(null);
@@ -103,12 +104,19 @@ function TrySetScreen({ me, exercise, onClose }: { me: string; exercise: CameraE
     return () => { void deactivateKeepAwake(AWAKE_TAG).catch(() => undefined); };
   }, []);
 
-  const press = useCallback((p: TryPress) => { setSet((s) => pressTry(s, p)); }, []);
+  const press = useCallback(
+    (p: TryPress) => {
+      if (p.kind === "reset") setLive(new LiveSet(exercise.counts, exercise.camera, 1));
+      setSet((s) => pressTry(s, p));
+    },
+    [exercise],
+  );
   // The set reached its end, by its target or by Set done: the camera's last rep judged, and its summary read once.
   useEffect(() => {
     if (!set.done || result !== null) return;
     const end = live.end();
-    setResult({ reps: shownReps(set), heldMs: set.heldMs, form: end.summary?.avgFormScore ?? null });
+    const last = ended(set, end.reps);
+    setResult({ reps: shownReps(last), heldMs: last.heldMs, form: end.summary?.avgFormScore ?? null });
     setBox(false);
   }, [set, live, result]);
 

@@ -23,6 +23,7 @@ function eventOf(f: MovementFrame, clock = 1_234_567): PoseEvent {
     width: 480 * f.aspect,
     height: 480,
     gravity: [down[0] * EARTH, down[1] * EARTH, -down[2] * EARTH],
+    turn: 0,
     people: f.people.map((p) => ({ points: p.points.flat(), world: p.world === null ? [] : p.world.flat() })),
   };
 }

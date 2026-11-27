@@ -6,12 +6,15 @@ import { KEYPOINT_COUNT, movementFrameSchema, type Down, type MovementFrame } fr
 // decides nothing.
 
 /** One answer, as the module sends it. `t`: the phone's own clock, ms, never back. `gravity`: Android's reading in the
- *  phone's own axes, or none. Each person: 33 points of 5 numbers, laid end to end, and 33 3D points of 3, or none. */
+ *  phone's own axes, or none. `turn`: how the screen, and so the picture turned upright for it, is turned from those axes,
+ *  in degrees (0 on a phone held upright; 90 or 270 on a tablet held upright). Each person: 33 points of 5 numbers, laid
+ *  end to end, and 33 3D points of 3, or none. */
 export interface PoseEvent {
   readonly t: number;
   readonly width: number;
   readonly height: number;
   readonly gravity: readonly number[];
+  readonly turn: number;
   readonly people: readonly { readonly points: readonly number[]; readonly world: readonly number[] }[];
 }
 
@@ -24,15 +27,35 @@ const MOVED = 2;
  * phone's own axes, m/s²: x to the right across the screen, y up it, z out of it, and pointing up, as the phone feels
  * Earth hold it (an upright phone reads about [0, 9.81, 0]). The engine's picture has x to its right, y down it and z away
  * from the camera; the selfie camera looks out of the screen at the person, so the picture's right is the phone's left
- * and away from it is the phone's z. Down is therefore (gx, gy, -gz) over its size. Null with no reading, or one too far
- * from Earth's pull.
+ * and away from it is the phone's z. Down is therefore (gx, gy, -gz) over its size, once the reading is turned into the
+ * screen's own axes: a phone's own axes are its natural way up, which on a tablet is on its side, and the picture is
+ * turned upright for the screen (`turn`, the way Android's own sample turns a reading for its screen). Null with no
+ * reading, one too far from Earth's pull, or a turn that is not a quarter turn.
  */
-export function downOf(gravity: readonly number[]): Down | null {
+export function downOf(gravity: readonly number[], turn: number): Down | null {
   const [gx, gy, gz] = gravity;
   if (gravity.length !== 3 || gx === undefined || gy === undefined || gz === undefined) return null;
   const size = Math.hypot(gx, gy, gz);
   if (!Number.isFinite(size) || Math.abs(size - EARTH) > MOVED) return null;
-  return [gx / size, gy / size, (0 - gz) / size];
+  const screen = turned(gx, gy, turn);
+  if (screen === null) return null;
+  return [screen[0] / size, screen[1] / size, (0 - gz) / size];
+}
+
+/** A reading's x and y in the screen's axes, the screen turned `turn` degrees from the phone's own. */
+function turned(x: number, y: number, turn: number): [number, number] | null {
+  switch (turn) {
+    case 0:
+      return [x, y];
+    case 90:
+      return [0 - y, x];
+    case 180:
+      return [0 - x, 0 - y];
+    case 270:
+      return [y, 0 - x];
+    default:
+      return null;
+  }
 }
 
 const share = (v: number): number => Math.min(1, Math.max(0, v));
@@ -59,6 +82,6 @@ export function frameOf(e: PoseEvent, t: number): MovementFrame | null {
     }
     people.push({ points, world: p.world.length > 0 ? world : null });
   }
-  const parsed = movementFrameSchema.safeParse({ t, aspect: e.width / e.height, down: downOf(e.gravity), people });
+  const parsed = movementFrameSchema.safeParse({ t, aspect: e.width / e.height, down: downOf(e.gravity, e.turn), people });
   return parsed.success ? parsed.data : null;
 }

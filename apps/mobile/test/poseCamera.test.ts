@@ -37,7 +37,7 @@ describe("the worst thing first: the camera keeps and sends nothing of a person 
 
   it("no file is written, no picture is made into one, nothing is recorded or kept", () => {
     expect(code).not.toMatch(
-      /\bFile\(|toFile\(|java\.io|java\.nio\.file|kotlin\.io|FileOutputStream|FileWriter|RandomAccessFile|openFileOutput|\.compress\(|MediaStore|MediaRecorder|VideoCapture|ImageCapture|Recorder\b|writeBytes|writeText|appendText|appendBytes|printWriter|outputStream\(|bufferedWriter|SharedPreferences|DataStore|SQLite|filesDir|cacheDir|externalCache|getExternal/,
+      /\bFile\(|toFile\(|java\.io|java\.nio\.file|kotlin\.io|FileOutputStream|FileWriter|RandomAccessFile|openFileOutput|\.compress\(|MediaStore|MediaRecorder|VideoCapture|ImageCapture|Recorder\b|writeBytes|writeText|appendText|appendBytes|printWriter|outputStream\(|bufferedWriter|SharedPreferences|DataStore|SQLite|filesDir|cacheDir|externalCache|getExternal|contentResolver|ContentResolver|ParcelFileDescriptor/i,
     );
     // Its one read is the model the build put in the app.
     expect(code.match(/assets\.open\(/g)).toHaveLength(1);
@@ -45,13 +45,16 @@ describe("the worst thing first: the camera keeps and sends nothing of a person 
   });
 
   it("nothing reaches the internet: no address, no socket, no web library", () => {
-    expect(code).not.toMatch(/java\.net|okhttp|HttpURLConnection|URLConnection|Socket|Retrofit|Volley|https?:\/\//i);
+    expect(code).not.toMatch(/java\.net|okhttp|HttpURLConnection|URLConnection|Socket|Retrofit|Volley|DownloadManager|WebView|HttpEngine|Cronet|https?:\/\//i);
   });
 
   it("the phone's log is told counts and a failure's kind, never a point", () => {
-    const logs = code.split("\n").filter((l) => /Log\.[a-z]\(/.test(l)).map((l) => l.trim());
+    // Every way Kotlin or Java can write to the log, however the call is split across lines.
+    expect(code).not.toMatch(/\bprintln\(|\bprint\(|System\.(out|err)|printStackTrace|Log\.(wtf|println)\b/);
+    expect(code.match(/\bLog\.\w+\s*\(/g)).toHaveLength(3);
+    const logs = code.split("\n").filter((l) => /\bLog\.\w+\s*\(/.test(l)).map((l) => l.trim());
     expect(logs).toEqual([
-      "if (debuggable) Log.i(TAG, \"chip=$chip frames=${frames ?: \"the camera's own\"}\")",
+      "if (debuggable) Log.i(TAG, \"frames=${frames ?: \"the camera's own\"}\")",
       'Log.i(TAG, "answers=$a found=$f")',
       'Log.w(TAG, "The $reason stopped: ${e?.javaClass?.simpleName ?: "no picture"}")',
     ]);
@@ -103,6 +106,19 @@ describe("the body drawn by the phone, on the very picture it was read from (Kd 
   });
 });
 
+describe("which way is down: gravity, and how the screen is turned from the phone's own axes (round one)", () => {
+  it("each answer says how the screen is turned, read on the screen's thread when the camera opens and each second", () => {
+    expect(view).toContain('"turn" to screenTurn.toDouble(),');
+    expect(view).toContain("private fun turnOfScreen(): Int = (display?.rotation ?: Surface.ROTATION_0) * 90");
+    expect(view.match(/screenTurn = turnOfScreen\(\)/g)).toHaveLength(2);
+  });
+
+  it("a gravity reading is timed on the clock it is judged by", () => {
+    expect(view).toContain("gravityAt = SystemClock.elapsedRealtimeNanos()");
+    expect(view).toContain("SystemClock.elapsedRealtimeNanos() - gravityAt <= GRAVITY_STALE_NS");
+  });
+});
+
 describe("the camera as the phone test picked it (51b-ii)", () => {
   it("the model reads the picture as the camera took it, upright and never mirrored", () => {
     expect(view).toContain("val turn = proxy.imageInfo.rotationDegrees");
@@ -125,14 +141,14 @@ describe("the camera as the phone test picked it (51b-ii)", () => {
   });
 
   it("the full model, asked for one person, at the sureness every kept file was measured with, on the main chip's 4 cores", () => {
+    // The pick the phone proof counts with (phoneCounts.ts CHOSEN_RUN, "cpu.t4"): the graphics chip has no proof row (round one).
+    expect(view).not.toMatch(/Delegate\.GPU|Delegate\.NNAPI/);
+    expect(view.match(/setDelegate\(/g)).toHaveLength(1);
+    expect(view).toContain(".setDelegate(Delegate.CPU)");
     expect(view).toContain('private const val MODEL = "pose_landmarker_full.task"');
     expect(view).toContain(".setNumPoses(1)");
     expect(view).toContain("private const val SURE = 0.5f");
     expect(view).toContain("private const val CORES = 4");
-    // The graphics chip first, which 51b-ii measured faster and cooler; the main chip's 4 cores where it cannot start.
-    expect(view).toContain("PoseLandmarker.createFromOptions(context, options(Delegate.GPU))");
-    expect(view).toContain("PoseLandmarker.createFromOptions(context, options(Delegate.CPU))");
-    expect(view).toContain("if (delegate != Delegate.CPU) return options");
     expect(view).toContain("PoseCameraCores.onCores(options, minOf(CORES, Runtime.getRuntime().availableProcessors()))");
     expect(view).toContain("RunningMode.LIVE_STREAM");
     const cores = text(join(MODULE, "src", "main", "java", "com", "google", "mediapipe", "tasks", "vision", "poselandmarker", "PoseCameraCores.java"));

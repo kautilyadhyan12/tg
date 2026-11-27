@@ -9,6 +9,7 @@ import { colours, shadows, sizes } from "../../look/colours";
 import { Icon, type IconName } from "../../look/Icon";
 import { Txt } from "../../look/Txt";
 import { Led } from "../library/Records";
+import { FIRST_LINE } from "./CameraFirst";
 
 // The box a tap on the camera screen opens (ROADMAP Stage 5 53a; Kd's drawing of 2026-11-26, board 4, "A tap: reps, weight,
 // pause"): everything a person changes in the middle of a set, as the workout's own set has it (64a-ii), in a small box
@@ -90,6 +91,10 @@ export function CameraBox({ set, units, sound, press, byHand, onClose, onByHand,
           {byHand ? null : <Button label="Count this set myself" kind="link" onPress={onByHand} />}
           <Button label="Skip exercise" kind="link" onPress={onSkip} />
         </View>
+        {/* The camera screen's one line of privacy (spec Part 2 §11.8, step 7), here and not over the person. */}
+        <Txt kind="small" colour="textSoft" style={styles.privacy}>
+          {FIRST_LINE}
+        </Txt>
       </View>
     </View>
   );
@@ -149,4 +154,5 @@ const styles = StyleSheet.create({
   pills: { flexDirection: "row", gap: 8 },
   pill: { flex: 1, minHeight: sizes.button, borderRadius: sizes.round, borderWidth: 1, borderColor: colours.lineStrong, backgroundColor: colours.raised, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, paddingHorizontal: 10 },
   links: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between" },
+  privacy: { textAlign: "center" },
 });

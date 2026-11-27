@@ -66,9 +66,12 @@ export function pressTry(s: TrySet, p: TryPress): TrySet {
         if (s.paused) return { ...s, cameraLast: last };
         return { ...s, cameraLast: last, cameraReps: s.cameraReps + reps, heldMs: s.heldMs + held };
       }
-      case "count":
+      case "count": {
         if (s.measuredIn === "time") return s;
-        return { ...s, byHand: shownReps(s) + p.by < 0 ? s.byHand : s.byHand + p.by };
+        // A press that would take the count past its ends changes nothing, so the next press the other way is felt.
+        const shown = shownReps(s) + p.by;
+        return shown < 0 || shown > WORKOUT_SAVE_LIMITS.repsMost ? s : { ...s, byHand: s.byHand + p.by };
+      }
       case "target": {
         const target = s.measuredIn === "time" ? stepTime(s.target, p.by) : Math.max(1, Math.min(WORKOUT_SAVE_LIMITS.repsMost, s.target + p.by));
         return { ...s, target };
@@ -80,7 +83,8 @@ export function pressTry(s: TrySet, p: TryPress): TrySet {
       case "resume":
         return { ...s, paused: false };
       case "reset":
-        return { ...s, byHand: -s.cameraReps };
+        // The set starts again: its count, its time held and the camera's own, which starts again with it (TryCamera).
+        return { ...s, cameraReps: 0, heldMs: 0, cameraLast: { reps: 0, heldMs: 0 }, byHand: 0 };
       case "stopped":
         return { ...s, stopped: true };
       case "done":
@@ -88,4 +92,9 @@ export function pressTry(s: TrySet, p: TryPress): TrySet {
     }
   })();
   return !next.done && reached(next) ? { ...next, done: true } : next;
+}
+
+/** The set as it ends: the camera's last count taken, a rep it judged only at the end included (`LiveSet.end`). */
+export function ended(s: TrySet, cameraReps: number): TrySet {
+  return { ...pressTry({ ...s, done: false }, { kind: "camera", reps: cameraReps, heldMs: s.cameraLast.heldMs }), done: true };
 }

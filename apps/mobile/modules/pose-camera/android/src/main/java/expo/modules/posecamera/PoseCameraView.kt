@@ -22,6 +22,7 @@ import android.os.SystemClock
 import android.util.Log
 import android.util.Range
 import android.util.Size
+import android.view.Surface
 import android.view.View
 import android.widget.FrameLayout
 import android.widget.ImageView
@@ -62,8 +63,10 @@ import java.util.concurrent.Executors
 /** The model the phone runs, put in the app by this module's build (build.gradle, checked by its SHA-256 there). */
 private const val MODEL = "pose_landmarker_full.task"
 private const val POINTS = 33
-/** 51b-ii's pick, and where a phone's graphics chip cannot take the model: the full model on the main chip on 4 cores (on a
- *  phone with fewer, all of them). */
+/** 51b-ii's pick, the one the phone proof counts with (phoneCounts.ts, CHOSEN_RUN): the full model on the main chip on 4
+ *  cores (on a phone with fewer, all of them). The graphics chip answered 20 a second off the charger for 8½ minutes on
+ *  Kd's phone (53a), but no proof row has been read on it, and 51b-ii saw it lose the body in 23 to 43 of 100 answers: it
+ *  may be taken only once the proof passes on its points (53a's round one). */
 private const val CORES = 4
 /** The model's own sureness settings, as every kept body-points file was measured with (phoneRun.ts SETTINGS). */
 private const val SURE = 0.5f
@@ -77,9 +80,9 @@ private const val QUIET_MS = 5_000L
 /** A gravity reading older than this says nothing about now. */
 private const val GRAVITY_STALE_NS = 1_000_000_000L
 private const val TAG = "PoseCamera"
-/** How many turned pictures go round (`picture`): the model on the graphics chip reads the next while it finishes the
- *  last, and a picture is copied for the screen once answered, at up to 20 a second and with the model's answer taking up
- *  to about 150 ms, so six are never drawn over while either still reads one. */
+/** How many turned pictures go round (`picture`): a picture is copied for the screen once the model has answered it, at
+ *  up to 20 a second and with an answer taking up to about 150 ms, so six are never drawn over while the model or the
+ *  screen's copy still reads one. */
 private const val TURNED = 6
 
 // The body's drawing, as Kd's drawing of 2026-11-26 has it, in the screen's points: a gold halo and glow round each white
@@ -272,9 +275,9 @@ private class BodyOverlay(context: Context) : View(context) {
  * on the camera's live picture they trailed the body by the model's time and the screen's (Kd at 53a's run: "the lines
  * that track body is lagging"). The model reads the picture as the camera took it, upright and NOT mirrored, as the proof
  * videos were filmed, so its left is the person's own left (51b-ii: mirrored, the model's left was the person's right). It
- * reads on the phone's graphics chip, which 51b-ii measured faster and cooler, or on the main chip's 4 cores where the
- * graphics chip cannot take it. Each answer goes to the screen as `onPose`: the picture's size, the phone's gravity at
- * that moment, and the person found, if any; nothing is kept. Anything that stops the camera or the model is said once as
+ * reads on the main chip's 4 cores (`CORES`). Each answer goes to the screen as `onPose`: the picture's size, the phone's
+ * gravity at that moment and how the screen is turned from the phone's own axes, and the person found, if any; nothing is
+ * kept. Anything that stops the camera or the model is said once as
  * `onProblem`, and the screen turns the set into one counted by hand.
  */
 class PoseCameraView(context: Context, appContext: AppContext) : ExpoView(context, appContext) {
@@ -363,8 +366,9 @@ class PoseCameraView(context: Context, appContext: AppContext) : ExpoView(contex
     /** The two pictures the screen shows in turn, each a copy of one the model has answered. */
     private val showing = arrayOfNulls<Bitmap>(2)
     private var nextShown = 0
-    /** Which chip reads, "graphics" or "main": the laptop's log, while a folder's copy is measured. */
-    @Volatile private var chip = ""
+    /** How the screen is turned from the phone's own axes, in degrees: Android reads gravity in those axes, and the picture
+     *  is turned upright for the screen (on a tablet held upright, 90 or 270). Read on the screen's thread. */
+    @Volatile private var screenTurn = 0
 
     private fun rawOf(proxy: ImageProxy): Bitmap {
       val plane = proxy.planes.firstOrNull()
@@ -386,27 +390,24 @@ class PoseCameraView(context: Context, appContext: AppContext) : ExpoView(contex
         val sensor = s.getDefaultSensor(Sensor.TYPE_GRAVITY) ?: s.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
         if (sensor != null) s.registerListener(this, sensor, SensorManager.SENSOR_DELAY_GAME, Handler(sensorThread.looper))
       }
+      screenTurn = turnOfScreen()
       worker.execute {
-        landmarker = try {
-          PoseLandmarker.createFromOptions(context, options(Delegate.GPU)).also { chip = "graphics" }
-        } catch (gpu: Throwable) {
-          try {
-            PoseLandmarker.createFromOptions(context, options(Delegate.CPU)).also { chip = "main" }
-          } catch (e: Throwable) {
-            fail("model", e)
-            return@execute
-          }
+        try {
+          landmarker = PoseLandmarker.createFromOptions(context, options())
+        } catch (e: Throwable) {
+          fail("model", e)
+          return@execute
         }
         main.post { bind() }
       }
       main.postDelayed(watch, 1_000L)
     }
 
-    private fun options(delegate: Delegate): PoseLandmarker.PoseLandmarkerOptions {
+    private fun options(): PoseLandmarker.PoseLandmarkerOptions {
       val bytes = context.assets.open(MODEL).use { it.readBytes() }
       val model = ByteBuffer.allocateDirect(bytes.size).order(ByteOrder.nativeOrder()).put(bytes)
       model.rewind()
-      val base = BaseOptions.builder().setModelAssetBuffer(model).setDelegate(delegate).build()
+      val base = BaseOptions.builder().setModelAssetBuffer(model).setDelegate(Delegate.CPU).build()
       val options = PoseLandmarker.PoseLandmarkerOptions.builder()
         .setBaseOptions(base)
         .setRunningMode(RunningMode.LIVE_STREAM)
@@ -418,7 +419,6 @@ class PoseCameraView(context: Context, appContext: AppContext) : ExpoView(contex
         .setResultListener { result: PoseLandmarkerResult, image: MPImage -> answer(result, image) }
         .setErrorListener { e -> fail("model", e) }
         .build()
-      if (delegate != Delegate.CPU) return options
       return PoseCameraCores.onCores(options, minOf(CORES, Runtime.getRuntime().availableProcessors()))
     }
 
@@ -463,7 +463,7 @@ class PoseCameraView(context: Context, appContext: AppContext) : ExpoView(contex
             .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_RGBA_8888)
           val frames = framesOf(cameras)
           frames?.let { Camera2Interop.Extender(builder).setCaptureRequestOption(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, it) }
-          if (debuggable) Log.i(TAG, "chip=$chip frames=${frames ?: "the camera's own"}")
+          if (debuggable) Log.i(TAG, "frames=${frames ?: "the camera's own"}")
           val analysis = builder.build()
           analysis.setAnalyzer(worker) { proxy -> picture(proxy) }
           useCases = listOf(analysis)
@@ -477,9 +477,8 @@ class PoseCameraView(context: Context, appContext: AppContext) : ExpoView(contex
     }
 
     /** One camera picture, on the worker: turned upright, never mirrored, and handed to the model, which drops it if it
-     *  cannot take it now (its live mode). Not held back until the picture before is answered: on the graphics chip the
-     *  model reads the next while it finishes the last, and held back it answered 11 times a second where it can 20 (53a's
-     *  12-minute run). The pictures' memory is made once and used again for every picture: two new pictures each time
+     *  cannot take it now (its live mode), as 53a's first runs measured it on the main chip (15 to 20 answers a second). The
+     *  pictures' memory is made once and used again for every picture: two new pictures each time
      *  (CameraX's own and the turned one) were about 40 MB of throwaway memory a second, and on Kd's phone Android's
      *  clean-up of it took nearly half a core away from the model (53a, the 20-minute run). */
     private fun picture(proxy: ImageProxy) {
@@ -554,6 +553,7 @@ class PoseCameraView(context: Context, appContext: AppContext) : ExpoView(contex
         "width" to image.width.toDouble(),
         "height" to image.height.toDouble(),
         "gravity" to (g?.let { doubleArrayOf(it[0].toDouble(), it[1].toDouble(), it[2].toDouble()) } ?: DoubleArray(0)),
+        "turn" to screenTurn.toDouble(),
         "people" to people,
       )
       if (debuggable) {
@@ -596,6 +596,8 @@ class PoseCameraView(context: Context, appContext: AppContext) : ExpoView(contex
           fail("camera", null)
           return
         }
+        // A folding phone opened, or closed, turns its screen.
+        screenTurn = turnOfScreen()
         if (debuggable) {
           val (a, f) = synchronized(lock) { (answered to found).also { answered = 0; found = 0 } }
           Log.i(TAG, "answers=$a found=$f")
@@ -604,10 +606,14 @@ class PoseCameraView(context: Context, appContext: AppContext) : ExpoView(contex
       }
     }
 
+    /** The screen's turn from the phone's own axes, in degrees; 0 where Android does not say. */
+    private fun turnOfScreen(): Int = (display?.rotation ?: Surface.ROTATION_0) * 90
+
     override fun onSensorChanged(event: SensorEvent) {
       if (event.values.size < 3) return
       gravity = floatArrayOf(event.values[0], event.values[1], event.values[2])
-      gravityAt = event.timestamp
+      // When it came, on the clock the answers are judged by: a phone's sensor clock may run from another start.
+      gravityAt = SystemClock.elapsedRealtimeNanos()
     }
 
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) = Unit

@@ -3,10 +3,10 @@ import { StyleSheet, Text, type StyleProp, type TextStyle } from "react-native";
 import { colours, type ColourName } from "./colours";
 import { MOST_TEXT_GROWTH } from "./sizing";
 
-/** Inter, one file a weight: Android picks a weight by the font's name. */
 /** The eyebrow's measures: small gold capitals over a thing. The camera screen's phone draws its own (CameraSet). */
 export const EYEBROW = { size: 11, line: 14, spacing: 1.54 } as const;
 
+/** Inter, one file a weight: Android picks a weight by the font's name. */
 export const fonts = {
   regular: "Inter_400Regular",
   medium: "Inter_500Medium",

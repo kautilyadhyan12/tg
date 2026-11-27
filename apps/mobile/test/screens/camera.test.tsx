@@ -55,6 +55,7 @@ function eventOf(f: MovementFrame): PoseEvent {
     width: 480 * f.aspect,
     height: 480,
     gravity: [down[0] * EARTH, down[1] * EARTH, -down[2] * EARTH],
+    turn: 0,
     people: f.people.map((p) => ({ points: p.points.flat(), world: p.world === null ? [] : p.world.flat() })),
   };
 }
@@ -90,9 +91,9 @@ const server = () =>
     "/v1/auth/refresh": () => ({ status: 200, body: { tokens: tokens(2) } }),
   });
 
-/** Me → Try the camera → the exercise, signed in on a folder's copy. */
-async function openTry(name = "Squat", ask = server().ask, copy: { copyName?: string; apiUrl: string } = extra) {
-  await render(<App extra={copy} store={memoryStore(kept(1))} ask={ask} />);
+/** Me → Try the camera → the exercise, signed in on a folder's copy; the phone's key store it signed in with. */
+async function openTry(name = "Squat", ask = server().ask, copy: { copyName?: string; apiUrl: string } = extra, store = memoryStore(kept(1))) {
+  await render(<App extra={copy} store={store} ask={ask} />);
   await fireEvent.press(await screen.findByRole("tab", { name: "Me" }));
   if (copy.copyName === undefined) return;
   await fireEvent.press(await screen.findByRole("button", { name: "Try the camera" }));
@@ -127,9 +128,12 @@ afterEach(() => {
 describe("the worst thing first: nothing of the person leaves the screen", () => {
   it("a whole set of a real person's squats reaches neither the server, nor the phone's files, nor its log", async () => {
     const fake = server();
-    await openTry("Squat", fake.ask);
+    const store = memoryStore(kept(1));
+    await openTry("Squat", fake.ask, extra, store);
     await turnOn();
     const asked = fake.asked.length;
+    const keyStoreBefore = store.value;
+    const keyStore = [jest.spyOn(store, "write"), jest.spyOn(store, "clear")];
     const written: string[] = [];
     const write = jest.spyOn(files.File.prototype, "write").mockImplementation(function (this: { uri: string }, text: string) {
       written.push(`${this.uri}: ${text.slice(0, 80)}`);
@@ -137,6 +141,7 @@ describe("the worst thing first: nothing of the person leaves the screen", () =>
     jest.spyOn(files.File.prototype, "create").mockImplementation(function (this: { uri: string }) {
       written.push(this.uri);
     });
+    const moved = jest.spyOn(files.File.prototype as unknown as { move: (to: unknown) => void }, "move");
     const logged: unknown[] = [];
     for (const kind of ["log", "info", "warn", "error", "debug"] as const) jest.spyOn(console, kind).mockImplementation((...args: unknown[]) => { logged.push(args); });
     const fetched = jest.fn();
@@ -157,6 +162,10 @@ describe("the worst thing first: nothing of the person leaves the screen", () =>
     expect(fetched).not.toHaveBeenCalled();
     expect(written).toEqual([]);
     expect(write).not.toHaveBeenCalled();
+    expect(moved).not.toHaveBeenCalled();
+    // Nor in the phone's key store, the one other place the app keeps anything.
+    for (const spy of keyStore) expect(spy).not.toHaveBeenCalled();
+    expect(store.value).toBe(keyStoreBefore);
     expect(logged).toEqual([]);
   });
 
@@ -165,8 +174,12 @@ describe("the worst thing first: nothing of the person leaves the screen", () =>
     expect(await screen.findByText(FIRST_LINE)).toBeTruthy();
     await turnOn();
     await play(SQUATS.slice(0, 5));
-    // While setting up, the set-up's words; the line of privacy is the first screen's and the tap box's.
+    // While setting up, the set-up's words; the line of privacy is the first screen's, and the camera screen's in its box
+    // (spec Part 2 §11.8, step 7), never over the person.
     expect(screen.getByText(SET_UP_WORDS)).toBeTruthy();
+    expect(screen.queryByText(FIRST_LINE)).toBeNull();
+    await fireEvent.press(screen.getByTestId("camera-tap"));
+    expect(within(screen.getByTestId("camera-box")).getByText(FIRST_LINE)).toBeTruthy();
   });
 });
 
@@ -253,6 +266,24 @@ describe("I stand my phone up, step back, do my squats, and the phone counts the
     expect(countSays()).toBe("00 / 10");
     await fireEvent.press(screen.getByRole("button", { name: "Resume" }));
     expect(poseCamera.actives[poseCamera.actives.length - 1]).toBe(true);
+    // The same three squats a minute later: counted now.
+    await play(SQUATS.map((e) => ({ ...e, t: e.t + 60_000 })));
+    expect(countSays()).toBe("03 / 10");
+  });
+
+  it("Reset set starts the set again: its count, and its form score only from the reps after it", async () => {
+    await openTry();
+    await turnOn();
+    await play(SQUATS);
+    expect(countSays()).toBe("03 / 10");
+    await fireEvent.press(screen.getByTestId("camera-tap"));
+    await fireEvent.press(within(screen.getByTestId("camera-box")).getByRole("button", { name: "Reset set" }));
+    expect(countSays()).toBe("00 / 10");
+    await fireEvent.press(screen.getByRole("button", { name: "Set done · 0 reps" }));
+    const done = await screen.findByTestId("camera-done");
+    expect(within(done).getByText("0 reps")).toBeTruthy();
+    // The three reset reps judged no form of this set.
+    expect(within(done).queryByText(/^Form score/)).toBeNull();
   });
 });
 

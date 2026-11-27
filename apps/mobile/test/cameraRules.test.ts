@@ -1,8 +1,8 @@
-import { KEYPOINT_COUNT, KP } from "@app/shared";
+import { KEYPOINT_COUNT, KP, WORKOUT_SAVE_LIMITS } from "@app/shared";
 import { describe, expect, it } from "vitest";
 import { downOf, frameOf, type PoseEvent } from "../src/camera/poseFrame";
 import { BODY_LINES, BODY_RULES } from "../src/camera/skeleton";
-import { pressTry, shownReps, startTry, type TryPress, type TrySet } from "../src/camera/trySet";
+import { ended, pressTry, shownReps, startTry, type TryPress, type TrySet } from "../src/camera/trySet";
 import { CAMERA_DIGITS, CAMERA_TILE, cameraSizes } from "../src/look/sizing";
 
 // The camera screen's rules that need no screen (ROADMAP Stage 5 53a): which way is down from the phone's gravity, an
@@ -31,7 +31,7 @@ describe("which way is down, in the selfie camera's picture", () => {
     ["two numbers", [0, g], null],
     ["a broken number", [0, Number.NaN, 0], null],
   ])("%s", (_, gravity, down) => {
-    const got = downOf(gravity);
+    const got = downOf(gravity, 0);
     if (down === null) {
       expect(got).toBeNull();
       return;
@@ -43,8 +43,32 @@ describe("which way is down, in the selfie camera's picture", () => {
   });
 
   it("a reading a little off Earth's pull is made a unit, as the engine asks", () => {
-    const d = downOf([0.3, 10.9, 1.1]);
+    const d = downOf([0.3, 10.9, 1.1], 0);
     expect(Math.hypot(...(d ?? [0, 0, 0]))).toBeCloseTo(1, 12);
+  });
+
+  // A tablet's own axes are its natural way up, on its side; the app stands upright, so its screen, and the picture turned
+  // upright for it, are turned 90 or 270 degrees from them (round one: "down" turned 90 degrees on such a phone). Each
+  // stands upright, facing the person: down is down the picture whatever the turn.
+  it.each<[string, number[], number, [number, number, number] | null]>([
+    ["a phone upright", [0, g, 0], 0, [0, 1, 0]],
+    ["a tablet upright, its screen turned 90°", [g, 0, 0], 90, [0, 1, 0]],
+    ["a tablet upright, its screen turned 270°", [-g, 0, 0], 270, [0, 1, 0]],
+    ["a phone upside down, its screen turned 180°", [0, -g, 0], 180, [0, 1, 0]],
+    ["a tablet upright and leaning back 14°, turned 90°", [g * Math.cos(14 * deg), 0, g * Math.sin(14 * deg)], 90, [0, Math.cos(14 * deg), -Math.sin(14 * deg)]],
+    ["a tablet tilted 15° in the picture, turned 90°", [g * Math.cos(15 * deg), g * Math.sin(15 * deg), 0], 90, [-Math.sin(15 * deg), Math.cos(15 * deg), 0]],
+    ["a turn that is no quarter turn", [0, g, 0], 45, null],
+    ["a broken turn", [0, g, 0], Number.NaN, null],
+  ])("%s", (_, gravity, turn, down) => {
+    const got = downOf(gravity, turn);
+    if (down === null) {
+      expect(got).toBeNull();
+      return;
+    }
+    expect(got).not.toBeNull();
+    down.forEach((v, k) => {
+      expect(got?.[k]).toBeCloseTo(v, 9);
+    });
   });
 });
 
@@ -54,7 +78,7 @@ const standing = (): number[] => {
   return points;
 };
 const world = (): number[] => Array.from({ length: KEYPOINT_COUNT * 3 }, (_, k) => (k % 3 === 1 ? 0.5 : 0.01));
-const answer = (over: Partial<PoseEvent> = {}): PoseEvent => ({ t: 0, width: 480, height: 640, gravity: [0, g, 0], people: [{ points: standing(), world: world() }], ...over });
+const answer = (over: Partial<PoseEvent> = {}): PoseEvent => ({ t: 0, width: 480, height: 640, gravity: [0, g, 0], turn: 0, people: [{ points: standing(), world: world() }], ...over });
 
 describe("an answer of the pose model, as the engine's frame", () => {
   it("a whole answer is a frame: its picture's shape, down, and the person", () => {
@@ -136,7 +160,8 @@ describe("the set's own steps (Try the camera)", () => {
     ["a rep added by hand is added to the camera's", [{ kind: "camera", reps: 3, heldMs: 0 }, { kind: "count", by: 1 }], 4, false],
     ["a rep taken off by hand, then the camera counts on", [{ kind: "camera", reps: 3, heldMs: 0 }, { kind: "count", by: -1 }, { kind: "camera", reps: 4, heldMs: 0 }], 3, false],
     ["never below 0", [{ kind: "count", by: -1 }, { kind: "count", by: -1 }], 0, false],
-    ["Reset set: back to 0, and the camera counts on from there", [{ kind: "camera", reps: 5, heldMs: 0 }, { kind: "reset" }, { kind: "camera", reps: 6, heldMs: 0 }], 1, false],
+    // The screen starts the camera's own count again with it (TryCamera): its next count is 1.
+    ["Reset set: back to 0, and the new count counted from there", [{ kind: "camera", reps: 5, heldMs: 0 }, { kind: "count", by: 1 }, { kind: "reset" }, { kind: "camera", reps: 1, heldMs: 0 }], 1, false],
     ["paused, what the camera counts is not the set's", [{ kind: "pause" }, { kind: "camera", reps: 2, heldMs: 0 }, { kind: "resume" }, { kind: "camera", reps: 3, heldMs: 0 }], 1, false],
     ["the target reached ends the set by itself", [{ kind: "camera", reps: 10, heldMs: 0 }], 10, true],
     ["the target lowered to the count ends it", [{ kind: "camera", reps: 9, heldMs: 0 }, { kind: "target", by: -1 }], 9, true],
@@ -146,6 +171,29 @@ describe("the set's own steps (Try the camera)", () => {
     const s = run(reps, ...presses);
     expect(shownReps(s)).toBe(shown);
     expect(s.done).toBe(done);
+  });
+
+  it("a hold's Reset set starts its time again", () => {
+    const hold = run(startTry("time", 20), { kind: "camera", reps: 0, heldMs: 12_000 }, { kind: "reset" });
+    expect(hold.heldMs).toBe(0);
+    expect(run(hold, { kind: "camera", reps: 0, heldMs: 3_000 }).heldMs).toBe(3_000);
+  });
+
+  it("at the most reps a set may hold, a press more changes nothing, and the next press less is felt", () => {
+    // A target past the most, so the set does not end at it.
+    const full = run(startTry("reps", WORKOUT_SAVE_LIMITS.repsMost + 1), { kind: "camera", reps: WORKOUT_SAVE_LIMITS.repsMost, heldMs: 0 });
+    expect(shownReps(full)).toBe(WORKOUT_SAVE_LIMITS.repsMost);
+    expect(run(full, { kind: "count", by: 1 })).toEqual(full);
+    expect(shownReps(run(full, { kind: "count", by: 1 }, { kind: "count", by: -1 }))).toBe(WORKOUT_SAVE_LIMITS.repsMost - 1);
+  });
+
+  it("as the set ends, a rep the camera judged only then is the set's, unless it was paused", () => {
+    const done = run(reps, { kind: "camera", reps: 4, heldMs: 0 }, { kind: "done" });
+    expect(shownReps(ended(done, 5))).toBe(5);
+    expect(ended(done, 5).done).toBe(true);
+    expect(shownReps(ended(done, 4))).toBe(4);
+    const paused = run(reps, { kind: "camera", reps: 4, heldMs: 0 }, { kind: "pause" }, { kind: "done" });
+    expect(shownReps(ended(paused, 5))).toBe(4);
   });
 
   it("a hold ends at its target time held, and its count cannot be pressed", () => {
