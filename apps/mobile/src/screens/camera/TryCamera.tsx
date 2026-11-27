@@ -26,7 +26,7 @@ import { accountUnits } from "../setup/Setup";
 import { CopyContext } from "../ThisCopy";
 import { CameraBox, repsWords } from "./CameraBox";
 import { CameraFirst } from "./CameraFirst";
-import { CameraSet } from "./CameraSet";
+import { CameraSet, REPS_BOX_WORDS, TIME_BOX_WORDS } from "./CameraSet";
 import { FollowAlong, FollowBox, FollowDone } from "./FollowAlong";
 
 // "Try the camera" (ROADMAP Stage 5 53a): a folder's copy's door to the camera screen, before the workout carries it
@@ -244,6 +244,7 @@ function TrySetScreen({ me, exercise, onClose }: { me: string; exercise: CameraE
       onCamera={(reps, heldMs) => { press({ kind: "camera", reps, heldMs }); }}
       onProblem={() => { setStopped("failed"); press({ kind: "stopped" }); }}
       onTap={() => { setBox(true); }}
+      boxWords={timed ? TIME_BOX_WORDS : REPS_BOX_WORDS}
       onFollow={result === null ? startFollowing : undefined}
     >
       {result !== null ? (

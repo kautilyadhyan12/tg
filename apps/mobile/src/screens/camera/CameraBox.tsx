@@ -81,6 +81,19 @@ export function CameraBox({ set, units, sound, press, byHand, onClose, onByHand,
   );
 }
 
+/** The button that opens the set's box, at the foot of the camera screen and of Follow along (Kd's click-through of 53b-ii:
+ *  a tap anywhere on the screen opened it, and nobody would know). A tap anywhere still opens it too. */
+export function BoxButton({ words, onPress }: { words: string; onPress: () => void }) {
+  return (
+    <Pressable testID="box-button" accessibilityRole="button" accessibilityLabel={words} onPress={onPress} style={styles.open}>
+      <Icon name="sliders" size={18} colour="orangeLight" />
+      <Txt kind="strong" colour="text">
+        {words}
+      </Txt>
+    </Pressable>
+  );
+}
+
 /** The box from the bottom, over the screen: a tap above it closes it, or, with no `onClose`, it stays. */
 export function BoxSheet({ testID, closeID, onClose, children }: { testID: string; closeID?: string; onClose: (() => void) | null; children: ReactNode }) {
   const insets = useSafeAreaInsets();
@@ -186,4 +199,5 @@ const styles = StyleSheet.create({
   roundSpace: { width: 48 },
   pill: { flex: 1, minHeight: sizes.button, borderRadius: sizes.round, borderWidth: 1, borderColor: colours.lineStrong, backgroundColor: colours.raised, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, paddingHorizontal: 10 },
   privacy: { textAlign: "center" },
+  open: { alignSelf: "center", minHeight: sizes.button, flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 18, paddingVertical: 8, borderRadius: sizes.round, borderWidth: 1, borderColor: colours.lineStrong, backgroundColor: colours.raised },
 });

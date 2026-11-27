@@ -10,8 +10,8 @@ import { FIRST_LINE, FIRST_TITLE } from "../../src/screens/camera/CameraFirst";
 import type { BodyDrawing } from "../../src/camera/poseCameraNative";
 import { BODY_LINES } from "../../src/camera/skeleton";
 import { colours } from "../../src/look/colours";
-import { FOLLOW_LINE, FOLLOW_WORDS, SET_UP_WORDS, STOPPED_WORDS } from "../../src/screens/camera/CameraSet";
-import { ASK_REPS_WORDS, CAMERA_OFF_WORDS, CAMERA_ON_WORDS, FOLLOW_TAP_WORDS } from "../../src/screens/camera/FollowAlong";
+import { FOLLOW_LINE, FOLLOW_WORDS, REPS_BOX_WORDS, SET_UP_WORDS, STOPPED_WORDS, TIME_BOX_WORDS } from "../../src/screens/camera/CameraSet";
+import { ASK_REPS_WORDS, CAMERA_OFF_WORDS, CAMERA_ON_WORDS, FOLLOW_BOX_WORDS } from "../../src/screens/camera/FollowAlong";
 import { FOLLOW_TICK_MS } from "../../src/screens/camera/TryCamera";
 import { RAVI, fakeServer, kept, memoryStore, tokens } from "../kit";
 
@@ -200,7 +200,32 @@ describe("I stand my phone up, step back, do my squats, and the phone counts the
     expect(countSays()).toBe("03 / 10");
     expect(sounds.played.filter((s) => s === "rep")).toHaveLength(3);
     expect(screen.getByText("Squat · Set 1 of 1")).toBeTruthy();
-    expect(screen.getByText("Tap the screen to change reps, weight or pause")).toBeTruthy();
+    expect(screen.getByRole("button", { name: REPS_BOX_WORDS })).toBeTruthy();
+  });
+
+  it("a button says where reps, weight and pause are, while setting up and while counting, and opens their box (Kd's click-through of 53b-ii)", async () => {
+    await openTry();
+    await turnOn();
+    // Setting up: the target can be set before the first rep.
+    expect(screen.getByText(SET_UP_WORDS)).toBeTruthy();
+    await fireEvent.press(screen.getByRole("button", { name: REPS_BOX_WORDS }));
+    const box = screen.getByTestId("camera-box");
+    await fireEvent.press(within(box).getByRole("button", { name: "Lower the target" }));
+    expect(countSays()).toBe("00 / 9");
+    // Open, the box is all there is: the button waits under it.
+    expect(screen.queryByRole("button", { name: REPS_BOX_WORDS })).toBeNull();
+    await fireEvent.press(screen.getByTestId("camera-box-close"));
+    await play(SQUATS);
+    expect(screen.queryByText(SET_UP_WORDS)).toBeNull();
+    await fireEvent.press(screen.getByRole("button", { name: REPS_BOX_WORDS }));
+    expect(screen.getByTestId("camera-box")).toBeTruthy();
+  });
+
+  it("a hold's button names its time", async () => {
+    await openTry("L-sit");
+    await turnOn();
+    expect(screen.getByRole("button", { name: TIME_BOX_WORDS })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: REPS_BOX_WORDS })).toBeNull();
   });
 
   it("the phone is told how to draw my body on its own picture, and the screen draws no second one behind it", async () => {
@@ -598,12 +623,12 @@ describe("Follow along (53b-ii): the gym is busy, so I tap the clip, follow it o
     expect(timerSays()).toBe("time left 00:30");
     expect(sounds.played).toEqual(["count", "count", "count", "go"]);
     expect(screen.getByText("Squat · Set 1 of 1")).toBeTruthy();
-    expect(screen.getByText(FOLLOW_TAP_WORDS)).toBeTruthy();
+    expect(screen.getByRole("button", { name: FOLLOW_BOX_WORDS })).toBeTruthy();
     await clock.pass(15_000);
     expect(timerSays()).toBe("time left 00:15");
     expect(sounds.spoken[sounds.spoken.length - 1]).toEqual({ id: "halfway", index: 0 });
-    // A tap: the time made longer, and the timer says so at once.
-    await fireEvent.press(screen.getByTestId("follow-tap"));
+    // Its button: the time made longer, and the timer says so at once.
+    await fireEvent.press(screen.getByRole("button", { name: FOLLOW_BOX_WORDS }));
     const box = screen.getByTestId("follow-box");
     for (const name of ["Pause", "End", "Reset set", "Count this set myself", "Skip exercise", "Set done · 15 s"]) expect(within(box).getByRole("button", { name })).toBeTruthy();
     await fireEvent.press(within(box).getByRole("button", { name: "Lengthen the time" }));

@@ -12,6 +12,7 @@ import { MOST_TEXT_GROWTH, cameraSizes } from "../../look/sizing";
 import { EYEBROW, Txt, fonts } from "../../look/Txt";
 import { soundNative } from "../../sound/soundNative";
 import { Led } from "../library/Records";
+import { BoxButton } from "./CameraBox";
 
 // The camera screen (ROADMAP Stage 5 53a; Kd's drawing of 2026-11-26, "The camera screen", boards 2 to 5): the selfie
 // camera's picture across the whole phone, seen by somebody 2 to 3 metres from it who can press nothing. Over it only
@@ -23,6 +24,9 @@ export const STOPPED_WORDS = "The camera stopped. Count this set yourself.";
 export const SET_UP_WORDS = "Step back until the camera sees you like the picture.";
 export const SET_UP_LINE = "Stand the phone on the floor, a bench or a shelf, 2 to 3 m away. From another angle the count may be wrong.";
 export const TAP_WORDS = "Tap the screen to change reps, weight or pause";
+/** The button at the foot that opens the set's box: what is in it, for a set of reps and for a hold. */
+export const REPS_BOX_WORDS = "Reps, weight, pause";
+export const TIME_BOX_WORDS = "Time, weight, pause";
 /** Under the reference clip: the other way to do the set, for a room where the camera may not follow the person (53b-ii). */
 export const FOLLOW_WORDS = "Follow along";
 /** Said before every camera set, whatever the room, as an instruction beside the way to it (RULINGS 2026-08-17: the app
@@ -75,13 +79,15 @@ export interface CameraSetProps {
   onCamera: (reps: number, heldMs: number) => void;
   onProblem: () => void;
   onTap: () => void;
+  /** The words of the button that opens the box (`REPS_BOX_WORDS`, `TIME_BOX_WORDS`). */
+  boxWords: string;
   /** Follow along (53b-ii): the clip in the corner, and the button under it, open it. Not offered once the set is over. */
   onFollow?: (() => void) | undefined;
   /** The box over the camera, while open. */
   children?: ReactNode;
 }
 
-export function CameraSet({ live, title, digits, of, paused, sound, now, stopped, reference, onCamera, onProblem, onTap, onFollow, children }: CameraSetProps) {
+export function CameraSet({ live, title, digits, of, paused, sound, now, stopped, reference, onCamera, onProblem, onTap, boxWords, onFollow, children }: CameraSetProps) {
   const insets = useSafeAreaInsets();
   const screen = useWindowDimensions();
   const sizes = cameraSizes(screen.height);
@@ -168,7 +174,7 @@ export function CameraSet({ live, title, digits, of, paused, sound, now, stopped
             </View>
           )}
         </View>
-        <View style={[styles.bottom, { paddingBottom: insets.bottom + 20 }]} pointerEvents="none">
+        <View style={[styles.bottom, { paddingBottom: insets.bottom + 20 }]} pointerEvents="box-none">
           {setUp ? (
             <View style={styles.setUp}>
               <Txt kind="h2" style={styles.shadow}>
@@ -185,6 +191,8 @@ export function CameraSet({ live, title, digits, of, paused, sound, now, stopped
                   </Txt>
                 </View>
               )}
+              {/* The target can be set before the first rep. */}
+              {children === undefined ? <BoxButton words={boxWords} onPress={onTap} /> : null}
             </View>
           ) : (
             <>
@@ -192,11 +200,7 @@ export function CameraSet({ live, title, digits, of, paused, sound, now, stopped
               <Txt kind="strong" style={[styles.centre, styles.shadow]}>
                 {title}
               </Txt>
-              {line === null && children === undefined ? (
-                <Txt kind="small" colour="text" style={[styles.centre, styles.shadow]}>
-                  {TAP_WORDS}
-                </Txt>
-              ) : null}
+              {children === undefined ? <BoxButton words={boxWords} onPress={onTap} /> : null}
             </>
           )}
         </View>

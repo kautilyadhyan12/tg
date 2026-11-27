@@ -10,7 +10,7 @@ import { followDigits } from "../../look/sizing";
 import { Txt, fonts } from "../../look/Txt";
 import { Led } from "../library/Records";
 import { countdown } from "../workout/words";
-import { BoxLinks, BoxPills, BoxRows, BoxSheet, Pill, Row, WeightRow, repsWords } from "./CameraBox";
+import { BoxButton, BoxLinks, BoxPills, BoxRows, BoxSheet, Pill, Row, WeightRow, repsWords } from "./CameraBox";
 
 // Follow along (ROADMAP Stage 5 53b-ii; Kd's drawing of 2026-11-27, boards 3 to 6; RULINGS 2026-08-17): the exercise's clip
 // fills the phone and a timer runs the set, for a room where the camera may not be able to follow the person. The camera is
@@ -20,6 +20,8 @@ import { BoxLinks, BoxPills, BoxRows, BoxSheet, Pill, Row, WeightRow, repsWords 
 export const CAMERA_OFF_WORDS = "Camera off";
 export const CAMERA_ON_WORDS = "Tap to turn on";
 export const FOLLOW_TAP_WORDS = "Tap the screen to change time, weight or pause";
+/** The button at the foot that opens Follow along's box. */
+export const FOLLOW_BOX_WORDS = "Time, weight, pause";
 export const ASK_REPS_WORDS = "How many reps did you do?";
 
 export interface FollowAlongProps {
@@ -86,13 +88,9 @@ export function FollowAlong({ follow, name, setWords, reference, press, onTap, o
           ) : (
             <View style={styles.centred} pointerEvents="none">
               <Txt kind="strong" style={styles.centre}>{`${name} · ${setWords}`}</Txt>
-              {children === undefined ? (
-                <Txt kind="small" colour="text" style={styles.centre}>
-                  {FOLLOW_TAP_WORDS}
-                </Txt>
-              ) : null}
             </View>
           )}
+          {children === undefined ? <BoxButton words={FOLLOW_BOX_WORDS} onPress={onTap} /> : null}
         </View>
       </Pressable>
       {children}
@@ -182,7 +180,7 @@ const styles = StyleSheet.create({
   melt: { position: "absolute", left: 0, right: 0, height: 32 },
   meltTop: { top: 0, experimental_backgroundImage: `linear-gradient(to bottom, ${colours.page}, ${colours.cameraShadeClear})` },
   meltFoot: { bottom: 0, experimental_backgroundImage: `linear-gradient(to top, ${colours.page}, ${colours.cameraShadeClear})` },
-  foot: { paddingHorizontal: 16, paddingTop: 8, backgroundColor: colours.page },
+  foot: { paddingHorizontal: 16, paddingTop: 8, gap: 10, backgroundColor: colours.page },
   readyRow: { flexDirection: "row", alignItems: "center", gap: 12 },
   grow: { flex: 1, gap: 2 },
   centred: { alignItems: "center", gap: 4 },
