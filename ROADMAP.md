@@ -819,7 +819,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
       - 37j. [x] **Auto-pause and Start use the phone's motion** · merged 2026-11-25 · PR #646
       - 37k. [x] **The line holds still with Auto-pause off** · merged 2026-11-26 · PR #649
     - The hunt's other running faults (Kd, 2026-11-26: three jobs, split where the work differs in kind, `rulings/2026-11-26-37m.md`).
-      - 37m. [ ] **A saved run always reaches Your runs, and the run plan's faults**: one run the server fails never holds back the others; Your runs refreshes and keeps its place; the run plan's eight.
+      - 37m. [x] **A saved run always reaches Your runs, and the run plan's faults** · merged 2026-11-27 · PR #652
       - 37n. [ ] **Heart rate and the voice**: the hunt's C1 to C9, Android's own code, tried with the strap.
       - 37o. [ ] **The run's clock against the GPS, sign-out during a run, the map before the first point, long runs and the server**: the hunt's A6, A7, A9, A11 and E1 to E3; Risky (sign-in, a database change).
 38. [ ] **The global board** (its reminders moved to item 19e on 2026-11-05): last, as Kd ruled on 2026-11-01 (`rulings/2026-11-01-17c-ii-a.md`): Active days and Running, the server's checks, a stranger's profile, and follow requests for somebody who chose Hide me, seen from outside their gym; Follow with Followers and Following counts everywhere, gyms included (`rulings/2026-11-01-17c-ii-b.md`). It waits for items 18, 37, 53 and 64.
