@@ -118,12 +118,33 @@ async function openBox(preview = previewOf(GOLD)) {
   fireEvent.click(screen.getByLabelText('One of the memberships above'));
   fireEvent.change(screen.getByLabelText('Which membership Gold is'), { target: { value: GOLD.id } });
   fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
-  return await screen.findByRole('group', { name: BOX_GOLD });
+  return await screen.findByRole('dialog', { name: BOX_GOLD });
 }
 
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+});
+
+describe('the worst thing: a membership given to the wrong type, or to somebody not ticked (V4b-i)', () => {
+  it('Give it to them on the second of two types opens the box in the middle for that type, and sends only who is ticked', async () => {
+    const SILVER = type(3, { name: 'Silver Monthly', priceMinor: 2999 });
+    const silverWord = name({ word: 'Silv', people: 4, link: { typeId: SILVER.id, typeName: 'Silver Monthly', typeArchived: false, waiting: 4, ownName: false } });
+    const goldWord = counted(5);
+    await open([GOLD, SILVER], [goldWord, silverWord]);
+    orgService.previewMembershipLink.mockResolvedValue({ data: previewOf(SILVER, { word: 'Silv' }) });
+    fireEvent.click(await screen.findByRole('button', { name: 'Give Silver Monthly to the people with Silv on your member list' }));
+    await waitFor(() => expect(orgService.previewMembershipLink).toHaveBeenCalledWith(GYM, { word: 'Silv', typeId: SILVER.id }));
+    const box = await screen.findByRole('dialog', { name: 'Give Silver Monthly to the people with “Silv” on your member list?' });
+    expect(screen.queryByRole('dialog', { name: BOX_GOLD })).toBeNull();
+    // Untick the people whose date has passed: they must not be sent.
+    fireEvent.click(within(box).getByLabelText(/payment due/i));
+    fireEvent.click(within(box).getByLabelText('Yes, they have paid'));
+    orgService.linkMembershipWord.mockResolvedValue({ data: { given: 3, list: { words: [goldWord, silverWord], types: [] } } });
+    fireEvent.click(within(box).getByRole('button', { name: 'Give Silver Monthly to 3 people' }));
+    await waitFor(() => expect(orgService.linkMembershipWord).toHaveBeenCalledTimes(1));
+    expect(orgService.linkMembershipWord).toHaveBeenCalledWith(GYM, { word: 'Silv', typeId: SILVER.id, groups: { settled: true, due: false, ask: true }, digest: DIGEST, paid: true });
+  });
 });
 
 describe("the member list's names sit in the gym's one list of memberships", () => {
@@ -175,7 +196,7 @@ describe("a name that is already one of the gym's own types (Kd's click-through)
     fireEvent.click(screen.getByRole('button', { name: 'See who on your member list can get Gold Monthly' }));
     await waitFor(() => expect(orgService.previewMembershipLink).toHaveBeenCalledWith(GYM, { word: 'Gold Monthly', typeId: GOLD.id }));
     // Its name is said once in the box, not "Gold Monthly … with “Gold Monthly”".
-    expect(await screen.findByRole('group', { name: 'Give Gold Monthly to the people who have it on your member list?' })).toBeTruthy();
+    expect(await screen.findByRole('dialog', { name: 'Give Gold Monthly to the people who have it on your member list?' })).toBeTruthy();
     expect(screen.queryByRole('combobox')).toBeNull();
   });
 
@@ -184,7 +205,7 @@ describe("a name that is already one of the gym's own types (Kd's click-through)
     expect(await screen.findByText('3 people on your member list have Gold Monthly, but it is not on their pages yet.')).toBeTruthy();
     orgService.previewMembershipLink.mockResolvedValue({ data: previewOf(GOLD, { word: 'Gold Monthly', ownName: true }) });
     fireEvent.click(screen.getByRole('button', { name: 'Give Gold Monthly to the people on your member list' }));
-    const box = await screen.findByRole('group', { name: 'Give Gold Monthly to the people who have it on your member list?' });
+    const box = await screen.findByRole('dialog', { name: 'Give Gold Monthly to the people who have it on your member list?' });
     expect(within(box).getByRole('button', { name: 'Give Gold Monthly to 4 people' })).toBeTruthy();
   });
 });
@@ -208,7 +229,7 @@ describe('Set up, in a gym that has set no price yet', () => {
     await waitFor(() => expect(orgService.createMembershipType).toHaveBeenCalledWith(GYM, expect.objectContaining({ name: 'Gold', kind: 'recurring', priceMinor: 4999 })));
     // The box is for the type just made, found by its id and not by its name.
     await waitFor(() => expect(orgService.previewMembershipLink).toHaveBeenCalledWith(GYM, { word: 'Gold', typeId: MADE.id }));
-    const box = await screen.findByRole('group', { name: 'Give Gold to the people who have it on your member list?' });
+    const box = await screen.findByRole('dialog', { name: 'Give Gold to the people who have it on your member list?' });
     expect(orgService.linkMembershipWord).not.toHaveBeenCalled();
 
     orgService.linkMembershipWord.mockResolvedValue({
@@ -264,7 +285,7 @@ describe('Set up, in a gym that already has membership types', () => {
     fireEvent.change(which, { target: { value: GOLD.id } });
     fireEvent.click(within(ask).getByRole('button', { name: 'Continue' }));
     await waitFor(() => expect(orgService.previewMembershipLink).toHaveBeenCalledWith(GYM, { word: 'Gold', typeId: GOLD.id }));
-    expect(await screen.findByRole('group', { name: BOX_GOLD })).toBeTruthy();
+    expect(await screen.findByRole('dialog', { name: BOX_GOLD })).toBeTruthy();
     expect(screen.queryByRole('group', { name: 'What is “Gold” here?' })).toBeNull();
     expect(orgService.linkMembershipWord).not.toHaveBeenCalled();
   });
@@ -320,7 +341,7 @@ describe('Set up, in a gym that already has membership types', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Set up Gold' }));
     expect(screen.getByRole('button', { name: 'Set up Silver' }).disabled).toBe(true);
     expect(screen.getByRole('button', { name: 'Add a membership type' }).disabled).toBe(true);
-    expect(screen.getByRole('button', { name: 'Change Gold Monthly' }).disabled).toBe(true);
+    expect(screen.getByRole('button', { name: 'Edit Gold Monthly' }).disabled).toBe(true);
     expect(screen.getByRole('button', { name: 'Archive Gold Monthly' }).disabled).toBe(true);
   });
 });
@@ -388,7 +409,7 @@ describe('the box of who gets it', () => {
     for (const tick of within(box).getAllByRole('checkbox')) expect(tick.checked).toBe(true);
     expect(within(box).getByText(/No money is taken and nobody is emailed/)).toBeTruthy();
     // While the box is open the price list is not changed under it.
-    expect(screen.getByRole('button', { name: 'Change Gold Monthly' }).disabled).toBe(true);
+    expect(screen.getByRole('button', { name: 'Edit Gold Monthly' }).disabled).toBe(true);
     expect(screen.getByRole('button', { name: 'Add a membership type' }).disabled).toBe(true);
 
     const yes = within(box).getByLabelText('Yes, they have paid');
@@ -411,7 +432,7 @@ describe('the box of who gets it', () => {
       }),
     );
     expect(await screen.findByText("4 people now have Gold Monthly. You can see it on each person's page.")).toBeTruthy();
-    expect(screen.queryByRole('group', { name: BOX_GOLD })).toBeNull();
+    expect(screen.queryByRole('dialog', { name: BOX_GOLD })).toBeNull();
     // The name has left "not set up yet" and is said on the type's own row.
     expect(screen.queryByText('On your member list, not set up yet')).toBeNull();
     expect(screen.getByText('On your member list this is “Gold” · 5 people.')).toBeTruthy();
@@ -441,14 +462,15 @@ describe('the box of who gets it', () => {
     await open([GOLD], [counted(4)]);
     orgService.previewMembershipLink.mockResolvedValue({ data: topUpOf(GOLD) });
     fireEvent.click(await screen.findByRole('button', { name: 'See who with Gold on your member list can get Gold Monthly' }));
-    const box = await screen.findByRole('group', { name: BOX_GOLD });
+    const box = await screen.findByRole('dialog', { name: BOX_GOLD });
     for (const tick of within(box).getAllByRole('checkbox')) expect(tick.checked).toBe(false);
     expect(within(box).getByText('1 person already has Gold Monthly, or had it before.')).toBeTruthy();
     expect(rowsOf(box, 'has')).toEqual([['Sam Carter']]);
     // Already counted as Gold Monthly: nothing to press until somebody is ticked.
     expect(within(box).getByText('Tick who should get Gold Monthly.')).toBeTruthy();
     expect(within(box).queryByRole('button', { name: /Give Gold Monthly|Count/ })).toBeNull();
-    expect(within(box).getByRole('button', { name: 'Close' })).toBeTruthy();
+    // The foot's Close, beside the box's own X.
+    expect(within(box).getByText('Close', { selector: 'button' })).toBeTruthy();
     expect(within(box).queryByLabelText('Yes, they have paid')).toBeNull();
 
     // Only the paid-up people are ticked: only they are sent.
@@ -466,7 +488,7 @@ describe('the box of who gets it', () => {
     );
   });
 
-  it('a renewal: the row offers it, the box opens under that row with the people ticked, and the result is said there', async () => {
+  it('a renewal: the row offers it, the box opens in the middle with the people ticked, and the result is said in that row', async () => {
     const TERM = type(3, { name: '3 Months', kind: 'one_time', termCount: 3 });
     const OTHER = type(4, { name: 'Zumba Pass' });
     const plan = (again) => name({ word: '3 Month Plan', people: 8, link: { typeId: TERM.id, typeName: '3 Months', typeArchived: false, waiting: 0, again, ownName: false } });
@@ -480,11 +502,11 @@ describe('the box of who gets it', () => {
       }),
     });
     fireEvent.click(screen.getByRole('button', { name: 'Renew 3 Months for the people with 3 Month Plan on your member list' }));
-    const box = await screen.findByRole('group', { name: 'Renew 3 Months for 2 people?' });
-    // In the row of the membership it is about, not under the whole list.
+    const box = await screen.findByRole('dialog', { name: 'Renew 3 Months for 2 people?' });
+    // Over the page, in the middle: in no row, the one it is about named in its title.
     const row = () => screen.getByText('3 Months', { selector: 'span' }).closest('li');
-    expect(row().contains(box)).toBe(true);
-    expect(screen.getByText('Zumba Pass', { selector: 'span' }).closest('li').contains(box)).toBe(false);
+    expect(row().contains(box)).toBe(false);
+    expect(box.getAttribute('aria-modal')).toBe('true');
     expect(within(box).getByText('Their 3 Months memberships have ended, and your member list shows a later end date for them. Each gets a new 3 Months up to the date beside their name.')).toBeTruthy();
     expect(within(box).getByText('Who is renewed')).toBeTruthy();
     expect(rowsOf(box, 'ask')).toEqual([
@@ -508,11 +530,11 @@ describe('the box of who gets it', () => {
     // What it did is said in that same row, where the box was.
     const said = await screen.findByText("2 people now have 3 Months. You can see it on each person's page.");
     expect(row().contains(said)).toBe(true);
-    expect(screen.queryByRole('group', { name: 'Renew 3 Months for 2 people?' })).toBeNull();
+    expect(screen.queryByRole('dialog', { name: 'Renew 3 Months for 2 people?' })).toBeNull();
     expect(screen.queryByText(/You can renew/)).toBeNull();
   });
 
-  it('a button on another page leads here with one box to open: it opens once, under its row', async () => {
+  it('a button on another page leads here with one box to open: it opens once, for that membership', async () => {
     const TERM = type(3, { name: '3 Months', kind: 'one_time', termCount: 3 });
     orgService.getMembershipTypes.mockResolvedValue({ data: listOf({ types: [TERM] }) });
     orgService.getMembershipWords.mockResolvedValue(wordsOf([name({ word: '3 Month Plan', people: 8, link: { typeId: TERM.id, typeName: '3 Months', typeArchived: false, waiting: 0, again: 1, ownName: false } })]));
@@ -521,8 +543,7 @@ describe('the box of who gets it', () => {
     });
     const onBoxOpened = vi.fn();
     const { rerender } = render(<MembershipTypesPanel org={ORG} readOnly={false} openBox={{ typeId: TERM.id, word: '3 Month Plan' }} onBoxOpened={onBoxOpened} />);
-    const box = await screen.findByRole('group', { name: 'Renew 3 Months for 1 person?' });
-    expect(screen.getByText('3 Months', { selector: 'span' }).closest('li').contains(box)).toBe(true);
+    expect(await screen.findByRole('dialog', { name: 'Renew 3 Months for 1 person?' })).toBeTruthy();
     expect(orgService.previewMembershipLink).toHaveBeenCalledWith(GYM, { word: '3 Month Plan', typeId: TERM.id });
     expect(onBoxOpened).toHaveBeenCalledTimes(1);
     // The page drawing again, with the address tidied or not, opens nothing more.
@@ -577,7 +598,7 @@ describe('the box of who gets it', () => {
     await open([GOLD], [name()]);
     const box = await openBox();
     fireEvent.click(within(box).getByRole('button', { name: 'Cancel' }));
-    expect(screen.queryByRole('group', { name: BOX_GOLD })).toBeNull();
+    expect(screen.queryByRole('dialog', { name: BOX_GOLD })).toBeNull();
     expect(orgService.linkMembershipWord).not.toHaveBeenCalled();
     expect((await block()).textContent).toContain('“Gold” · 5 people');
   });
@@ -605,7 +626,7 @@ describe('the box of who gets it', () => {
     orgService.getMembershipWords.mockResolvedValue(wordsOf([counted(0)]));
     fireEvent.click(within(box).getByRole('button', { name: 'Give Gold Monthly to 2 people' }));
     expect(await screen.findByText("This was already done, and nothing more was given. Check each person's page.")).toBeTruthy();
-    expect(screen.queryByRole('group', { name: BOX_GOLD })).toBeNull();
+    expect(screen.queryByRole('dialog', { name: BOX_GOLD })).toBeNull();
     expect(screen.queryByText(/Nobody was given/)).toBeNull();
     // The list as it stands now: the name is tied, on its type's row.
     expect(await screen.findByText('On your member list this is “Gold” · 5 people.')).toBeTruthy();
@@ -652,7 +673,7 @@ describe('the box of who gets it', () => {
     fireEvent.change(screen.getByLabelText('Which membership Gold is'), { target: { value: GOLD.id } });
     fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
     expect(await screen.findByText("We couldn't work out who would get that membership. Please try again.")).toBeTruthy();
-    expect(screen.queryByRole('group', { name: BOX_GOLD })).toBeNull();
+    expect(screen.queryByRole('dialog', { name: BOX_GOLD })).toBeNull();
     expect(screen.getByRole('button', { name: 'Set up Gold' }).disabled).toBe(false);
   });
 });
@@ -665,7 +686,7 @@ describe("a name the gym said is one of its types, on that type's row", () => {
     orgService.previewMembershipLink.mockResolvedValue({ data: topUpOf(GOLD) });
     fireEvent.click(screen.getByRole('button', { name: 'See who with Gold on your member list can get Gold Monthly' }));
     await waitFor(() => expect(orgService.previewMembershipLink).toHaveBeenCalledWith(GYM, { word: 'Gold', typeId: GOLD.id }));
-    expect(await screen.findByRole('group', { name: BOX_GOLD })).toBeTruthy();
+    expect(await screen.findByRole('dialog', { name: BOX_GOLD })).toBeTruthy();
   });
 
   it('with everybody holding it, says so and offers nothing to give', async () => {

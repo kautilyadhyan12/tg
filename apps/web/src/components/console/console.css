@@ -2703,6 +2703,9 @@
 .c-choice { display: flex; align-items: flex-start; gap: 12px; padding: 14px 16px; border: 1px solid var(--ctl-line); border-radius: 14px; color: var(--t1); cursor: pointer; min-width: 0; overflow-wrap: anywhere; }
 .c-choice-on { border-color: var(--soft-line); background: var(--soft); }
 .c-choice input { margin-top: 2px; flex: none; }
+/* A tab's panel on Memberships (V4b-i): its boxes keep the page's own gap; hidden is hidden. */
+.c-tabpanel { display: flex; flex-direction: column; gap: inherit; min-width: 0; }
+.c-tabpanel[hidden] { display: none; }
 .c-box-foot { position: sticky; bottom: 64px; z-index: 5; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 12px 0; background: var(--card); border-top: 1px solid var(--line); }
 @media (min-width: 768px) {
   .c-box-foot { bottom: 0; }

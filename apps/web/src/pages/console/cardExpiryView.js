@@ -1,7 +1,7 @@
 import { CARD_EXPIRY_LAST_DAY, cardName } from '@app/shared';
 import { shortDay } from './memberBillsView';
 
-// A REMINDER BEFORE A CARD EXPIRES (ROADMAP 18d-iii-c): what the Bills box lists under its tick,
+// A REMINDER BEFORE A CARD EXPIRES (ROADMAP 18d-iii-c): what Billing rules lists under its tick,
 // and what a person's Card on file says of it, from the server's answer.
 
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];

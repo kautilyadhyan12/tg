@@ -1,4 +1,4 @@
-// The Bills box on the Memberships page (ROADMAP 18a-i; the billing day, 18y): the day is picked,
+// Billing rules on the Memberships page (ROADMAP 18a-i; the billing day, 18y): the day is picked,
 // said with a real date, and waits for Save; staff without the payments tick read it only.
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
@@ -18,7 +18,7 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-describe('the billing day on the Bills box', () => {
+describe('the billing day in Billing rules', () => {
   it('picked, said with a real date, and saved with the grace as it is', async () => {
     orgService.getBillSettings.mockResolvedValue({ data: { overdueAfterDays: 3, billDay: null, canChange: true } });
     orgService.saveBillSettings.mockResolvedValue({ data: { overdueAfterDays: 3, billDay: 1, canChange: true } });

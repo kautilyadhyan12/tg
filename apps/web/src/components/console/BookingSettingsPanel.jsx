@@ -482,7 +482,7 @@ export default function BookingSettingsPanel({ org, orgSlug, privileges, readOnl
                   </span>
                 </fieldset>
                 <p className="text-sm m-0 flex flex-wrap items-center gap-x-3 gap-y-1" style={labelStyle} data-testid="overdue-grace">
-                  <span>The grace period is set in the Bills box on Memberships.</span>
+                  <span>The grace period is set in Billing rules on Memberships.</span>
                   {billsTo === null ? (
                     <span style={hintStyle}>Staff who record members' payments change it there.</span>
                   ) : (

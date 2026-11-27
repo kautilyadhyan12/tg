@@ -1,8 +1,8 @@
-import { Link, useParams, useSearchParams } from 'react-router-dom';
+import { Link, useLocation, useParams, useSearchParams } from 'react-router-dom';
 import { ConsoleFailed, ConsoleLoading } from '../../components/console/ConsoleStates';
 import MembershipTypesPanel from '../../components/console/MembershipTypesPanel';
 import { useConsoleOrg } from './useConsoleOrg';
-import { canManageMemberships } from './membershipTypesView';
+import { canManageMemberships, membershipTabFor } from './membershipTypesView';
 import { consoleIsReadOnly } from './billingView';
 import { viewerPrivileges } from './consoleView';
 
@@ -14,6 +14,10 @@ import { viewerPrivileges } from './consoleView';
 export default function Memberships() {
   const { orgSlug } = useParams();
   const { loading, error, org, notFound, reload } = useConsoleOrg(orgSlug);
+  // "#discounts" and "#tax" open their tab (Search, Payments overview, Refer a friend); each press
+  // of a link here is a new `key`, so it opens that tab again after another was pressed.
+  const location = useLocation();
+  const section = { key: location.key, tab: membershipTabFor(location.hash) };
   // A button on another page can lead here with one membership's box to open
   // (`membershipBoxTo`): the address is tidied once the box has opened.
   const [searchParams, setSearchParams] = useSearchParams();
@@ -75,5 +79,5 @@ export default function Memberships() {
   }
 
   // Keyed on the gym: the address is one route for every gym, and the page holds a form.
-  return <MembershipTypesPanel key={`memberships-${org.id}`} org={org} readOnly={consoleIsReadOnly(org)} openBox={openBox} onBoxOpened={boxOpened} />;
+  return <MembershipTypesPanel key={`memberships-${org.id}`} org={org} readOnly={consoleIsReadOnly(org)} openBox={openBox} onBoxOpened={boxOpened} section={section} />;
 }

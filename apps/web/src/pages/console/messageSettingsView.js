@@ -213,8 +213,8 @@ export function messageWhen(kind, orgType, use = {}) {
 }
 
 /** Where the days before a bill reads Overdue are changed, said under Payment overdue. */
-export const OVERDUE_DAYS_NOTE = 'It follows the grace period you set in the Bills box on Memberships.';
-export const OVERDUE_DAYS_ASK = 'It follows the grace period in the Bills box on Memberships, which staff who can change the price list set.';
+export const OVERDUE_DAYS_NOTE = 'It follows the grace period you set in Billing rules on Memberships.';
+export const OVERDUE_DAYS_ASK = 'It follows the grace period in Billing rules on Memberships, which staff who can change the price list set.';
 
 /** What a message needs from the gym that the gym does not have yet, so nobody will get it:
  *  the sentence, the place whose button opens where to set it up, that button's words, and

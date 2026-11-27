@@ -3630,7 +3630,7 @@ with the payment that settles the bill of the first unpaid period.
   asks how they paid.
 - **Paid · Due · Overdue** is worked out on the gym's own day and stored nowhere. A bill
   reads Overdue once the gym's **grace period** has passed after its due date: 0 to 60
-  days, starting at 0, set in the Bills box on Memberships (as Gymdesk lets a gym set
+  days, starting at 0, set in Billing rules on Memberships (as Gymdesk lets a gym set
   when a manual payment turns overdue).
 - **Void payment** (named Undo last payment until 18o, below) takes back the newest payment on a membership, one at a time;
   its row is kept, marked. A period counted paid before bills were kept, or on the word
@@ -4477,7 +4477,7 @@ Failed payments, only where there are some. No new table: the gym's declines are
 `gym_card_charges_card_idx`.
 
 *As built, 18d-iii-c (a reminder before a card expires):* the gym's own choice, off until it ticks
-"Email a reminder before a saved card expires" in Bills on Memberships (staff with `billing.members`;
+"Email a reminder before a saved card expires" in Billing rules on Memberships (staff with `billing.members`;
 it waits for Save, and each change is a line of the gym's activity). The tick is drawn where the gym
 is connected to Square, or where it is on. From 6 in the morning, gym time, on the 1st of the month a
 card on file expires (or on the day the gym turns it on or the card is saved, up to the 25th: one
@@ -5692,7 +5692,7 @@ in this order: Welcome · Trial check-in · Trial ending · Membership ending ·
   software, whatever its bills here read, and is never told (round one, H1: a gym that
   keeps its money elsewhere and sells one day pass at the desk told everybody). It goes
   `paymentNoticeAfterDays` after the due date: the first day the bill reads Overdue on the
-  person's page (more than `gyms.bills_overdue_days` after it, the Bills box on
+  person's page (more than `gyms.bills_overdue_days` after it, Billing rules on
   Memberships), and never sooner than 3 days (`GYM_MESSAGE_OVERDUE_WAIT_DAYS`), since
   staff record a bank transfer or money handed over a day or two late. So the message
   never comes before the page says Overdue. On 30 mornings at most
@@ -5739,7 +5739,7 @@ in this order: Welcome · Trial check-in · Trial ending · Membership ending ·
   45 days (Payment overdue; Members, since a payment is recorded on a person's page).
   Archiving a type ends nobody's membership, so `trialOnList` and `priceList` stay true
   while anybody still holds one. The Payment overdue row says the day the notice goes in
-  words, from `paymentNoticeAfterDays`, with a button to the Bills box. The settings read
+  words, from `paymentNoticeAfterDays`, with a button to Billing rules. The settings read
   carries `trialOnList`, `priceList`, `payments` and `billsOverdueDays` for this.
 - **A save** takes the kinds and numbers the page sent; one it left out keeps what it had,
   so a page loaded before the four new kinds can still save.

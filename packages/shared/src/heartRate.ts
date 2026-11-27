@@ -53,6 +53,16 @@ export const phoneHeartSamplesSchema = z
   .max(100_000);
 export type PhoneHeartSample = z.infer<typeof phoneHeartSamplesSchema>[number];
 
+/** What the phone's Bluetooth code says of the monitor it watches (`status`): its address, whether it is connected, and
+ *  whether the phone is listening for it before connecting (37n: a monitor not paired and not heard since the app
+ *  started, which Android 11 and older cannot hear with Location off). A copy built before 37n says nothing of
+ *  listening: not listening. */
+export const phoneHeartStatusSchema = z.object({
+  device: z.string().min(1).max(64).nullable(),
+  connected: z.boolean(),
+  finding: z.boolean().catch(false).default(false),
+});
+
 /** The monitor a person connected, kept on their phone: its Bluetooth address and its own name. */
 export const keptHeartMonitorSchema = z.object({ id: z.string().min(1).max(64), name: z.string().max(100) });
 
