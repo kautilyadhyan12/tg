@@ -501,7 +501,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
     - V4a-ii. [x] **A sale** · merged 2026-11-26 · PR #650
     - V4a-iii. [x] **Products, Tax and Discounts** · merged 2026-11-27 · PR #653
    - V4b. **Memberships**, in two (2026-11-27; boards `Memberships*`, `MembershipAdd`, `MembershipRaise`, `PhoneMemberships`):
-    - V4b-i. [ ] **The page: tabs, the price list, who gets it, Billing rules**
+    - V4b-i. [x] **The page: tabs, the price list, who gets it, Billing rules** · merged 2026-11-27 · PR #656
     - V4b-ii. [ ] **Add and Edit a membership type, a page of its own in five parts, with the higher price**
    - V5. [ ] **Overview and getting in** (web folder 1): Overview, its banners and plan prompts, your organisations, creating a gym, signing in, joining as staff (`Overview*`, `Banners`, `GymReady`, `Orgs`, `CreateGym`, `SignIn`, `StaffInvite`, `PhoneOverview`).
    - V6. [ ] **Leads and At risk** (web folder 1): a lead, adding and importing leads, your gym page, At risk (`Lead*`, `GymPage`, `AtRisk*`).
