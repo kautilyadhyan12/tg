@@ -579,6 +579,48 @@ describe('a higher price for members already on it (18w)', () => {
   });
 });
 
+describe('a membership type on a page of its own (V4b-ii)', () => {
+  const ANA = '66666666-6666-4666-8666-000000000011';
+  const BEN = '66666666-6666-4666-8666-000000000012';
+  const status = (state) => ({ state, fromMinor: 2999, toMinor: 3499, startsOn: '2026-12-03', on: '2026-11-03' });
+  const person = (membershipId, name) => ({ membershipId, entryId: membershipId.replace('6666-4666', '7777-4777'), name, paidBy: null, status: status('will_send') });
+  afterEach(() => orgService.previewPriceRaise.mockImplementation(() => Promise.resolve({ data: { currency: 'GBP', people: [] } })));
+
+  // The worst thing: members of the type being changed charged the new price when staff unticked them or chose
+  // Keep their price, or the raise sent for the other type.
+  it('Edit on the second of two types opens its own page, and Save raises only the ticked members of that type', async () => {
+    const gold = type({ name: 'Gold Monthly', priceMinor: 4999 });
+    const silver = type({ name: 'Silver Monthly', priceMinor: 2999 });
+    orgService.previewPriceRaise.mockResolvedValue({ data: { currency: 'GBP', people: [person(ANA, 'Ana Ruiz'), person(BEN, 'Ben Okafor')] } });
+    orgService.updateMembershipType.mockResolvedValue({ data: { ...listOf({ types: [gold, { ...silver, priceMinor: 3499 }] }), raised: 1 } });
+    open(listOf({ types: [gold, silver] }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit Silver Monthly' }));
+
+    // A page of its own: its title, the way back, and nothing of the price list under it.
+    expect(screen.getByRole('heading', { level: 1, name: 'Edit membership type' })).toBeTruthy();
+    expect(screen.getByRole('navigation', { name: 'You are here' })).toBeTruthy();
+    expect(screen.queryByRole('region', { name: 'What you sell' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Edit Gold Monthly' })).toBeNull();
+    expect(screen.getByLabelText('Name').value).toBe('Silver Monthly');
+
+    type_('Price (GBP)', '34.99');
+    const field = await screen.findByTestId('raise-field');
+    fireEvent.click(within(field).getByRole('radio', { name: /^Move them to the new price/ }));
+    const box = await screen.findByTestId('raise-box');
+    fireEvent.click(within(box).getByRole('checkbox', { name: /^Ben Okafor/ }));
+    // Save and Cancel are in the one bar held at the foot of the screen.
+    const bar = screen.getByTestId('type-form-save');
+    expect(within(bar).getByRole('button', { name: 'Cancel' })).toBeTruthy();
+    fireEvent.click(within(bar).getByRole('button', { name: 'Save changes' }));
+    await waitFor(() => expect(orgService.updateMembershipType).toHaveBeenCalledTimes(1));
+    expect(orgService.updateMembershipType.mock.calls[0][1]).toBe(silver.id);
+    expect(orgService.updateMembershipType.mock.calls[0][2]).toMatchObject({ priceMinor: 3499, raise: { noticeDays: 30, membershipIds: [ANA] } });
+    // Back on the price list, said in Silver's own row.
+    const rows = await screen.findAllByRole('listitem');
+    expect(within(rows.find((r) => within(r).queryByText('Silver Monthly', { selector: 'span.c-w6' }))).getByText(/^Saved. 1 member pays the new price/)).toBeTruthy();
+  });
+});
+
 describe('changing, archiving and putting back', () => {
   it('opens a type as it was saved, its kind fixed, and saves in the money it was made in', async () => {
     // Yen in a pound gym: 4999 yen is typed "4999" and 55 yen is 55, where a form that
@@ -622,14 +664,13 @@ describe('changing, archiving and putting back', () => {
     expect(screen.queryByLabelText('Name')).toBeNull();
   });
 
-  it('while a form is open, the rows cannot be changed or archived, so nothing typed is thrown away', async () => {
+  it("while a type's page is open, no row can be changed or archived, so nothing typed is thrown away", async () => {
     open(listOf({ types: [type(), type({ name: 'Silver' })] }));
     fireEvent.click(await screen.findByRole('button', { name: 'Edit Gold Monthly' }));
     type_('Price (GBP)', '60');
     for (const name of ['Edit Silver', 'Archive Silver', 'Edit Gold Monthly', 'Archive Gold Monthly']) {
-      expect(screen.getByRole('button', { name }).disabled, name).toBe(true);
+      expect(screen.queryByRole('button', { name }), name).toBeNull();
     }
-    fireEvent.click(screen.getByRole('button', { name: 'Edit Silver' }));
     expect(screen.getByLabelText('Price (GBP)').value).toBe('60');
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
     expect(screen.getByRole('button', { name: 'Edit Silver' }).disabled).toBe(false);
@@ -673,33 +714,79 @@ describe('changing, archiving and putting back', () => {
   });
 });
 
-// 23c-i: the page is open from top to bottom, so a form opens where it was asked for.
+// V4b-ii: a type being added or changed is a page of its own, in five numbered parts (board `MembershipAdd`).
 describe('where the form opens', () => {
-  const rowOf = (name) => screen.getByRole('button', { name: `Edit ${name}` }).closest('li');
-
-  it('a new type: under the title, above the list, and the Add button makes way for it', async () => {
+  it('a new type: a page of its own in its parts, the way back at the top, and the Add button back after', async () => {
     open(listOf({ types: [type()] }));
     fireEvent.click(await screen.findByRole('button', { name: 'Add a membership type' }));
     const form = screen.getByRole('form', { name: 'Add a membership type' });
+    expect(screen.getByRole('heading', { level: 1, name: 'Add a membership type' })).toBeTruthy();
+    expect(screen.getByText('Give it your name and price, then say how it is paid and what it includes.')).toBeTruthy();
+    expect(within(form).getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual([
+      'Name it', 'How is it paid?', 'Price and payment', 'What it includes', 'In the app', "You're adding",
+    ]);
     // While there is still a choice to make, the form says it is made once.
     expect(
       within(form).getByText("How it is paid can't be changed once it is saved. To sell it another way later, archive this one and add a new one."),
     ).toBeTruthy();
-    const list = screen.getByRole('region', { name: 'What you sell' });
-    expect(list.contains(form)).toBe(false);
-    expect(form.compareDocumentPosition(list) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.queryByRole('region', { name: 'What you sell' })).toBeNull();
+    expect(screen.queryByRole('tablist', { name: 'Memberships' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Add a membership type' })).toBeNull();
-    fireEvent.click(within(form).getByRole('button', { name: 'Cancel' }));
+    // The trail at the top goes back as Cancel does.
+    fireEvent.click(within(screen.getByRole('navigation', { name: 'You are here' })).getByRole('button', { name: 'Price list' }));
+    expect(screen.queryByRole('form')).toBeNull();
+    expect(screen.getByRole('region', { name: 'What you sell' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Add a membership type' }).disabled).toBe(false);
   });
 
-  it("a type being changed: in its own row, never another type's", async () => {
-    open(listOf({ types: [type(), type({ name: 'Silver' })] }));
-    fireEvent.click(await screen.findByRole('button', { name: 'Edit Silver' }));
-    const form = screen.getByRole('form', { name: 'Edit membership type' });
-    expect(rowOf('Silver').contains(form)).toBe(true);
-    expect(rowOf('Gold Monthly').contains(form)).toBe(false);
-    expect(within(form).getByLabelText('Name').value).toBe('Silver');
+  it("a type being changed: its own page, never another type's, and back at its row after", async () => {
+    const had = Element.prototype.scrollIntoView;
+    const into = vi.fn();
+    Element.prototype.scrollIntoView = into;
+    try {
+      open(listOf({ types: [type(), type({ name: 'Silver' })] }));
+      fireEvent.click(await screen.findByRole('button', { name: 'Edit Silver' }));
+      const form = screen.getByRole('form', { name: 'Edit membership type' });
+      expect(within(form).getByLabelText('Name').value).toBe('Silver');
+      expect(within(form).getByRole('heading', { level: 2, name: "You're changing" })).toBeTruthy();
+      // The page opens at its title, in front of the keys.
+      expect(document.activeElement).toBe(screen.getByRole('heading', { level: 1, name: 'Edit membership type' }));
+      fireEvent.click(within(form).getByRole('button', { name: 'Cancel' }));
+      const row = screen.getByRole('button', { name: 'Edit Silver' }).closest('li');
+      await waitFor(() => expect(into.mock.instances).toContain(row));
+    } finally {
+      Element.prototype.scrollIntoView = had;
+    }
+  });
+
+  it('the summary fills in as they type, and says what is not set yet', async () => {
+    open(listOf({ types: [], taxRates: [{ id: '44444444-4444-4444-8444-000000000001', name: 'VAT', pcm: 20000 }], taxIncluded: false }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Add a membership type' }));
+    const sum = screen.getByRole('complementary', { name: "You're adding" });
+    expect(within(sum).getAllByText('Not set yet').length).toBeGreaterThan(0);
+    type_('Name', 'Gold 12');
+    fireEvent.click(screen.getByRole('radio', { name: /^Recurring/ }));
+    type_('Price (GBP)', '45');
+    fireEvent.click(screen.getByRole('checkbox', { name: 'VAT 20%' }));
+    expect(within(sum).getByText('Gold 12')).toBeTruthy();
+    expect(within(sum).getByText('Recurring')).toBeTruthy();
+    expect(within(sum).getByText('£45.00 every month')).toBeTruthy();
+    expect(within(sum).getByText('Plus VAT 20% on each payment')).toBeTruthy();
+    expect(within(sum).getByText('Unlimited classes')).toBeTruthy();
+    // The same in one line in the save bar, for a screen where the summary is under the parts.
+    expect(within(screen.getByTestId('type-form-save')).getByText("You're adding: Gold 12 · Recurring · £45.00 every month")).toBeTruthy();
+    // A price that is not a price is never summed up as one.
+    type_('Price (GBP)', 'abc');
+    expect(within(sum).queryByText(/every month/)).toBeNull();
+  });
+
+  it('a change not saved yet is said beside Save', async () => {
+    open(listOf({ types: [type()] }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit Gold Monthly' }));
+    const bar = screen.getByTestId('type-form-save');
+    expect(within(bar).queryByText("You have changes that aren't saved.")).toBeNull();
+    type_('Price (GBP)', '60');
+    expect(within(bar).getByText("You have changes that aren't saved.")).toBeTruthy();
   });
 
   it('a refused save is said inside the form, beside its button, and goes with the form on Cancel', async () => {
@@ -737,19 +824,19 @@ describe('where the form opens', () => {
   });
 });
 
-// Round one, H1: a form drawn in a row must never be left open with its row gone.
-describe('while a form is open, nothing can take its row away', () => {
+// While a type's page is open, nothing on the price list can be pressed: it is not on the screen.
+describe("while a type's page is open, nothing can take its row away", () => {
   const OLD = { ...type({ name: 'Old' }), archivedAt: '2026-10-01T09:00:00.000Z' };
 
-  it('Put back waits, as Edit and Archive do, and is back once the form is cancelled', async () => {
+  it('Put back is not on the page, and is back once the page is cancelled', async () => {
     open(listOf({ types: [type()], archived: [OLD], archivedTotal: 1 }));
     fireEvent.click(await screen.findByRole('button', { name: 'Show archived (1)' }));
     fireEvent.click(screen.getByRole('button', { name: 'Edit Gold Monthly' }));
-    expect(screen.getByRole('button', { name: 'Put back Old' }).disabled).toBe(true);
+    expect(screen.queryByRole('button', { name: 'Put back Old' })).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
     expect(screen.getByRole('button', { name: 'Put back Old' }).disabled).toBe(false);
     fireEvent.click(screen.getByRole('button', { name: 'Add a membership type' }));
-    expect(screen.getByRole('button', { name: 'Put back Old' }).disabled).toBe(true);
+    expect(screen.queryByRole('button', { name: 'Put back Old' })).toBeNull();
     expect(orgService.restoreMembershipType).not.toHaveBeenCalled();
   });
 });

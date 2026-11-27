@@ -1827,6 +1827,12 @@
   .c-steps { grid-template-columns: minmax(0, 1fr) 320px; }
   .c-steps-sum { position: sticky; top: 24px; }
 }
+/* The summary in one line in the save bar, while the whole summary is under the parts rather than beside them
+   (a membership type's page, V4b-ii). */
+.c-type-bar-sum { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+@media (min-width: 1200px) {
+  .c-type-bar-sum { display: none; }
+}
 
 /* The side list for a long page: down the side on a wide screen, a row across the top
    otherwise, which scrolls on its own and never the page. */

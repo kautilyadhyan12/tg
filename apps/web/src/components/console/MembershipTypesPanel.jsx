@@ -50,10 +50,12 @@ import {
   termUnitOptions,
   typesSummary,
   withChoice,
+  typeSummary,
 } from '../../pages/console/membershipTypesView';
 import { MEMBER_LIST_MAX_STATUS_CHARS } from '@app/shared';
 import { formWordsFor, notSetUp, typeTies, withSetUpCount } from '../../pages/console/membershipWordsView';
 import { ConfirmInline, ConsoleFailed, ConsoleLoading } from './ConsoleStates';
+import { StepsPage } from './ConsoleBoxes';
 import BillSettingsCard from './BillSettingsCard';
 import MembershipDiscounts from '../../pages/console/MembershipDiscounts';
 import { NewRateInline } from '../../pages/console/TaxRates';
@@ -111,18 +113,18 @@ function Field({ id, label, children, problem }) {
   );
 }
 
-/** One part of the form, under its own small heading. */
-function Part({ title, children }) {
-  return (
-    <fieldset className="flex flex-col gap-4 pt-4" style={LINE}>
-      <legend className="c-s14 c-w6 c-t2 pr-2">{title}</legend>
-      {children}
-    </fieldset>
-  );
+/** The page's title and the line under it: a new type, a type being changed, or a name from the member list. */
+function typeFormTitle(editing, forWord) {
+  return editing ? 'Edit membership type' : (forWord?.heading ?? 'Add a membership type');
 }
+function typeFormHint(editing, forWord) {
+  if (forWord?.hint) return forWord.hint;
+  return editing
+    ? 'Make it your own: give it your name and price, then say how it is paid and what it includes.'
+    : 'Give it your name and price, then say how it is paid and what it includes.';
+}
+const formKey = (draft) => JSON.stringify({ ...draft, raiseOffer: null });
 
-/** `inRow`: the form is inside a row of a list, under that list's own heading.
- *  `error`: why the server refused the last save, said beside the button that sent it. */
 /** One group of the reminder's box: a few names, then See all. */
 function ReminderGroup({ group }) {
   const [all, setAll] = useState(false);
@@ -387,10 +389,10 @@ function SellInAppField({ draft, set, problem, busy, sell }) {
   );
 }
 
-function TypeForm({ gymId, orgType, country, currency, options, taxRates, onRateAdded, draft, setDraft, problems, refused, busy, forWord, error, inRow, sell, onSave, onCancel }) {
+function TypeForm({ gymId, orgType, country, currency, options, taxRates, onRateAdded, draft, setDraft, problems, refused, busy, forWord, error, summary, sell, onSave, onCancel }) {
   const [addingRate, setAddingRate] = useState(false);
   const editing = draft.id !== null;
-  const title = editing ? 'Edit membership type' : (forWord?.heading ?? 'Add a membership type');
+  const title = typeFormTitle(editing, forWord);
   const id = (name) => `membership-${name}-${gymId}`;
   const set = (patch) => setDraft((d) => ({ ...d, ...patch }));
   const text = (key) => (event) => set({ [key]: event.target.value });
@@ -407,7 +409,9 @@ function TypeForm({ gymId, orgType, country, currency, options, taxRates, onRate
     set({ classIds: draft.classIds.includes(classId) ? draft.classIds.filter((c) => c !== classId) : [...draft.classIds, classId] });
   const first = firstProblem(problems);
   const formRef = useRef(null);
-  const Heading = inRow ? 'h3' : 'h2';
+  // What was opened, to say when something has changed and is not saved yet (the reply's list of who is on it aside).
+  const [opened] = useState(() => formKey(draft));
+  const changed = editing && formKey(draft) !== opened;
 
   // A refused save shows its first wrong box: the button is at the bottom of a long form,
   // and a sentence under a box that has scrolled away is a sentence nobody reads. Once a
@@ -431,13 +435,11 @@ function TypeForm({ gymId, orgType, country, currency, options, taxRates, onRate
       className="flex flex-col gap-5"
       aria-label={title}
     >
-      <div className="flex flex-col gap-1">
-        <Heading className={inRow ? 'c-h3' : 'c-h2'}>{title}</Heading>
-        <p className="c-s14 c-t2 m-0">
-          {forWord?.hint ?? 'Make it your own: give it your name and price, then say how it is paid and what it includes.'}
-        </p>
-      </div>
-
+      <StepsPage
+        summaryTitle={editing ? "You're changing" : "You're adding"}
+        summary={summary.lines.map((line) => ({ label: line.label, value: Array.isArray(line.value) ? line.value.map((text) => <span key={text} className="block">{text}</span>) : line.value }))}
+        parts={[
+          { key: 'name', title: 'Name it', children: (<>
       <Field id={id('name')} label="Name" problem={problems?.name}>
         <input
           id={id('name')}
@@ -461,10 +463,9 @@ function TypeForm({ gymId, orgType, country, currency, options, taxRates, onRate
           className="c-input"
         />
       </Field>
-
-      <Part title="Price and payment">
+          </>) },
+          { key: 'paid', title: 'How is it paid?', children: (
         <div role="radiogroup" aria-label="How is it paid?" className="flex flex-col gap-2">
-          <span className="c-label">How is it paid?</span>
           {KIND_CHOICES.map((k) => {
             const picked = choice === k.value;
             return (
@@ -501,6 +502,8 @@ function TypeForm({ gymId, orgType, country, currency, options, taxRates, onRate
               : "How it is paid can't be changed once it is saved. To sell it another way later, archive this one and add a new one."}
           </p>
         </div>
+          ) },
+          { key: 'price', title: 'Price and payment', children: (<>
 
         <Field id={id('price')} label={`Price (${currency})`} problem={problems?.price}>
           <input
@@ -712,10 +715,8 @@ function TypeForm({ gymId, orgType, country, currency, options, taxRates, onRate
             </Field>
           </div>
         ) : null}
-      </Part>
-
-      {hasTerm || picksClasses || choice === 'pack' ? (
-        <Part title="What it includes">
+          </>) },
+          ...(hasTerm || picksClasses || choice === 'pack' ? [{ key: 'includes', title: 'What it includes', children: (<>
           {hasTerm ? (
             <Field id={id('access')} label="Classes">
               <select id={id('access')} value={draft.access} onChange={text('access')} className="c-input">
@@ -835,17 +836,16 @@ function TypeForm({ gymId, orgType, country, currency, options, taxRates, onRate
               </span>
             </Field>
           ) : null}
-        </Part>
-      ) : null}
-
-      {usesSellInApp(choice) ? (
-        <Part title="In the app">
+          </>) }] : []),
+          ...(usesSellInApp(choice) ? [{ key: 'app', title: 'In the app', children: (
           <SellInAppField draft={draft} set={set} problem={problems?.soldInApp} busy={busy} sell={sell} />
-        </Part>
-      ) : null}
+          ) }] : []),
+        ]}
+      />
 
-      {/* Save stays at the bottom of the screen while the long form scrolls (Kd's click-through, 18w). */}
-      <div className="flex flex-col gap-3 c-save-stuck" style={inRow ? { background: 'var(--raise)' } : undefined} data-testid="type-form-save">
+      {/* Save and Cancel stay at the foot of the screen however long the page is, on every screen (Kd, 18w and V4b-ii). */}
+      <div className="flex flex-col gap-2 c-save-stuck" data-testid="type-form-save">
+        {summary.short !== '' ? <p className="c-s14 c-t2 m-0 c-type-bar-sum">{`${editing ? "You're changing" : "You're adding"}: ${summary.short}`}</p> : null}
         {first !== null ? (
           <p className="c-s14 c-w6 m-0" style={BAD} role="alert">
             {NOT_SAVED}
@@ -856,6 +856,7 @@ function TypeForm({ gymId, orgType, country, currency, options, taxRates, onRate
             {error}
           </p>
         ) : null}
+        {first === null && !error && changed ? <p className="c-s14 c-t2 m-0" role="status">You have changes that aren&apos;t saved.</p> : null}
         <div className="flex flex-wrap gap-2">
           <button type="submit" disabled={busy} className="c-btn c-btn-p">
             {busy ? <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" /> : null}
@@ -890,7 +891,7 @@ function RowNote({ error, done }) {
  *  who gets this type, while it is open. `note`: what the last press about this type did. */
 // `agreementLine`: which of the business's agreements it is signed with, once it has more than
 // one (18u-ii-a); `agreementTo`: Settings, for whoever may open it there.
-function TypeRow({ type, orgType, taxLine = null, agreementLine = null, agreementTo = null, sell = null, readOnly, busy, formOpen, ties, form, note = null, onEdit, onArchive, onGive, onUndo }) {
+function TypeRow({ type, orgType, taxLine = null, agreementLine = null, agreementTo = null, sell = null, readOnly, busy, formOpen, ties, note = null, onEdit, onArchive, onGive, onUndo }) {
   const [asking, setAsking] = useState(false);
   // Sold in the app (18k-i): the tag while members can buy it; while Square still has to be set up, why not, and the
   // button to that place for whoever may.
@@ -899,7 +900,7 @@ function TypeRow({ type, orgType, taxLine = null, agreementLine = null, agreemen
   const fix = sold?.line && !readOnly ? sellInAppHint(sell.state, sell.canConnect).button : null;
   const price = priceParts(type);
   return (
-    <li className="c-item" data-testid="membership-type-row">
+    <li className="c-item" data-testid="membership-type-row" data-type-row={type.id}>
       <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between md:gap-6">
         <div className="flex flex-col gap-1 min-w-0 md:flex-1">
           {/* The kind and "Sold in the app" are plain words: nothing here needs attention. */}
@@ -987,7 +988,6 @@ function TypeRow({ type, orgType, taxLine = null, agreementLine = null, agreemen
           newLook
         />
       ) : null}
-      {form}
     </li>
   );
 }
@@ -1206,17 +1206,28 @@ export default function MembershipTypesPanel({ org, readOnly, openBox = null, on
     setShowProblems(false);
     // Opened from the Discounts or Tax tab, it is saved on the price list, where its row is.
     setTab('price');
+    backTo.current = next.id;
     setDraft(next);
   };
 
   const formOpen = draft !== null && draftCurrency !== null;
-  // Where the open form is drawn: under the title for a new type, in its own row for a
-  // type being changed, in the name's row for a name from the member list.
-  // A row that has gone from the list (archived by somebody else, a name that became a
-  // type) cannot hold it, so it is drawn under the title: a form is never open and unseen.
-  const hasRow = formOpen && draft.id !== null && (list?.types ?? []).some((t) => t.id === draft.id);
-  const hasWord = formOpen && draftWord !== null && notSetUp(fromList.words).some((w) => w.word === draftWord.word);
-  const formAt = !formOpen ? null : hasRow ? 'row' : draft.id === null && hasWord ? 'word' : 'top';
+  // A type being added or changed is a page of its own (V4b-ii, board `MembershipAdd`): it opens at the top, its
+  // title in front of the keys, wherever on the list its button was; closed, the page is back at that type's row.
+  const formTitle = useRef(null);
+  const backTo = useRef(null);
+  useEffect(() => {
+    if (formOpen) {
+      const title = formTitle.current;
+      if (title && typeof title.scrollIntoView === 'function') title.scrollIntoView({ block: 'start' });
+      title?.focus({ preventScroll: true });
+      return;
+    }
+    const at = backTo.current;
+    backTo.current = null;
+    if (at === null) return;
+    const row = document.querySelector(`[data-type-row="${at}"]`);
+    if (row && typeof row.scrollIntoView === 'function') row.scrollIntoView({ block: 'center' });
+  }, [formOpen]);
   const form = formOpen ? (
     <TypeForm
       gymId={gymId}
@@ -1233,17 +1244,12 @@ export default function MembershipTypesPanel({ org, readOnly, openBox = null, on
       busy={busy}
       forWord={draftWord === null ? null : formWordsFor(draftWord)}
       error={actionError}
-      inRow={formAt !== 'top'}
+      summary={typeSummary(draft, draftCurrency, list, org.orgType, classOptions(list, editing))}
       sell={sell}
       onSave={() => void save()}
       onCancel={closeForm}
     />
   ) : null;
-  const inRow = (node) => (
-    <div className="rounded-[14px] p-4 md:p-5" style={{ background: 'var(--raise)' }}>
-      {node}
-    </div>
-  );
   const summary = withSetUpCount(typesSummary(list), fromList.words);
   // The country is a box in Settings' details section ("Gym details", "Studio details"),
   // for whoever may change them: its button opens Settings there, at that box.
@@ -1251,6 +1257,38 @@ export default function MembershipTypesPanel({ org, readOnly, openBox = null, on
   const agreementTo = placeFor(org.slug, viewerPrivileges(org), 'agreement');
   const canSetCountry = countryTo !== null;
   const details = `${orgWords(org.orgType).itCap} details`;
+
+  if (formOpen && loadError === null) {
+    const forWord = draftWord === null ? null : formWordsFor(draftWord);
+    const back = () => {
+      if (!busy) closeForm();
+    };
+    return (
+      <div className="c-page c-touch-44">
+        <header className="flex flex-col gap-1.5 min-w-0">
+          {/* The way back to the price list, as Cancel; nothing typed here is saved by it. */}
+          <nav aria-label="You are here" className="flex flex-wrap items-center gap-x-2 c-s14">
+            <button type="button" className="c-btn-link c-s14 c-w6" disabled={busy} onClick={back}>
+              Memberships
+            </button>
+            <span className="c-t3" aria-hidden="true">
+              ›
+            </span>
+            <button type="button" className="c-btn-link c-s14 c-w6" disabled={busy} onClick={back}>
+              Price list
+            </button>
+          </nav>
+          <h1 ref={formTitle} tabIndex={-1} className="c-h1" style={{ outline: 'none' }}>
+            {typeFormTitle(draft.id !== null, forWord)}
+          </h1>
+          <p className="c-s15 c-t2 m-0" style={{ maxWidth: 640 }}>
+            {typeFormHint(draft.id !== null, forWord)}
+          </p>
+        </header>
+        {form}
+      </div>
+    );
+  }
 
   return (
     <div className="c-page c-touch-44">
@@ -1264,7 +1302,7 @@ export default function MembershipTypesPanel({ org, readOnly, openBox = null, on
             {list?.currency ? ` New prices are in ${list.currency}.` : ''}
           </p>
         </div>
-        {list !== null && loadError === null && !formOpen && list.currency !== null && canAddType(list) ? (
+        {list !== null && loadError === null && list.currency !== null && canAddType(list) ? (
           <button
             type="button"
             disabled={readOnly || anyBusy || locked}
@@ -1290,9 +1328,6 @@ export default function MembershipTypesPanel({ org, readOnly, openBox = null, on
         <ConsoleLoading label="Loading your membership types…" newLook />
       ) : (
         <>
-          {/* While a type's form is open the page is that form and the price list: the other
-              tabs come back when it is saved or cancelled. */}
-          {formOpen ? null : (
             <div className="c-utabs" role="tablist" aria-label="Memberships">
               {MEMBERSHIP_TABS.map(({ key, label }) => (
                 <button
@@ -1315,9 +1350,8 @@ export default function MembershipTypesPanel({ org, readOnly, openBox = null, on
                 </button>
               ))}
             </div>
-          )}
-          <div role="tabpanel" id={`${tabsId}-price-panel`} aria-labelledby={`${tabsId}-price`} hidden={!formOpen && tab !== 'price'} className="c-tabpanel">
-          {formOpen ? null : list.currency === null ? (
+          <div role="tabpanel" id={`${tabsId}-price-panel`} aria-labelledby={`${tabsId}-price`} hidden={tab !== 'price'} className="c-tabpanel">
+          {list.currency === null ? (
             <div className="c-callout flex-col items-start">
               <p className="c-s15 m-0">
                 {canSetCountry
@@ -1331,8 +1365,6 @@ export default function MembershipTypesPanel({ org, readOnly, openBox = null, on
           ) : canAddType(list) ? null : (
             <p className="c-s15 c-t2 m-0">{TOO_MANY_TYPES}</p>
           )}
-
-          {formAt === 'top' ? <section className="c-card c-narrow p-5 md:p-6">{form}</section> : null}
 
           <section className="c-card overflow-clip" aria-label="What you sell">
             <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 px-5 pt-5 pb-4 md:px-6">
@@ -1354,7 +1386,6 @@ export default function MembershipTypesPanel({ org, readOnly, openBox = null, on
                     busy={anyBusy}
                     formOpen={locked}
                     ties={typeTies(type, fromList.words, !readOnly)}
-                    form={formAt === 'row' && draft.id === type.id ? inRow(form) : null}
                     note={noteRow === type.id ? { error: fromList.error, done: fromList.done } : savedNote?.typeId === type.id ? { error: null, done: savedNote.text } : null}
                     onGive={(word, t) => void fromList.open(word.word, t.id)}
                     onUndo={(word) => void fromList.undo(word)}
@@ -1381,8 +1412,6 @@ export default function MembershipTypesPanel({ org, readOnly, openBox = null, on
             off={readOnly || anyBusy || locked}
             busy={anyBusy}
             choosing={choosing}
-            formFor={formAt === 'word' ? draftWord.word : null}
-            form={formAt === 'word' ? inRow(form) : null}
             // With nothing for sale yet there is nothing to choose between: straight to the form.
             onChoose={(word) => (word !== null && list.types.length === 0 ? setUpAsNew(word) : setChoosing(word === null ? null : word.word))}
             onExisting={(word, typeId) => {
@@ -1398,7 +1427,7 @@ export default function MembershipTypesPanel({ org, readOnly, openBox = null, on
           {/* A refused save is said in the form, beside its button; what a press about one
               membership did is said in that membership's row. */}
           <Notes
-            error={formOpen ? null : actionError}
+            error={actionError}
             listError={fromList.preview === null && noteRow === null ? fromList.error : null}
             done={noteRow === null ? fromList.done : null}
           />
@@ -1451,10 +1480,10 @@ export default function MembershipTypesPanel({ org, readOnly, openBox = null, on
             </div>
           ) : null}
           {/* Billing rules (18a-i), under the price list bills are made from. */}
-          {formOpen ? null : <BillSettingsCard gymId={gymId} readOnly={readOnly} readOnlyLine={readOnlyNote(org.orgType)} />}
+          <BillSettingsCard gymId={gymId} readOnly={readOnly} readOnlyLine={readOnlyNote(org.orgType)} />
           </div>
           {/* Discounts and Tax for memberships, each a tab beside the price list (Kd, 2026-10-14). */}
-          {formOpen ? null : <MembershipDiscounts org={org} readOnly={readOnly} typesKey={list} onTaxChanged={() => void load()} tab={tab} tabsId={tabsId} />}
+          <MembershipDiscounts org={org} readOnly={readOnly} typesKey={list} onTaxChanged={() => void load()} tab={tab} tabsId={tabsId} />
         </>
       )}
     </div>
