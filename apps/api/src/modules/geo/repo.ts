@@ -168,7 +168,7 @@ export async function listRuns(
     FROM runs
     WHERE user_id = ${userId}
       AND (${cursor === null} OR (started_at, id) < (${cursor?.at ?? null}, ${cursor?.id ?? null}))
-      AND (${upTo === null} OR ${runLocal(sql, timeZone)}::date <= ${upTo}::date)
+      AND (${upTo === null} OR (started_at < ((${upTo}::date + 2)::timestamp AT TIME ZONE ${timeZone}) AND ${runLocal(sql, timeZone)}::date <= ${upTo}::date))
     ORDER BY started_at DESC, id DESC
     LIMIT ${limit + 1}`;
   return rows.map(toRun);
