@@ -500,7 +500,7 @@ describe('staff who may', () => {
     expect(await screen.findByText(/Ask the owner to set it in Studio details./)).toBeTruthy();
   });
 
-  it("a membership type's page is an entry of its own: the browser's Back closes it as Cancel does; Cancel and a reload leave no mark", async () => {
+  it("a membership type's page is an entry of its own: the browser's Back closes it as Cancel does; after Cancel or Save one Back leaves; a reload leaves no mark", async () => {
     function Browser() {
       const navigate = useNavigate();
       const at = useLocation();
@@ -510,13 +510,14 @@ describe('staff who may', () => {
             browser back
           </button>
           <span data-testid="at">{at.search}</span>
+          <span data-testid="path">{at.pathname}</span>
         </>
       );
     }
     const drawAt = (at) => {
       orgService.getMine.mockResolvedValue({ data: { orgs: [gym()] } });
       render(
-        <MemoryRouter initialEntries={['/console/iron-house/memberships', at]} initialIndex={1}>
+        <MemoryRouter initialEntries={['/console/iron-house/overview', at]} initialIndex={1}>
           <Browser />
           <Routes>
             <Route path="/console/:orgSlug/memberships" element={<ConsoleLayout><Memberships /></ConsoleLayout>} />
@@ -534,12 +535,27 @@ describe('staff who may', () => {
     expect(screen.getByRole('button', { name: 'Edit Gold Monthly' })).toBeTruthy();
     expect(orgService.updateMembershipType).not.toHaveBeenCalled();
 
-    // Cancel takes the mark away in place.
+    // Cancel steps back off the page's entry: the keys back on Edit, and ONE more Back leaves Memberships.
     fireEvent.click(screen.getByRole('button', { name: 'Edit Gold Monthly' }));
     expect(screen.getByTestId('at').textContent).toBe('?page=membership-type');
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    await waitFor(() => expect(screen.getByTestId('at').textContent).toBe(''));
     expect(screen.queryByRole('form')).toBeNull();
-    expect(screen.getByTestId('at').textContent).toBe('');
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Edit Gold Monthly' })));
+    fireEvent.click(screen.getByRole('button', { name: 'browser back' }));
+    await waitFor(() => expect(screen.getByTestId('path').textContent).toBe('/console/iron-house/overview'));
+    cleanup();
+
+    // Save does the same, and what it did is said in the row.
+    orgService.updateMembershipType.mockResolvedValue({ data: listOf({ types: [type({ priceMinor: 6000 })] }) });
+    drawAt('/console/iron-house/memberships');
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit Gold Monthly' }));
+    fireEvent.change(screen.getByLabelText('Price (USD)'), { target: { value: '60' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+    expect(await screen.findByText('Saved.')).toBeTruthy();
+    await waitFor(() => expect(screen.getByTestId('at').textContent).toBe(''));
+    fireEvent.click(screen.getByRole('button', { name: 'browser back' }));
+    await waitFor(() => expect(screen.getByTestId('path').textContent).toBe('/console/iron-house/overview'));
     cleanup();
 
     // Reloaded on the page's address: the price list, the address tidied.

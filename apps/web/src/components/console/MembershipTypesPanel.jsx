@@ -1239,13 +1239,20 @@ export default function MembershipTypesPanel({ org, readOnly, openBox = null, on
   const addButton = useRef(null);
   // { type: id } | { word } | { add: true } | null
   const backTo = useRef(null);
+  const wasOpen = useRef(false);
   useEffect(() => {
     if (formOpen) {
+      if (wasOpen.current) return;
+      wasOpen.current = true;
       const title = formTitle.current;
       if (title && typeof title.scrollIntoView === 'function') title.scrollIntoView({ block: 'start' });
       title?.focus({ preventScroll: true });
       return;
     }
+    wasOpen.current = false;
+    // Closed by Cancel or Save, the page steps back in the browser's history first, and the browser puts back where
+    // that entry was scrolled: the way back to the row waits for it, so it is the last word.
+    if (typePage !== null && typePage.open) return;
     const at = backTo.current;
     backTo.current = null;
     if (at === null) return;
@@ -1255,7 +1262,9 @@ export default function MembershipTypesPanel({ org, readOnly, openBox = null, on
     if (typeof place.scrollIntoView === 'function') place.scrollIntoView({ block: 'center' });
     const key = at.add ? place : place.querySelector(at.type !== undefined ? 'button[aria-label^="Edit "]' : 'button');
     if (key && !key.disabled) key.focus({ preventScroll: true });
-  }, [formOpen]);
+    // typePage is drawn again each time; what matters is whether its address is still open.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [formOpen, typePage?.open]);
   // The browser's Back took the page's address away: the page closes, as Cancel. An address kept with no page open
   // (a reload, Forward) is tidied away.
   const wasOnPage = useRef(typePage?.open === true);
