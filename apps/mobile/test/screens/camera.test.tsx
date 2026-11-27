@@ -671,6 +671,66 @@ describe("Follow along (53b-ii): the gym is busy, so I tap the clip, follow it o
     expect(within(done).getByRole("button", { name: "Done · 0 reps" })).toBeTruthy();
   });
 
+  it("the app sent away while following: the timer is not read and says nothing; back, it takes in the time away, silently (round one, tests)", async () => {
+    const clock = heldClock();
+    await openTry();
+    await turnOn();
+    await fireEvent.press(screen.getByTestId("camera-tap"));
+    const off = screen.queryByRole("button", { name: "Sound off" });
+    if (off !== null) await fireEvent.press(off);
+    await fireEvent.press(screen.getByTestId("camera-box-close"));
+    await fireEvent.press(screen.getByRole("button", { name: FOLLOW_WORDS }));
+    await fireEvent.press(screen.getByRole("button", { name: "Start now" }));
+    await clock.pass(5_000);
+    expect(timerSays()).toBe("time left 00:25");
+    sounds.spoken.length = 0;
+    sounds.played.length = 0;
+    try {
+      // Away over the set's half and its last three seconds but one: nothing read, nothing heard.
+      AppState.currentState = "background";
+      await clock.pass(21_000);
+      expect(timerSays()).toBe("time left 00:25");
+      expect(sounds.spoken).toEqual([]);
+      expect(sounds.played).toEqual([]);
+    } finally {
+      AppState.currentState = "active";
+    }
+    // Back: the first reading takes in the whole time away and sounds none of it; Halfway, passed while away, never comes.
+    await clock.pass(1_000);
+    expect(timerSays()).toBe("time left 00:03");
+    expect(sounds.spoken).toEqual([]);
+    expect(sounds.played).toEqual([]);
+    await clock.pass(3_000);
+    expect(await screen.findByTestId("follow-done")).toBeTruthy();
+    expect(sounds.played).toEqual(["count", "count"]);
+    expect(sounds.spoken).toEqual([{ id: "set_complete", index: 0 }]);
+  });
+
+  it("Sound off pressed in Follow along's own box: the coach falls silent at once and the timer makes no sound after it (round one, tests)", async () => {
+    const clock = heldClock();
+    await openTry();
+    await turnOn();
+    await fireEvent.press(screen.getByTestId("camera-tap"));
+    const off = screen.queryByRole("button", { name: "Sound off" });
+    if (off !== null) await fireEvent.press(off);
+    await fireEvent.press(screen.getByTestId("camera-box-close"));
+    await fireEvent.press(screen.getByRole("button", { name: FOLLOW_WORDS }));
+    await fireEvent.press(screen.getByRole("button", { name: "Start now" }));
+    await clock.pass(5_000);
+    await fireEvent.press(screen.getByRole("button", { name: FOLLOW_BOX_WORDS }));
+    const hushed = sounds.hushed;
+    await fireEvent.press(within(screen.getByTestId("follow-box")).getByRole("button", { name: "Sound on" }));
+    expect(sounds.hushed - hushed).toBe(1);
+    expect(within(screen.getByTestId("follow-box")).getByRole("button", { name: "Sound off" })).toBeTruthy();
+    await fireEvent.press(screen.getByTestId("follow-box-close"));
+    sounds.spoken.length = 0;
+    sounds.played.length = 0;
+    await clock.pass(26_000);
+    expect(await screen.findByTestId("follow-done")).toBeTruthy();
+    expect(sounds.spoken).toEqual([]);
+    expect(sounds.played).toEqual([]);
+  });
+
   it("Count this set myself: the camera stays off, the box with the count stays open", async () => {
     await openTry();
     await turnOn();

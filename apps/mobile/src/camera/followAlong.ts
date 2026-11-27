@@ -30,6 +30,9 @@ export interface Follow {
   /** Once ended: how long the set was followed, and the reps the person says they did (a set measured in reps). */
   readonly doneMs: number;
   readonly reps: number;
+  /** Half of the set has been followed (a set of 20 s or more): "Halfway." is said once a set, whatever the time is changed
+   *  to after it (round one, L1). Reset set starts it again. */
+  readonly halfway: boolean;
 }
 
 export type FollowPress =
@@ -63,7 +66,12 @@ export const startFollow = (measuredIn: "reps" | "time", target: number, now: nu
   paused: false,
   doneMs: 0,
   reps: 0,
+  halfway: false,
 });
+
+/** The set's target once the person goes back to the camera: a hold's is the time it was followed for, changed or not
+ *  (round one, L2); a set of reps keeps its reps. */
+export const targetAfterFollow = (f: Follow, target: number): number => (f.measuredIn === "time" ? f.seconds : target);
 
 /** When the phase ends by itself, on the set's own clock; null once ended. */
 export const followEndsAt = (f: Follow): number | null => (f.phase === "ready" ? f.phaseAt + READY_MS : f.phase === "set" ? f.phaseAt + f.seconds * 1000 : null);
@@ -79,11 +87,13 @@ export const followedMs = (f: Follow): number => (f.phase === "set" ? Math.max(0
 
 const ended = (f: Follow, doneMs: number): Follow => ({ ...f, phase: "done", doneMs, reps: f.measuredIn === "reps" ? repsOfTime(doneMs) : 0, paused: false });
 
-/** The phases that end by themselves at this clock, in order: the get-ready, then the set. */
+/** The phases that end by themselves at this clock, in order: the get-ready, then the set; and whether half of it has been
+ *  followed. */
 function settle(f: Follow): Follow {
   let s = f;
   if (s.phase === "ready" && s.activeMs >= s.phaseAt + READY_MS) s = { ...s, phase: "set", phaseAt: s.phaseAt + READY_MS };
   if (s.phase === "set" && s.activeMs >= s.phaseAt + s.seconds * 1000) s = ended(s, s.seconds * 1000);
+  if (!s.halfway && s.phase === "set" && s.seconds >= COACH_LIMITS.holdHalfwayFrom && followedMs(s) >= (s.seconds * 1000) / 2) s = { ...s, halfway: true };
   return s;
 }
 
@@ -99,6 +109,9 @@ export function followPress(f: Follow, p: FollowPress, now: number): Follow {
     case "time": {
       if (moved.phase === "done") return moved;
       const seconds = stepTime(moved.seconds, p.by);
+      // Shortened to what has been followed or less: it ends with the time followed, never the shorter one (round one, H1).
+      const followed = followedMs(moved);
+      if (moved.phase === "set" && followed >= seconds * 1000) return ended({ ...moved, seconds }, followed);
       return settle({ ...moved, seconds });
     }
     case "pause":
@@ -106,7 +119,7 @@ export function followPress(f: Follow, p: FollowPress, now: number): Follow {
     case "resume":
       return { ...moved, paused: false };
     case "reset":
-      return moved.phase === "done" ? moved : { ...moved, phase: "ready", phaseAt: moved.activeMs, doneMs: 0, reps: 0 };
+      return moved.phase === "done" ? moved : { ...moved, phase: "ready", phaseAt: moved.activeMs, doneMs: 0, reps: 0, halfway: false };
     case "done":
       return moved.phase === "done" ? moved : ended(moved, followedMs(moved));
     case "reps": {
@@ -129,8 +142,8 @@ const NOTHING: FollowHeard = { beeps: [], say: null };
 const COUNT_FROM_S = 3;
 
 /** What a press sounds, from the set before it and after it: a beep at each of the last 3 seconds of the get-ready and of
- *  the set, a rising "go" when the set starts, "Halfway." at half of a set of 20 s or more (the coach's own line for a hold,
- *  `COACH_LIMITS.holdHalfwayFrom`), "Get ready." on Reset set, "Set complete." when it ends. None while paused, for Pause
+ *  the set, a rising "go" when the set starts, "Halfway." once a set, as half of a set of 20 s or more is followed (the
+ *  coach's own line for a hold, `COACH_LIMITS.holdHalfwayFrom`), "Get ready." on Reset set, "Set complete." when it ends. None while paused, for Pause
  *  and Resume, or for a tick that comes late (the app was asleep: a burst of old beeps would say nothing true about now).
  *  "Get ready." as Follow along begins is the screen's own (`startFollow` is no press). */
 export function followSounds(before: Follow, after: Follow, p: FollowPress, now: number): FollowHeard {
@@ -139,11 +152,8 @@ export function followSounds(before: Follow, after: Follow, p: FollowPress, now:
   if (before.phase !== "done" && after.phase === "done") return { beeps: [], say: "set complete" };
   if (p.kind === "reset") return { beeps: [], say: "get ready" };
   if (before.phase === "ready" && after.phase === "set") return { beeps: ["go"], say: null };
+  if (!before.halfway && after.halfway) return { beeps: [], say: "halfway" };
   if (before.phase !== after.phase || before.phaseAt !== after.phaseAt) return NOTHING;
-  if (after.phase === "set" && after.seconds === before.seconds && after.seconds >= COACH_LIMITS.holdHalfwayFrom) {
-    const half = (after.seconds * 1000) / 2;
-    if (followedMs(before) < half && followedMs(after) >= half) return { beeps: [], say: "halfway" };
-  }
   if (p.kind !== "tick") return NOTHING;
   const leftBefore = followLeftMs(before);
   const leftAfter = followLeftMs(after);

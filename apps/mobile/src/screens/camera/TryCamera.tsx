@@ -3,7 +3,7 @@ import { activateKeepAwakeAsync, deactivateKeepAwake } from "expo-keep-awake";
 import { useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { AppState, Image, Pressable, StyleSheet, View } from "react-native";
 import { CAMERA_EXERCISES, type CameraExercise } from "../../camera/cameraExercises";
-import { followPress, followSounds, startFollow, type Follow, type FollowPress } from "../../camera/followAlong";
+import { followPress, followSounds, startFollow, targetAfterFollow, type Follow, type FollowPress } from "../../camera/followAlong";
 import { LiveSet } from "../../camera/liveSet";
 import { PoseCameraView } from "../../camera/poseCameraNative";
 import { clipFor, clipOf } from "../../camera/voice";
@@ -162,12 +162,14 @@ function TrySetScreen({ me, exercise, onClose }: { me: string; exercise: CameraE
   // Leaving Follow along: the set starts again, with the camera on (or counted by hand), its target and weight kept.
   const stopFollowing = (byHand: boolean) => {
     soundNative?.hush();
+    const followed = following.current;
+    const target = followed === null ? set.target : targetAfterFollow(followed, set.target);
     following.current = null;
     setFollow(null);
     setFollowBox(false);
     setBox(false);
     setLive(new LiveSet(exercise.counts, exercise.camera, 1));
-    const again = { ...startTry(set.measuredIn, set.target), weightGrams: set.weightGrams };
+    const again = { ...startTry(set.measuredIn, target), weightGrams: set.weightGrams };
     setSet(byHand ? pressTry(again, { kind: "stopped" }) : again);
     setStopped(byHand ? "byHand" : null);
   };

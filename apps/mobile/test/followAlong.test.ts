@@ -9,6 +9,7 @@ import {
   followedMs,
   repsOfTime,
   startFollow,
+  targetAfterFollow,
   type Follow,
   type FollowPress,
 } from "../src/camera/followAlong";
@@ -103,6 +104,24 @@ describe("the clock", () => {
     expect(less(4)).toMatchObject({ phase: "done", seconds: 10, doneMs: 10_000, reps: 3 });
   });
 
+  it("shortened past what was followed, it ends with the time followed, never the shorter one (round one, H1)", () => {
+    // 27 s of 30 followed, made 25 s: the end says 27 s and starts the count at 9, not 25 s and 8.
+    const at = run(start, [[1_000, { kind: "start" }], [28_000, tick]]);
+    expect(followedMs(at)).toBe(27_000);
+    expect(run(at, [[28_000, { kind: "time", by: -1 }]])).toMatchObject({ phase: "done", seconds: 25, doneMs: 27_000, reps: 9 });
+    // A long hold whose step is 30 s: 350 s followed of 360, made 330 s, ends at 350 s.
+    const hold = run(startFollow("time", 360, T0), [[1_000, { kind: "start" }], [351_000, tick], [351_000, { kind: "time", by: -1 }]]);
+    expect(hold).toMatchObject({ phase: "done", seconds: 330, doneMs: 350_000 });
+    // Getting ready, nothing is followed yet: a shorter time is only a shorter timer.
+    expect(run(start, [[2_000, { kind: "time", by: -1 }]])).toMatchObject({ phase: "ready", seconds: 25 });
+  });
+
+  it("back to the camera: a hold's target is the time it was followed for, a set of reps keeps its reps (round one, L2)", () => {
+    const hold = run(startFollow("time", 20, T0), [[1_000, { kind: "time", by: 1 }]]);
+    expect(targetAfterFollow(hold, 20)).toBe(25);
+    expect(targetAfterFollow(run(start, [[1_000, { kind: "time", by: 1 }]]), 10)).toBe(10);
+  });
+
   it("Set done ends it with the time followed: nothing while getting ready", () => {
     expect(run(start, [[16_000, { kind: "done" }]])).toMatchObject({ phase: "done", doneMs: 6_000, reps: 2 });
     expect(run(start, [[4_000, { kind: "done" }]])).toMatchObject({ phase: "done", doneMs: 0, reps: 0 });
@@ -163,6 +182,46 @@ describe("what it sounds", () => {
     expect(heard(short, 0, 30_000).map((h) => h.say)).toEqual([null, null, null, null, null, null, null, "set complete"]);
     const twenty = startFollow("time", 20, T0);
     expect(heard(twenty, 0, 31_000).filter((h) => h.say === "halfway").map((h) => h.at)).toEqual([20_000]);
+  });
+
+  it("Halfway is said once a set: never again when the time is lengthened after it, again only after Reset set (round one, L1)", () => {
+    const hold = startFollow("time", 20, T0);
+    // Getting ready to 10 s; Halfway at 10 s of the set (20 s); at 12 s of the set (22 s) the time made 25 s, whose half
+    // (12.5 s of the set) is then passed again; it ends at 35 s.
+    const at = run(hold, [[12_000, tick]]);
+    let s = at;
+    const said: { at: number; say: string }[] = [];
+    for (let t = 12_250; t <= 22_000; t += 250) {
+      const p: FollowPress = t === 22_000 ? { kind: "time", by: 1 } : tick;
+      const next = followPress(s, p, T0 + t);
+      const h = followSounds(s, next, p, T0 + t);
+      if (h.say !== null) said.push({ at: t, say: h.say });
+      s = next;
+    }
+    for (let t = 22_250; t <= 40_000; t += 250) {
+      const next = followPress(s, tick, T0 + t);
+      const h = followSounds(s, next, tick, T0 + t);
+      if (h.say !== null) said.push({ at: t, say: h.say });
+      s = next;
+    }
+    expect(said).toEqual([{ at: 20_000, say: "halfway" }, { at: 35_000, say: "set complete" }]);
+    // Reset set: a new set, said again at its own half.
+    const again = run(run(start, [[30_000, tick]]), [[30_000, { kind: "reset" }]]);
+    expect(again.halfway).toBe(false);
+    expect(heard(again, 30_250, 56_000).filter((h) => h.say === "halfway").map((h) => h.at)).toEqual([55_000]);
+  });
+
+  it("shortened so that half is passed at once, Halfway is said on that press; passed while asleep, never", () => {
+    const at = run(start, [[22_000, tick]]);
+    // 12 s of 30 followed, made 20 s: half of it is 10 s.
+    const shorter = followPress(followPress(at, { kind: "time", by: -1 }, T0 + 22_000), { kind: "time", by: -1 }, T0 + 22_000);
+    const mid = followPress(at, { kind: "time", by: -1 }, T0 + 22_000);
+    expect(followSounds(mid, shorter, { kind: "time", by: -1 }, T0 + 22_000)).toEqual({ beeps: [], say: "halfway" });
+    // Away from 12 s to 20 s of a 30 s set: half was passed asleep, so Halfway is never said in this set.
+    const late = followPress(at, tick, T0 + 30_000);
+    expect(late.halfway).toBe(true);
+    expect(followSounds(at, late, tick, T0 + 30_000)).toEqual({ beeps: [], say: null });
+    expect(heard(late, 30_250, 41_000).map((h) => h.say)).toEqual([null, null, null, "set complete"]);
   });
 
   it("nothing while paused, for Pause and Resume, or for a reading that comes late (the app was asleep)", () => {

@@ -23,7 +23,7 @@ export function clipOf(say: Pick<Say, "words" | "times">, voice: Voice = VOICE):
 }
 
 /** The clip of a set's own line, found by what it is said for ("get ready", "halfway"), in its first wording: Follow
- *  along's timer (53b-ii) says each at most once a set. */
+ *  along's timer (53b-ii) says each at most once a set, Reset set starting the set again. */
 export function clipFor(when: VoiceWhen, voice: Voice = VOICE): Clip | null {
   const line = voice.lines.find((l) => l.when === when);
   return line === undefined ? null : { id: line.id, index: 0 };
