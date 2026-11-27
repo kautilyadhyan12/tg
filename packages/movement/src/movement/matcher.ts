@@ -17,6 +17,7 @@
 import type { CheckedMistake, ExerciseCamera, Movement, MovementRead, MovementReady, MovementRule } from "@app/shared";
 import { KP } from "@app/shared";
 import { MEASURE_LIST, type MeasureName, type MeasuredBody, type Reading } from "../body/measures.js";
+import { facingMiddle, facingOf, turnBetween } from "../body/facing.js";
 import type { SteadyBody } from "../body/steady.js";
 import { checkExercise, checkedOf, formOf, mistakeReading, turnOf, type FormCheck } from "./form.js";
 
@@ -110,6 +111,9 @@ export interface MatchLimits {
   /** For a movement counted in a fast rhythm or as a jump: where the person stands is also read on the move, from the
    *  frames of the last this long, ms, in which they stood upright on the floor (`movingStanding`). */
   readonly moving: number;
+  /** Between reps, a standing found facing further than this from the way the person faced when the highest standing was
+   *  taken replaces it at once, higher or lower: the person has turned, degrees (`facing.ts`). */
+  readonly turned: number;
 }
 
 /**
@@ -150,6 +154,7 @@ export const MATCH_LIMITS: MatchLimits = {
   lower: 1000,
   tried: 0.75,
   moving: 2000,
+  turned: 45,
 };
 
 export type Verdict =
@@ -207,6 +212,10 @@ export interface MatchFrame {
   readonly seen: boolean;
   /** A rep that was judged in this frame. */
   readonly rep: RepResult | null;
+  /** Between reps, how far the person faces from the way they faced when their standing was taken, degrees (`facing.ts`);
+   *  null in a rep, with no standing, or when either way is not known. Past `MatchLimits.turned`, the next standing found
+   *  replaces it. */
+  readonly turned: number | null;
 }
 
 /** Whether the camera must see a rule for the rep to be judged: "always" (unseen, the rep decides nothing) or "or another
@@ -412,6 +421,8 @@ interface Standing {
   readonly reads: Readonly<Record<string, number | null>>;
   /** Each checked mistake's reading while standing ready, the middle of the moment; null where not seen. */
   readonly form: readonly (number | null)[];
+  /** Which way the person faced the phone, the middle of the moment (`facing.ts`); null where not known. */
+  readonly facing: number | null;
 }
 
 interface Sample {
@@ -471,6 +482,8 @@ interface Recent {
   readonly feet: readonly ({ readonly x: number; readonly y: number } | null)[];
   readonly size: number | null;
   readonly measured: MeasuredBody;
+  /** Which way the body faced the phone (`facing.ts`); null where not known. */
+  readonly facing: number | null;
 }
 
 export class MovementMatcher {
@@ -482,6 +495,9 @@ export class MovementMatcher {
   /** The highest standing since the stream began, or since a lower one was held for `lower`: standing never creeps
    *  below it. */
   private anchor: number | null = null;
+  /** Which way the person faced when the highest standing was taken: a standing found within its shake is that same
+   *  standing, and the way they faced then stays its own (`MatchFrame.turned` is measured from it). */
+  private anchorFacing: number | null = null;
   /** The drive and whether the person stood ready, over the last `lower` and the newest frame older than that. */
   private held: { readonly t: number; readonly drive: number | null; readonly ready: boolean }[] = [];
   private standing: Standing | null = null;
@@ -491,6 +507,8 @@ export class MovementMatcher {
   private lastDrive: number | null = null;
   /** Whether this frame's drive was read (`MatchFrame.seen`). */
   private seenNow = false;
+  /** This frame's `MatchFrame.turned`. */
+  private turnedNow: number | null = null;
   /** "Down" as the picture shows it this frame, a unit vector; null when not known. */
   private flatDown: readonly [number, number] | null = null;
   /** The feet at the top between reps (not in a rep, or in a rep's moment after), frame by frame, over the last
@@ -560,6 +578,8 @@ export class MovementMatcher {
     const drive = this.driveOf(measured, "flat");
     if (drive !== null) this.lastDrive = t;
     this.seenNow = drive !== null;
+    this.turnedNow = null;
+    const facing = facingOf(body);
     const heights = new Map<string, number>();
     for (const name of this.watched) {
       const h = readingOf(measured, name)?.flat ?? null;
@@ -583,14 +603,14 @@ export class MovementMatcher {
     const dn = Math.hypot(dx, dy);
     this.flatDown = body.down === null || !(dn > 0) ? null : [dx / dn, dy / dn];
     const ready = this.movement.ready.every((c) => this.holds(c, measured));
-    this.recent.push({ t, drive, ready, heights, feet, size: body.size, measured });
+    this.recent.push({ t, drive, ready, heights, feet, size: body.size, measured, facing });
     // The last `stillFor` of frames, and the newest one older than that, so the window always spans `stillFor` of seen
     // time however few frames a second the phone gives.
     const inside = this.recent.filter((r) => t - r.t <= L.stillFor);
     const older = this.recent.filter((r) => t - r.t > L.stillFor);
     const edge = older[older.length - 1];
     this.recent = edge === undefined ? inside : [edge, ...inside];
-    if (this.onTheMove) this.keepUpright({ t, drive, ready, heights, feet, size: body.size, measured });
+    if (this.onTheMove) this.keepUpright({ t, drive, ready, heights, feet, size: body.size, measured, facing });
     this.held.push({ t, drive, ready });
     const heldOlder = this.held.filter((h) => t - h.t > L.lower);
     const heldEdge = heldOlder[heldOlder.length - 1];
@@ -643,16 +663,27 @@ export class MovementMatcher {
       if (this.rep !== null) return this.frame(t, drop, null);
     }
 
-    // Not in a rep: standing ready is remembered afresh whenever it holds.
+    // Not in a rep: standing ready is remembered afresh whenever it holds. A person who has turned to face another way
+    // stands at another height on the picture, with their feet in other places: what was remembered of their standing
+    // belongs to the way they faced. A standing found facing further than `turned` from the way the highest standing was
+    // taken replaces it at once, higher or lower, as at the start of a set, the count going on (a man's own squats, the
+    // camera left on as he turned between them: his first squats after the turn were lost against the standing of
+    // before). Until one is found the old one stays: forgotten at the turn instead, a man who squatted before he had stood
+    // still had no standing at all, and his first squat after turning from the phone was lost (his walk back, begun at
+    // six of its pictures).
+    this.turnedNow = this.turnedFrom(this.standing);
     const found = this.stillStanding();
+    if (found !== null && found.facing !== null && this.anchorFacing !== null && turnBetween(found.facing, this.anchorFacing) > L.turned) this.turnedAway();
     const anchor = this.anchor;
     let still: Standing | null = found;
     if (found !== null && anchor !== null && found.drive < anchor) {
       // Lower than the highest standing since the last rep: within the shake of it, it is that same standing; further
       // down, it is taken only once held there for `lower`.
-      if (found.drive >= anchor - this.stillBy) still = { ...found, drive: anchor };
+      if (found.drive >= anchor - this.stillBy) still = { ...found, drive: anchor, facing: this.anchorFacing };
       else if (!this.heldLow()) still = null;
     }
+    // A new highest standing (higher, held lower, or the first) keeps the way it was taken facing; the same one, its own.
+    if (still !== null && (anchor === null || still.drive !== anchor)) this.anchorFacing = still.facing;
     if (still !== null) this.anchor = still.drive;
     if (still !== null) this.standing = still;
     // Never still, read on the move (a fast rhythm, a jump): where the person stood upright on the floor (`movingStanding`).
@@ -756,11 +787,32 @@ export class MovementMatcher {
   /** A frame that decides nothing. */
   private still(t: number): MatchFrame {
     const state: MatchState = this.rep !== null ? "rep" : this.standing !== null ? "ready" : "waiting";
-    return { t, state, count: this.count, progress: null, rep: null, seen: false };
+    return { t, state, count: this.count, progress: null, rep: null, seen: false, turned: null };
   }
 
   private deepest(rep: Rep): number {
     return Math.max(0, ...rep.samples.map((s) => s.drop ?? 0));
+  }
+
+  /** How far the person faces now, over the last `stillFor`, from the way they faced when `standing` was taken, degrees;
+   *  null with no standing, or where either way is not known (`MatchFrame.turned`). */
+  private turnedFrom(standing: Standing | null): number | null {
+    if (standing === null || standing.facing === null) return null;
+    const now = facingMiddle(this.recent.flatMap((r) => (r.facing === null ? [] : [r.facing])));
+    return now === null ? null : turnBetween(now, standing.facing);
+  }
+
+  /** The person has turned, and stands still facing the new way: the highest standing, the stillness held below it, where
+   *  their feet were last seen at a top and every standing read on the move are forgotten, so that the standing found now
+   *  is taken as it is; the count, the frames of the last moment and the feet of the last moment at the top (`tops`, all
+   *  from the way they face now) are kept. */
+  private turnedAway(): void {
+    this.anchor = null;
+    this.anchorFacing = null;
+    this.held = [];
+    this.lastTop = [];
+    this.upright = [];
+    this.lastMoving = null;
   }
 
   /** A clock that went back is a new stream of frames: nothing of the old one is carried, its count included. */
@@ -769,6 +821,7 @@ export class MovementMatcher {
     this.tops = [];
     this.lastTop = [];
     this.anchor = null;
+    this.anchorFacing = null;
     this.recent = [];
     this.held = [];
     this.standing = null;
@@ -777,6 +830,7 @@ export class MovementMatcher {
     this.frameTimes = [];
     this.rep = null;
     this.lastDrive = null;
+    this.turnedNow = null;
   }
 
   private end(t: number, result: RepResult): MatchFrame {
@@ -787,7 +841,7 @@ export class MovementMatcher {
   private frame(t: number, drop: number | null, rep: RepResult | null): MatchFrame {
     if (rep?.verdict === "counted") this.count++;
     const state: MatchState = this.rep !== null ? "rep" : this.standing !== null ? "ready" : "waiting";
-    return { t, state, count: this.count, progress: this.rep !== null && drop !== null ? drop / this.depth : null, rep, seen: this.seenNow };
+    return { t, state, count: this.count, progress: this.rep !== null && drop !== null ? drop / this.depth : null, rep, seen: this.seenNow, turned: this.turnedNow };
   }
 
   /** Whether the person has stood ready, the drive seen and still, for the whole of the last `lower`. */
@@ -886,7 +940,8 @@ export class MovementMatcher {
       const v = mistakeReading(m, f.measured);
       return v === null ? [] : [v];
     })));
-    const partial: Standing = { t: last?.t ?? 0, drive, size, heights, feet, reads: {}, form };
+    const facing = facingMiddle(frames.flatMap((f) => (f.facing === null ? [] : [f.facing])));
+    const partial: Standing = { t: last?.t ?? 0, drive, size, heights, feet, reads: {}, form, facing };
     const reads: Record<string, number | null> = {};
     for (const rule of this.movement.rules) {
       reads[rule.name] = ["drop", "rise", "change", "lift", "travel", "time"].includes(rule.read.kind) ? 0 : median(frames.flatMap((f) => {

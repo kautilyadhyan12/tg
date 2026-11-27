@@ -182,7 +182,7 @@ describe('a sale with a discount', () => {
     const done = await within(newSale()).findByTestId('sale-done');
     expect(done.textContent).toContain('Sold: 2 × Water to a walk-in. $3.44, cash. Summer sale: $0.80 off.');
     expect(within(today()).getByTestId('takings-row').textContent).toContain('Summer sale: $0.80 off');
-    expect(within(today()).getByText("Discounts took $0.80 off today's product sales. The total above is what was paid.")).toBeTruthy();
+    expect(within(screen.getByTestId('revenue-card')).getByText("Discounts took $0.80 off today's product sales. The total above is what was paid.")).toBeTruthy();
 
     // The next sale starts with no discount: the last one is not carried over.
     fireEvent.click(within(newSale()).getByRole('button', { name: 'New sale' }));

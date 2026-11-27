@@ -48,7 +48,7 @@ import {
   voidSaleQuestion,
   basketRefundTag,
 } from './sellView';
-import { saleDiscountWords } from './sellView';
+import { saleDiscountWords, dayRevenue, questionParts, salesHeading } from './sellView';
 
 const water = (over = {}) => ({ id: 'p1', name: 'Water', priceMinor: 199, currency: 'USD', taxRateIds: ['r1'], stock: null, archivedAt: null, updatedAt: '2026-10-12T10:00:00.000Z', ...over });
 const rate = (over = {}) => ({ id: 'r1', name: 'Sales tax', pcm: 8250, products: 0, membershipTypes: 0, memberships: 0, ...over });
@@ -78,7 +78,7 @@ const sale = (over = {}) => ({
   ...over,
 });
 const totals = (over = {}) => ({ count: 0, payments: 0, totalMinor: 0, taxMinor: 0, cash: 0, upi: 0, card_at_desk: 0, bank_transfer: 0, link: 0, company: 0, refundedMinor: 0, otherCurrency: 0, ...over });
-const page = (over = {}) => ({ currency: 'USD', sales: [], payments: [], salesNotShown: 0, paymentsNotShown: 0, totals: totals(), ...over });
+const page = (over = {}) => ({ currency: 'USD', today: '2026-10-12', sales: [], payments: [], salesNotShown: 0, paymentsNotShown: 0, totals: totals(), ...over });
 const kind = (over = {}) => ({ count: 0, totalMinor: 0, cash: 0, upi: 0, card_at_desk: 0, bank_transfer: 0, link: 0, company: 0, terminal: 0, refundedMinor: 0, otherCurrency: 0, notShown: 0, ...over });
 
 describe("the day's takings by kind (18q-ii)", () => {
@@ -103,11 +103,59 @@ describe("the day's takings by kind (18q-ii)", () => {
     expect(['all', 'products', 'memberships', 'fees'].map((key) => takingsTabTotal(day(), key))).toEqual(['$66.98', '$1.99', '$49.99', '$15.00']);
   });
   it('the line names the kind, its money and how it was paid; All names every kind', () => {
-    expect(takingsWords(day())).toBe('Taken today: $66.98 from 1 sale, 1 membership payment and 1 fee. Cash $16.99 · Card at the desk $49.99.');
+    expect(takingsWords(day())).toBe('Revenue today: $66.98 from 1 sale, 1 membership payment and 1 fee. Cash $16.99 · Card at the desk $49.99.');
     expect(takingsWords(day(), 'products')).toBe('Products today: $1.99 from 1 sale. Cash $1.99.');
     expect(takingsWords(day(), 'memberships')).toBe('Memberships today: $49.99 from 1 membership payment. Card at the desk $49.99.');
     expect(takingsWords(day(), 'fees')).toBe('Fees today: $15.00 from 1 fee. Cash $15.00.');
     expect(takingsWords(day({ day: '2026-10-09', today: '2026-10-12' }), 'fees')).toBe('Fees on 9 Oct 2026: $15.00 from 1 fee. Cash $15.00.');
+  });
+  it('the Revenue card (V4a-ii), every kind of day: its title and day, its total, what it came from and each way it was paid', () => {
+    const cases = [
+      // A day of each kind, in a gym in the US: the ways by hand always, others only where money came in by them.
+      {
+        name: 'today, all three kinds',
+        page: day(),
+        country: 'US',
+        want: { title: 'Revenue today', day: 'Mon 12 Oct', total: '$66.98', from: 'From 1 sale, 1 membership payment and 1 fee', methods: ['Cash $16.99', 'Card at the desk $49.99', 'Bank transfer $0.00'] },
+      },
+      {
+        name: 'an earlier day, on the Terminal',
+        page: page({ day: '2026-10-09', today: '2026-10-12', totals: totals({ count: 2, totalMinor: 900, terminal: 900 }) }),
+        country: 'US',
+        want: { title: 'Revenue on 9 Oct 2026', day: 'Fri 9 Oct', total: '$9.00', from: 'From 2 sales', methods: ['Card on Terminal $9.00', 'Cash $0.00', 'Card at the desk $0.00', 'Bank transfer $0.00'] },
+      },
+      { name: 'nothing yet today', page: page({ kinds: { products: kind(), memberships: kind(), fees: kind() } }), country: 'US', want: { title: 'Revenue today', day: 'Mon 12 Oct', total: '$0.00', from: 'Nothing taken yet today.', methods: [] } },
+      { name: 'nothing on an earlier day', page: page({ day: '2026-11-01', today: '2026-11-02' }), country: 'US', want: { title: 'Revenue on 1 Nov 2026', day: 'Sun 1 Nov', total: '$0.00', from: 'Nothing was taken on 1 Nov.', methods: [] } },
+      {
+        name: 'only money in another currency: no false "nothing"',
+        page: page({ currency: 'GBP', totals: totals({ otherCurrency: 1 }) }),
+        country: 'GB',
+        want: { title: 'Revenue today', day: 'Mon 12 Oct', total: '£0.00', from: null, methods: ['Cash £0.00', 'Card at the desk £0.00', 'Bank transfer £0.00'] },
+      },
+      { name: 'a gym in India lists UPI', page: page({ currency: 'INR', totals: totals({ count: 1, totalMinor: 5000, upi: 5000 }) }), country: 'IN', want: { title: 'Revenue today', day: 'Mon 12 Oct', total: '₹50.00', from: 'From 1 sale', methods: ['Cash ₹0.00', 'UPI ₹50.00', 'Card at the desk ₹0.00', 'Bank transfer ₹0.00'] } },
+    ];
+    for (const c of cases) {
+      const got = dayRevenue(c.page, c.country);
+      expect({ ...got, methods: got.methods.map((m) => `${m.label} ${m.amount}`) }, c.name).toEqual(c.want);
+    }
+  });
+  it("the list's heading counts every row of the day, the newest first", () => {
+    // Every class: all shown; a past day; nothing; the server sent only the newest (All, and one kind); a kind's tab counts only its own rows.
+    const cases = [
+      ['all shown', page(), 3, 'all', "Today's sales", '3 today · the newest first'],
+      ['a past day', page({ day: '2026-10-09', today: '2026-10-12' }), 1, 'all', 'Sales on 9 Oct 2026', '1 that day · the newest first'],
+      ['nothing', page(), 0, 'all', "Today's sales", null],
+      ['130 product sales, 100 sent, and 2 payments', page({ salesNotShown: 30, paymentsNotShown: 0 }), 102, 'all', "Today's sales", 'The newest 102 of 132 today'],
+      ['payments past the hundred, on All', page({ salesNotShown: 0, paymentsNotShown: 5 }), 100, 'all', "Today's sales", 'The newest 100 of 105 today'],
+      ['the Products tab, 30 left out', page({ salesNotShown: 30, kinds: { products: kind({ count: 130, notShown: 30 }) } }), 100, 'products', "Today's sales", 'The newest 100 of 130 today'],
+      ['the Products tab with 2 of its own while 3 payments are on All', page({ kinds: { products: kind({ count: 2 }) } }), 2, 'products', "Today's sales", '2 today · the newest first'],
+      ['the Fees tab, nothing', page({ kinds: { fees: kind() } }), 0, 'fees', "Today's sales", null],
+    ];
+    for (const [name, p, n, key, title, sub] of cases) expect(salesHeading(p, Array.from({ length: n }, (_, i) => i), key), name).toEqual({ title, sub });
+  });
+  it('a question is split into its title and the rest, for a box in the middle', () => {
+    expect(questionParts('Void this sale? 1 × Towel, $5.00.')).toEqual({ title: 'Void this sale?', body: '1 × Towel, $5.00.' });
+    expect(questionParts('No question here.')).toEqual({ title: 'No question here.', body: null });
   });
   it('a kind with nothing in it says so, today or on the day picked', () => {
     const empty = page({ kinds: { products: kind(), memberships: kind(), fees: kind() } });
@@ -125,7 +173,7 @@ describe("the day's takings by kind (18q-ii)", () => {
     });
     expect(takingsWords(moved, 'memberships')).toBe('Memberships today: £0.00.');
     expect(takingsNotes(moved, 'memberships')).toEqual(['1 sale or payment today was taken in another currency. It is listed below and not added to the total above.']);
-    expect(takingsWords(moved)).toBe('Taken today: £0.00.');
+    expect(takingsWords(moved)).toBe('Revenue today: £0.00.');
     expect(takingsWords(moved, 'products')).toBe('No product sales yet today.');
   });
   it('each tab notes only its own tax, refunds and left-out rows', () => {
@@ -329,14 +377,14 @@ describe("a member's Refer a friend gift on a sale (20e-ii-b-ii-a)", () => {
 describe('today', () => {
   it('says nothing was taken, or how much and how', () => {
     expect(takingsWords(page())).toBe('Nothing taken yet today.');
-    expect(takingsWords(page({ totals: totals({ count: 1, totalMinor: 199, cash: 199 }) }))).toBe('Taken today: $1.99 from 1 sale. Cash $1.99.');
-    expect(takingsWords(page({ currency: 'INR', totals: totals({ count: 2, totalMinor: 350000, cash: 50000, upi: 300000 }) }))).toBe('Taken today: ₹3,500.00 from 2 sales. Cash ₹500.00 · UPI ₹3,000.00.');
+    expect(takingsWords(page({ totals: totals({ count: 1, totalMinor: 199, cash: 199 }) }))).toBe('Revenue today: $1.99 from 1 sale. Cash $1.99.');
+    expect(takingsWords(page({ currency: 'INR', totals: totals({ count: 2, totalMinor: 350000, cash: 50000, upi: 300000 }) }))).toBe('Revenue today: ₹3,500.00 from 2 sales. Cash ₹500.00 · UPI ₹3,000.00.');
     expect(takingsWords(page({ totals: totals({ count: 3, payments: 1, totalMinor: 5596, cash: 398, card_at_desk: 4999, bank_transfer: 199 }) }))).toBe(
-      'Taken today: $55.96 from 3 sales and 1 membership payment. Cash $3.98 · Card at the desk $49.99 · Bank transfer $1.99.',
+      'Revenue today: $55.96 from 3 sales and 1 membership payment. Cash $3.98 · Card at the desk $49.99 · Bank transfer $1.99.',
     );
     // Named as the rows under it name them: one thing, one name.
     expect(takingsWords(page({ currency: 'GBP', totals: totals({ payments: 2, totalMinor: 9000, link: 4000, company: 5000 }) }))).toBe(
-      'Taken today: £90.00 from 2 membership payments. Payment link £40.00 · Card on file £50.00.',
+      'Revenue today: £90.00 from 2 membership payments. Payment link £40.00 · Card on file £50.00.',
     );
   });
   it('the smaller lines are each said only where they are true', () => {

@@ -1,6 +1,6 @@
 import ChargebackLines from './ChargebackLines';
 import { chargebackLines } from './chargebackView';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Check, Loader2 } from 'lucide-react';
 import { registerService } from '../../api/registerApi';
 import { errorCode, errorText } from '../../api/orgsApi';
@@ -42,6 +42,8 @@ import {
 import MoreMenu from '../../components/console/MoreMenu';
 import ReceiptBox from '../../components/console/ReceiptBox';
 import { RefundToCardBox } from './CardRefundBox';
+import { MiddleBox } from '../../components/console/ConsoleBoxes';
+import { questionParts } from './sellView';
 
 // REFUND A SALE AT THE DESK (spec Part 3 §14.3; ROADMAP 18p), drawn the same on Sell's list and
 // on a person's "Bought at the desk": the Refund sale box, opened inside the sale it is for, and
@@ -54,17 +56,25 @@ const PLAIN = 'c-btn c-btn-s';
 const SMALL = 'c-btn c-btn-s c-btn-sm';
 const DANGER = 'c-btn c-btn-danger';
 const VOIDED = { color: 'var(--t3)', textDecoration: 'line-through' };
-const BOX = { background: 'var(--raise)' };
 
 const newKey = () => globalThis.crypto.randomUUID();
 /** The list's choice for all of a sale. */
 const ALL = 'all';
 
+/** Tells the box in the middle while a press is on its way, so Escape and pressing outside wait for its answer. */
+function useSaysSending(busy, onSending) {
+  useEffect(() => {
+    onSending?.(busy);
+  }, [busy, onSending]);
+  useEffect(() => () => onSending?.(false), [onSending]);
+}
+
 /** The Refund sale box. `who` is the buyer's name, or null for a walk-in. `typeAmount`: the amount is only what staff type, as
  *  where Square gave back part of the sale with no note here. */
-export function SaleRefundBox({ gymId, country = null, sale, who, typeAmount = false, onDone, onClose }) {
+export function SaleRefundBox({ gymId, country = null, sale, who, typeAmount = false, onDone, onClose, onSending = null }) {
   const [draft, setDraft] = useState(() => ({ ...saleRefundDraft(sale, newKey), ...(typeAmount ? { amount: '' } : {}) }));
   const [busy, setBusy] = useState(false);
+  useSaysSending(busy, onSending);
   const [error, setError] = useState(null);
   const words = saleRefundWords(sale, who);
   const { problem, body } = saleRefundBody(sale, draft);
@@ -85,8 +95,7 @@ export function SaleRefundBox({ gymId, country = null, sale, who, typeAmount = f
   return (
     <form
       noValidate
-      className="rounded-[14px] p-3 flex flex-col gap-3"
-      style={BOX}
+      className="c-inbox flex flex-col gap-3"
       data-testid="sale-refund-form"
       onSubmit={(e) => {
         e.preventDefault();
@@ -98,7 +107,7 @@ export function SaleRefundBox({ gymId, country = null, sale, who, typeAmount = f
         void send();
       }}
     >
-      <p className="c-s15 c-w6 c-t1 m-0">{words.title}</p>
+      <p className="c-inbox-t c-s15 c-w6 c-t1 m-0">{words.title}</p>
       <p className="c-s14 c-t2 m-0">{words.detail}</p>
       <label className="c-field">
         <span className="c-label">{`Amount given back (${sale.currency})`}</span>
@@ -148,7 +157,7 @@ export function SaleRefundBox({ gymId, country = null, sale, who, typeAmount = f
           {error}
         </span>
       ) : null}
-      <div className="flex flex-wrap gap-2">
+      <div className="c-inbox-a">
         <button type="submit" className={MAIN} disabled={busy}>
           {busy ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : <Check aria-hidden="true" className="w-4 h-4" />}
           Note refund
@@ -162,7 +171,7 @@ export function SaleRefundBox({ gymId, country = null, sale, who, typeAmount = f
 }
 
 /** Refund to card on one product of a sale paid on the Terminal (18d-iv-b-ii): the money goes back through Square. */
-function SaleCardRefundBox({ gymId, sale, who, paymentsTo, onDone, onNote, onStopped, onClose }) {
+function SaleCardRefundBox({ gymId, sale, who, paymentsTo, onDone, onNote, onStopped, onClose, onSending }) {
   return (
     <RefundToCardBox
       gymId={gymId}
@@ -179,12 +188,13 @@ function SaleCardRefundBox({ gymId, sale, who, paymentsTo, onDone, onNote, onSto
       onNote={onNote}
       onStopped={onStopped}
       onClose={onClose}
+      onSending={onSending ?? undefined}
     />
   );
 }
 
 /** Refund to card on all of a sale: one refund at Square for all that is left, so no amount is asked. */
-function WholeCardRefundBox({ gymId, basket, lines, who, paymentsTo, onDone, onNote, onStopped, onClose }) {
+function WholeCardRefundBox({ gymId, basket, lines, who, paymentsTo, onDone, onNote, onStopped, onClose, onSending }) {
   const saleId = lines[0]?.id ?? '';
   return (
     <RefundToCardBox
@@ -203,14 +213,16 @@ function WholeCardRefundBox({ gymId, basket, lines, who, paymentsTo, onDone, onN
       onNote={onNote}
       onStopped={onStopped}
       onClose={onClose}
+      onSending={onSending ?? undefined}
     />
   );
 }
 
 /** Note a refund on all of a sale: a refund noted on each product with something left, in one press. */
-function WholeNoteBox({ gymId, country, basket, lines, who, onDone, onClose }) {
+function WholeNoteBox({ gymId, country, basket, lines, who, onDone, onClose, onSending = null }) {
   const [draft, setDraft] = useState(() => ({ requestKey: newKey(), method: basket.first.method === 'terminal' ? '' : basket.first.method, reason: '', shelf: {}, tried: false }));
   const [busy, setBusy] = useState(false);
+  useSaysSending(busy, onSending);
   const [error, setError] = useState(null);
   const words = wholeNoteWords(basket, lines, who);
   const { problem, body } = wholeNoteBody(lines, draft);
@@ -230,8 +242,7 @@ function WholeNoteBox({ gymId, country, basket, lines, who, onDone, onClose }) {
   return (
     <form
       noValidate
-      className="rounded-[14px] p-3 flex flex-col gap-3"
-      style={BOX}
+      className="c-inbox flex flex-col gap-3"
       data-testid="sale-refund-all-form"
       onSubmit={(e) => {
         e.preventDefault();
@@ -243,7 +254,7 @@ function WholeNoteBox({ gymId, country, basket, lines, who, onDone, onClose }) {
         void send();
       }}
     >
-      <p className="c-s15 c-w6 c-t1 m-0">{words.title}</p>
+      <p className="c-inbox-t c-s15 c-w6 c-t1 m-0">{words.title}</p>
       <p className="c-s14 c-t2 m-0">{words.detail}</p>
       <label className="c-field">
         <span className="c-label">How you gave it back</span>
@@ -289,7 +300,7 @@ function WholeNoteBox({ gymId, country, basket, lines, who, onDone, onClose }) {
           {error}
         </span>
       ) : null}
-      <div className="flex flex-wrap gap-2">
+      <div className="c-inbox-a">
         <button type="submit" className={MAIN} disabled={busy}>
           {busy ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : <Check aria-hidden="true" className="w-4 h-4" />}
           Note refund
@@ -305,7 +316,7 @@ function WholeNoteBox({ gymId, country, basket, lines, who, onDone, onClose }) {
 /** Refund sale on a sale (18q): on a sale of several products, which one the money went back
  *  for is picked first, from those with something left to refund; then that product's box.
  *  `toCard`: Refund to card was pressed, on a sale paid on the Terminal; else Note a refund. */
-export function BasketRefundBox({ gymId, country = null, basket, who, toCard = false, paymentsTo = null, onDone, onStopped, onClose }) {
+export function BasketRefundBox({ gymId, country = null, basket, who, toCard = false, paymentsTo = null, onDone, onStopped, onClose, onSending = null }) {
   const open = basket.lines.filter((line) => line.canRefund === true);
   const [lineId, setLineId] = useState(open.length === 1 ? (open[0]?.id ?? '') : '');
   /** Refund to card said to note it instead: the box stays on the same product. */
@@ -323,20 +334,21 @@ export function BasketRefundBox({ gymId, country = null, basket, who, toCard = f
   };
   const wholeBox = () =>
     toCard && !noting ? (
-      <WholeCardRefundBox key={ALL} gymId={gymId} basket={basket} lines={open} who={who} paymentsTo={paymentsTo} onDone={onDone} onNote={noteFromWhole} onStopped={onStopped} onClose={onClose} />
+      <WholeCardRefundBox key={ALL} gymId={gymId} basket={basket} lines={open} who={who} paymentsTo={paymentsTo} onDone={onDone} onNote={noteFromWhole} onStopped={onStopped} onClose={onClose} onSending={onSending} />
     ) : (
-      <WholeNoteBox key={ALL} gymId={gymId} country={country} basket={basket} lines={open} who={who} onDone={onDone} onClose={onClose} />
+      <WholeNoteBox key={ALL} gymId={gymId} country={country} basket={basket} lines={open} who={who} onDone={onDone} onClose={onClose} onSending={onSending} />
     );
   const box = (sale) =>
     toCard && !noting ? (
-      <SaleCardRefundBox key={sale.id} gymId={gymId} sale={sale} who={who} paymentsTo={paymentsTo} onDone={onDone} onNote={() => setNoting(true)} onStopped={onStopped} onClose={onClose} />
+      <SaleCardRefundBox key={sale.id} gymId={gymId} sale={sale} who={who} paymentsTo={paymentsTo} onDone={onDone} onNote={() => setNoting(true)} onStopped={onStopped} onClose={onClose} onSending={onSending} />
     ) : (
-      <SaleRefundBox key={sale.id} gymId={gymId} country={country} sale={sale} who={who} typeAmount={pickToNote} onDone={onDone} onClose={onClose} />
+      <SaleRefundBox key={sale.id} gymId={gymId} country={country} sale={sale} who={who} typeAmount={pickToNote} onDone={onDone} onClose={onClose} onSending={onSending} />
     );
   if (basket.lines.length === 1) return box(basket.first);
   return (
-    <div className="flex flex-col gap-3" data-testid="basket-refund">
-      <div className="rounded-[14px] p-3 flex flex-col gap-3" style={BOX}>
+    <div className="flex flex-col gap-4" data-testid="basket-refund">
+      <div className="c-inbox flex flex-col gap-3">
+        {line === null && !whole ? <p className="c-inbox-t c-s15 c-w6 c-t1 m-0">{SALE_MENU_WORDS.refund.label}</p> : null}
         <label className="c-field">
           <span className="c-label">Which product was it for?</span>
           <select
@@ -358,7 +370,7 @@ export function BasketRefundBox({ gymId, country = null, basket, who, toCard = f
         </label>
         {pickToNote ? <p className="c-s14 c-t2 m-0">Pick the product, then type what Square gave back.</p> : null}
         {line === null && !whole ? (
-          <div className="flex flex-wrap gap-2">
+          <div className="c-inbox-a">
             <button type="button" className={PLAIN} onClick={onClose}>
               Back
             </button>
@@ -372,11 +384,12 @@ export function BasketRefundBox({ gymId, country = null, basket, who, toCard = f
 }
 
 /** Choose product: which product a refund made in Square was for (18d-iv-d-ii). */
-function PlaceRefundBox({ gymId, lines, press, currency, onDone, onClose }) {
+function PlaceRefundBox({ gymId, lines, press, currency, onDone, onClose, onSending = null }) {
   const open = placeOpen(lines, press);
   const choices = placeChoices(lines, press);
   const [draft, setDraft] = useState({ pick: choices.length === 0 ? SEVERAL : '', amounts: {}, shelf: {}, tried: false });
   const [busy, setBusy] = useState(false);
+  useSaysSending(busy, onSending);
   const [error, setError] = useState(null);
   const { problem, body } = placeBody(lines, press.amountMinor, currency, draft);
   const picked = draft.pick === SEVERAL ? open.filter((line) => (draft.amounts[line.id] ?? '').trim() !== '') : lines.filter((line) => line.id === draft.pick);
@@ -401,8 +414,7 @@ function PlaceRefundBox({ gymId, lines, press, currency, onDone, onClose }) {
   return (
     <form
       noValidate
-      className="rounded-[14px] p-3 flex flex-col gap-3"
-      style={BOX}
+      className="c-inbox flex flex-col gap-3"
       data-testid="place-refund-form"
       onSubmit={(e) => {
         e.preventDefault();
@@ -414,6 +426,8 @@ function PlaceRefundBox({ gymId, lines, press, currency, onDone, onClose }) {
         void send();
       }}
     >
+      <p className="c-inbox-t c-s15 c-w6 c-t1 m-0">Choose product</p>
+      <p className="c-s14 c-t2 m-0">{placeLine(press.amountMinor, currency, press.chargeback === true)}</p>
       {placeOverLine(lines, press) !== null ? <p className="c-s14 c-t2 m-0">{placeOverLine(lines, press)}</p> : null}
       {choices.length > 0 ? (
         <label className="c-field">
@@ -459,7 +473,7 @@ function PlaceRefundBox({ gymId, lines, press, currency, onDone, onClose }) {
           {error}
         </span>
       ) : null}
-      <div className="flex flex-wrap gap-2">
+      <div className="c-inbox-a">
         <button type="submit" className={MAIN} disabled={busy}>
           {busy ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : <Check aria-hidden="true" className="w-4 h-4" />}
           Save
@@ -474,6 +488,8 @@ function PlaceRefundBox({ gymId, lines, press, currency, onDone, onClose }) {
 
 /** Refunds made in Square on this sale whose product is not yet said, each with its box. `opened`: the one Overview opened. */
 export function SquareRefundsToPlace({ gymId, basket, canAct, opened = null, onDone }) {
+  /** A choice on its way: its box in the middle waits for the answer. */
+  const [sending, setSending] = useState(false);
   const [open, setOpen] = useState(opened);
   const lines = basket?.lines ?? [];
   const currency = lines[0]?.currency ?? 'USD';
@@ -488,17 +504,20 @@ export function SquareRefundsToPlace({ gymId, basket, canAct, opened = null, onD
         </button>
       ) : null}
       {canAct && open === press.pressId ? (
+        <MiddleBox label="Choose product" busy={sending} onClose={() => setOpen(null)} testId="place-refund-middle">
         <PlaceRefundBox
           gymId={gymId}
           lines={lines}
           press={press}
           currency={currency}
+          onSending={setSending}
           onDone={(words) => {
             setOpen(null);
             onDone(words);
           }}
           onClose={() => setOpen(null)}
         />
+        </MiddleBox>
       ) : null}
     </div>
   ));
@@ -551,10 +570,10 @@ export function SaleRefundLines({ gymId, gym, sale, canAct, onDone, named = fals
               style={{ borderLeft: `2px solid ${r.voided === null ? 'var(--bad)' : 'var(--raise-line)'}` }}
               data-testid={r.voided === null ? 'sale-refund' : 'sale-voided-refund'}
             >
-              <span className="c-s13 c-w6 whitespace-nowrap" style={r.voided === null ? { color: 'var(--bad)' } : VOIDED}>
+              <span className="c-s14 c-w6 whitespace-nowrap" style={r.voided === null ? { color: 'var(--bad)' } : VOIDED}>
                 {r.amount}
               </span>
-              <span className="c-s13 c-t2 md:flex-1 flex flex-col">
+              <span className="c-s14 c-t2 md:flex-1 flex flex-col">
                 <span>{r.detail}</span>
                 {r.voided === null ? null : <span>{r.voided}</span>}
                 {r.note === null ? null : <span>{r.note}</span>}
@@ -569,9 +588,9 @@ export function SaleRefundLines({ gymId, gym, sale, canAct, onDone, named = fals
                 <button
                   type="button"
                   className={SMALL}
-                  aria-expanded={receiptFor === r.receiptNumber}
+                  aria-haspopup="dialog"
                   aria-label={receiptButtonLabel(r.receiptNumber, `the refund of ${r.money}`)}
-                  onClick={() => setReceiptFor((was) => (was === r.receiptNumber ? null : r.receiptNumber))}
+                  onClick={() => setReceiptFor(r.receiptNumber)}
                 >
                   {RECEIPT_BUTTON}
                 </button>
@@ -596,19 +615,20 @@ export function SaleRefundLines({ gymId, gym, sale, canAct, onDone, named = fals
                 ) : null}
               </span>
             </div>
-            {receiptFor === r.receiptNumber ? <ReceiptBox gymId={gymId} gym={gym} number={r.receiptNumber} onClose={() => setReceiptFor(null)} /> : null}
+            {receiptFor === r.receiptNumber ? <ReceiptBox gymId={gymId} gym={gym} number={r.receiptNumber} onClose={() => setReceiptFor(null)} inMiddle /> : null}
             {voiding === r.id ? (
+              <MiddleBox label={questionParts(words.question).title} busy={busy} error={error} onClose={() => setVoiding(null)} testId="sale-void-refund-middle">
               <form
                 noValidate
-                className="rounded-[14px] p-3 flex flex-col gap-3"
-                style={BOX}
+                className="c-inbox flex flex-col gap-3"
                 data-testid="sale-void-refund"
                 onSubmit={(e) => {
                   e.preventDefault();
                   if (!busy) void send(r.id, words);
                 }}
               >
-                <p className="c-s15 c-w6 c-t1 m-0">{words.question}</p>
+                <p className="c-inbox-t c-s15 c-w6 c-t1 m-0">{questionParts(words.question).title}</p>
+                {questionParts(words.question).body !== null ? <p className="c-s14 c-t2 m-0">{questionParts(words.question).body}</p> : null}
                 <label className="c-field">
                   <span className="c-label">Why are you voiding it?</span>
                   <select className="c-sel" value={form.reason} onChange={(e) => setForm({ reason: e.target.value, tried: false })}>
@@ -625,21 +645,17 @@ export function SaleRefundLines({ gymId, gym, sale, canAct, onDone, named = fals
                     Pick why you are voiding it.
                   </span>
                 ) : null}
-                {error !== null ? (
-                  <span className="c-s14" style={{ color: 'var(--bad)' }} role="alert">
-                    {error}
-                  </span>
-                ) : null}
-                <div className="flex flex-wrap gap-2">
+                <div className="c-inbox-a">
                   <button type="submit" className={DANGER} disabled={busy}>
                     {busy ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : null}
                     Void refund
                   </button>
-                  <button type="button" className={PLAIN} disabled={busy} onClick={() => setVoiding(null)}>
+                  <button type="button" className={PLAIN} disabled={busy} onClick={() => setVoiding(null)} data-autofocus>
                     Keep it
                   </button>
                 </div>
               </form>
+              </MiddleBox>
             ) : null}
           </div>
         );

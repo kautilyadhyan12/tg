@@ -21,7 +21,8 @@ const boxStyle = {
 // month rather than on the earliest allowed one. `newLook` draws it from `console.css`
 // (spec Part 3 §17) on a page already restyled; other pages keep the old look until
 // their own R-job. `floating` opens the calendar over the page instead of pushing what is
-// under it down, for a picker in a row of buttons.
+// under it down, for a picker in a row of buttons. `button`: the words of a plain button that opens the
+// calendar ("View another day"), in place of the field showing the day picked; it floats.
 export default function DatePick({
   label,
   value,
@@ -35,6 +36,7 @@ export default function DatePick({
   yearSelect,
   newLook = false,
   floating = false,
+  button = null,
 }) {
   const [open, setOpen] = useState(false);
   const [month, setMonth] = useState(() => openingMonth(value, yearSelect ? '' : min, today, max));
@@ -66,7 +68,13 @@ export default function DatePick({
   const text = value ? closureDateLabel(value) : (emptyText ?? 'Pick a date');
 
   return (
-    <div ref={wrap} className={floating ? 'relative' : undefined}>
+    <div ref={wrap} className={floating || button !== null ? 'relative' : undefined}>
+      {button !== null ? (
+        <button type="button" aria-haspopup="dialog" aria-expanded={open} onClick={show} disabled={disabled} className="c-btn c-btn-s">
+          <Calendar aria-hidden="true" className="w-4 h-4" />
+          {button}
+        </button>
+      ) : (
       <button
         type="button"
         aria-label={label}
@@ -93,12 +101,13 @@ export default function DatePick({
           style={{ color: newLook ? 'var(--link)' : '#FF8A1F' }}
         />
       </button>
+      )}
 
       {open ? (
         <div
           role="dialog"
           aria-label={`${label}: pick a date`}
-          className={`${newLook ? 'c-sheet mt-2 w-80 rounded-xl p-3' : 'mt-2 w-72 rounded-xl p-3'} ${floating ? 'absolute z-30 left-0 md:left-auto md:right-0 max-w-[calc(100vw-32px)]' : 'max-w-full'}`}
+          className={`${newLook ? 'c-sheet mt-2 w-80 rounded-xl p-3' : 'mt-2 w-72 rounded-xl p-3'} ${floating || button !== null ? 'absolute z-30 left-0 md:left-auto md:right-0 max-w-[calc(100vw-32px)]' : 'max-w-full'}`}
           style={
             newLook
               ? { border: '1px solid var(--card-line)' }
