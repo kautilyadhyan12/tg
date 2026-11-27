@@ -235,7 +235,7 @@ describe('the sale as it is shown', () => {
     expect(sellTabNamed('Water is out of stock. Change its stock count under Products if you have more.')?.key).toBe('products');
     expect(sellTabNamed('Staff cannot be used until its amount is saved again in GBP. Open it under Discounts and press Change.')?.key).toBe('discounts');
     expect(sellTabNamed('Five off is a fixed amount in GBP. Open it under Discounts and save its amount again.')?.key).toBe('discounts');
-    expect(sellTabNamed('The taxes on Water come to more than 30% together. Press Change on Water under Products and untick one.')?.key).toBe('products');
+    expect(sellTabNamed('The taxes on Water come to more than 30% together. Press Edit on Water under Products and untick one.')?.key).toBe('products');
     expect(sellTabNamed('Enter how many, 1 or more.')).toBeNull();
     expect(sellTabNamed('Find and pick the member, or choose Walk-in.')).toBeNull();
     expect(sellTabNamed(null)).toBeNull();
@@ -491,10 +491,10 @@ describe('products and tax', () => {
   it('a product whose taxes came to more than 30% says why it is not sold, and where to fix it; one put back says what was taken off (round one, High)', () => {
     const tax = { included: false, rates: [rate({ id: 's', name: 'State tax', pcm: 20000 }), rate({ id: 'c', name: 'City tax', pcm: 15000 })] };
     const bar = water({ name: 'Bar', taxRateIds: ['s', 'c'] });
-    expect(saleProblem({ product: bar, quantity: 1, who: 'walkin', person: null, tax })).toBe('The taxes on Bar come to more than 30% together. Press Change on Bar under Products and untick one.');
+    expect(saleProblem({ product: bar, quantity: 1, who: 'walkin', person: null, tax })).toBe('The taxes on Bar come to more than 30% together. Press Edit on Bar under Products and untick one.');
     expect(saleProblem({ product: water({ taxRateIds: ['s'] }), quantity: 1, who: 'walkin', person: null, tax })).toBeNull();
     expect(restoredWords(bar, { tax, products: [{ ...bar, taxRateIds: ['s'] }] })).toBe(
-      'Bar is for sale again. City tax 15% was taken off it, as its taxes came to more than 30% together. Press Change on Bar to check its tax.',
+      'Bar is for sale again. City tax 15% was taken off it, as its taxes came to more than 30% together. Press Edit on Bar to check its tax.',
     );
     expect(restoredWords(water(), { tax: TEXAS, products: [water()] })).toBe('Water is for sale again.');
   });

@@ -178,7 +178,7 @@ describe('a fixed amount in the money the gym used before it changed country', (
     expect(discountStatusTag(discount(), '2026-10-13', 'GBP')).toMatchObject({ words: 'Active' });
     // What it already is comes first: an expired one is expired.
     expect(discountStatusTag({ ...FIVE, endsOn: '2026-01-01' }, '2026-10-13', 'GBP')).toMatchObject({ words: 'Expired' });
-    expect(oldMoneyLine(FIVE, 'GBP')).toBe('This amount is in USD. Press Change and save it again to use it in GBP.');
+    expect(oldMoneyLine(FIVE, 'GBP')).toBe('This amount is in USD. Press Edit and save it again to use it in GBP.');
     expect(oldMoneySaleLine(pounds)).toBe('Five off cannot be used until its amount is saved again in GBP. Open it under Discounts and press Change.');
     expect(oldMoneySaleLine({ ...pounds, discounts: [FIVE, { ...FIVE, id: 'd-2', name: 'Staff' }] })).toBe('Five off and Staff cannot be used until their amounts are saved again in GBP. Open them under Discounts and press Change.');
     expect(oldMoneySaleLine(page([FIVE, discount()]))).toBeNull();

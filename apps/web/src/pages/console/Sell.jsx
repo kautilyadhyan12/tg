@@ -1551,7 +1551,7 @@ export default function Sell() {
             <SellProducts key={`products-${gymId}`} gymId={gymId} country={org.country ?? null} page={page} locked={readOnly} lockedNote={readOnlyNote(org.orgType)} countryTo={placeFor(orgSlug, privileges, 'country')} addAsk={addAsk} changeAsk={changeAsk} onPage={setPage} />
           </div>
           <div role="tabpanel" id={`${tabsId}-tax-panel`} aria-labelledby={`${tabsId}-tax`} hidden={tab !== 'tax'}>
-            <TaxRates key={`tax-${gymId}`} gymId={gymId} country={org.country ?? null} page={page} locked={readOnly} lockedNote={readOnlyNote(org.orgType)} onPage={setPage} />
+            <TaxRates key={`tax-${gymId}`} gymId={gymId} country={org.country ?? null} page={page} locked={readOnly} lockedNote={readOnlyNote(org.orgType)} otherTo={placeFor(orgSlug, privileges, 'membershipTax')} onPage={setPage} />
           </div>
           <div role="tabpanel" id={`${tabsId}-discounts-panel`} aria-labelledby={`${tabsId}-discounts`} hidden={tab !== 'discounts'}>
             <SellDiscounts
