@@ -67,7 +67,7 @@ import { newRecords, RECORDS_PATH } from "./runRecords";
 import { RunMap, useMapScheme } from "./RunMap";
 import { useRunOutbox } from "./RunOutbox";
 import { endRunAtLeaving } from "./runLeaving";
-import { currentPace, saveRequestOf, sentOf, sumsAt, trueStart } from "./runLive";
+import { currentPace, saveRequestOf, sentOf, sumsAt, sumsInSlices, trueStart } from "./runLive";
 import { clock, distance, pace, paceWord, runName, runWhen, unitWord, METRES_PER_MILE } from "./runWords";
 
 /** What stood in the way of Start, said under it with its button. */
@@ -357,12 +357,33 @@ function useLiveNumbers(run: LiveRun, kg: number): { now: number; sums: RunSums 
   useEffect(() => {
     if (runIsFull(run, now)) void finishRun();
   }, [run, now]);
+  // Paused, nothing the numbers are worked out from changes until a point, a pause or a still stretch comes: they
+  // are not worked out again (37o, A11: a day's run took the phone 1.4 s each time, paused or not).
+  const lastPaused = useRef<string | null>(null);
+  /** The stop of the count going on; null when none is. */
+  const working = useRef<(() => void) | null>(null);
   useEffect(() => {
     const every = 2000 + count * 0.1;
     if (sums !== null && now - lastWork.current < every) return;
+    const open = run.pauses[run.pauses.length - 1];
+    const from = run.phase === "paused" ? `${String(count)} ${String(run.pauses.length)} ${String(open?.[0])} ${String(run.still.length)} ${String(run.datedBack.length)} ${String(kg)}` : null;
+    if (sums !== null && from !== null && from === lastPaused.current) return;
+    // One count at a time: the next starts once this one is on screen.
+    if (working.current !== null) return;
+    lastPaused.current = from;
     lastWork.current = now;
-    setSums(sumsAt(run, elapsedMs(run, now), kg));
+    working.current = sumsInSlices(run, elapsedMs(run, now), kg, (made) => {
+      working.current = null;
+      setSums(made);
+    });
   }, [now, count, run, kg, sums]);
+  useEffect(
+    () => () => {
+      working.current?.();
+      working.current = null;
+    },
+    [],
+  );
   return { now, sums };
 }
 
