@@ -696,7 +696,7 @@ describe('where the form opens', () => {
   it("a type being changed: in its own row, never another type's", async () => {
     open(listOf({ types: [type(), type({ name: 'Silver' })] }));
     fireEvent.click(await screen.findByRole('button', { name: 'Edit Silver' }));
-    const form = screen.getByRole('form', { name: 'Change membership type' });
+    const form = screen.getByRole('form', { name: 'Edit membership type' });
     expect(rowOf('Silver').contains(form)).toBe(true);
     expect(rowOf('Gold Monthly').contains(form)).toBe(false);
     expect(within(form).getByLabelText('Name').value).toBe('Silver');
@@ -712,7 +712,7 @@ describe('where the form opens', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
     const said = await screen.findByRole('alert');
     expect(said.textContent).toBe('You already have a membership type with this name. Pick another name.');
-    expect(screen.getByRole('form', { name: 'Change membership type' }).contains(said)).toBe(true);
+    expect(screen.getByRole('form', { name: 'Edit membership type' }).contains(said)).toBe(true);
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
     expect(screen.queryByRole('alert')).toBeNull();
     expect(screen.queryByRole('form')).toBeNull();

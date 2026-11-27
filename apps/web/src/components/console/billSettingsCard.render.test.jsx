@@ -18,7 +18,7 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-describe('the billing day on the Bills box', () => {
+describe('the billing day in Billing rules', () => {
   it('picked, said with a real date, and saved with the grace as it is', async () => {
     orgService.getBillSettings.mockResolvedValue({ data: { overdueAfterDays: 3, billDay: null, canChange: true } });
     orgService.saveBillSettings.mockResolvedValue({ data: { overdueAfterDays: 3, billDay: 1, canChange: true } });

@@ -117,6 +117,8 @@ beforeEach(() => {
   orgService.getMembershipTypes.mockResolvedValue({ data: listOf({ types: [type()] }) });
   orgService.getMembershipWords.mockResolvedValue({ data: { words: [], types: [] } });
   register.get.mockImplementation(() => new Promise(() => undefined));
+  // Billing rules not answered unless a test answers it: a test that does must not reach the next.
+  orgService.getBillSettings.mockImplementation(() => new Promise(() => undefined));
 });
 afterEach(() => cleanup());
 
@@ -282,7 +284,7 @@ describe('tax on memberships (18b-iii)', () => {
       expect(form.getByLabelText('Rate (%)').getAttribute('placeholder')).toBeNull();
       fireEvent.click(screen.getByRole('tab', { name: 'Price list 1' }));
       fireEvent.click(await screen.findByRole('button', { name: 'Edit Gold Monthly' }));
-      const typeForm = within(screen.getByRole('form', { name: 'Change membership type' }));
+      const typeForm = within(screen.getByRole('form', { name: 'Edit membership type' }));
       fireEvent.click(typeForm.getByRole('button', { name: 'Add a tax rate' }));
       const inline = within(typeForm.getByRole('group', { name: 'Add a tax rate' }));
       expect(inline.getByLabelText('Tax name').getAttribute('placeholder')).toBe(name);
@@ -301,7 +303,7 @@ describe('tax on memberships (18b-iii)', () => {
     orgService.updateMembershipType.mockResolvedValue({ data: listOf({ types: [type({ taxRateIds: [VAT.id] })], taxRates: [GST, VAT], taxIncluded: false }) });
     draw([gym()]);
     fireEvent.click(await screen.findByRole('button', { name: 'Edit Gold Monthly' }));
-    const form = within(screen.getByRole('form', { name: 'Change membership type' }));
+    const form = within(screen.getByRole('form', { name: 'Edit membership type' }));
     const tax = within(form.getByRole('group', { name: 'Tax' }));
     expect(tax.getAllByRole('checkbox').map((box) => [box.parentElement?.textContent, box.checked])).toEqual([['GST 18%', false]]);
     expect(form.getByText('Members who already hold it keep the taxes they were sold with.')).toBeTruthy();
@@ -331,7 +333,7 @@ describe('tax on memberships (18b-iii)', () => {
     orgService.getMembershipTypes.mockResolvedValue({ data: listOf({ types: [type({ taxRateIds: [GST.id] })], taxRates: [GST], taxIncluded: false }) });
     draw([gym()]);
     fireEvent.click(await screen.findByRole('button', { name: 'Edit Gold Monthly' }));
-    const form = within(screen.getByRole('form', { name: 'Change membership type' }));
+    const form = within(screen.getByRole('form', { name: 'Edit membership type' }));
     fireEvent.change(form.getByLabelText('Price (USD)'), { target: { value: '800000' } });
     fireEvent.click(form.getByRole('button', { name: 'Save changes' }));
     expect(await form.findByText('A price with tax can be at most $769,230.76. Lower the price, or untick the taxes.')).toBeTruthy();
@@ -392,6 +394,37 @@ describe('staff who may', () => {
   ])('an address ending %s (Search, Payments overview) opens the %s tab', async (hash, tab) => {
     draw([gym()], `/console/iron-house/memberships${hash}`);
     expect((await screen.findByRole('tab', { name: tab })).getAttribute('aria-selected')).toBe('true');
+  });
+
+  it('a link to a tab pressed while the page is open opens that tab again, even after another tab was pressed', async () => {
+    orgService.getMine.mockResolvedValue({ data: { orgs: [gym()] } });
+    render(
+      <MemoryRouter initialEntries={['/console/iron-house/memberships#tax']}>
+        <Link to="/console/iron-house/memberships#discounts">to discounts</Link>
+        <Link to="/console/iron-house/memberships#tax">to tax</Link>
+        <Routes>
+          <Route path="/console/:orgSlug/memberships" element={<ConsoleLayout><Memberships /></ConsoleLayout>} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    const selected = () => screen.getAllByRole('tab').find((t) => t.getAttribute('aria-selected') === 'true')?.textContent;
+    await screen.findByRole('tablist', { name: 'Memberships' });
+    expect(selected()).toBe('Tax');
+    fireEvent.click(screen.getByText('to discounts'));
+    await waitFor(() => expect(selected()).toBe('Discounts'));
+    // Pressed away by hand, then the same link to Tax again: Tax.
+    fireEvent.click(screen.getByRole('tab', { name: 'Price list 1' }));
+    fireEvent.click(screen.getByText('to tax'));
+    await waitFor(() => expect(selected()).toBe('Tax'));
+  });
+
+  it('Add a membership type pressed on the Discounts tab opens on the price list, where the new type and what was said will be', async () => {
+    draw([gym()]);
+    fireEvent.click(await screen.findByRole('tab', { name: 'Discounts' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add a membership type' }));
+    expect(await screen.findByRole('form', { name: 'Add a membership type' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect((await screen.findByRole('tab', { name: 'Price list 1' })).getAttribute('aria-selected')).toBe('true');
   });
 
   it('on a phone the page is under More, never a fifth tab', async () => {

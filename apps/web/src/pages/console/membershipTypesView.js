@@ -249,7 +249,7 @@ export function restoredTypeWords(type, list) {
   const taken = typeRates(type, list).filter((r) => now !== undefined && !(now.taxRateIds ?? []).includes(r.id));
   if (taken.length === 0) return null;
   const were = taken.length === 1 ? 'was' : 'were';
-  return `${type.name} is back on your price list. ${taxRatesPhrase(taken)} ${were} taken off it, as its taxes came to more than 30% together. Press Change on ${type.name} to check its tax.`;
+  return `${type.name} is back on your price list. ${taxRatesPhrase(taken)} ${were} taken off it, as its taxes came to more than 30% together. Press Edit on ${type.name} to check its tax.`;
 }
 
 /** Whether a kind can have a joining fee (18t): one that opens a first bill to carry it. */

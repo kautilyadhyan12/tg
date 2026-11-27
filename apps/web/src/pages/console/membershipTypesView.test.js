@@ -503,7 +503,7 @@ describe('a type’s tax (18b-iii)', () => {
     const before = { id: 't', name: 'Bronze', taxRateIds: ['c', 'b'] };
     const rates = [{ id: 'b', name: 'B', pcm: 25000 }, { id: 'c', name: 'C', pcm: 5000 }];
     expect(restoredTypeWords(before, { taxRates: rates, types: [{ id: 't', taxRateIds: ['c'] }] })).toBe(
-      'Bronze is back on your price list. B 25% was taken off it, as its taxes came to more than 30% together. Press Change on Bronze to check its tax.',
+      'Bronze is back on your price list. B 25% was taken off it, as its taxes came to more than 30% together. Press Edit on Bronze to check its tax.',
     );
     expect(restoredTypeWords(before, { taxRates: rates, types: [{ id: 't', taxRateIds: ['c', 'b'] }] })).toBeNull();
   });

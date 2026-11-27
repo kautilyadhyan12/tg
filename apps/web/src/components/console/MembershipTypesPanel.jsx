@@ -390,7 +390,7 @@ function SellInAppField({ draft, set, problem, busy, sell }) {
 function TypeForm({ gymId, orgType, country, currency, options, taxRates, onRateAdded, draft, setDraft, problems, refused, busy, forWord, error, inRow, sell, onSave, onCancel }) {
   const [addingRate, setAddingRate] = useState(false);
   const editing = draft.id !== null;
-  const title = editing ? 'Change membership type' : (forWord?.heading ?? 'Add a membership type');
+  const title = editing ? 'Edit membership type' : (forWord?.heading ?? 'Add a membership type');
   const id = (name) => `membership-${name}-${gymId}`;
   const set = (patch) => setDraft((d) => ({ ...d, ...patch }));
   const text = (key) => (event) => set({ [key]: event.target.value });
@@ -1195,6 +1195,7 @@ export default function MembershipTypesPanel({ org, readOnly, openBox = null, on
     setShowProblems(false);
     setDraftWord(word);
     setRestored(null);
+    setTab('price');
     setDraft({ ...emptyDraft(), name: word.word });
   };
 
@@ -1203,6 +1204,8 @@ export default function MembershipTypesPanel({ org, readOnly, openBox = null, on
     setRestored(null);
     setSavedNote(null);
     setShowProblems(false);
+    // Opened from the Discounts or Tax tab, it is saved on the price list, where its row is.
+    setTab('price');
     setDraft(next);
   };
 
