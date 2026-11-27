@@ -23,6 +23,7 @@ import android.util.Log
 import android.util.Range
 import android.util.Size
 import android.view.View
+import android.widget.FrameLayout
 import android.widget.ImageView
 import androidx.camera.camera2.interop.Camera2CameraInfo
 import androidx.camera.camera2.interop.Camera2Interop
@@ -295,8 +296,12 @@ class PoseCameraView(context: Context, appContext: AppContext) : ExpoView(contex
   private var session: Session? = null
 
   init {
-    addView(shown, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
-    addView(body, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
+    // One over the other: Expo's view lays its own children out side by side, and the body beside its picture was drawn
+    // off the screen's edge.
+    val stack = FrameLayout(context)
+    stack.addView(shown, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
+    stack.addView(body, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
+    addView(stack, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
   }
 
   fun setDrawing(drawing: BodyDrawing) = body.setDrawing(drawing)

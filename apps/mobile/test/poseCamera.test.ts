@@ -87,6 +87,10 @@ describe("the body drawn by the phone, on the very picture it was read from (Kd 
     expect(view).toContain("xs[k] = w - (left + x * wide)");
     expect(view).toContain("ys[k] = top + y * tall");
     expect(view).toContain("scaleType = ImageView.ScaleType.CENTER_CROP\n    scaleX = -1f");
+    // The body lies over its picture, never beside it: Expo's own view lays its children out in a row.
+    expect(view).toContain("stack.addView(shown, ");
+    expect(view).toContain("stack.addView(body, ");
+    expect(view).toContain("addView(stack, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))");
   });
 
   it("a point drawn only when the model is sure enough of it, and only a real number", () => {
