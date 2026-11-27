@@ -17,7 +17,9 @@ import type { TextStore } from "../food/outbox";
  *  `kept`: the server has it (a 2xx is only answered once the run is stored) in words this copy of the app
  *  cannot read, as when a store build lags behind the server: let go, and lists of runs read again.
  *  `deleted`: the person deleted it, on this phone or another, while it waited to be sent (37c-i). */
-export type RunSendResult = { kind: "done"; run: SavedRun } | { kind: "kept" } | { kind: "later" } | { kind: "failed" } | { kind: "refused"; message: string } | { kind: "deleted" };
+/** `passed`: the server's front door answered for an api that could not (37m's L5): the next run is tried, and this one
+ *  is never counted towards giving up on it, as the api down for a while answers so for every run (round one, H2). */
+export type RunSendResult = { kind: "done"; run: SavedRun } | { kind: "kept" } | { kind: "later" } | { kind: "failed" } | { kind: "passed" } | { kind: "refused"; message: string } | { kind: "deleted" };
 export type RunSender = (run: SaveRunRequest) => Promise<RunSendResult>;
 
 export type { RefusedRun };
@@ -60,12 +62,10 @@ export const RUN_FAILING_MS = 10 * 60_000;
 
 /** Nothing can go now: a lost connection, a sign-in being renewed or gone, or too many at once. */
 const nothingGoes = (answer: Answer<unknown>): boolean =>
-  (answer.kind === "no_answer" && answer.gateway !== true) || (answer.kind === "refused" && (answer.status === 401 || answer.status === 429));
+  answer.kind === "no_answer" || (answer.kind === "refused" && (answer.status === 401 || answer.status === 429));
 
-/** The server answered and could not take it now: a timeout of its own (408, 425) or a fault of its own, its front
- *  door's 502, 503 or 504 among them (37m's L5: a run that broke the api held back every run after it). */
-const notNow = (answer: Answer<unknown>): boolean =>
-  (answer.kind === "no_answer" && answer.gateway === true) || (answer.kind === "refused" && (answer.status === 408 || answer.status === 425 || answer.status >= 500));
+/** The server answered and could not take it now: a timeout of its own (408, 425) or a fault of its own. */
+const notNow = (answer: Answer<unknown>): boolean => answer.kind === "refused" && (answer.status === 408 || answer.status === 425 || answer.status >= 500);
 
 /** Any reply, read here and not by the call: a reply that is not a saved run is told apart from no reply. */
 const anyReply: Shape<unknown> = { safeParse: (raw) => ({ success: true, data: raw }) };
@@ -77,6 +77,8 @@ export function runSender(session: Session): RunSender {
       const saved = saveRunResponseSchema.safeParse(answer.data);
       return saved.success ? { kind: "done", run: saved.data.run } : { kind: "kept" };
     }
+    // The front door's 502, 503 or 504 (37m's L5): a run that broke the api never holds back the runs after it.
+    if (answer.kind === "no_answer" && answer.gateway === true) return { kind: "passed" };
     if (notNow(answer)) return { kind: "failed" };
     if (nothingGoes(answer) || answer.kind !== "refused") return { kind: "later" };
     if (answer.status === 410) return { kind: "deleted" };
@@ -171,6 +173,11 @@ export function createRunOutbox(store: TextStore, send: RunSender, now: () => nu
         fails.clear();
         if (view.failing.length > 0) set({ ...view, failing: [] });
         return;
+      }
+      if (result.kind === "passed") {
+        // Said as not sent yet; counted nowhere, so a server down for an hour gives up on no run.
+        if (!view.failing.includes(next.runId)) set({ ...view, failing: [...view.failing, next.runId] });
+        continue;
       }
       if (result.kind === "failed") {
         const was = fails.get(next.runId);

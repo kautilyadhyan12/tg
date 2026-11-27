@@ -440,7 +440,8 @@ async function writeState(run: LiveRun): Promise<void> {
       motionFiles: Math.ceil(run.motion.length / POINTS_PER_FILE),
       still: run.still,
       datedBack: run.datedBack,
-      clockGapMs: run.clockGapMs ?? 0,
+      // Not known yet is kept as not known (round one, H1): read back as none, a fast clock lost the run.
+      clockGapMs: run.clockGapMs ?? null,
     }),
   );
 }

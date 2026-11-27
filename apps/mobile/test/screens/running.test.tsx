@@ -7,7 +7,7 @@ import { resetMapSource } from "../../src/screens/running/mapSource";
 import { RUN_BAR_ROOM } from "../../src/screens/running/RunLayer";
 import { MAP_CREDIT_PAGE, MAP_WAIT_MS } from "../../src/screens/running/RunMap";
 import { unitMarks } from "../../src/screens/running/routeShape";
-import { chooseAutoPause, finishRun, keepRunUnits, pauseRun, phoneRunFiles, resetRecorder, runNow, startRun, takeLocations } from "../../src/screens/running/recorder";
+import { chooseAutoPause, finishRun, keepRunUnits, loadRun, pauseRun, phoneRunFiles, resetRecorder, runNow, startRun, takeLocations } from "../../src/screens/running/recorder";
 import { saveRequestOf, sentOf, sumsAt } from "../../src/screens/running/runLive";
 import { endRunAtLeaving } from "../../src/screens/running/runLeaving";
 import { spokenTime } from "../../src/screens/running/runVoice";
@@ -366,12 +366,22 @@ describe("a phone whose clock is wrong (37o, the hunt's A6): the run is recorded
     expect(run().points.map((p) => p[0])).toEqual(Array.from({ length: 30 }, (_, i) => i * 1000 + 900));
   });
 
-  it("the gap is kept with the run: the app closed and opened again keeps taking it off", async () => {
+  it.each<[string, number]>([
+    ["the gap decided before the app was closed", 20],
+    // Round one, H1: Android restarting the app during Finding GPS, before the gap was known.
+    ["the app closed before the gap was known", 0],
+  ])("%s: opened again, the points still land from Go", async (_name, before) => {
     await startRun(RAVI.id, "1b9d6bcd-bbfd-4b2d-9b5d-ab8dfbbd4bed", false, T0);
-    await deliver(0, 20, -300_000);
-    await finishRun(T0 + 20_000);
-    const state: unknown = JSON.parse((await phoneRunFiles.read("run-now.json")) ?? "{}");
-    expect(state).toMatchObject({ clockGapMs: expect.closeTo(-300_000, -3) as unknown });
+    await deliver(0, before, -300_000);
+    // The app closed and opened again: the recorder starts from its files.
+    resetRecorder();
+    await loadRun();
+    await deliver(before, 60, -300_000);
+    const points = run().points;
+    // A restart may lose the seconds since the last write (every 10 s), never the run.
+    expect(points.length).toBeGreaterThanOrEqual(before + 48);
+    expect(points[0]?.[0]).toBeLessThanOrEqual(1_200);
+    expect(run().clockGapMs).toBeCloseTo(-300_000, -3);
   });
 });
 
