@@ -26,12 +26,11 @@ import {
  *  read that failed draws nothing: the list is a preview of Attendance, one press away. A
  *  business nobody has come to in 8 weeks gets no empty box (the Attendance box says so).
  *  The names fold away and open again (Kd, 2026-09-03: "add a open close thing"). */
-export function CheckinsBox({ day, orgSlug, attendanceTo, anybodyCame }) {
+export function CheckinsBox({ day, attendanceTo, anybodyCame }) {
   const [open, setOpen] = useState(true);
   const shown = day === null ? [] : previewPeople(day.people);
   if (day === null || (shown.length === 0 && !anybodyCame)) return null;
   const hidden = hiddenPeopleCount(day.totals, shown);
-  const to = attendanceTo ?? `/console/${orgSlug}/attendance`;
   return (
     <section className="c-card c-ov-box" data-testid="todays-checkins" aria-label="Today's check-ins">
       <div className="c-ov-box-head">
@@ -50,12 +49,14 @@ export function CheckinsBox({ day, orgSlug, attendanceTo, anybodyCame }) {
           {shown.map((person, i) => (
             <PersonRow key={person.userId ?? person.entryId ?? `row-${String(i)}`} person={person} timezone={day.timezone} clockFormat={day.clockFormat} />
           ))}
-          <div className="c-ov-line">
-            <Link to={to} className="c-s14 c-w6 c-lk inline-flex items-center gap-1">
-              {hidden > 0 ? `${String(hidden)} more — see everyone` : 'View all check-ins'}
-              <ChevronRight size={16} aria-hidden="true" />
-            </Link>
-          </div>
+          {attendanceTo !== null ? (
+            <div className="c-ov-line">
+              <Link to={attendanceTo} className="c-s14 c-w6 c-lk inline-flex items-center gap-1">
+                {hidden > 0 ? `${String(hidden)} more — see everyone` : 'View all check-ins'}
+                <ChevronRight size={16} aria-hidden="true" />
+              </Link>
+            </div>
+          ) : null}
         </>
       )}
     </section>

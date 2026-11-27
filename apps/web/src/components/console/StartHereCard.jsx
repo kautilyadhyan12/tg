@@ -7,7 +7,7 @@ import { readOnlyNote } from '../../pages/console/billingView';
 
 // GETTING STARTED on Overview (ROADMAP 23b; V5-a, board `Overview`): a strip with how many steps
 // are done, the next step and its button, and View all steps, which opens every step under the
-// strip, each Done or Not done yet with its button (the next step's button then stands in its row). Hide this list hides it for the whole
+// strip, each Done or Not done yet with its buttons (the next step's buttons then stand in its row). Hide this list hides it for the whole
 // business, so it sits under the steps with the sentence that says so.
 
 const RING = 2 * Math.PI * 22;
@@ -33,13 +33,13 @@ export default function StartHereCard({ view, orgType, readOnly = false, onHide,
   const [open, setOpen] = useState(false);
   const share = view.total === 0 ? 0 : view.doneCount / view.total;
   const next = view.rows.find((row) => row.next) ?? null;
-  const nextAction = next === null ? null : (next.actions[next.actions.length - 1] ?? null);
   return (
     <section className="c-card overflow-hidden" data-testid="start-here" aria-label="Getting started">
       <div className="c-ov-start">
         <span className="c-ov-ring" aria-hidden="true">
           <svg viewBox="0 0 52 52" width="52" height="52">
             <circle className="c-ov-ring-track" cx="26" cy="26" r="22" fill="none" strokeWidth="5" />
+            {share > 0 ? (
             <circle
               className="c-ov-ring-fill"
               cx="26"
@@ -50,6 +50,7 @@ export default function StartHereCard({ view, orgType, readOnly = false, onHide,
               strokeLinecap="round"
               strokeDasharray={`${String(RING * share)} ${String(RING)}`}
             />
+            ) : null}
           </svg>
           <span className="c-s14 c-w7 c-t1 c-num">
             {view.doneCount}/{view.total}
@@ -63,7 +64,11 @@ export default function StartHereCard({ view, orgType, readOnly = false, onHide,
           <p className="c-s14 c-t2">{next === null ? 'Every step is done. Each button still opens its page.' : next.line}</p>
         </div>
         <div className="c-ov-start-acts">
-          {nextAction !== null && !open ? <StepAction action={nextAction} look="next" readOnly={readOnly} /> : null}
+          {next !== null && !open
+            ? next.actions.map((action, index) => (
+                <StepAction key={action.to} action={action} look={index === next.actions.length - 1 ? 'next' : 'plain'} readOnly={readOnly} />
+              ))
+            : null}
           <button type="button" className="c-btn c-btn-s c-btn-sm" aria-expanded={open} onClick={() => setOpen((was) => !was)}>
             {open ? 'Hide the steps' : `View all ${String(view.total)} steps`}
             {open ? <ChevronUp size={16} aria-hidden="true" /> : <ChevronDown size={16} aria-hidden="true" />}

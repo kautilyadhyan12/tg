@@ -2669,7 +2669,7 @@ describe("the gym's numbers", () => {
     orgService.getOverview.mockResolvedValue(busy());
     drawOverview();
 
-    expect(await screen.findByText(/so far, against 38 visits in the whole of last week/)).toBeTruthy();
+    expect(await screen.findByText(/so far, against 20 people in the whole of last week/)).toBeTruthy();
   });
 
   it('draws a bar for every week including the empty ones, and says which one is unfinished', async () => {

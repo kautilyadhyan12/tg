@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Loader2 } from 'lucide-react';
+import { ChevronDown, ChevronUp, Loader2 } from 'lucide-react';
 import { orgService, errorCode, errorText } from '../../api/orgsApi';
 import { CHEER_CHOICES, cheerLine } from '../../utils/cheerPresets';
 import {
@@ -107,6 +107,8 @@ export default function OnARollPanel({
   // and `toString` from its prototype, and a row whose state came back as a
   // function is a defect nobody would look for.
   const [taps, setTaps] = useState(() => new Map());
+  // The list folds away and opens again, as it did under "On a roll".
+  const [open, setOpen] = useState(true);
 
   /** WHICH EMOJI IS WAITING FOR ITS **Send**, or `null` — `{ userId, preset }`.
    *
@@ -253,9 +255,14 @@ export default function OnARollPanel({
   return (
     <section className="c-card c-ov-box" data-testid="streaks" aria-label="Streaks">
       <div className="c-ov-box-head">
-        <h2 className="c-h2">Streaks</h2>
+        <h2 className="c-h2">
+          <button type="button" className="c-ov-fold" aria-expanded={open} onClick={() => setOpen((was) => !was)}>
+            Streaks
+            {open ? <ChevronUp size={18} className="c-t3" aria-hidden="true" /> : <ChevronDown size={18} className="c-t3" aria-hidden="true" />}
+          </button>
+        </h2>
       </div>
-        {state === 'empty' ? (
+        {!open ? null : state === 'empty' ? (
           <p className="c-s14 c-t2 c-ov-box-body">
             {emptyRegularsSentence()}
           </p>

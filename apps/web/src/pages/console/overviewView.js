@@ -139,8 +139,10 @@ export function weekLine(week) {
  *  **THE COMPARISON IS UNEVEN AND THE SCREEN MUST SAY SO** — a build requirement
  *  the server half's review moved into `CARD-gym-overview-numbers.md` §4b after
  *  finding it lived only in a comment in `packages/shared`, which is not
- *  somewhere the screen's author reads. `week.visits` is this gym-week SO FAR;
- *  `week.prevVisits` is the WHOLE of the week before. **On a Tuesday that is two
+ *  somewhere the screen's author reads. `week.visitors` is this gym-week SO FAR;
+ *  `week.prevVisitors` is the WHOLE of the week before. It compares PEOPLE, as the
+ *  figure beside it counts (Kd, 2026-09-03; V5-a's review: visits under a count of
+ *  people showed fewer visits as fewer people). **On a Tuesday that is two
  *  days against seven, so a bare arrow tells a healthy gym it is collapsing** —
  *  :5807 on its face, a number on screen that is wrong.
  *
@@ -151,11 +153,11 @@ export function weekLine(week) {
  *  trend, and an arrow drawn over a gym's first week would be the same false
  *  confidence in the other direction. */
 export function weekComparison(week) {
-  const prev = count(week?.prevVisits);
+  const prev = count(week?.prevVisitors);
   if (prev === 0) return { direction: null, text: 'Nothing was recorded last week.' };
-  const now = count(week?.visits);
+  const now = count(week?.visitors);
   const direction = now > prev ? 'up' : now < prev ? 'down' : 'same';
-  return { direction, text: `so far, against ${visitsLabel(prev)} in the whole of last week` };
+  return { direction, text: `so far, against ${peopleLabel(prev)} in the whole of last week` };
 }
 
 /** THE LAST 30 DAYS — how many of the gym's members came, and what share that

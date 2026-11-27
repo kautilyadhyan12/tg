@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { CalendarDays, CheckCircle2, ChevronRight, ClipboardCheck, Clock3, Users, Wallet } from 'lucide-react';
 import JoinCodeCard from '../../components/console/JoinCodeCard';
@@ -23,6 +23,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useConsoleOrg } from './useConsoleOrg';
 import { useSectionLink } from './useSectionLink';
 import { useAttention } from './useAttention';
+import { useCameBack } from './useCameBack';
 import { PLAN_SECTION, canOpenPlace, placeFor } from './consolePlaces';
 import { consoleIsReadOnly } from './billingView';
 import { startHereView } from './startHereView';
@@ -199,6 +200,15 @@ export default function Overview() {
   // REVENUE TODAY, Sell's own figure, read only for staff Sell gives takings to (V5-a).
   const readsSell = org != null && canOpenPlace(viewerPrivileges(org), 'sell');
   const [register, setRegister] = useState({ gymId: null, data: null });
+  // Read again when staff come back to the window, as Payments overview does, and each time
+  // the bell's own read is taken again (after a payment, or when the live line says money moved).
+  const [registerAsk, setRegisterAsk] = useState(0);
+  useCameBack(readsSell, () => setRegisterAsk((n) => n + 1));
+  const seenAttention = useRef(null);
+  useEffect(() => {
+    if (seenAttention.current !== null && attention !== seenAttention.current) setRegisterAsk((n) => n + 1);
+    seenAttention.current = attention;
+  }, [attention]);
 
   useEffect(() => {
     if (gymId === null) return undefined;
@@ -288,7 +298,7 @@ export default function Overview() {
     return () => {
       live = false;
     };
-  }, [gymId, readsSell, attempt]);
+  }, [gymId, readsSell, attempt, registerAsk]);
 
   const retry = () => {
     setCodes({ loading: true, error: null, retryable: true, list: null, retired: false });
@@ -504,7 +514,7 @@ export default function Overview() {
           ) : null}
         </div>
         <div className="c-ov-col c-ov-side">
-          <CheckinsBox day={day} orgSlug={orgSlug} attendanceTo={attendanceTo} anybodyCame={streaks} />
+          <CheckinsBox day={day} attendanceTo={attendanceTo} anybodyCame={streaks} />
         </div>
       </div>
 

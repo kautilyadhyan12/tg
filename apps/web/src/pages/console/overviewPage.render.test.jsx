@@ -2,7 +2,7 @@
 // mocked: what staff see is read off the real page. The worst thing it could do: show somebody
 // whose role gives them no money the business's revenue, who owes, or a money line.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { ROLE_PRIVILEGES, startHereResponseSchema } from '@app/shared';
 import { WEEK_STARTS, attendanceDay, overview } from './__fixtures__/overview';
@@ -83,6 +83,11 @@ function Where() {
   const { pathname, search, hash } = useLocation();
   return <p data-testid="where">{`${pathname}${search}${hash}`}</p>;
 }
+/** Where the browser is, drawn beside the page whatever route is open. */
+function Here() {
+  const { pathname, search, hash } = useLocation();
+  return <p data-testid="here">{`${pathname}${search}${hash}`}</p>;
+}
 function open(org = ORG, attention = ATTENTION) {
   orgApi.getMine.mockResolvedValue({ data: { orgs: [org], formerOrgs: [] } });
   render(
@@ -92,6 +97,7 @@ function open(org = ORG, attention = ATTENTION) {
           <Route path="/console/:orgSlug" element={<Overview />} />
           <Route path="/console/:orgSlug/*" element={<Where />} />
         </Routes>
+        <Here />
       </AttentionContext.Provider>
     </MemoryRouter>,
   );
@@ -171,7 +177,7 @@ describe('the page', () => {
     expect(today.getByText('people')).toBeTruthy();
     const week = within(screen.getByTestId('ov-tile-week'));
     expect(week.getByText('21')).toBeTruthy();
-    expect(week.getByText(/people so far, against 58 visits in the whole of last week/)).toBeTruthy();
+    expect(week.getByText(/people so far, against 26 people in the whole of last week/)).toBeTruthy();
     const month = within(screen.getByTestId('ov-tile-month'));
     expect(month.getByText('46%')).toBeTruthy();
     expect(month.getByText('12 of 26 members came in the last 30 days')).toBeTruthy();
@@ -183,12 +189,23 @@ describe('the page', () => {
     open();
     const box = await screen.findByTestId('ov-attention');
     const lines = within(box).getAllByTestId('ov-attention-line');
-    expect(lines.length).toBeGreaterThanOrEqual(6);
-    expect(within(box).getByText(/items · by urgency/)).toBeTruthy();
-    expect(lines[0].textContent).toMatch(/chargeback/i);
-    const refunds = lines.find((l) => /refund/i.test(l.textContent));
+    const titles = lines.map((l) => l.querySelector('.c-attn-text > span').textContent);
+    expect(titles).toEqual([
+      '2 chargebacks need a response',
+      '3 failed card payments',
+      '6 members with a payment due',
+      '2 refunds to review',
+      '1 app payment to review',
+      '2 members at risk',
+      '2 members cancelled in the app',
+      '5 new leads',
+    ]);
+    expect(within(box).getByText('8 items · by urgency')).toBeTruthy();
+    const refunds = lines[3];
     fireEvent.click(within(refunds).getByRole('link'));
+    // Overview again, at its Refunds to review box.
     expect(screen.queryByTestId('where')).toBeNull();
+    expect(screen.getByTestId('here').textContent).toBe('/console/iron-house#refunds-to-review');
   });
 
   it('says Nothing needs attention when the bell is empty, and draws no box for somebody who may see no part', async () => {
@@ -231,6 +248,82 @@ describe('the page', () => {
     expect(strip.getByRole('button', { name: 'Hide this list' })).toBeTruthy();
     fireEvent.click(strip.getByRole('button', { name: /Hide the steps/ }));
     expect(document.querySelector('[data-step]')).toBeNull();
+  });
+});
+
+describe('what the review found (V5-a, round one)', () => {
+  it('staff who keep the price list but take no payments get no Revenue today, though the register sends its totals', async () => {
+    register.get.mockResolvedValue({ ...takings, canSell: false });
+    const keeper = { ...ORG, staffRole: 'manager', privileges: ['members.read', 'memberships.manage', 'attendance.read'] };
+    open(keeper, NO_MONEY);
+    await screen.findByTestId('ov-tile-today');
+    await waitFor(() => expect(register.get).toHaveBeenCalled());
+    await new Promise((r) => setTimeout(r, 50));
+    expect(screen.queryByTestId('ov-tile-revenue')).toBeNull();
+    expect(document.body.textContent).not.toMatch(/\$/);
+  });
+
+  it('This week follows the people: more people and fewer visits than last week is up', async () => {
+    orgApi.getOverview.mockResolvedValue(
+      overview({ today: { visits: 2, visitors: 2 }, week: { visits: 26, visitors: 25, prevVisits: 60, prevVisitors: 15 }, month: { visitors: 12, members: 26, adoptionPct: 46 } }),
+    );
+    open();
+    const week = within(await screen.findByTestId('ov-tile-week'));
+    expect(week.getByText('25')).toBeTruthy();
+    expect(week.getByText('▲')).toBeTruthy();
+    expect(week.getByText(/against 15 people in the whole of last week/)).toBeTruthy();
+  });
+
+  it('Revenue today is read again when staff come back to the window', async () => {
+    open();
+    await screen.findByText('$1,240.00');
+    expect(register.get).toHaveBeenCalledTimes(1);
+    register.get.mockResolvedValue({ ...takings, totals: { ...takings.totals, totalMinor: 150000 } });
+    window.dispatchEvent(new Event('focus'));
+    expect(await screen.findByText('$1,500.00')).toBeTruthy();
+    expect(register.get).toHaveBeenCalledTimes(2);
+  });
+
+  it('Getting started shows every button of the next step: Import and Add when it is bringing members in', async () => {
+    orgApi.getStartHere.mockResolvedValue({ data: startHere(['memberships']) });
+    open();
+    const strip = within(await screen.findByTestId('start-here'));
+    expect(strip.getByRole('link', { name: 'Import members' }).getAttribute('href')).toBe('/console/iron-house/members?open=import');
+    expect(strip.getByRole('link', { name: 'Add member' }).getAttribute('href')).toBe('/console/iron-house/members?open=add');
+  });
+
+  it('the ring draws no progress at 0 done, and some at 1', async () => {
+    orgApi.getStartHere.mockResolvedValue({ data: startHere([]) });
+    open();
+    const card = await screen.findByTestId('start-here');
+    expect(card.querySelector('.c-ov-ring-fill')).toBeNull();
+    cleanup();
+    resetConsoleOrgs();
+    orgApi.getStartHere.mockResolvedValue({ data: startHere(['memberships']) });
+    open();
+    expect((await screen.findByTestId('start-here')).querySelector('.c-ov-ring-fill')).not.toBeNull();
+  });
+
+  it('Streaks folds away and opens again', async () => {
+    orgApi.getOverview.mockResolvedValue({
+      data: { overview: { ...busyNumbers().data.overview, onARoll: [{ userId: 'r1', displayName: 'Priya Nair', weeksRunning: 5, daysRunning: 3, visits: 11, cheerableAt: null }] } },
+    });
+    open();
+    const box = within(await screen.findByTestId('streaks'));
+    expect(box.getByText('Priya Nair')).toBeTruthy();
+    const fold = box.getByRole('button', { name: /^Streaks/ });
+    fireEvent.click(fold);
+    expect(fold.getAttribute('aria-expanded')).toBe('false');
+    expect(box.queryByText('Priya Nair')).toBeNull();
+    fireEvent.click(fold);
+    expect(box.getByText('Priya Nair')).toBeTruthy();
+  });
+
+  it("a role that may not open Attendance gets no link to it under today's check-ins", async () => {
+    const noAttendancePage = { ...ORG, staffRole: 'manager', privileges: ['members.read'] };
+    open(noAttendancePage, NO_MONEY);
+    const box = within(await screen.findByTestId('todays-checkins'));
+    expect(box.queryByRole('link')).toBeNull();
   });
 });
 
