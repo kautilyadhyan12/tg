@@ -389,7 +389,7 @@ function SellInAppField({ draft, set, problem, busy, sell }) {
   );
 }
 
-function TypeForm({ gymId, orgType, country, currency, options, taxRates, onRateAdded, draft, setDraft, problems, refused, busy, forWord, error, summary, sell, onSave, onCancel }) {
+function TypeForm({ gymId, orgType, country, currency, options, taxRates, onRateAdded, draft, setDraft, problems, refused, busy, forWord, error, summary, sell, header, onSave, onCancel }) {
   const [addingRate, setAddingRate] = useState(false);
   const editing = draft.id !== null;
   const title = typeFormTitle(editing, forWord);
@@ -435,6 +435,7 @@ function TypeForm({ gymId, orgType, country, currency, options, taxRates, onRate
       className="flex flex-col gap-5"
       aria-label={title}
     >
+      {header}
       <StepsPage
         summaryTitle={editing ? "You're changing" : "You're adding"}
         summary={summary.lines.map((line) => ({ label: line.label, value: Array.isArray(line.value) ? line.value.map((text) => <span key={text} className="block">{text}</span>) : line.value }))}
@@ -1228,8 +1229,36 @@ export default function MembershipTypesPanel({ org, readOnly, openBox = null, on
     const row = document.querySelector(`[data-type-row="${at}"]`);
     if (row && typeof row.scrollIntoView === 'function') row.scrollIntoView({ block: 'center' });
   }, [formOpen]);
+  const formWords = draftWord === null ? null : formWordsFor(draftWord);
+  const leaveForm = () => {
+    if (!busy) closeForm();
+  };
+  // Inside the form, so its save bar can stay at the foot of the window however short the window is.
+  const formHeader = !formOpen ? null : (
+      <header className="flex flex-col gap-1.5 min-w-0">
+        {/* The way back to the price list, as Cancel; nothing typed here is saved by it. */}
+        <nav aria-label="You are here" className="flex flex-wrap items-center gap-x-2 c-s14">
+          <button type="button" className="c-btn-link c-s14 c-w6" disabled={busy} onClick={leaveForm}>
+            Memberships
+          </button>
+          <span className="c-t3" aria-hidden="true">
+            ›
+          </span>
+          <button type="button" className="c-btn-link c-s14 c-w6" disabled={busy} onClick={leaveForm}>
+            Price list
+          </button>
+        </nav>
+        <h1 ref={formTitle} tabIndex={-1} className="c-h1" style={{ outline: 'none' }}>
+          {typeFormTitle(draft.id !== null, formWords)}
+        </h1>
+        <p className="c-s15 c-t2 m-0" style={{ maxWidth: 640 }}>
+          {typeFormHint(draft.id !== null, formWords)}
+        </p>
+      </header>
+  );
   const form = formOpen ? (
     <TypeForm
+      header={formHeader}
       gymId={gymId}
       orgType={org.orgType}
       country={org.country ?? null}
@@ -1242,7 +1271,7 @@ export default function MembershipTypesPanel({ org, readOnly, openBox = null, on
       problems={showProblems ? problems : null}
       refused={refused}
       busy={busy}
-      forWord={draftWord === null ? null : formWordsFor(draftWord)}
+      forWord={formWords}
       error={actionError}
       summary={typeSummary(draft, draftCurrency, list, org.orgType, classOptions(list, editing))}
       sell={sell}
@@ -1259,35 +1288,7 @@ export default function MembershipTypesPanel({ org, readOnly, openBox = null, on
   const details = `${orgWords(org.orgType).itCap} details`;
 
   if (formOpen && loadError === null) {
-    const forWord = draftWord === null ? null : formWordsFor(draftWord);
-    const back = () => {
-      if (!busy) closeForm();
-    };
-    return (
-      <div className="c-page c-touch-44">
-        <header className="flex flex-col gap-1.5 min-w-0">
-          {/* The way back to the price list, as Cancel; nothing typed here is saved by it. */}
-          <nav aria-label="You are here" className="flex flex-wrap items-center gap-x-2 c-s14">
-            <button type="button" className="c-btn-link c-s14 c-w6" disabled={busy} onClick={back}>
-              Memberships
-            </button>
-            <span className="c-t3" aria-hidden="true">
-              ›
-            </span>
-            <button type="button" className="c-btn-link c-s14 c-w6" disabled={busy} onClick={back}>
-              Price list
-            </button>
-          </nav>
-          <h1 ref={formTitle} tabIndex={-1} className="c-h1" style={{ outline: 'none' }}>
-            {typeFormTitle(draft.id !== null, forWord)}
-          </h1>
-          <p className="c-s15 c-t2 m-0" style={{ maxWidth: 640 }}>
-            {typeFormHint(draft.id !== null, forWord)}
-          </p>
-        </header>
-        {form}
-      </div>
-    );
+    return <div className="c-page c-touch-44">{form}</div>;
   }
 
   return (

@@ -1830,7 +1830,8 @@
 /* The summary in one line in the save bar, while the whole summary is under the parts rather than beside them
    (a membership type's page, V4b-ii). */
 .c-type-bar-sum { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-@media (min-width: 1200px) {
+/* On a short window (a phone on its side, a laptop at 200 %) the bar keeps to Save and Cancel; the summary is on the page. */
+@media (min-width: 1200px), (max-height: 500px) {
   .c-type-bar-sum { display: none; }
 }
 
