@@ -5,6 +5,7 @@ import { Image, Pressable, StyleSheet, View } from "react-native";
 import { CAMERA_EXERCISES, type CameraExercise } from "../../camera/cameraExercises";
 import { LiveSet } from "../../camera/liveSet";
 import { PoseCameraView } from "../../camera/poseCameraNative";
+import { clipOf } from "../../camera/voice";
 import { ended, pressTry, shownReps, startTry, type TryPress, type TrySet } from "../../camera/trySet";
 import { cameraToldFile, workoutSoundsFile } from "../../library/files";
 import { holdWords } from "../../library/records";
@@ -16,6 +17,7 @@ import { Sheet } from "../../look/Sheet";
 import { Txt } from "../../look/Txt";
 import { useSession } from "../../session/SessionProvider";
 import { soundOnIn, soundText } from "../../sound/soundChoice";
+import { soundNative } from "../../sound/soundNative";
 import { ClipOver } from "../library/ExerciseClip";
 import { useKeepMedia, useOwnPicture } from "../library/ExerciseImage";
 import { useNamed } from "../library/useLibrary";
@@ -118,7 +120,10 @@ function TrySetScreen({ me, exercise, onClose }: { me: string; exercise: CameraE
     const last = ended(set, end.reps);
     setResult({ reps: shownReps(last), heldMs: last.heldMs, form: end.summary?.avgFormScore ?? null });
     setBox(false);
-  }, [set, live, result]);
+    // "Set complete.", by the coach (53b-i).
+    const clip = end.say === null ? null : clipOf(end.say);
+    if (clip !== null && soundOn) soundNative?.speak(clip);
+  }, [set, live, result, soundOn]);
 
   const reference = useReference(exercise, !set.paused && result === null);
   const timed = exercise.measuredIn === "time";
@@ -132,6 +137,7 @@ function TrySetScreen({ me, exercise, onClose }: { me: string; exercise: CameraE
       of={timed ? `/ ${holdWords(set.target)}` : `/ ${String(set.target)}`}
       paused={set.paused || result !== null}
       sound={soundOn}
+      now={{ byHand: set.byHand, target: set.target }}
       stopped={stopped}
       reference={reference}
       onCamera={(reps, heldMs) => { press({ kind: "camera", reps, heldMs }); }}

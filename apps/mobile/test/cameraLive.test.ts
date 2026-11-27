@@ -4,7 +4,7 @@ import { cameraHolds, heldIn } from "../../../packages/movement/scripts/holdChec
 import { cameraRun, proofVideos, withLeadIn, type ProofVideo } from "../../../packages/movement/scripts/movementCheck";
 import { MOVEMENT_VIDEOS } from "../../../packages/movement/scripts/movementVideos";
 import { CAMERA_EXERCISES, type CameraExercise } from "../src/camera/cameraExercises";
-import { FLASH_MS, LINE_MS, LiveSet, LOST_MS, LOST_WORDS, type LiveView } from "../src/camera/liveSet";
+import { FLASH_MS, LINE_MS, LiveSet, LOST_MS, LOST_WORDS, type LiveView, type SetNow } from "../src/camera/liveSet";
 import type { PoseEvent } from "../src/camera/poseFrame";
 import { frameOf } from "../src/camera/poseFrame";
 
@@ -173,6 +173,86 @@ describe("what the screen says, and for how long", () => {
   });
 });
 
+// 53b-i: the coach, through the screen's own pieces. What it says each answer, with the set's target and the person's own
+// changes to the count, as the screen hands them over.
+function talk(e: CameraExercise, v: ProofVideo, now: SetNow, change: (f: MovementFrame) => MovementFrame = (f) => f): string[] {
+  const set = new LiveSet(e.counts, e.camera, 1);
+  return withLeadIn(v.video).frames.flatMap((f) => {
+    const say = set.next(eventOf(change(f)), now).say;
+    return say === null ? [] : [say.words];
+  });
+}
+
+describe("what the coach says (53b-i)", () => {
+  it.each([
+    ["squat", "prisoner_squat_1"],
+    ["goblet", "goblet_squat_kettlebell"],
+    ["squat-jump", "squat_jump_1"],
+    ["lunge", "lunge_forward_kettlebell"],
+    ["sit-up", "sit_up_plate_1"],
+    ["hip-thrust", "hip_thrust_dumbbell"],
+  ])("%s on %s, a proper set with its count as the target: only the count, never a correction or a reason", (key, file) => {
+    const v = video(file);
+    const target = v.entry.reps ?? 0;
+    const said = talk(exercise(key), v, { byHand: 0, target });
+    // The count's lines, each where the count says.
+    const expected = [target >= 8 ? "Halfway." : null, target >= 4 ? "Two more." : null, target >= 2 ? "Last one." : null].filter((w): w is string => w !== null);
+    expect(said).toEqual(expected);
+  });
+
+  it("another movement says nothing: a barbell deadlift, seen as a squat", () => {
+    expect(talk(exercise("squat"), video("deadlift_barbell"), { byHand: 0, target: 10 })).toEqual([]);
+  });
+
+  it("the person's own rep added by hand: \"Last one.\" comes a rep earlier, as the screen's count does", () => {
+    const v = video("prisoner_squat_1");
+    const target = v.entry.reps ?? 0;
+    const e = exercise("squat");
+    const lastAt = (byHand: number): number => {
+      const set = new LiveSet(e.counts, e.camera, 1);
+      for (const f of withLeadIn(v.video).frames) if (set.next(eventOf(f), { byHand, target }).say?.words === "Last one.") return f.t;
+      return Number.NaN;
+    };
+    expect(target).toBeGreaterThanOrEqual(3);
+    expect(lastAt(1)).toBeLessThan(lastAt(0));
+  });
+  it("the person lost: said once, while the screen says so", () => {
+    const v = video("prisoner_squat_1");
+    const frames = withLeadIn(v.video).frames;
+    const counting = play(exercise("squat"), v).views.findIndex((w) => w.stage === "counting");
+    const from = (frames[counting]?.t ?? 0) + 300;
+    const said = talk(exercise("squat"), v, { byHand: 0, target: null }, (f) => (f.t >= from && f.t < from + LOST_MS + 3000 ? { ...f, people: [] } : f));
+    expect(said).toEqual([LOST_WORDS]);
+  });
+
+  it("a rep that fell short: \"Go lower to count.\" on the first, then every other one while it comes back", () => {
+    const press = proofVideos(MOVEMENT_VIDEOS.filter((e) => e.file.includes("push_press")))[0];
+    if (press === undefined) throw new Error("no push press");
+    const set = new LiveSet(exercise("squat").counts, exercise("squat").camera, 1);
+    const shown: string[] = [];
+    const spoken: string[] = [];
+    for (const f of withLeadIn(press.video).frames) {
+      const w = set.next(eventOf(f), { byHand: 0, target: 10 });
+      if (w.line !== null && w.line.words !== shown[shown.length - 1]) shown.push(w.line.words);
+      if (w.say !== null) spoken.push(`${w.say.words} ${String(w.say.times)}`);
+    }
+    expect(spoken.length).toBeGreaterThan(0);
+    expect(spoken.every((s) => s.startsWith("Go lower to count."))).toBe(true);
+    // Each said in its next wording.
+    expect(spoken.map((s) => s.split(" ").pop())).toEqual(spoken.map((_, i) => String(i)));
+  });
+
+  it("an answer that is broken, or whose clock went back, says nothing", () => {
+    const e = exercise("squat");
+    const set = new LiveSet(e.counts, e.camera, 1);
+    const f = video("prisoner_squat_1").video.frames[5];
+    if (f === undefined) throw new Error("no frame");
+    set.next(eventOf(f));
+    expect(set.next({ ...eventOf(f), t: 0 }).say).toBeNull();
+    expect(set.next({ ...eventOf(f), width: -1 }).say).toBeNull();
+  });
+});
+
 describe("the set's end", () => {
   it("the squat's summary is the server's own shape, holds the reps counted and nothing of the body", () => {
     const { set } = play(exercise("squat"), video("prisoner_squat_1"));
@@ -181,8 +261,8 @@ describe("the set's end", () => {
     const parsed = engineSetSummarySchema.parse(summary);
     expect(parsed.reps).toBe(reps);
     expect(JSON.stringify(summary)).not.toMatch(/points|world|"x"|"y"/);
-    // Asked again, the same: the last rep is judged once.
-    expect(set.end()).toEqual({ reps, summary });
+    // Asked again, the same: the last rep is judged once, and "Set complete." said once.
+    expect(set.end()).toMatchObject({ reps, summary, say: { words: "Set complete.", kind: "set complete", times: 0 } });
   });
 
   it("an exercise with no camera file of its own counts, and has no summary yet", () => {

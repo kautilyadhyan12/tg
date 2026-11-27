@@ -1,35 +1,78 @@
-// The app's one sound player (ROADMAP Stage 5 64a-vi; spec Part 2 §13.6: "Sound in a workout uses one player, shared
-// with job 53"): expo-audio playing short files kept in the app. It mixes with the person's own music, never pausing
-// it: in "mixWithOthers" expo-audio asks Android for no audio focus (its AudioModule.requestAudioFocus, read
-// 2026-11-23), where its default would pause the music for every beep. A copy of the app built before expo-audio has
-// no player, so it plays nothing and never fails; nor do the tests, which hand in their own (test/screens/setup.js).
+// The app's one sound player (ROADMAP Stage 5 64a-vi, 53b-i; spec Part 2 §13.6: "Sound in a workout uses one player,
+// shared with job 53"): expo-audio playing short files kept in the app. A beep mixes with the person's own music, never
+// pausing it: in "mixWithOthers" expo-audio asks Android for no audio focus (its AudioModule.requestAudioFocus, read
+// 2026-11-23), where its default would pause the music for every beep. The coach's voice (53b-i) lowers the music while
+// it speaks and lets it back up after (spec §11.8): for each clip the player asks for "duckOthers", in which expo-audio
+// asks Android for focus that lets other sound go quieter (AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK) and gives it back once
+// nothing plays (read 2026-11-27), and goes back to mixing when the clip ends. A copy of the app built before expo-audio
+// has no player, so it plays nothing and never fails; nor do the tests, which hand in their own (test/screens/setup.js).
 import { requireOptionalNativeModule } from "expo";
+import type * as ExpoAudio from "expo-audio";
+import type { AudioMode, AudioPlayer } from "expo-audio";
 import count from "../../assets/sounds/count.wav";
 import go from "../../assets/sounds/go.wav";
 import rep from "../../assets/sounds/rep.wav";
 import setEnd from "../../assets/sounds/set-end.wav";
+import type { Clip } from "../camera/voice";
+import { VOICE_CLIPS } from "../camera/voiceClips";
 
 export type SoundName = "rep" | "setEnd" | "count" | "go";
 
 export interface SoundNative {
   play(name: SoundName): void;
+  /** One of the coach's clips: the music lowered while it speaks. A clip asked for while another speaks waits for it to
+   *  end, and a newer one takes the waiting one's place, so lines never talk over each other or pile up. */
+  speak(clip: Clip): void;
 }
 
 const FILES: Record<SoundName, number> = { rep, setEnd, count, go };
 
-interface Played {
-  seekTo(seconds: number): Promise<void>;
-  play(): void;
-}
+const MIX: Partial<AudioMode> = { interruptionMode: "mixWithOthers", playsInSilentMode: true, shouldPlayInBackground: false, allowsRecording: false };
+const DUCK: Partial<AudioMode> = { ...MIX, interruptionMode: "duckOthers" };
+/** The longest clip is about 2.5 s: a clip that never said it ended frees the voice after this long, ms. */
+const LONGEST_CLIP_MS = 6000;
+
+type Audio = typeof ExpoAudio;
 
 function phonePlayer(): SoundNative | null {
   if (requireOptionalNativeModule("ExpoAudio") === null) return null;
   // Loaded only where the phone has it, and set to mix before anything plays.
   const ready = import("expo-audio").then(async (audio) => {
-    await audio.setAudioModeAsync({ interruptionMode: "mixWithOthers", playsInSilentMode: true, shouldPlayInBackground: false, allowsRecording: false });
+    await audio.setAudioModeAsync(MIX);
     return audio;
   });
-  const players = new Map<SoundName, Played>();
+  const players = new Map<SoundName, AudioPlayer>();
+  const voices = new Map<number, AudioPlayer>();
+  /** Until when the voice is speaking (the phone's clock), or null. */
+  let speakingUntil: number | null = null;
+  let waiting: number | null = null;
+
+  const finished = (audio: Audio): void => {
+    const next = waiting;
+    waiting = null;
+    if (next !== null) {
+      void voice(audio, next).catch(() => undefined);
+      return;
+    }
+    speakingUntil = null;
+    void audio.setAudioModeAsync(MIX).catch(() => undefined);
+  };
+
+  const voice = async (audio: Audio, file: number): Promise<void> => {
+    speakingUntil = Date.now() + LONGEST_CLIP_MS;
+    await audio.setAudioModeAsync(DUCK);
+    const made = voices.get(file);
+    if (made !== undefined) await made.seekTo(0);
+    const player = made ?? audio.createAudioPlayer(file);
+    if (made === undefined) {
+      player.addListener("playbackStatusUpdate", (status) => {
+        if (status.didJustFinish) finished(audio);
+      });
+      voices.set(file, player);
+    }
+    player.play();
+  };
+
   return {
     // Each play on its own, never behind the one before: a seek that never settled would otherwise silence every sound
     // after it (round one, L2).
@@ -44,6 +87,21 @@ function phonePlayer(): SoundNative | null {
           player.play();
         })
         .catch(() => undefined);
+    },
+    speak: (clip) => {
+      const file = VOICE_CLIPS[clip.id]?.[clip.index];
+      if (file === undefined) return;
+      void ready
+        .then(async (audio) => {
+          if (speakingUntil !== null && Date.now() < speakingUntil) {
+            waiting = file;
+            return;
+          }
+          await voice(audio, file);
+        })
+        .catch(() => {
+          speakingUntil = null;
+        });
     },
   };
 }
