@@ -9,7 +9,8 @@ import type { BluetoothState } from "./monitor";
 /** What stands for the heart rate when there is none: why, where the phone knows (37n, the bug hunt's C1, C2, C5). */
 export function noSignalWords(bluetooth: BluetoothState = "on"): string {
   if (bluetooth === "off") return "Bluetooth off";
-  if (bluetooth === "denied") return "Nearby devices off";
+  // Android's Nearby devices is allowed or not, never on or off (round one, L6); the box it opens has Allow.
+  if (bluetooth === "denied") return "Allow Nearby devices";
   if (bluetooth === "location") return "Location off";
   return "No signal";
 }

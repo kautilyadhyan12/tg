@@ -19,6 +19,7 @@ import {
   pairOutcome,
   phoneBondedSchema,
   phoneHeartSamplesSchema,
+  phoneHeartStatusSchema,
   type HeartBond,
   type HeartFound,
 } from "@app/shared";
@@ -358,6 +359,16 @@ export function bluetoothState(): BluetoothState {
   return native.locationOff?.() === true ? "location" : "on";
 }
 
+/** As `bluetoothState`, for the monitor watched: Location off is the reason for no heart rate only while the phone is
+ *  listening for it (not paired, not heard since the app started). A monitor Android already knows connects with
+ *  Location off (round one, H1). */
+export function monitorBluetoothState(): BluetoothState {
+  const state = bluetoothState();
+  if (state !== "location" || native === null) return state;
+  const status = phoneHeartStatusSchema.safeParse(native.status());
+  return status.success && status.data.finding ? "location" : "on";
+}
+
 /** Android's "Nearby devices" (12 and later), or the location older Androids need to find a monitor.
  *  "blocked": the person said Don't allow before, so only the app's settings can change it. */
 export async function askNearby(): Promise<"granted" | "denied" | "blocked"> {
@@ -397,5 +408,5 @@ export function useHeartNow(active: boolean): { monitor: Monitor | null; bpm: nu
       release();
     };
   }, [active, monitor]);
-  return { monitor, bpm: monitor === null ? null : heartNow(Date.now()), bluetooth: bluetoothState() };
+  return { monitor, bpm: monitor === null ? null : heartNow(Date.now()), bluetooth: monitorBluetoothState() };
 }

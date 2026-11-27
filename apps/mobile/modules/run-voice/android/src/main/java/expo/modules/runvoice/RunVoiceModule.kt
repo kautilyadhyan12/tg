@@ -58,6 +58,8 @@ class RunVoiceModule : Module() {
   private var spareNo = 0
   private var spareReady = false
   private var spareEarly: Int? = null
+  /** When the fresh engine was made, on the uptime clock: one not ready WARM_AHEAD_MS later is let go (round one, L4). */
+  private var spareMadeAt = 0L
   /** The last line said of those handed over ahead, and when, on the uptime clock (`hush`). */
   private var timedLine: String? = null
   private var timedAt = 0L
@@ -135,9 +137,12 @@ class RunVoiceModule : Module() {
       makeEngine(ctx)
       return
     }
+    // A fresh one that never answered is let go, so the next one is made (round one, L4).
+    if (spare != null && !spareReady && SystemClock.uptimeMillis() - spareMadeAt > WARM_AHEAD_MS) dropSpare()
     // One starting already, or a fresh one waiting to be taken in.
     if (!ready || spare != null) return
     spareNo += 1
+    spareMadeAt = SystemClock.uptimeMillis()
     val mine = spareNo
     spareReady = false
     spareEarly = null

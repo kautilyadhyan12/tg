@@ -222,7 +222,7 @@ function SavedStep({ monitor, said, running, onChange, onRemove }: { monitor: Mo
       <View style={styles.live}>
         <Icon name="heart" size={28} colour={bpm === null ? "textFaint" : "orange"} />
         <Txt kind="h1" fit numberOfLines={1}>
-          {bpmWords(bpm)}
+          {bpmWords(bpm, bluetooth)}
         </Txt>
       </View>
       <Txt kind="strong" style={styles.centredText}>
@@ -233,7 +233,8 @@ function SavedStep({ monitor, said, running, onChange, onRemove }: { monitor: Mo
           {said}
         </Txt>
       )}
-      <BluetoothProblem state={bluetooth} doing="connect" />
+      {/* Only with no heart rate: a reading coming in is the monitor working, whatever else is off (round one, H1). */}
+      {bpm === null ? <BluetoothProblem state={bluetooth} doing="connect" /> : null}
       {bluetooth === "on" && bpm === null ? (
         <Txt kind="small" colour="textFaint" style={styles.centredText}>
           {running ? "Wear it to connect." : "Wear it to connect. Still no signal? Change monitor and find it again."}

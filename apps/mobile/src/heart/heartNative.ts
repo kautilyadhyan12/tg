@@ -19,7 +19,7 @@ export interface HeartNative {
   unwatch(): void;
   /** The readings since the last take (read through phoneHeartSamplesSchema). */
   take(): unknown;
-  /** The monitor watched and whether it is connected (read through the code that asks). */
+  /** The monitor watched, whether it is connected, and whether the phone is listening for it (phoneHeartStatusSchema). */
   status(): unknown;
   /** Android's own "Turn on Bluetooth?" box. */
   askRadio(): boolean;

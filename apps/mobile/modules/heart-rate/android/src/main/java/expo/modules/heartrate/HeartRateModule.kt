@@ -340,6 +340,8 @@ object Strap {
   /** Listening for the monitor is started again this often: Android turns a long scan down to almost nothing
    *  after 30 minutes. */
   private const val FIND_AGAIN_MS = 5 * 60_000L
+  /** Let go for being quiet and Android has said nothing this long after: closed here and connected afresh. */
+  private const val LET_GO_MS = 5_000L
 
   private val main = Handler(Looper.getMainLooper())
   private var address: String? = null
@@ -402,7 +404,7 @@ object Strap {
   }
 
   @Synchronized
-  fun status(): Map<String, Any?> = mapOf("device" to address, "connected" to connected)
+  fun status(): Map<String, Any?> = mapOf("device" to address, "connected" to connected, "finding" to (finding != null))
 
   /** Connect to the watched monitor now: the paired one, or the one heard; otherwise listen for it first.
    *  With Bluetooth off nothing is done: Bluetooth coming on starts it. */
@@ -436,7 +438,9 @@ object Strap {
       override fun onBatchScanResults(results: MutableList<ScanResult>) = results.forEach { heard(ctx, this, it.device) }
     }
     val filters = listOf(ScanFilter.Builder().setServiceUuid(ParcelUuid(HeartRateModule.HEART_SERVICE)).build())
-    val settings = ScanSettings.Builder().setScanMode(ScanSettings.SCAN_MODE_BALANCED).build()
+    // Low power: a strap says it is there each second, so it is still heard in a few seconds, and a strap left at
+    // home costs little for as long as the run holds it (round one, L3).
+    val settings = ScanSettings.Builder().setScanMode(ScanSettings.SCAN_MODE_LOW_POWER).build()
     try {
       scanner.startScan(filters, settings, callback)
       finding = callback
@@ -562,6 +566,18 @@ object Strap {
     } catch (e: SecurityException) {
       // Permission taken away: no readings.
     }
+    // Some phones say nothing after a disconnect from a link half gone: still this connection after LET_GO_MS, it is
+    // closed here and connected afresh, never left looking connected with no readings (round one, L2).
+    main.postDelayed({ letGoIfStill(g) }, LET_GO_MS)
+  }
+
+  @Synchronized
+  private fun letGoIfStill(g: BluetoothGatt) {
+    if (gatt !== g) return
+    connected = false
+    asked = false
+    letGo()
+    appContext?.let { start(it) }
   }
 
   private fun dropIt(g: BluetoothGatt) {
@@ -642,7 +658,12 @@ object Strap {
       } catch (e: SecurityException) {
         false
       }
-      if (!askedNow) dropIt(g)
+      // Refused: it counts as a monitor with no heart rate, so one that always refuses is given up after NO_HEART_MOST
+      // and never dropped and connected again for the whole run (round one, L1).
+      if (!askedNow) {
+        synchronized(Strap) { noHeart += 1 }
+        dropIt(g)
+      }
     }
 
     // The monitor's answer to being asked for its heart rate: refused is let go and connected again (C3); taken,
@@ -652,6 +673,7 @@ object Strap {
       synchronized(Strap) {
         if (g !== gatt) return
         if (status != BluetoothGatt.GATT_SUCCESS) {
+          noHeart += 1
           dropIt(g)
           return
         }

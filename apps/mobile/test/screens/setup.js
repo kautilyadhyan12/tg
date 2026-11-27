@@ -554,12 +554,13 @@ jest.mock("../../src/sound/soundNative", () => {
 // would, whether it is watched or not: the app's own code must leave out what is not its monitor's).
 // `radio`, `allowed` and `missing` stand for Bluetooth off, Nearby devices refused, and a copy built before it;
 // `locationOff` for Android 11 and older with Location off (37n). Watching is refused while Nearby devices is, as the
-// Android code refuses it: `watches` lists only the watches it took.
+// Android code refuses it: `watches` lists only the watches it took, `asks` counts every watch asked, refused or not.
+// `finding`: the Android code is listening for the watched monitor before connecting it (37n).
 // Pairing (37f-ii-b): `bonded` is the phone's list of paired devices, `pairs` the addresses asked to pair,
 // `pairAnswer` what asking says, and `bond(device, state)` hands over one of Android's paired-or-not messages and
 // is what asking a device's state says after it (`silent` keeps the message from the app, as a lost one).
 jest.mock("../../src/heart/heartNative", () => {
-  const fresh = () => ({ radio: "on", allowed: true, locationOff: false, missing: false, near: [], watched: null, watches: [], waiting: [], scans: 0, bonded: [], pairs: [], pairAnswer: "started", states: {}, asked: 0 });
+  const fresh = () => ({ radio: "on", allowed: true, locationOff: false, finding: false, asks: 0, missing: false, near: [], watched: null, watches: [], waiting: [], scans: 0, bonded: [], pairs: [], pairAnswer: "started", states: {}, asked: 0 });
   const strap = { ...fresh(), found: new Set(), bonds: new Set() };
   strap.send = (id, bytes, at = Date.now()) => {
     strap.waiting.push({ device: id, at, bytes });
@@ -585,6 +586,7 @@ jest.mock("../../src/heart/heartNative", () => {
     },
     stopScan: () => undefined,
     watch: (id) => {
+      strap.asks += 1;
       if (!strap.allowed) return false;
       strap.watched = id;
       strap.watches.push(id);
@@ -598,7 +600,7 @@ jest.mock("../../src/heart/heartNative", () => {
       strap.waiting = [];
       return out;
     },
-    status: () => ({ device: strap.watched, connected: strap.watched !== null }),
+    status: () => ({ device: strap.watched, connected: strap.watched !== null, finding: strap.finding }),
     askRadio: () => true,
     bonded: () => [...strap.bonded],
     bondState: (id) => {

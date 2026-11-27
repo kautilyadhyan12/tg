@@ -39,6 +39,8 @@ interface Strap {
   watched: string | null;
   watches: string[];
   locationOff: boolean;
+  finding: boolean;
+  asks: number;
   scans: number;
   send: (id: string, bytes: number[], at?: number) => void;
   reset: () => void;
@@ -153,16 +155,25 @@ describe("the worst thing (37n): a monitor connected again by itself is only eve
     try {
       strap.allowed = false;
       const release = holdHeart();
+      expect(strap.asks).toBe(1);
       expect(strap.watches).toEqual([]);
+      // Asked again at most every 3 s, never on every reading, refused or not (round one, tests).
+      pullHeart();
+      pullHeart();
+      expect(strap.asks).toBe(1);
+      // Not allowed: Android is not asked at all.
       now += 5000;
       pullHeart();
+      pullHeart();
+      expect(strap.asks).toBe(1);
       expect(strap.watches).toEqual([]);
       strap.allowed = true;
-      // Asked again at most every 3 s, never on every reading.
       pullHeart();
-      expect(strap.watches).toEqual([]);
+      expect(strap.asks).toBe(1);
       now += 3000;
       pullHeart();
+      pullHeart();
+      expect(strap.asks).toBe(2);
       expect(strap.watches).toEqual([MINE]);
       strap.send(STRANGER, polar(150), now);
       pullHeart();
@@ -173,7 +184,7 @@ describe("the worst thing (37n): a monitor connected again by itself is only eve
       // Watched now: never asked again.
       now += 10_000;
       pullHeart();
-      expect(strap.watches).toEqual([MINE]);
+      expect(strap.asks).toBe(2);
       release();
     } finally {
       clock.mockRestore();
@@ -193,10 +204,14 @@ describe("the worst thing (37n): a monitor connected again by itself is only eve
       pullHeart();
       expect(strap.watches).toEqual([MINE]);
       release();
-      // Nothing holds it: nothing is asked again.
+      // Nothing holds it: nothing is asked again, Nearby devices allowed or not (round one, tests).
+      const asked = strap.asks;
+      now += 3000;
+      pullHeart();
       strap.allowed = false;
       now += 3000;
       pullHeart();
+      expect(strap.asks).toBe(asked);
       expect(strap.watches).toEqual([MINE]);
     } finally {
       clock.mockRestore();
@@ -830,11 +845,11 @@ describe("I see why my monitor has no signal, and fix it from that screen", () =
     await openRunning(s);
     await startRunning();
     strap.allowed = false;
-    expect(await screen.findByRole("button", { name: "Heart rate: nearby devices off. Open heart rate monitor" }, { timeout: 3000 })).toBeTruthy();
+    expect(await screen.findByRole("button", { name: "Heart rate: allow nearby devices. Open heart rate monitor" }, { timeout: 3000 })).toBeTruthy();
     await fireEvent.press(screen.getByRole("button", { name: "Numbers" }));
     // The pill and the big Heart rate figure: one answer.
-    expect(await screen.findAllByText("Nearby devices off", {}, { timeout: 3000 })).toHaveLength(2);
-    await fireEvent.press(screen.getByRole("button", { name: "Heart rate: nearby devices off. Open heart rate monitor" }));
+    expect(await screen.findAllByText("Allow Nearby devices", {}, { timeout: 3000 })).toHaveLength(2);
+    await fireEvent.press(screen.getByRole("button", { name: "Heart rate: allow nearby devices. Open heart rate monitor" }));
     expect(await screen.findByText("Allow Nearby devices to connect your monitor.")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Allow" })).toBeTruthy();
     // During a run the monitor is not changed or removed from here.
@@ -847,12 +862,12 @@ describe("I see why my monitor has no signal, and fix it from that screen", () =
     }, { timeout: 3000 });
   });
 
-  it("the run's pill says why there is no heart rate: Bluetooth off, Nearby devices off, Location off; otherwise No signal", async () => {
+  it("the run's pill says why there is no heart rate: Bluetooth off, Allow Nearby devices, Location off; otherwise No signal", async () => {
     const shown = await render(<HeartPill bpm={null} max={null} bluetooth="off" />);
     expect(screen.getByText("Bluetooth off")).toBeTruthy();
     expect(screen.getByLabelText("Heart rate: bluetooth off")).toBeTruthy();
     await shown.rerender(<HeartPill bpm={null} max={null} bluetooth="denied" />);
-    expect(screen.getByText("Nearby devices off")).toBeTruthy();
+    expect(screen.getByText("Allow Nearby devices")).toBeTruthy();
     await shown.rerender(<HeartPill bpm={null} max={null} bluetooth="location" />);
     expect(screen.getByText("Location off")).toBeTruthy();
     await shown.rerender(<HeartPill bpm={null} max={null} bluetooth="on" />);
@@ -860,6 +875,22 @@ describe("I see why my monitor has no signal, and fix it from that screen", () =
     await shown.rerender(<HeartPill bpm={131} max={null} bluetooth="off" />);
     expect(screen.getByText("131 bpm")).toBeTruthy();
   });
+
+  it("Android 11 or older with Location off: Location is the reason only while the phone listens for the monitor, never under a heart rate (round one, H1)", async () => {
+    strap.locationOff = true;
+    await render(<HeartMonitorSheet open monitor={monitor} onClose={() => undefined} />);
+    // A monitor Android already knows connects with Location off: no Location line, no Location reason.
+    expect(await screen.findByText("No signal")).toBeTruthy();
+    expect(screen.queryByText("Turn on Location to connect your monitor.")).toBeNull();
+    strap.send(MINE, polar(118));
+    expect(await screen.findByText("118 bpm", {}, { timeout: 3000 })).toBeTruthy();
+    expect(screen.queryByText("Turn on Location to connect your monitor.")).toBeNull();
+    // A monitor the phone must listen for first, with no heart rate: Location is the reason, with its button.
+    strap.finding = true;
+    expect(await screen.findByText("Location off", {}, { timeout: 8000 })).toBeTruthy();
+    expect(screen.getByText("Turn on Location to connect your monitor.")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Turn on Location" })).toBeTruthy();
+  }, 15_000);
 
   it("Android 11 or older with Location off: Look for monitors says Turn on Location, opens its setting, and looks once it is on", async () => {
     forgetMonitor();
