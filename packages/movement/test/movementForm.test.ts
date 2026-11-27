@@ -150,6 +150,7 @@ const mistake = (over: Record<string, unknown>, lower?: number): CheckedMistake 
     view: "side",
     against: "nothing",
     ...(lower === undefined ? { atMost: 40 } : { atLeast: lower }),
+    coach: { silent: "test" },
     from: "test",
     ...over,
   });

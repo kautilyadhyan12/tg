@@ -278,10 +278,17 @@ export const checkedMistakeSchema = z
      *  this mistake is read, shows it past that rule's own line too; otherwise it says nothing, as another movement does
      *  (Kd, 2026-11-23). */
     refused: z.object({ rule: z.string().min(1).max(60), words }).strict().optional(),
+    /** What the coach says when the camera sees this mistake made in two counted reps running (spec §12.6), in a few
+     *  words that say what to do; or, `silent`, why it says nothing yet: a correction is spoken only on a line a proper
+     *  source or Kd's ruling backs (§12.6: it is never wrong out loud). */
+    coach: z.union([z.object({ words }).strict(), z.object({ silent: from }).strict()]),
     from,
   })
   .strict()
   .refine((m) => (m.atLeast === undefined) !== (m.atMost === undefined), { message: "a mistake has exactly one bound" })
+  .refine((m) => m.refused === undefined || !("words" in m.coach) || m.coach.words === m.refused.words, {
+    message: "one phrase for one thing: a mistake's correction and the words of a rep it refuses are the same",
+  })
   .refine((m) => (m.against === "bottom") === (m.at === "way up"), { message: "a reading on the way up is taken against the bottom, and only it" });
 
 export const exerciseMistakeSchema = z.union([
