@@ -1,0 +1,3 @@
+<!-- The camera screen (ROADMAP Stage 5 item 53a). It asks for nothing of its own: the camera permission is the one the app
+     already holds for the meal photo (expo-camera's), and nothing here reaches the internet. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" />

@@ -118,3 +118,7 @@ export const savedWaitingFile = (userId: string): TextStore => personFile(userId
 /** Whether a person's workouts play their sounds (64a-vi), `{"on":false}` once they turn them off; removed with the
  *  account (`forgetPersonFiles`), as its name names them. */
 export const workoutSoundsFile = (userId: string): TextStore => personFile(userId, `workout-sounds-${userId}.json`);
+
+/** Whether the person has been told what the camera keeps private (53a, spec Part 2 §11.8 step 7), `{"told":true}` once
+ *  they have: told on the screen before the phone first asks for the camera, and never again. */
+export const cameraToldFile = (userId: string): TextStore => personFile(userId, `camera-told-${userId}.json`);

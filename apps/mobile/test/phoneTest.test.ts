@@ -6,8 +6,9 @@ import { STORE, configFor, copyFor, storeConfig } from "../app.config";
 
 // The phone test (ROADMAP Stage 5 51a) plays Kd's reference videos through Google's Android pose library in a
 // folder's copy. Two things here would reach people if they slipped, and GitHub never builds the app: the store's
-// app must hold none of the test (no screen anybody could open, no pose library before job 53 ships it), and a copy
-// that holds the library must not let it send Google its usage reports (Kd, 2026-10-18: nothing goes online).
+// app must hold none of the test (no screen anybody could open; the store's pose library is the camera screen's own,
+// modules/pose-camera, since 53a), and an app that holds the library must not let it send Google its usage reports
+// (Kd, 2026-10-18: nothing goes online).
 
 const mobile = join(__dirname, "..");
 const MODULE = join(mobile, "modules", "phone-test", "android");
@@ -139,12 +140,12 @@ describe("the store's app holds none of the phone test (51a)", () => {
 });
 
 describe("a copy that holds the pose library sends Google nothing (51a)", () => {
-  it("every folder's copy is built with the sender taken away; the store's, without the library, is not changed", () => {
+  it("every folder's copy and the store's app are built with the sender taken away (the store's holds the camera screen's library since 53a)", () => {
     for (const key of ["feature1", "feature2", "exercise1", "exercise2"]) {
       expect(configFor(copyFor(key)).plugins).toContain("./plugins/noUsageReports.js");
     }
     const store = storeConfig({ KWAZO_VERSION_CODE: "7" }, [STORE.applicationId]);
-    expect(store.plugins).not.toContain("./plugins/noUsageReports.js");
+    expect(store.plugins).toContain("./plugins/noUsageReports.js");
   });
 
   it("the transport's sender is removed from the app's manifest, and only it", () => {

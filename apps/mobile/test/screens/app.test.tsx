@@ -110,8 +110,9 @@ describe("the five tabs", () => {
     }
     await screen.findByRole("button", { name: "Try again" });
     const pressed = [...screen.getAllByRole("tab"), ...screen.getAllByRole("button")];
-    expect(pressed.map(label).slice(5)).toEqual(["Your plan", "Progress", "Achievements", "Settings", "Sign out", "Try again"]);
-    expect(pressed).toHaveLength(11);
+    // A folder's copy also offers Try the camera (53a), under its own line.
+    expect(pressed.map(label).slice(5)).toEqual(["Your plan", "Progress", "Achievements", "Settings", "Sign out", "Try again", "Try the camera"]);
+    expect(pressed).toHaveLength(12);
     const heights = pressed.map((one) => Number(drawn(one).height ?? drawn(one).minHeight ?? 0));
     expect(heights.filter((height) => height < 44)).toEqual([]);
   });

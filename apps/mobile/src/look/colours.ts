@@ -171,6 +171,19 @@ export const colours = {
   barSteel: "#9C9A97",
   barSleeve: "#C9C6C1",
   barCollar: "#B4B1AC",
+  /** The camera screen (53a, Kd's drawing of 2026-11-26): the body's lines, white-gold with a gold glow round them, and
+   *  the gold corners round the person followed; the line at the foot, amber for a rep that did not count and red for
+   *  what the camera cannot see, each with its words dark or white enough to read from across a room. */
+  bodyLine: "#FFFDF5",
+  bodyGlow: "rgba(255,214,107,0.45)",
+  bodyHalo: "rgba(255,179,71,0.16)",
+  bodyJoint: "rgba(10,9,8,0.55)",
+  footAmber: "#FFB020",
+  onFootAmber: "#1A0F04",
+  footRed: "#B91C1C",
+  /** The camera's picture under the words at its foot and top, so they read over any room. */
+  cameraShade: "rgba(10,9,8,0.75)",
+  cameraShadeClear: "rgba(10,9,8,0)",
 } as const;
 
 export type ColourName = keyof typeof colours;
@@ -288,6 +301,8 @@ export const shadows = {
   /** A day run on Your runs' calendar (37c-i): the footprint lit from under. */
   dayGlow: "0 0 16px 4px rgba(255,138,31,0.55)",
   sheet: "0 -12px 48px rgba(0,0,0,0.6)",
+  /** The camera screen's reference clip, lifted off the camera's picture (53a). */
+  cameraTile: "0 12px 30px rgba(0,0,0,0.45)",
   /** A run's round Start, Pause and Resume (37a): a halo, then the glow under it. */
   roundButton: "0 0 0 10px rgba(255,138,31,0.12), 0 0 0 22px rgba(255,138,31,0.05), 0 10px 38px rgba(255,138,31,0.55)",
 } as const;

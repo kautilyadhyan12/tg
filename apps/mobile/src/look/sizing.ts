@@ -75,3 +75,14 @@ export const RECEIPT_MOST = 0.6;
 /** The most of the screen's height a question in the middle box takes before it scrolls (Report's reasons and its
  *  note), so its title and buttons stay on screen. */
 export const ASK_MOST = 0.6;
+
+/** The camera screen (53a, Kd's drawing of 2026-11-26), read from 2 to 3 metres: the count's digits and the reference clip's
+ *  tile in the top corners, as drawn on Kd's phone (432 × 960), never taking more of a short or opened phone's height than
+ *  they took there, so the person below them stays in view. */
+export const CAMERA_DIGITS = 112;
+export const CAMERA_TILE = { width: 132, height: 235 } as const;
+export function cameraSizes(screenHeight: number): { digits: number; tile: { width: number; height: number } } {
+  const digits = Math.round(Math.min(CAMERA_DIGITS, screenHeight * (CAMERA_DIGITS / 960)));
+  const tall = Math.round(Math.min(CAMERA_TILE.height, screenHeight * (CAMERA_TILE.height / 960)));
+  return { digits, tile: { width: Math.round((tall * CAMERA_TILE.width) / CAMERA_TILE.height), height: tall } };
+}
