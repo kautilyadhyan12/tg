@@ -16,6 +16,9 @@ class PoseCameraModule : Module() {
 
       /** The camera and the model run while true, and are let go while false (a rest, a paused set, the screen gone). */
       Prop("active") { view: PoseCameraView, active: Boolean -> view.setActive(active) }
+
+      /** How the body the model finds is drawn over its picture: the app's own rules, words and colours. */
+      Prop("drawing") { view: PoseCameraView, drawing: BodyDrawing -> view.setDrawing(drawing) }
     }
   }
 }

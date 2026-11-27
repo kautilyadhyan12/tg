@@ -1,14 +1,13 @@
-import { memo, useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { Pressable, StyleSheet, View, useWindowDimensions, type LayoutChangeEvent, type NativeSyntheticEvent } from "react-native";
+import { useCallback, useRef, useState, type ReactNode } from "react";
+import { Pressable, StyleSheet, View, processColor, useWindowDimensions, type NativeSyntheticEvent } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import Svg, { Circle, Path } from "react-native-svg";
 import { NO_VIEW, type LineTone, type LiveSet, type LiveView } from "../../camera/liveSet";
-import { PoseCameraView } from "../../camera/poseCameraNative";
+import { PoseCameraView, type BodyDrawing } from "../../camera/poseCameraNative";
 import type { PoseEvent } from "../../camera/poseFrame";
-import { drawn } from "../../camera/skeleton";
+import { BODY_RULES } from "../../camera/skeleton";
 import { colours, shadows } from "../../look/colours";
-import { cameraSizes } from "../../look/sizing";
-import { Txt } from "../../look/Txt";
+import { MOST_TEXT_GROWTH, cameraSizes } from "../../look/sizing";
+import { EYEBROW, Txt, fonts } from "../../look/Txt";
 import { soundNative } from "../../sound/soundNative";
 import { Led } from "../library/Records";
 
@@ -22,6 +21,31 @@ export const STOPPED_WORDS = "The camera stopped. Count this set yourself.";
 export const SET_UP_WORDS = "Step back until the camera sees you like the picture.";
 export const SET_UP_LINE = "Stand the phone on the floor, a bench or a shelf, 2 to 3 m away. From another angle the count may be wrong.";
 export const TAP_WORDS = "Tap the screen to change reps, weight or pause";
+/** Over the corners round the person the camera follows. */
+export const TRACKING_WORDS = "Tracking you";
+
+const argb = (colour: string): number => {
+  const n = processColor(colour);
+  return typeof n === "number" ? n : 0;
+};
+
+/** The person the camera follows, as the phone draws them on their own picture (Kd's drawing): white lines with a gold
+ *  glow, a dark ring with a gold dot on each joint, gold corners round them, "Tracking you" over the corners. */
+export const BODY_DRAWING: BodyDrawing = {
+  ...BODY_RULES,
+  words: TRACKING_WORDS.toUpperCase(),
+  font: fonts.bold,
+  wordsSize: EYEBROW.size,
+  wordsLine: EYEBROW.line,
+  wordsSpacing: EYEBROW.spacing,
+  wordsGrowth: MOST_TEXT_GROWTH,
+  line: argb(colours.bodyLine),
+  glow: argb(colours.bodyGlow),
+  halo: argb(colours.bodyHalo),
+  joint: argb(colours.bodyJoint),
+  gold: argb(colours.gold),
+  shadow: argb(colours.wordShadow),
+};
 
 export interface CameraSetProps {
   /** The host's own set, which it asks for the set's end. */
@@ -51,18 +75,14 @@ export function CameraSet({ live, title, digits, of, paused, sound, stopped, ref
   const screen = useWindowDimensions();
   const sizes = cameraSizes(screen.height);
   const [view, setView] = useState<LiveView>(NO_VIEW);
-  const [box, setBox] = useState<{ width: number; height: number } | null>(null);
   const shown = useRef<LiveView>(NO_VIEW);
-  // Only the body's lines are drawn again for each picture (`BodyLayer`, told directly); the rest of the screen only when
-  // what it says changes. Drawing the whole screen for every picture took the phone's chip from the model (53a's
-  // 20-minute run).
-  const drawBody = useRef<((view: LiveView) => void) | null>(null);
   const Camera = PoseCameraView;
 
+  // The phone draws the body with each picture itself (`BODY_DRAWING`); the screen is drawn again only when what it says
+  // changes. Drawing the whole screen for every picture took the phone's chip from the model (53a's 20-minute run).
   const pose = useCallback(
     (e: NativeSyntheticEvent<PoseEvent>) => {
       const next = live.next(e.nativeEvent);
-      drawBody.current?.(next);
       const last = shown.current;
       if (saysOtherwise(last, next)) {
         shown.current = next;
@@ -79,16 +99,11 @@ export function CameraSet({ live, title, digits, of, paused, sound, stopped, ref
   const line: FootLine | null = stopped === "failed" ? { words: STOPPED_WORDS, tone: "stopped" } : on ? view.line : null;
   const setUp = on && view.stage === "setUp";
   return (
-    <View
-      testID="camera-screen"
-      style={styles.page}
-      onLayout={(e: LayoutChangeEvent) => {
-        setBox({ width: e.nativeEvent.layout.width, height: e.nativeEvent.layout.height });
-      }}
-    >
+    <View testID="camera-screen" style={styles.page}>
       {on ? (
         <Camera
           active={!paused}
+          drawing={BODY_DRAWING}
           onPose={pose}
           onProblem={() => {
             onProblem();
@@ -97,8 +112,6 @@ export function CameraSet({ live, title, digits, of, paused, sound, stopped, ref
         />
       ) : null}
       <Pressable testID="camera-tap" style={StyleSheet.absoluteFill} onPress={onTap} accessibilityRole="button" accessibilityLabel={TAP_WORDS}>
-        {/* Paused, or once the set has ended, the camera rests: no line is left on a picture it no longer reads. */}
-        {on && !paused && box !== null ? <BodyLayer bind={drawBody} width={box.width} height={box.height} /> : null}
         <View pointerEvents="none" style={[styles.foot, styles.shade]} />
         <View style={[styles.corners, { top: insets.top + 10 }]} pointerEvents="none">
           <View style={styles.count} accessible accessibilityLabel={`${digits} ${of}`}>
@@ -167,60 +180,6 @@ function saysOtherwise(a: LiveView, b: LiveView): boolean {
   return a.stage !== b.stage || a.reps !== b.reps || second(a.heldMs) !== second(b.heldMs) || a.flash !== b.flash || a.line?.words !== b.line?.words || a.line?.tone !== b.line?.tone;
 }
 
-/** The body's lines, drawn again for each picture the screen is told of, alone. */
-function BodyLayer({ bind, width, height }: { bind: { current: ((view: LiveView) => void) | null }; width: number; height: number }) {
-  const [view, setView] = useState<LiveView | null>(null);
-  useEffect(() => {
-    bind.current = setView;
-    return () => {
-      bind.current = null;
-    };
-  }, [bind]);
-  return view === null ? null : <Body view={view} width={width} height={height} />;
-}
-
-/** The person the camera follows, drawn on their own picture: white-gold lines with a gold glow, a ring on each joint,
- *  and gold corners round them, "Tracking you" over the corners. Nothing when it follows nobody. */
-const Body = memo(function Body({ view, width, height }: { view: LiveView; width: number; height: number }) {
-  const d = drawn(view.body, view.aspect, width, height);
-  if (d.lines.length === 0 && d.joints.length === 0) return null;
-  const path = d.lines.map(([x1, y1, x2, y2]) => `M${x1.toFixed(1)},${y1.toFixed(1)}L${x2.toFixed(1)},${y2.toFixed(1)}`).join("");
-  const b = d.box;
-  const arm = b === null ? 0 : Math.min(26, (b.right - b.left) / 4);
-  const corners =
-    b === null
-      ? ""
-      : [
-          ["M", b.left, b.top + arm, "V", b.top, "H", b.left + arm],
-          ["M", b.right - arm, b.top, "H", b.right, "V", b.top + arm],
-          ["M", b.right, b.bottom - arm, "V", b.bottom, "H", b.right - arm],
-          ["M", b.left + arm, b.bottom, "H", b.left, "V", b.bottom - arm],
-        ]
-          .map((part) => part.map((v) => (typeof v === "number" ? v.toFixed(1) : v)).join(" "))
-          .join("");
-  return (
-    <View pointerEvents="none" style={StyleSheet.absoluteFill} testID="camera-body">
-      <Svg width={width} height={height}>
-        {corners === "" ? null : <Path d={corners} stroke={colours.gold} strokeWidth={3} strokeLinecap="round" strokeLinejoin="round" fill="none" />}
-        <Path d={path} stroke={colours.bodyHalo} strokeWidth={16} strokeLinecap="round" strokeLinejoin="round" fill="none" />
-        <Path d={path} stroke={colours.bodyGlow} strokeWidth={7} strokeLinecap="round" strokeLinejoin="round" fill="none" />
-        <Path d={path} stroke={colours.bodyLine} strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" fill="none" />
-        {d.joints.map(([x, y], k) => (
-          <Circle key={`r${String(k)}`} cx={x} cy={y} r={7} fill={colours.bodyJoint} stroke={colours.bodyLine} strokeWidth={2} />
-        ))}
-        {d.joints.map(([x, y], k) => (
-          <Circle key={`d${String(k)}`} cx={x} cy={y} r={2.5} fill={colours.gold} />
-        ))}
-      </Svg>
-      {b === null ? null : (
-        <Txt kind="eyebrow" colour="gold" style={[styles.tracking, styles.shadow, { left: b.left, top: b.top - 22 }]}>
-          Tracking you
-        </Txt>
-      )}
-    </View>
-  );
-});
-
 const styles = StyleSheet.create({
   page: { flex: 1, backgroundColor: colours.page, overflow: "hidden" },
   corners: { position: "absolute", left: 16, right: 8, flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" },
@@ -238,5 +197,4 @@ const styles = StyleSheet.create({
   lineDark: { backgroundColor: colours.raised, borderWidth: 1, borderColor: colours.lineStrong },
   centre: { textAlign: "center" },
   shadow: { textShadowColor: colours.wordShadow, textShadowRadius: 6, textShadowOffset: { width: 0, height: 1 } },
-  tracking: { position: "absolute" },
 });

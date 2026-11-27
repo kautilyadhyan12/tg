@@ -1,13 +1,13 @@
-import { KEYPOINT_COUNT, KP, type SeenPerson } from "@app/shared";
+import { KEYPOINT_COUNT, KP } from "@app/shared";
 import { describe, expect, it } from "vitest";
 import { downOf, frameOf, type PoseEvent } from "../src/camera/poseFrame";
-import { drawn } from "../src/camera/skeleton";
+import { BODY_LINES, BODY_RULES } from "../src/camera/skeleton";
 import { pressTry, shownReps, startTry, type TryPress, type TrySet } from "../src/camera/trySet";
 import { CAMERA_DIGITS, CAMERA_TILE, cameraSizes } from "../src/look/sizing";
 
 // The camera screen's rules that need no screen (ROADMAP Stage 5 53a): which way is down from the phone's gravity, an
-// answer of the pose model made into the engine's frame (or refused whole), the body drawn where the person is on the
-// mirrored screen, and the set's own steps.
+// answer of the pose model made into the engine's frame (or refused whole), the rules the phone draws the body by, and
+// the set's own steps.
 
 const g = 9.81;
 const deg = Math.PI / 180;
@@ -94,49 +94,36 @@ describe("an answer of the pose model, as the engine's frame", () => {
   });
 });
 
-const person = (at: (k: number) => [number, number, number?]): SeenPerson => ({
-  points: Array.from({ length: KEYPOINT_COUNT }, (_, k) => {
-    const [x, y, sure = 0.9] = at(k);
-    return [x, y, 0, sure, sure] as [number, number, number, number, number];
-  }),
-  world: null,
-});
-
-describe("the body drawn where the person is, on the mirrored screen", () => {
-  it("a 3 by 4 picture fills a tall screen: cut at its sides, and its left is the screen's right", () => {
-    // 432 by 960: the picture is drawn 960 tall, 720 wide, 144 cut off each side.
-    const d = drawn(person(() => [0.25, 0.5]), 0.75, 432, 960);
-    expect(d.joints[0]).toEqual([432 - (-144 + 0.25 * 720), 480]);
-    expect(d.joints[0]?.[0]).toBe(396);
-  });
-
-  it("a wide screen is filled across, cut at its top and foot", () => {
-    // 1000 by 500 from a 3 by 4 picture: drawn 1000 wide, 1333 tall, 416.7 cut off the top.
-    const d = drawn(person(() => [0.5, 0.5]), 0.75, 1000, 500);
-    expect(d.joints[0]?.[0]).toBeCloseTo(500, 9);
-    expect(d.joints[0]?.[1]).toBeCloseTo(250, 9);
-  });
-
-  it("a point the model is not sure of is not drawn, nor any line to it", () => {
-    const d = drawn(person((k) => [0.5, 0.5, k === KP.left_knee ? 0.4 : 0.9]), 0.75, 432, 960);
-    expect(d.joints).toHaveLength(11);
-    expect(d.lines).toHaveLength(10);
-  });
-
-  it("the corners stand round the body, a little out from it", () => {
-    const d = drawn(person((k) => [0.4 + (k % 2) * 0.2, 0.2 + (k / KEYPOINT_COUNT) * 0.7]), 0.75, 432, 960);
-    expect(d.box).not.toBeNull();
-    for (const [x, y] of d.joints) {
-      expect(x).toBeGreaterThan(d.box?.left ?? Infinity);
-      expect(x).toBeLessThan(d.box?.right ?? -Infinity);
-      expect(y).toBeGreaterThan(d.box?.top ?? Infinity);
-      expect(y).toBeLessThan(d.box?.bottom ?? -Infinity);
+describe("the body the phone draws over the picture it read it from (53a)", () => {
+  it("the lines it joins, one pair after another, and every point one the model gives", () => {
+    expect(BODY_RULES.lines).toEqual(BODY_LINES.flatMap(([a, b]) => [a, b]));
+    for (const k of [...BODY_RULES.lines, ...BODY_RULES.joints, BODY_RULES.nose]) {
+      expect(Number.isInteger(k) && k >= 0 && k < KEYPOINT_COUNT).toBe(true);
     }
   });
 
-  it("nobody, or too little of anybody, draws no corners", () => {
-    expect(drawn(null, 0.75, 432, 960)).toEqual({ lines: [], joints: [], box: null });
-    expect(drawn(person((k) => [0.5, 0.5, k <= KP.left_shoulder ? 0.9 : 0.1]), 0.75, 432, 960).box).toBeNull();
+  it("the arms, shoulders and hips, the trunk's sides and the legs; every big joint ringed; the head for the corners", () => {
+    expect(BODY_RULES.lines).toHaveLength(24);
+    expect(BODY_RULES.joints).toEqual([
+      KP.left_shoulder,
+      KP.right_shoulder,
+      KP.left_elbow,
+      KP.right_elbow,
+      KP.left_wrist,
+      KP.right_wrist,
+      KP.left_hip,
+      KP.right_hip,
+      KP.left_knee,
+      KP.right_knee,
+      KP.left_ankle,
+      KP.right_ankle,
+    ]);
+    expect(BODY_RULES.nose).toBe(KP.nose);
+  });
+
+  it("a point the model gives less than an even chance of being seen is not drawn; the corners a little out", () => {
+    expect(BODY_RULES.sure).toBe(0.5);
+    expect(BODY_RULES.room).toBe(0.06);
   });
 });
 

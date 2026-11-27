@@ -61,7 +61,9 @@ describe("the worst thing first: the camera keeps and sends nothing of a person 
 
   it("each answer goes to the screen, with the picture it was read from, and nowhere else", () => {
     expect(view.match(/onPose\(/g)).toHaveLength(1);
-    expect(view).toContain("if (picture != null) shown.setImageBitmap(picture)\n        onPose(event)");
+    expect(view).toContain(
+      "if (picture != null) shown.setImageBitmap(picture)\n        body.show(drawn, if (image.height > 0) image.width.toFloat() / image.height else 0f)\n        onPose(event)",
+    );
   });
 
   it("the module asks for no permission of its own: the camera's is the meal photo's", () => {
@@ -70,6 +72,30 @@ describe("the worst thing first: the camera keeps and sends nothing of a person 
 
   it("the store's app takes away the pose library's sender of usage reports", () => {
     expect(storeConfig({ KWAZO_VERSION_CODE: "7" }, [STORE.applicationId]).plugins).toContain("./plugins/noUsageReports.js");
+  });
+});
+
+describe("the body drawn by the phone, on the very picture it was read from (Kd at 53a's run: the lines lagging)", () => {
+  it("drawn in the same moment as its picture, and on nothing once the camera rests", () => {
+    // One message on the screen's thread sets both: they reach the screen in the same frame.
+    expect(view).toMatch(/main\.post \{\n\s+if \(closed\) return@post\n[^}]*shown\.setImageBitmap\(picture\)\n\s+body\.show\(drawn/);
+    expect(view).toContain("private fun stop() {\n    session?.close()\n    session = null\n    // Paused, or gone: no line is left on a picture the model no longer reads.\n    body.show(null, 0f)");
+  });
+
+  it("where the screen shows each point: the picture filling it, mirrored", () => {
+    expect(view).toContain("val tall = maxOf(w / aspect, h)");
+    expect(view).toContain("xs[k] = w - (left + x * wide)");
+    expect(view).toContain("ys[k] = top + y * tall");
+    expect(view).toContain("scaleType = ImageView.ScaleType.CENTER_CROP\n    scaleX = -1f");
+  });
+
+  it("a point drawn only when the model is sure enough of it, and only a real number", () => {
+    expect(view).toContain("seen[k] = x.isFinite() && y.isFinite() && p[k * 4 + 2] >= sure && p[k * 4 + 3] >= sure");
+  });
+
+  it("the app hands over its rules, words and colours", () => {
+    const module = text(join(MODULE, "src", "main", "java", "expo", "modules", "posecamera", "PoseCameraModule.kt"));
+    expect(module).toContain('Prop("drawing") { view: PoseCameraView, drawing: BodyDrawing -> view.setDrawing(drawing) }');
   });
 });
 
@@ -120,7 +146,7 @@ describe("the camera as the phone test picked it (51b-ii)", () => {
     expect(gradle).toContain("if (!wholeModel(part))");
   });
 
-  it("Google's pose library is the phone test's version, and the camera library the app's own", () => {
+  it("Google's pose library is the phone test's version, and the camera library and React Native the app's own", () => {
     const testGradle = text(join(mobile, "modules", "phone-test", "android", "build.gradle"));
     const tasks = /tasks-vision:([0-9.]+)"/.exec(testGradle)?.[1];
     expect(tasks).toBeDefined();
@@ -132,7 +158,7 @@ describe("the camera as the phone test picked it (51b-ii)", () => {
       `implementation "androidx.camera:camera-core:${String(camerax)}"`,
       `implementation "androidx.camera:camera-camera2:${String(camerax)}"`,
       `implementation "androidx.camera:camera-lifecycle:${String(camerax)}"`,
-      `implementation "androidx.camera:camera-view:${String(camerax)}"`,
+      "implementation 'com.facebook.react:react-android'",
     ]);
   });
 });

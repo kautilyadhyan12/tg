@@ -2,11 +2,14 @@ import { act, fireEvent, render, screen, waitFor, within } from "@testing-librar
 import type { MovementFrame } from "@app/shared";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { Linking } from "react-native";
+import { Linking, processColor } from "react-native";
 import { decodeBodyPoints } from "../../../../packages/movement/scripts/bodyPoints";
 import { App } from "../../src/App";
 import type { PoseEvent } from "../../src/camera/poseFrame";
 import { FIRST_LINE, FIRST_TITLE } from "../../src/screens/camera/CameraFirst";
+import type { BodyDrawing } from "../../src/camera/poseCameraNative";
+import { BODY_LINES } from "../../src/camera/skeleton";
+import { colours } from "../../src/look/colours";
 import { SET_UP_WORDS, STOPPED_WORDS } from "../../src/screens/camera/CameraSet";
 import { RAVI, fakeServer, kept, memoryStore, tokens } from "../kit";
 
@@ -23,7 +26,7 @@ const extra = { copyName: "Exercise 1", apiUrl: "http://localhost:3000" };
 
 interface PoseCameraFake {
   missing: boolean;
-  props: { active: boolean } | null;
+  props: { active: boolean; drawing: BodyDrawing } | null;
   actives: boolean[];
   answer: (e: PoseEvent) => void;
   fail: (reason: string) => void;
@@ -183,17 +186,21 @@ describe("I stand my phone up, step back, do my squats, and the phone counts the
     expect(screen.getByText("Tap the screen to change reps, weight or pause")).toBeTruthy();
   });
 
-  it("my body is drawn while the camera follows me, and not when it follows nobody", async () => {
+  it("the phone is told how to draw my body on its own picture, and the screen draws no second one behind it", async () => {
     await openTry();
     await turnOn();
-    await fireEvent(screen.getByTestId("camera-screen"), "layout", { nativeEvent: { layout: { width: 432, height: 960 } } });
+    const drawing = poseCamera.props?.drawing;
+    expect(drawing?.lines).toEqual(BODY_LINES.flatMap(([a, b]) => [a, b]));
+    expect(drawing?.words).toBe("TRACKING YOU");
+    expect(drawing?.font).toBe("Inter_700Bold");
+    // The look's colours by their names, made the phone's own numbers.
+    expect(drawing?.line).toBe(processColor(colours.bodyLine));
+    expect(drawing?.glow).toBe(processColor(colours.bodyGlow));
+    expect(drawing?.gold).toBe(processColor(colours.gold));
     await play(SQUATS.slice(0, 40));
-    expect(screen.queryByTestId("camera-body")).toBeTruthy();
-    expect(screen.getByText("Tracking you")).toBeTruthy();
-    const nobody = SQUATS[40];
-    if (nobody === undefined) throw new Error("short");
-    await play([{ ...nobody, people: [] }]);
+    // Drawn by the app's script, the lines reached the screen after the picture (Kd at 53a's run).
     expect(screen.queryByTestId("camera-body")).toBeNull();
+    expect(screen.queryByText(/Tracking you/i)).toBeNull();
   });
 
   it("a tap opens everything else; a rep put right by hand, the target and the weight; Set done says what I did", async () => {

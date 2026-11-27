@@ -5,10 +5,30 @@ import { requireNativeView, requireOptionalNativeModule } from "expo";
 import type { ComponentType } from "react";
 import type { NativeSyntheticEvent, StyleProp, ViewStyle } from "react-native";
 import type { PoseEvent } from "./poseFrame";
+import type { BodyRules } from "./skeleton";
+
+/** How the phone draws the body it finds over the picture it read it from: the rules (`BODY_RULES`), the words over the
+ *  corners in the look's eyebrow, and the look's colours, each made the phone's own number. */
+export interface BodyDrawing extends BodyRules {
+  readonly words: string;
+  readonly font: string;
+  readonly wordsSize: number;
+  readonly wordsLine: number;
+  readonly wordsSpacing: number;
+  readonly wordsGrowth: number;
+  readonly line: number;
+  readonly glow: number;
+  readonly halo: number;
+  readonly joint: number;
+  readonly gold: number;
+  readonly shadow: number;
+}
 
 export interface PoseCameraProps {
   /** The camera and the model run while true. */
   active: boolean;
+  /** Handed over once. */
+  drawing: BodyDrawing;
   /** Each answer of the model (read through `frameOf`). */
   onPose: (e: NativeSyntheticEvent<PoseEvent>) => void;
   /** The camera or the model stopped: "camera" or "model". */

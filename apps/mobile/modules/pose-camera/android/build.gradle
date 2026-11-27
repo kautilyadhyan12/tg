@@ -72,10 +72,11 @@ preBuild.dependsOn 'fetchPoseModel'
 dependencies {
   // Google's pose library for Android, the release the phone test measured (51a to 51c), pinned.
   implementation "com.google.mediapipe:tasks-vision:1.0.0"
-  // Android's camera library and the screen it draws on, the very versions the app already holds for the meal photo
-  // (expo-camera's camerax_version), so the app adds no copy of them.
+  // Android's camera library, the very version the app already holds for the meal photo (expo-camera's camerax_version),
+  // so the app adds no copy of it. The screen shows the model's own pictures, so its preview library is not needed.
   implementation "androidx.camera:camera-core:1.6.0"
   implementation "androidx.camera:camera-camera2:1.6.0"
   implementation "androidx.camera:camera-lifecycle:1.6.0"
-  implementation "androidx.camera:camera-view:1.6.0"
+  // React Native, the app's own, for the look's font the body's words are drawn in (as expo-font reaches it).
+  implementation 'com.facebook.react:react-android'
 }

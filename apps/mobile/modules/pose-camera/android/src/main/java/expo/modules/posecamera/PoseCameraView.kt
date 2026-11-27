@@ -6,6 +6,9 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Matrix
+import android.graphics.Paint
+import android.graphics.Path
+import android.graphics.Typeface
 import android.hardware.Sensor
 import android.hardware.camera2.CameraCharacteristics
 import android.hardware.camera2.CaptureRequest
@@ -19,6 +22,7 @@ import android.os.SystemClock
 import android.util.Log
 import android.util.Range
 import android.util.Size
+import android.view.View
 import android.widget.ImageView
 import androidx.camera.camera2.interop.Camera2CameraInfo
 import androidx.camera.camera2.interop.Camera2Interop
@@ -34,6 +38,7 @@ import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
+import com.facebook.react.common.assets.ReactFontManager
 import com.google.mediapipe.framework.image.BitmapExtractor
 import com.google.mediapipe.framework.image.BitmapImageBuilder
 import com.google.mediapipe.framework.image.MPImage
@@ -44,6 +49,8 @@ import com.google.mediapipe.tasks.vision.poselandmarker.PoseCameraCores
 import com.google.mediapipe.tasks.vision.poselandmarker.PoseLandmarker
 import com.google.mediapipe.tasks.vision.poselandmarker.PoseLandmarkerResult
 import expo.modules.kotlin.AppContext
+import expo.modules.kotlin.records.Field
+import expo.modules.kotlin.records.Record
 import expo.modules.kotlin.viewevent.EventDispatcher
 import expo.modules.kotlin.views.ExpoView
 import java.nio.ByteBuffer
@@ -74,6 +81,190 @@ private const val TAG = "PoseCamera"
  *  to about 150 ms, so six are never drawn over while either still reads one. */
 private const val TURNED = 6
 
+// The body's drawing, as Kd's drawing of 2026-11-26 has it, in the screen's points: a gold halo and glow round each white
+// line, a dark ring on each joint with a gold dot, gold corners round the person, the words 22 above them.
+private const val HALO_DP = 16f
+private const val GLOW_DP = 7f
+private const val LINE_DP = 2.5f
+private const val RING_DP = 7f
+private const val RING_LINE_DP = 2f
+private const val DOT_DP = 2.5f
+private const val CORNER_DP = 3f
+private const val CORNER_ARM_DP = 26f
+private const val WORDS_ABOVE_DP = 22f
+private const val WORDS_SHADOW_DP = 6f
+
+/** How the screen draws the body, handed over once by the app (src/camera/skeleton.ts `bodyDrawing`): which points are
+ *  joined and which ringed, how sure the model must be of a point to draw it, how far the corners stand out, the words over
+ *  them in the look's eyebrow, and the look's colours by name. */
+class BodyDrawing : Record {
+  @Field val lines: List<Int> = emptyList()
+  @Field val joints: List<Int> = emptyList()
+  @Field val nose: Int = 0
+  @Field val sure: Double = 0.5
+  @Field val room: Double = 0.06
+  @Field val words: String = ""
+  @Field val font: String = ""
+  @Field val wordsSize: Double = 11.0
+  @Field val wordsLine: Double = 14.0
+  @Field val wordsSpacing: Double = 0.0
+  @Field val wordsGrowth: Double = 1.0
+  @Field val line: Int = 0
+  @Field val glow: Int = 0
+  @Field val halo: Int = 0
+  @Field val joint: Int = 0
+  @Field val gold: Int = 0
+  @Field val shadow: Int = 0
+}
+
+/**
+ * The person the model found, drawn by the phone over the very picture it was read from, in the same moment (`answer`):
+ * drawn by the app's script they reached the screen after the picture, and fell further behind as it worked (Kd at 53a's
+ * run: "the lines lagging a lot again"). The picture fills the view, cut at its sides or top, and is mirrored (`shown`), so
+ * a point at x across the picture lies at the mirror of x on the screen. Nothing when it follows nobody.
+ */
+private class BodyOverlay(context: Context) : View(context) {
+  private val density = resources.displayMetrics.density
+  private var drawing: BodyDrawing? = null
+  /** x, y, seen and in the picture, for each point; null with nobody. */
+  private var points: FloatArray? = null
+  private var aspect = 0f
+  private val stroke = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+    style = Paint.Style.STROKE
+    strokeCap = Paint.Cap.ROUND
+    strokeJoin = Paint.Join.ROUND
+  }
+  private val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
+  private val words = Paint(Paint.ANTI_ALIAS_FLAG)
+  private val bones = Path()
+  private val corners = Path()
+  private val xs = FloatArray(POINTS)
+  private val ys = FloatArray(POINTS)
+  private val seen = BooleanArray(POINTS)
+
+  fun setDrawing(d: BodyDrawing) {
+    drawing = d
+    val growth = minOf(resources.configuration.fontScale, d.wordsGrowth.toFloat())
+    words.typeface = try {
+      ReactFontManager.getInstance().getTypeface(d.font, Typeface.NORMAL, context.assets)
+    } catch (e: Throwable) {
+      Typeface.DEFAULT_BOLD
+    }
+    words.textSize = d.wordsSize.toFloat() * density * growth
+    words.letterSpacing = if (d.wordsSize > 0) (d.wordsSpacing / d.wordsSize).toFloat() else 0f
+    words.color = d.gold
+    words.setShadowLayer(WORDS_SHADOW_DP * density, 0f, density, d.shadow)
+    invalidate()
+  }
+
+  fun show(next: FloatArray?, pictureAspect: Float) {
+    points = next
+    aspect = pictureAspect
+    invalidate()
+  }
+
+  override fun onDraw(canvas: Canvas) {
+    val d = drawing ?: return
+    val p = points ?: return
+    val w = width.toFloat()
+    val h = height.toFloat()
+    if (!(aspect > 0f) || w <= 0f || h <= 0f) return
+    // The picture as the screen shows it: as tall as the view, or as wide, whichever covers it; centred.
+    val tall = maxOf(w / aspect, h)
+    val wide = tall * aspect
+    val left = (w - wide) / 2f
+    val top = (h - tall) / 2f
+    val sure = d.sure.toFloat()
+    for (k in 0 until POINTS) {
+      val x = p[k * 4]
+      val y = p[k * 4 + 1]
+      seen[k] = x.isFinite() && y.isFinite() && p[k * 4 + 2] >= sure && p[k * 4 + 3] >= sure
+      xs[k] = w - (left + x * wide)
+      ys[k] = top + y * tall
+    }
+    val ok = { k: Int -> k in 0 until POINTS && seen[k] }
+
+    bones.rewind()
+    var i = 0
+    while (i + 1 < d.lines.size) {
+      val a = d.lines[i]
+      val b = d.lines[i + 1]
+      i += 2
+      if (ok(a) && ok(b)) {
+        bones.moveTo(xs[a], ys[a])
+        bones.lineTo(xs[b], ys[b])
+      }
+    }
+    var joints = 0
+    var minX = Float.MAX_VALUE
+    var maxX = -Float.MAX_VALUE
+    var minY = Float.MAX_VALUE
+    var maxY = -Float.MAX_VALUE
+    for (k in d.joints) {
+      if (!ok(k)) continue
+      joints++
+      minX = minOf(minX, xs[k])
+      maxX = maxOf(maxX, xs[k])
+      minY = minOf(minY, ys[k])
+      maxY = maxOf(maxY, ys[k])
+    }
+    if (bones.isEmpty && joints == 0) return
+
+    // The corners round the body, with the head, once enough of it is seen.
+    val boxed = joints >= 4
+    var boxLeft = 0f
+    var boxTop = 0f
+    if (boxed) {
+      if (ok(d.nose)) {
+        minY = minOf(minY, ys[d.nose])
+        maxY = maxOf(maxY, ys[d.nose])
+      }
+      val room = (maxY - minY) * d.room.toFloat()
+      boxLeft = minX - room
+      boxTop = minY - room * 2f
+      val right = maxX + room
+      val bottom = maxY + room
+      val arm = minOf(CORNER_ARM_DP * density, (right - boxLeft) / 4f)
+      corners.rewind()
+      corners.moveTo(boxLeft, boxTop + arm); corners.lineTo(boxLeft, boxTop); corners.lineTo(boxLeft + arm, boxTop)
+      corners.moveTo(right - arm, boxTop); corners.lineTo(right, boxTop); corners.lineTo(right, boxTop + arm)
+      corners.moveTo(right, bottom - arm); corners.lineTo(right, bottom); corners.lineTo(right - arm, bottom)
+      corners.moveTo(boxLeft + arm, bottom); corners.lineTo(boxLeft, bottom); corners.lineTo(boxLeft, bottom - arm)
+      stroke.color = d.gold
+      stroke.strokeWidth = CORNER_DP * density
+      canvas.drawPath(corners, stroke)
+    }
+
+    stroke.color = d.halo
+    stroke.strokeWidth = HALO_DP * density
+    canvas.drawPath(bones, stroke)
+    stroke.color = d.glow
+    stroke.strokeWidth = GLOW_DP * density
+    canvas.drawPath(bones, stroke)
+    stroke.color = d.line
+    stroke.strokeWidth = LINE_DP * density
+    canvas.drawPath(bones, stroke)
+
+    stroke.strokeWidth = RING_LINE_DP * density
+    for (k in d.joints) {
+      if (!ok(k)) continue
+      fill.color = d.joint
+      canvas.drawCircle(xs[k], ys[k], RING_DP * density, fill)
+      canvas.drawCircle(xs[k], ys[k], RING_DP * density, stroke)
+      fill.color = d.gold
+      canvas.drawCircle(xs[k], ys[k], DOT_DP * density, fill)
+    }
+
+    if (boxed && d.words.isNotEmpty()) {
+      // The words' line box starts 22 above the corners, the words centred in it, as the look's eyebrow sets them.
+      val lineBox = d.wordsLine.toFloat() * density * minOf(resources.configuration.fontScale, d.wordsGrowth.toFloat())
+      val m = words.fontMetrics
+      val baseline = boxTop - WORDS_ABOVE_DP * density + (lineBox - (m.descent - m.ascent)) / 2f - m.ascent
+      canvas.drawText(d.words, boxLeft, baseline, words)
+    }
+  }
+}
+
 /**
  * The selfie camera's pictures across the whole view, mirrored as every selfie camera shows a person, each the very
  * picture the pose model has just read, so the body's lines the screen draws from its answer lie on the body in it: drawn
@@ -97,6 +288,7 @@ class PoseCameraView(context: Context, appContext: AppContext) : ExpoView(contex
     scaleX = -1f
     setBackgroundColor(Color.BLACK)
   }
+  private val body = BodyOverlay(context)
   private val main = Handler(Looper.getMainLooper())
   private val debuggable = (context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
   private var wanted = false
@@ -104,7 +296,10 @@ class PoseCameraView(context: Context, appContext: AppContext) : ExpoView(contex
 
   init {
     addView(shown, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
+    addView(body, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
   }
+
+  fun setDrawing(drawing: BodyDrawing) = body.setDrawing(drawing)
 
   fun setActive(active: Boolean) {
     wanted = active
@@ -134,6 +329,8 @@ class PoseCameraView(context: Context, appContext: AppContext) : ExpoView(contex
   private fun stop() {
     session?.close()
     session = null
+    // Paused, or gone: no line is left on a picture the model no longer reads.
+    body.show(null, 0f)
   }
 
   private fun problem(reason: String) {
@@ -318,7 +515,15 @@ class PoseCameraView(context: Context, appContext: AppContext) : ExpoView(contex
       val points = result.landmarks().firstOrNull()?.takeIf { it.size == POINTS }
       val world = result.worldLandmarks().firstOrNull()?.takeIf { it.size == POINTS }
       val people = ArrayList<Map<String, Any>>(1)
+      var drawn: FloatArray? = null
       if (points != null) {
+        drawn = FloatArray(POINTS * 4)
+        for ((k, p) in points.withIndex()) {
+          drawn[k * 4] = p.x()
+          drawn[k * 4 + 1] = p.y()
+          drawn[k * 4 + 2] = p.visibility().orElse(0f)
+          drawn[k * 4 + 3] = p.presence().orElse(0f)
+        }
         // Plain number arrays: the screen gets them as they are, with no object made for each number.
         val flat = DoubleArray(POINTS * 5)
         for ((k, p) in points.withIndex()) {
@@ -354,7 +559,9 @@ class PoseCameraView(context: Context, appContext: AppContext) : ExpoView(contex
       }
       main.post {
         if (closed) return@post
+        // The picture and the body read from it, drawn in the same frame.
         if (picture != null) shown.setImageBitmap(picture)
+        body.show(drawn, if (image.height > 0) image.width.toFloat() / image.height else 0f)
         onPose(event)
       }
     }

@@ -4,6 +4,9 @@ import { colours, type ColourName } from "./colours";
 import { MOST_TEXT_GROWTH } from "./sizing";
 
 /** Inter, one file a weight: Android picks a weight by the font's name. */
+/** The eyebrow's measures: small gold capitals over a thing. The camera screen's phone draws its own (CameraSet). */
+export const EYEBROW = { size: 11, line: 14, spacing: 1.54 } as const;
+
 export const fonts = {
   regular: "Inter_400Regular",
   medium: "Inter_500Medium",
@@ -58,9 +61,9 @@ const kinds = StyleSheet.create({
   ticket: { fontFamily: fonts.bold, fontSize: 19, lineHeight: 24, letterSpacing: -0.3, color: colours.text },
   eyebrow: {
     fontFamily: fonts.bold,
-    fontSize: 11,
-    lineHeight: 14,
-    letterSpacing: 1.54,
+    fontSize: EYEBROW.size,
+    lineHeight: EYEBROW.line,
+    letterSpacing: EYEBROW.spacing,
     textTransform: "uppercase",
     color: colours.orange,
   },
