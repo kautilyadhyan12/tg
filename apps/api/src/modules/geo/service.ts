@@ -411,7 +411,12 @@ export async function workOutWaitingClimbs(
 /** A run sent again: as saved, "removed" when the person deleted it, null when it is new. */
 export async function savedRunIfAny(deps: ReadDeps, userId: string, runId: string): Promise<SavedRun | "removed" | null> {
   const row = await repo.getSavedRun(deps.sql, userId, runId);
-  if (row !== null) return asSavedRun(row);
+  if (row !== null) {
+    // A run sent again is the one way its streak, badges and XP heal after a failure just after it was stored
+    // (the hunt's E2): they are worked out again from history, as a workout's repeat does. Its points are not.
+    await onWorkoutSynced({ sql: deps.sql }, userId, (await getUserSyncContext(deps.sql, userId)).timezone);
+    return asSavedRun(row);
+  }
   return (await repo.wasRunRemoved(deps.sql, userId, runId)) ? "removed" : null;
 }
 
@@ -487,8 +492,9 @@ export async function saveRun(
     heart,
   });
   if (saved === "removed") throw new RemovedRunError();
-  // On every send, a repeat included, as a workout's sync does: the streak, badges and XP are
-  // worked out again from history, so a send whose first try failed here heals on the next.
+  // On every send, as a workout's sync does: the streak, badges and XP are worked out again from history. A
+  // repeat is answered before this, by savedRunIfAny, which works them out again too: a send whose first try
+  // failed here heals on the next.
   await onWorkoutSynced({ sql: deps.sql }, userId, ctx.timezone);
   return { status: saved.created ? "created" : "duplicate", run: asSavedRun(saved.row) };
 }
