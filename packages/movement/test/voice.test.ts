@@ -165,6 +165,7 @@ describe("every clip in the app was heard saying its own words", () => {
   });
 
   it("the app's list of clips is the one the lines make", () => {
-    expect(readFileSync(CLIPS_MODULE, "utf8")).toBe(clipsModule(VOICE));
+    // A Windows checkout may hold it with its own line ends.
+    expect(readFileSync(CLIPS_MODULE, "utf8").replace(/\r\n/g, "\n")).toBe(clipsModule(VOICE));
   });
 });

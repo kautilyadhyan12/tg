@@ -2749,6 +2749,69 @@ main chip until one is (round one). A set is a minute or two and the camera rest
 between sets (§11.8), so the long runs are the hardest case, never the usual one. On this development copy the script runs
 in its slower checking mode; a store build's would be faster.
 
+**As built, the coach's voice (53b-i, 2026-11-27; `rulings/2026-11-27-53b-i.md`).** **The lines are data**
+(`packages/movement/voice/lines.json`, checked by `voiceSchema` in `@app/shared`): 17 lines, 35 wordings, each line named
+by what it is said for (`when`): a "rule" line is found by the very words a movement or an exercise file gives the screen
+(a rep's reason, a mistake's correction, the first wording being those words), so one phrase is one thing everywhere; the
+set's own lines (Halfway, Two more, Last one, Set complete, the person lost, That one counts, Better) one each; and the
+workout's four (Get ready, Rest, Next exercise, Workout complete), recorded now for 64b so that Kd records once. A test holds
+every sentence the files can put on the screen to a line, and every rule line to a file that says it. **A mistake's
+correction** is in its exercise's camera file (`coach`: its words, or `silent` with why; the words of a rep it refuses are
+the same words): the squat's knees caving inward says "Keep your knees in line with your toes." (ACE's knees over the
+second toes); its lean is silent, since no published source gives a fixed lean as a mistake (the research file's 30 to 45
+degrees is a usual range) and the one that names it, Myer et al. 2014 (Strength Cond J; the trunk about parallel to the
+shins), read on the squat's nine people sets a line at 23 degrees of trunk past shin, the furthest proper rep 20.8, and 12
+to 25 with one person left out: proper squats of the people left out would be told. A rep refused past "chest up" still
+says "Keep your chest up.", as its screen does since 52b-ii-b. **The coach** (`Coach`, `packages/movement/src/coach`, pure,
+in the set's own time) reads what the engine decided and says at most one line: a rep's reason on the first such rep and
+every other one after while the same reason comes back; what the camera could not see from the second rep running (one
+hidden rep, a passer-by, is nobody's fault); a correction once the mistake was made in two counted reps running (a rep where
+it was unseen neither breaks nor adds), the camera file's order first, its run then starting again so the same correction
+never follows itself, in its next wording when it comes back; "Better." on the first counted rep where a corrected mistake
+is seen fine, "That one counts." on the first counted rep after a reason; the count against the set's target as the screen
+shows it, the person's own changes included ("Halfway." from 8 reps or 20 s held, "Two more." from 4, "Last one."); "Set
+complete." at the end; the person lost once, and not again within 10 s. A correction outranks praise, praise the count; a
+line that only encourages is left out within 0.8 s of the line before, the shortest clip (a quiet of 2 s lost every "Last
+one." of Kd's squat jumps, about a second apart). The camera screen shows a correction or praise at its foot as it is said,
+in the page's own dark; the count's lines are the digits'. The voice follows Sound on or off. **The player**
+(`sound/soundNative.ts`, expo-audio, the one player of §13.6) asks for "duckOthers" for each clip, in which expo-audio asks
+Android for focus that lets other sound go quieter and gives it back once nothing plays, and goes back to mixing when the
+clip ends; a clip asked for while another speaks waits, and a newer one takes its place. **The recording**: the script is
+printed by `voice-script` in three parts of 12, 12 and 11 wordings; Kd's chosen model, Eleven v4, takes no SSML break tag
+(his first take of `<break time="1.5s" />` left 0.3 to 0.5 s between lines), so each wording is a paragraph with "[long
+pause]" between (0.46 to 1.99 s measured; a pause inside "Better. That one counts." 0.52 s). `voice-cut` cuts a part at its
+`n - 1` longest pauses of at least 0.45 s, refuses a clip with no speech in it (quieter than -45 LUFS as recorded: the
+reader makes up "you" on silence), evens loudness in two passes of EBU R128 to -16 LUFS, keeps AAC at 96 kb/s, and reads
+each clip back, half a second of silence put either side of the reader's copy, with whisper.cpp 1.9.5 (on the laptop only,
+outside git): `ggml-base.en`, then `ggml-small.en` where the first did not hear it (each stumbled on one short clip the
+other heard right; neither turns another line into a clip's very words): a clip is kept only when its words, lower case
+with no punctuation, are exactly its wording's, and one refusal writes nothing. The 35 clips take 679 KB in the app. `voice/heard.json` keeps what
+each clip was heard saying under its bytes' SHA-256, and a test checks every clip in the app against it; `--redo <clip>`
+takes one wording generated again on its own. Found on the way, each caught by the read-back: the first cut took each clip
+after its fades were timed on the whole part's clock, and silenced 32 of 35 clips; "Workout complete." was heard "Workout
+completes." and made again alone. **Measured:** on the 23 good-form squat sets as filmed and under each of the 14 held
+replays, with every person's numbers and their own left out (600 runs), the coach says nothing, every mistake the camera
+checks spoken; each checked mistake drawn just past its line onto every rep of real squats that reads it is told its own
+correction after the second rep it is made in and every second one after, and nothing else, and just short of it nothing;
+every other movement under the 14 held replays is told no more than its screen already says (a dip the camera could not
+see, the push press's "Go lower to count."), never a correction, praise or the count; the phone's own runs give the laptop's
+lines on every proof video but `usual_v08` (open for 54, written). Played to the screen's own pieces, six real sets with their
+count as the target hear only the count's lines, a deadlift seen as a squat hears nothing, the push press hears "Go lower to
+count." in turn of its wordings; a whole set played to the camera screen still makes no request, writes no file and logs
+nothing. **Deliberate breaks**, each run red and put back: a correction after one rep (8 red), a mistake the camera could not
+see taken as made (2 red), a clip kept when it only starts with its words (2 red). **On Kd's phone** (moto g35, a folder's
+development copy, 2026-11-27; the laptop playing the prisoner squat clip on repeat): with the phone standing, the set
+counted to its target of 10, ended by itself, and Kd heard "Set complete."; Android's own record of sound focus shows the
+app asking for it four times in that set (16:49:22, :32, :34 and :36, as "Halfway.", "Two more.", "Last one." and "Set
+complete." would fall). **Found there, not this job's:** held by hand in front of the clip, some squats counted and some
+did not, and the count stopped at 4 or 5 (Kd). Measured on the laptop: the same clip with its whole picture swaying as a
+hand does counts 3 of 3 at 0.2 cm of sway and 0 of 3 from 0.5 cm (she stands about 11 cm tall on the laptop, so half a
+centimetre reads as her feet moved about 8 cm, another movement); and a phone moved in a set puts the person at another
+place in its picture, where the lock (52d) no longer takes them. A member's phone stands still and the person is life
+size, but a phone knocked over in a set would stay silent for the rest of it: job 53c. Not walked on the phone: a
+correction or praise shown at the foot (no clip of a real mistake), and the four shapes (the foot's line is the piece 53a
+fitted).
+
 An exercise that does not pass is published as "count by hand", never with a wrong camera
 count. Kd tries one exercise of each kind of movement on the phone, about a dozen, never
 each one. After launch the server sees, for each exercise, how often members changed the
@@ -2782,8 +2845,8 @@ movements' real numbers and written here then; until then it is not a number.
   his ElevenLabs plan (never the API) and downloads one file; a laptop tool cuts it into
   its lines, names them, evens the loudness, and **reads each cut clip back as text to
   check it says its own line**, since a clip cut or named wrongly would speak the wrong
-  advice. Not tried yet: if a batch does not cut cleanly, its failed lines are generated
-  one at a time. The read-back needs a free speech-reading tool on the laptop: Kd's yes in
+  advice. If a batch does not cut cleanly, its failed lines are generated one at a time
+  (tried at 53b-i: §12.5 "As built, the coach's voice"). The read-back needs a free speech-reading tool on the laptop: Kd's yes in
   that job's plan. The script's size is counted against his plan's monthly allowance when
   the first one is written.
 
@@ -2835,8 +2898,7 @@ terminal (Kd, 2026-11-16).
 
 How the phone counts what its own live camera sees, rather than the laptop's pictures of a video (job 53; on the laptop's
 pictures of all 78 proof videos it counts and speaks as the laptop on 74, the other four open in §12.5, 52a-iii) · whether full on the main chip still holds 15 a second with the camera
-screen's engine, voice and drawing, and how the selfie camera reads a person in the room (job 53) · whether
-one long recording cuts cleanly into lines (job 53) · a busy room in front of the live phone: a neighbour, a passer-by, a mirror, a walk to a machine, a step and a turn in a set
+screen's engine, voice and drawing, and how the selfie camera reads a person in the room (job 53) · (whether one long recording cuts cleanly into lines: in parts, at 53b-i) · a busy room in front of the live phone: a neighbour, a passer-by, a mirror, a walk to a machine, a step and a turn in a set
 (52d-i is proven on real videos with a second person put into them, 52d-ii's step drawn on them and its turn on his own floor
 videos; job 53) · whether a video redrawn from another
 phone place is faithful (52a-ii-b-ii-a: drawn as a change added to the picture, it comes back exactly from its own place; his raised squats, redrawn from the floor, move every phone-changed reading towards his real floor squats but not yet far enough at any of his six leans, so it is shown, not held; the pose model's foot wander measured on his four floor sets and added lost squats his real floor counts and still did not read as it, 52a-ii-b-ii-b-i, so it stays shown until more floor videos exist) · the lens of a web clip (taken as 26 mm) and how high a phone's lens stands on the floor (taken as 15 cm) · a floor phone on anybody but the one man of 2026-11-20, and on a floor that is neither his shiny nor his dull one (job 53's live tries) · what the hips do in a real one-leg lift: on the drawn
