@@ -12,11 +12,12 @@ import TaxRates from './TaxRates';
 
 // TAX AND DISCOUNTS FOR MEMBERSHIPS, on the Memberships page (Kd, 2026-10-14; ROADMAP 18b-ii-b
 // and 18b-iii): the gym's one Tax box and its one Discounts list, the ones for memberships,
-// made and changed beside the price list they apply to. `typesKey` changes whenever the
+// made and changed beside the price list they apply to, each in a tab of its own (V4b-i):
+// `tab` is the one open and `tabsId` names the tabs' buttons. `typesKey` changes whenever the
 // price list does, so a type just added can be ticked at once; `onTaxChanged` reads the
 // price list again when a tax rate changes, so its Tax choices are the gym's own.
 
-export default function MembershipDiscounts({ org, readOnly, typesKey, onTaxChanged = () => undefined }) {
+export default function MembershipDiscounts({ org, readOnly, typesKey, onTaxChanged = () => undefined, tab = 'discounts', tabsId = 'memberships' }) {
   const gymId = org.id;
   const [state, setState] = useState({ gymId: null, page: null, error: null });
   const [attempt, setAttempt] = useState(0);
@@ -36,13 +37,44 @@ export default function MembershipDiscounts({ org, readOnly, typesKey, onTaxChan
   // Drawn outside the app's router (older tests draw the price list alone) it has no
   // address to read.
   const routed = useInRouterContext();
-  if (mine.page === null) {
-    return mine.error !== null ? <ConsoleFailed message={mine.error} onRetry={() => setAttempt((n) => n + 1)} newLook /> : <ConsoleLoading label="Loading your discounts…" newLook />;
+  const waiting =
+    mine.page !== null ? null : mine.error !== null ? (
+      <ConsoleFailed message={mine.error} onRetry={() => setAttempt((n) => n + 1)} newLook />
+    ) : (
+      <ConsoleLoading label="Loading your discounts…" newLook />
+    );
+  const panel = (key, children) => (
+    <div role="tabpanel" id={`${tabsId}-${key}-panel`} aria-labelledby={`${tabsId}-${key}`} hidden={tab !== key} className="c-tabpanel">
+      {children}
+    </div>
+  );
+  if (waiting !== null) {
+    return (
+      <>
+        {panel('discounts', waiting)}
+        {panel('tax', waiting)}
+      </>
+    );
   }
   return (
     <>
       {routed ? <ToDiscounts /> : null}
-      <TaxRates
+      {panel(
+        'discounts',
+        <SellDiscounts
+          gymId={gymId}
+          page={mine.page}
+          locked={readOnly}
+          lockedNote={readOnlyNote(org.orgType)}
+          use="memberships"
+          otherTo={placeFor(org.slug, viewerPrivileges(org), 'sellDiscounts')}
+          referralTo={placeFor(org.slug, viewerPrivileges(org), 'referrals')}
+          onPage={(page) => setState({ gymId, page, error: null })}
+        />,
+      )}
+      {panel(
+        'tax',
+        <TaxRates
         gymId={gymId}
         country={org.country ?? null}
         page={mine.page}
@@ -54,17 +86,8 @@ export default function MembershipDiscounts({ org, readOnly, typesKey, onTaxChan
           setState({ gymId, page, error: null });
           onTaxChanged();
         }}
-      />
-      <SellDiscounts
-      gymId={gymId}
-      page={mine.page}
-      locked={readOnly}
-      lockedNote={readOnlyNote(org.orgType)}
-      use="memberships"
-      otherTo={placeFor(org.slug, viewerPrivileges(org), 'sellDiscounts')}
-      referralTo={placeFor(org.slug, viewerPrivileges(org), 'referrals')}
-      onPage={(page) => setState({ gymId, page, error: null })}
-      />
+        />,
+      )}
     </>
   );
 }

@@ -177,6 +177,7 @@ describe('discounts for memberships (18b-ii-b)', () => {
   it('are made and listed beside the price list: only the ones for memberships, and a new one starts on memberships', async () => {
     register.get.mockResolvedValue(sellPage([FIRST, WATER]));
     draw([gym()]);
+    fireEvent.click(await screen.findByRole('tab', { name: 'Discounts' }));
     const box = await screen.findByRole('region', { name: 'Discounts' });
     const rows = await within(box).findAllByTestId('discount-row');
     expect(rows.map((r) => r.textContent)).toEqual(['First monthActive20% off · Promo code FIRST20 · All memberships, first payment only · Not used yetEditArchive']);
@@ -199,6 +200,7 @@ describe('discounts for memberships (18b-ii-b)', () => {
   it('a gym with none is told so in its own words', async () => {
     register.get.mockResolvedValue(sellPage([WATER]));
     draw([gym()]);
+    fireEvent.click(await screen.findByRole('tab', { name: 'Discounts' }));
     const box = await screen.findByRole('region', { name: 'Discounts' });
     expect(await within(box).findByText('No discounts for memberships yet. Add one to take a percentage or a fixed amount off a membership, with a promo code if you want one.')).toBeTruthy();
   });
@@ -233,6 +235,7 @@ describe('tax on memberships (18b-iii)', () => {
     register.get.mockResolvedValue(sellPage([rateRow(GST, { membershipTypes: 1, memberships: 12 })]));
     draw([gym()]);
     expect(await screen.findByText('Plus GST 18% on each payment')).toBeTruthy();
+    fireEvent.click(await screen.findByRole('tab', { name: 'Tax' }));
     const box = await screen.findByRole('region', { name: 'Tax' });
     expect(within(box).getAllByTestId('tax-rate-row').map((r) => r.textContent)).toEqual([expect.stringContaining("GST 18%Charged on 1 membership type and 12 members' memberships.")]);
   });
@@ -242,6 +245,7 @@ describe('tax on memberships (18b-iii)', () => {
     register.addTaxRate.mockResolvedValue(sellPage([rateRow(GST, { membershipTypes: 0 })]));
     register.chargeTaxRate.mockResolvedValue({ ...sellPage([rateRow(GST)]), membershipTypes: [{ id: type().id, name: 'Gold Monthly', taxRateIds: [GST.id] }] });
     draw([gym()]);
+    fireEvent.click(await screen.findByRole('tab', { name: 'Tax' }));
     const box = await screen.findByRole('region', { name: 'Tax' });
     fireEvent.click(within(box).getByRole('button', { name: 'Add a tax rate' }));
     const form = within(within(box).getByRole('form', { name: 'Add a tax rate' }));
@@ -270,12 +274,14 @@ describe('tax on memberships (18b-iii)', () => {
       orgService.getMembershipTypes.mockResolvedValue({ data: listOf({ types: [type({ taxRateIds: [] })], taxRates: [], taxIncluded: country !== 'CA' }) });
       register.get.mockResolvedValue(sellPage([]));
       draw([gym({ country })]);
+      fireEvent.click(await screen.findByRole('tab', { name: 'Tax' }));
       const box = await screen.findByRole('region', { name: 'Tax' });
       fireEvent.click(await within(box).findByRole('button', { name: 'Add a tax rate' }));
       const form = within(within(box).getByRole('form', { name: 'Add a tax rate' }));
       expect(form.getByLabelText('Tax name').getAttribute('placeholder')).toBe(name);
       expect(form.getByLabelText('Rate (%)').getAttribute('placeholder')).toBeNull();
-      fireEvent.click(await screen.findByRole('button', { name: 'Change Gold Monthly' }));
+      fireEvent.click(screen.getByRole('tab', { name: 'Price list 1' }));
+      fireEvent.click(await screen.findByRole('button', { name: 'Edit Gold Monthly' }));
       const typeForm = within(screen.getByRole('form', { name: 'Change membership type' }));
       fireEvent.click(typeForm.getByRole('button', { name: 'Add a tax rate' }));
       const inline = within(typeForm.getByRole('group', { name: 'Add a tax rate' }));
@@ -294,7 +300,7 @@ describe('tax on memberships (18b-iii)', () => {
     register.addTaxRate.mockResolvedValue(sellPage([rateRow(GST), rateRow(VAT, { membershipTypes: 0 })]));
     orgService.updateMembershipType.mockResolvedValue({ data: listOf({ types: [type({ taxRateIds: [VAT.id] })], taxRates: [GST, VAT], taxIncluded: false }) });
     draw([gym()]);
-    fireEvent.click(await screen.findByRole('button', { name: 'Change Gold Monthly' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit Gold Monthly' }));
     const form = within(screen.getByRole('form', { name: 'Change membership type' }));
     const tax = within(form.getByRole('group', { name: 'Tax' }));
     expect(tax.getAllByRole('checkbox').map((box) => [box.parentElement?.textContent, box.checked])).toEqual([['GST 18%', false]]);
@@ -324,7 +330,7 @@ describe('tax on memberships (18b-iii)', () => {
   it('a taxed price too high to bill is said under the price, and nothing is sent', async () => {
     orgService.getMembershipTypes.mockResolvedValue({ data: listOf({ types: [type({ taxRateIds: [GST.id] })], taxRates: [GST], taxIncluded: false }) });
     draw([gym()]);
-    fireEvent.click(await screen.findByRole('button', { name: 'Change Gold Monthly' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit Gold Monthly' }));
     const form = within(screen.getByRole('form', { name: 'Change membership type' }));
     fireEvent.change(form.getByLabelText('Price (USD)'), { target: { value: '800000' } });
     fireEvent.click(form.getByRole('button', { name: 'Save changes' }));
@@ -349,6 +355,43 @@ describe('staff who may', () => {
     expect(screen.getByText('$49.99 every month')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Add a membership type' }).disabled).toBe(false);
     expect(orgService.getMembershipTypes).toHaveBeenCalledWith(IRON);
+  });
+
+  it('three tabs (V4b-i): the price list open with its count and Billing rules under it; Discounts and Tax one press away, nothing lost between them', async () => {
+    register.get.mockResolvedValue({
+      currency: 'USD', today: '2026-10-14', tax: { included: false, rates: [] }, products: [], archived: [], archivedTotal: 0,
+      discounts: [], archivedDiscounts: [], archivedDiscountsTotal: 0, membershipTypes: [{ id: type().id, name: 'Gold Monthly', taxRateIds: [] }],
+      canSell: true, canManage: true, sales: [], salesNotShown: 0, payments: [], paymentsNotShown: 0,
+      totals: { count: 0, payments: 0, totalMinor: 0, taxMinor: 0, cash: 0, card_at_desk: 0, bank_transfer: 0, link: 0, company: 0, refundedMinor: 0, discountMinor: 0, otherCurrency: 0 },
+    });
+    orgService.getBillSettings.mockResolvedValue({ data: { overdueAfterDays: 0, billDay: null, freezeFeeMinor: 0, currency: 'USD', canChange: true } });
+    draw([gym()]);
+    const tabs = within(await screen.findByRole('tablist', { name: 'Memberships' }));
+    expect(tabs.getAllByRole('tab').map((t) => t.textContent)).toEqual(['Price list 1', 'Discounts', 'Tax']);
+    expect(tabs.getByRole('tab', { name: 'Price list 1' }).getAttribute('aria-selected')).toBe('true');
+    expect(await screen.findByRole('heading', { name: 'Billing rules' })).toBeTruthy();
+    expect(screen.queryByRole('heading', { name: 'Bills' })).toBeNull();
+    expect(screen.queryByRole('region', { name: 'Discounts' })).toBeNull();
+
+    fireEvent.click(tabs.getByRole('tab', { name: 'Discounts' }));
+    expect(await screen.findByRole('region', { name: 'Discounts' })).toBeTruthy();
+    expect(screen.queryByRole('heading', { name: 'Billing rules' })).toBeNull();
+    // Something typed in Discounts is still there after a look at Tax.
+    fireEvent.click(screen.getByRole('button', { name: 'Add a discount' }));
+    fireEvent.change(await screen.findByLabelText('Discount name'), { target: { value: 'Spring' } });
+    fireEvent.click(tabs.getByRole('tab', { name: 'Tax' }));
+    expect(await screen.findByRole('region', { name: 'Tax' })).toBeTruthy();
+    fireEvent.click(tabs.getByRole('tab', { name: 'Discounts' }));
+    expect(screen.getByLabelText('Discount name').value).toBe('Spring');
+  });
+
+  it.each([
+    ['#tax', 'Tax'],
+    ['#discounts', 'Discounts'],
+    ['#bills', 'Price list 1'],
+  ])('an address ending %s (Search, Payments overview) opens the %s tab', async (hash, tab) => {
+    draw([gym()], `/console/iron-house/memberships${hash}`);
+    expect((await screen.findByRole('tab', { name: tab })).getAttribute('aria-selected')).toBe('true');
   });
 
   it('on a phone the page is under More, never a fifth tab', async () => {
@@ -392,7 +435,7 @@ describe('staff who may', () => {
       </MemoryRouter>,
     );
     await waitFor(() => expect(orgService.previewMembershipLink).toHaveBeenCalledWith(IRON, { word: '3 Month Plan', typeId: type().id }));
-    expect(await screen.findByRole('group', { name: 'Give Gold Monthly to the people with “3 Month Plan” on your member list?' })).toBeTruthy();
+    expect(await screen.findByRole('dialog', { name: 'Give Gold Monthly to the people with “3 Month Plan” on your member list?' })).toBeTruthy();
     await waitFor(() => expect(screen.getByTestId('where').textContent).toBe('/console/iron-house/memberships'));
     expect(orgService.previewMembershipLink).toHaveBeenCalledTimes(1);
   });
@@ -402,7 +445,7 @@ describe('staff who may', () => {
     expect(await screen.findByText('Gold Monthly')).toBeTruthy();
     expect(screen.getByText(readOnlyNote('gym'))).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Add a membership type' }).disabled).toBe(true);
-    expect(screen.getByRole('button', { name: 'Change Gold Monthly' }).disabled).toBe(true);
+    expect(screen.getByRole('button', { name: 'Edit Gold Monthly' }).disabled).toBe(true);
     expect(screen.getByRole('button', { name: 'Archive Gold Monthly' }).disabled).toBe(true);
   });
 

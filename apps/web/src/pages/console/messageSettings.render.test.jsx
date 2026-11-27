@@ -219,8 +219,8 @@ describe('Automatic messages', () => {
     // The gym's own grace period is said, with a button to the box that changes it.
     // Seven days' grace: the bill reads Overdue on the eighth day after, as the Bills box says.
     expect(within(box('Payment overdue')).getByText(/^Sent in the morning, 8 days after its due date: by then the bill reads Overdue/)).toBeTruthy();
-    expect(within(box('Payment overdue')).getByText('It follows the grace period you set in the Bills box on Memberships.')).toBeTruthy();
-    fireEvent.click(within(box('Payment overdue')).getByRole('button', { name: 'Open the Bills box' }));
+    expect(within(box('Payment overdue')).getByText('It follows the grace period you set in Billing rules on Memberships.')).toBeTruthy();
+    fireEvent.click(within(box('Payment overdue')).getByRole('button', { name: 'Open Billing rules' }));
     expect(within(box('Payment overdue')).getAllByRole('link', { name: 'Leave this page' }).map((a) => a.getAttribute('href'))).toContain('/console/iron-house/memberships');
 
     // Somebody who cannot change the price list is told who can, with no button to it.
@@ -230,7 +230,7 @@ describe('Automatic messages', () => {
     await loaded();
     expect(missing('trial_check_in').textContent).toContain('Staff who can change the price list add one on Memberships.');
     expect(screen.queryByRole('button', { name: 'Open Memberships' })).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Open the Bills box' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Open Billing rules' })).toBeNull();
 
     // A reply from a server that says nothing of these is read as nothing missing.
     cleanup();

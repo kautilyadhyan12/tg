@@ -135,6 +135,28 @@ export function termLine(type) {
   return choice === 'one_time' ? `${price} once · ${lasts}` : `${price} · ${lasts}`;
 }
 
+/** A row's price on the right of the price list (V4b-i, board `Memberships`): the price as
+ *  `termLine` says it, and what it holds under it ("10 classes, used within 60 days"), or null. */
+export function priceParts(type) {
+  const line = termLine(type);
+  const at = line.indexOf(' · ');
+  return at === -1 ? { price: line, detail: null } : { price: line.slice(0, at), detail: line.slice(at + 3) };
+}
+
+/** Memberships' tabs (V4b-i): the price list with Billing rules under it, Discounts and Tax. */
+export const MEMBERSHIP_TABS = [
+  { key: 'price', label: 'Price list' },
+  { key: 'discounts', label: 'Discounts' },
+  { key: 'tax', label: 'Tax' },
+];
+
+/** The tab an address opens: "#discounts" and "#tax" their own; the price list otherwise, where
+ *  "#bills" finds Billing rules. */
+export function membershipTabFor(hash) {
+  const section = typeof hash === 'string' && hash.startsWith('#') ? hash.slice(1) : '';
+  return section === 'discounts' || section === 'tax' ? section : 'price';
+}
+
 /** A membership for personal training alone: no class ticked, and the tick for it. */
 function ptOnly(type) {
   return type.includesPt === true && Array.isArray(type.classTypes) && type.classTypes.length === 0;

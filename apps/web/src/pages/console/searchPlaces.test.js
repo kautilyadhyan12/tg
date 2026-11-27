@@ -111,7 +111,7 @@ describe('what people type finds the place', () => {
     ['gst', 'setting', 'Tax'],
     ['promo code', 'setting', 'Discounts'],
     ['coupon', 'setting', 'Discounts'],
-    ['invoice', 'setting', 'Bills'],
+    ['invoice', 'setting', 'Billing rules'],
     ['waiver', 'setting', 'Waiver'],
     ['contract', 'setting', 'Membership agreements'],
     ['cancellation', 'setting', 'Booking rules'],
@@ -191,7 +191,7 @@ describe('what people type finds the place', () => {
     const groups = found(owner, 'money');
     expect(inGroup(groups, 'page')).toEqual(expect.arrayContaining(['Sell', 'Memberships', 'Failed payments', 'Reports', 'Payment due', 'No card on file', 'Products']));
     expect(inGroup(groups, 'action')).toEqual(expect.arrayContaining(['New sale', 'Record a payment']));
-    expect(inGroup(groups, 'setting')).toEqual(expect.arrayContaining(['Payments', 'Tax', 'Discounts', 'Bills', 'Your KWAZO plan']));
+    expect(inGroup(groups, 'setting')).toEqual(expect.arrayContaining(['Payments', 'Tax', 'Discounts', 'Billing rules', 'Your KWAZO plan']));
   });
 
   it('what waits in the bell is found too, and money that waits by "money"', () => {

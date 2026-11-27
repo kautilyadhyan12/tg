@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { MEMBERSHIP_DESCRIPTION_MAX, MEMBERSHIP_NAME_MAX, aCoach, formatMinor, pcmToTaxRateText, orgWords } from '@app/shared';
 import { Loader2, Plus } from 'lucide-react';
 import { orgService, errorCode, errorText } from '../../api/orgsApi';
@@ -26,7 +26,9 @@ import {
   firstProblem,
   includesLine,
   kindTag,
+  MEMBERSHIP_TABS,
   packForPtOnly,
+  priceParts,
   priceExample,
   termLine,
   typeTaxLine,
@@ -78,8 +80,11 @@ import {
 // `MembershipFromList.jsx`): a name that is no type yet is set up here, with this same
 // form, and a type the list's people should hold says so on its own row.
 //
-// Drawn from `console.css` (spec Part 3 §17). A new type's form opens under the title;
-// a type being changed, and a list's name being set up, open their form where they are.
+// Drawn from `console.css` in the third look (spec Part 3 §17.11; V4b-i, board `Memberships`):
+// three tabs, the price list with Billing rules under it, Discounts and Tax; each type a box of
+// its own with its price on the right. A new type's form opens under the title; a type being
+// changed, and a list's name being set up, open their form where they are. Who gets a type
+// is asked in a box in the middle (`GiveBox`).
 
 const TICK = { accentColor: 'var(--accent)' };
 const BAD = { color: 'var(--bad)' };
@@ -186,7 +191,7 @@ function ReminderField({ gymId, draft, set, problem, id, when }) {
           </option>
         ))}
       </select>
-      <p className="c-s13 c-t3 m-0">{words.hint}</p>
+      <p className="c-s14 c-t3 m-0">{words.hint}</p>
       {previewFailed ? <p className="c-s14 c-t2 m-0">{"We couldn't load who gets the reminder. You can still save."}</p> : null}
       {box !== null ? (
         <div className="rounded-[14px] p-3 flex flex-col gap-2" style={{ background: 'var(--raise)', border: '1px solid var(--raise-line)' }} data-testid={`reminder-box-${when}`}>
@@ -331,7 +336,7 @@ function RaiseField({ gymId, draft, setDraft, currency, problem, id, busy }) {
                 </option>
               ))}
             </select>
-            <p className="c-s13 c-t3 m-0">Before each one&apos;s first payment at the new price, with both prices, the day and how to cancel.</p>
+            <p className="c-s14 c-t3 m-0">Before each one&apos;s first payment at the new price, with both prices, the day and how to cancel.</p>
           </Field>
           {box.loading ? (
             <p className="c-s14 c-t2 m-0">Loading who is on it…</p>
@@ -524,25 +529,25 @@ function TypeForm({ gymId, orgType, country, currency, options, taxRates, onRate
               className="c-input"
               style={{ maxWidth: 240 }}
             />
-            <p className="c-s13 c-t3 m-0">Charged once, on the first bill. Leave it empty for none.</p>
+            <p className="c-s14 c-t3 m-0">Charged once, on the first bill. Leave it empty for none.</p>
           </Field>
         ) : null}
 
         <fieldset className="c-field m-0 p-0" style={{ border: 0 }}>
           <legend className="c-label">Tax</legend>
-          {taxRates.length > 0 ? <p className="c-s13 c-t3 m-0">Tick each tax charged on this membership. Leave all unticked for no tax.</p> : null}
+          {taxRates.length > 0 ? <p className="c-s14 c-t3 m-0">Tick each tax charged on this membership. Leave all unticked for no tax.</p> : null}
           {taxRates.map((rate) => (
             <label key={rate.id} className="flex items-center gap-3 c-s15 c-t1" style={{ minHeight: 44 }}>
               <input type="checkbox" checked={draft.taxRateIds.includes(rate.id)} aria-invalid={problems?.tax ? 'true' : undefined} disabled={busy} onChange={(e) => tickRate(rate.id, e.target.checked)} />
               {`${rate.name} ${pcmToTaxRateText(rate.pcm)}%`}
             </label>
           ))}
-          {tickedRates.length > 1 && !problems?.tax ? <p className="c-s13 c-t2 m-0">{`Together: ${togetherText(tickedRates)}`}</p> : null}
+          {tickedRates.length > 1 && !problems?.tax ? <p className="c-s14 c-t2 m-0">{`Together: ${togetherText(tickedRates)}`}</p> : null}
           {problems?.tax ? <p className="c-s14 m-0" style={BAD}>{problems.tax}</p> : null}
           {addingRate ? null : (
-            <p className="c-s13 c-t3 m-0 flex flex-wrap items-center gap-2">
+            <p className="c-s14 c-t3 m-0 flex flex-wrap items-center gap-2">
               {[taxRates.length === 0 ? 'You have no tax rates yet.' : null, editing ? 'Members who already hold it keep the taxes they were sold with.' : null].filter((line) => line !== null).join(' ') || null}
-              <button type="button" className="c-btn-link c-s13 c-w6" style={{ minHeight: 44 }} disabled={busy} onClick={() => setAddingRate(true)}>
+              <button type="button" className="c-btn-link c-s14 c-w6" style={{ minHeight: 44 }} disabled={busy} onClick={() => setAddingRate(true)}>
                 Add a tax rate
               </button>
             </p>
@@ -618,7 +623,7 @@ function TypeForm({ gymId, orgType, country, currency, options, taxRates, onRate
                 </select>
               </div>
             ) : null}
-            <p className="c-s13 c-t3 m-0">
+            <p className="c-s14 c-t3 m-0">
               {[
                 draft.contract === 'fixed' ? contractHint(draft) : 'Members can cancel at any time.',
                 editing ? 'Members who already hold it keep the minimum term they joined on.' : null,
@@ -641,7 +646,7 @@ function TypeForm({ gymId, orgType, country, currency, options, taxRates, onRate
               className="c-input"
               style={{ maxWidth: 240 }}
             />
-            <p className="c-s13 c-t3 m-0">
+            <p className="c-s14 c-t3 m-0">
               {[
                 'Added once to the bills of a member you cancel early, inside the minimum term. Members you release for a reason, such as moving away, pay none. Leave it empty for none.',
                 editing ? 'Members who already hold it keep the fee they joined on.' : null,
@@ -666,7 +671,7 @@ function TypeForm({ gymId, orgType, country, currency, options, taxRates, onRate
               />
               <span className="c-s15 c-t1">days</span>
             </div>
-            <p className="c-s13 c-t3 m-0">
+            <p className="c-s14 c-t3 m-0">
               {[noticeHint(draft), editing ? 'Members who already hold it keep the notice they joined on.' : null]
                 .filter((line) => line !== null)
                 .join(' ')}
@@ -687,7 +692,7 @@ function TypeForm({ gymId, orgType, country, currency, options, taxRates, onRate
             />
             <span className="c-s15 c-t1">days</span>
           </div>
-          <p className="c-s13 c-t3 m-0">
+          <p className="c-s14 c-t3 m-0">
             {[coolingOffHint(draft), editing ? 'Members who already hold it keep the cooling-off period they joined on.' : null]
               .filter((line) => line !== null)
               .join(' ')}
@@ -885,24 +890,32 @@ function RowNote({ error, done }) {
  *  who gets this type, while it is open. `note`: what the last press about this type did. */
 // `agreementLine`: which of the business's agreements it is signed with, once it has more than
 // one (18u-ii-a); `agreementTo`: Settings, for whoever may open it there.
-function TypeRow({ type, orgType, taxLine = null, agreementLine = null, agreementTo = null, sell = null, readOnly, busy, formOpen, ties, form, box = null, note = null, onEdit, onArchive, onGive, onUndo }) {
+function TypeRow({ type, orgType, taxLine = null, agreementLine = null, agreementTo = null, sell = null, readOnly, busy, formOpen, ties, form, note = null, onEdit, onArchive, onGive, onUndo }) {
   const [asking, setAsking] = useState(false);
   // Sold in the app (18k-i): the tag while members can buy it; while Square still has to be set up, why not, and the
   // button to that place for whoever may.
   const sold = sell === null ? null : soldInAppWords(type, readOnly ? 'no_plan' : sell.state, orgWords(orgType).it);
   // No plan with us is not Square's to fix: its sentence stands alone (the page says why at the top).
   const fix = sold?.line && !readOnly ? sellInAppHint(sell.state, sell.canConnect).button : null;
+  const price = priceParts(type);
   return (
-    <li className="px-5 py-4 md:px-6 flex flex-col gap-3" style={LINE}>
+    <li className="c-item" data-testid="membership-type-row">
       <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between md:gap-6">
-        <div className="flex flex-col gap-1 min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-col gap-1 min-w-0 md:flex-1">
+          {/* The kind and "Sold in the app" are plain words: nothing here needs attention. */}
+          <p className="m-0 flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
             <span className="c-s15 c-w6 c-t1 break-words min-w-0">{type.name}</span>
-            <span className="c-tag c-tag-plain">{kindTag(type)}</span>
-            {sold?.tag ? <span className="c-tag c-tag-plain">{sold.tag}</span> : null}
-          </div>
+            <span className="c-s14 c-t2">{kindTag(type)}</span>
+            {sold?.tag ? (
+              <>
+                <span className="c-s14 c-t2" aria-hidden="true">
+                  ·
+                </span>
+                <span className="c-s14 c-t2">{sold.tag}</span>
+              </>
+            ) : null}
+          </p>
           {type.description ? <p className="c-s14 c-t2 m-0 break-words">{type.description}</p> : null}
-          <p className="c-s14 c-t1 m-0">{termLine(type)}</p>
           {joiningFeeLine(type) !== null ? <p className="c-s14 c-t2 m-0">{joiningFeeLine(type)}</p> : null}
           {contractLine(type) !== null ? <p className="c-s14 c-t2 m-0">{contractLine(type)}</p> : null}
           {leaveFeeLine(type) !== null ? <p className="c-s14 c-t2 m-0">{leaveFeeLine(type)}</p> : null}
@@ -930,16 +943,21 @@ function TypeRow({ type, orgType, taxLine = null, agreementLine = null, agreemen
             </div>
           ) : null}
         </div>
-        {asking ? null : (
-          <div className="flex flex-wrap gap-2 flex-shrink-0">
+        <div className="flex flex-col gap-2 flex-shrink-0 md:items-end md:text-right">
+          <div className="flex flex-col">
+            <span className="c-h3">{price.price}</span>
+            {price.detail !== null ? <span className="c-s14 c-t2">{price.detail}</span> : null}
+          </div>
+          {asking ? null : (
+          <div className="flex flex-wrap gap-2 md:justify-end">
             <button
               type="button"
               disabled={readOnly || busy || formOpen}
               onClick={() => onEdit(type)}
-              aria-label={`Change ${type.name}`}
+              aria-label={`Edit ${type.name}`}
               className="c-btn c-btn-s c-btn-sm"
             >
-              Change
+              Edit
             </button>
             <button
               type="button"
@@ -951,10 +969,10 @@ function TypeRow({ type, orgType, taxLine = null, agreementLine = null, agreemen
               Archive
             </button>
           </div>
-        )}
+          )}
+        </div>
       </div>
       <TypeTies type={type} ties={ties} off={readOnly || busy || formOpen} busy={busy} onGive={onGive} onUndo={onUndo} />
-      {box}
       {note !== null ? <RowNote error={note.error} done={note.done} /> : null}
       {asking ? (
         <ConfirmInline
@@ -1007,8 +1025,16 @@ function Notes({ error, listError, done }) {
 
 /** `openBox`: a name from the member list and the type it counts as, whose box opens as
  *  the page does (a button on another page led here); `onBoxOpened` is told once it has. */
-export default function MembershipTypesPanel({ org, readOnly, openBox = null, onBoxOpened }) {
+/** `section`: the tab the address asks for (`{ key, tab }`, a new `key` at every press of a link
+ *  here); the price list without one. */
+export default function MembershipTypesPanel({ org, readOnly, openBox = null, onBoxOpened, section = null }) {
   const gymId = org.id;
+  const tabsId = useId();
+  const asked = { key: section?.key ?? null, tab: section?.tab ?? 'price' };
+  const [opened, setOpened] = useState(asked);
+  if (opened.key !== asked.key) setOpened(asked);
+  const tab = opened.key === asked.key ? opened.tab : asked.tab;
+  const setTab = (next) => setOpened({ key: asked.key, tab: next });
   const [list, setList] = useState(null);
   const [loadError, setLoadError] = useState(null);
   const [draft, setDraft] = useState(null);
@@ -1123,12 +1149,11 @@ export default function MembershipTypesPanel({ org, readOnly, openBox = null, on
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [openBox, list, readOnly]);
 
-  // The box, and what the last press did, belong to one membership type: both are drawn
-  // in that type's row while it is on the page, and under the list otherwise.
+  // Who gets a type is asked in a box in the middle; what the last press did is said in that
+  // type's row while it is on the page, and under the list otherwise.
   const liveIds = (list?.types ?? []).map((t) => t.id);
-  const boxRow = fromList.preview !== null && liveIds.includes(fromList.preview.type.id) ? fromList.preview.type.id : null;
   const noteRow = fromList.preview === null && fromList.at !== null && liveIds.includes(fromList.at) ? fromList.at : null;
-  const giveBox = (inRow) =>
+  const giveBox =
     fromList.preview === null ? null : (
       <GiveBox
         key={`${fromList.preview.word}-${fromList.preview.type.id}-${JSON.stringify(fromList.preview.counts)}`}
@@ -1136,7 +1161,6 @@ export default function MembershipTypesPanel({ org, readOnly, openBox = null, on
         counted={fromList.words.some((w) => w.word === fromList.preview.word && w.link !== null && w.link.typeId === fromList.preview.type.id)}
         busy={fromList.busy}
         error={fromList.error}
-        inRow={inRow}
         taxLine={typeTaxLine((list?.types ?? []).find((t) => t.id === fromList.preview.type.id) ?? { taxRateIds: [] }, list)}
         onGive={(body) => void fromList.give(body)}
         onCancel={fromList.closeBox}
@@ -1226,9 +1250,9 @@ export default function MembershipTypesPanel({ org, readOnly, openBox = null, on
   const details = `${orgWords(org.orgType).itCap} details`;
 
   return (
-    <div className="c-page">
-      <header className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between md:gap-6">
-        <div className="flex flex-col gap-1.5 min-w-0">
+    <div className="c-page c-touch-44">
+      <header className="c-page-headrow">
+        <div className="flex flex-col gap-1.5 min-w-0" style={{ flex: '1 1 360px' }}>
           <h1 className="c-h1">Memberships</h1>
           {org.name ? <p className="c-sub">{org.name}</p> : null}
           <p className="c-s15 c-t2 m-0" style={{ maxWidth: 640 }}>
@@ -1263,6 +1287,33 @@ export default function MembershipTypesPanel({ org, readOnly, openBox = null, on
         <ConsoleLoading label="Loading your membership types…" newLook />
       ) : (
         <>
+          {/* While a type's form is open the page is that form and the price list: the other
+              tabs come back when it is saved or cancelled. */}
+          {formOpen ? null : (
+            <div className="c-utabs" role="tablist" aria-label="Memberships">
+              {MEMBERSHIP_TABS.map(({ key, label }) => (
+                <button
+                  key={key}
+                  id={`${tabsId}-${key}`}
+                  type="button"
+                  role="tab"
+                  aria-selected={tab === key}
+                  aria-controls={`${tabsId}-${key}-panel`}
+                  onClick={() => setTab(key)}
+                  className={tab === key ? 'c-utab c-utab-on' : 'c-utab'}
+                >
+                  {label}
+                  {key === 'price' ? (
+                    <>
+                      {' '}
+                      <span className="c-n">{String(list.types.length)}</span>
+                    </>
+                  ) : null}
+                </button>
+              ))}
+            </div>
+          )}
+          <div role="tabpanel" id={`${tabsId}-price-panel`} aria-labelledby={`${tabsId}-price`} hidden={!formOpen && tab !== 'price'} className="c-tabpanel">
           {formOpen ? null : list.currency === null ? (
             <div className="c-callout flex-col items-start">
               <p className="c-s15 m-0">
@@ -1286,7 +1337,7 @@ export default function MembershipTypesPanel({ org, readOnly, openBox = null, on
               {summary ? <span className="c-s14 c-t3">{summary}</span> : null}
             </div>
             {list.types.length > 0 ? (
-              <ul className="flex flex-col m-0 p-0 list-none">
+              <ul className="c-items px-4 pb-4 md:px-6 md:pb-6">
                 {list.types.map((type) => (
                   <TypeRow
                     key={type.id}
@@ -1301,7 +1352,6 @@ export default function MembershipTypesPanel({ org, readOnly, openBox = null, on
                     formOpen={locked}
                     ties={typeTies(type, fromList.words, !readOnly)}
                     form={formAt === 'row' && draft.id === type.id ? inRow(form) : null}
-                    box={boxRow === type.id ? giveBox(true) : null}
                     note={noteRow === type.id ? { error: fromList.error, done: fromList.done } : savedNote?.typeId === type.id ? { error: null, done: savedNote.text } : null}
                     onGive={(word, t) => void fromList.open(word.word, t.id)}
                     onUndo={(word) => void fromList.undo(word)}
@@ -1340,8 +1390,7 @@ export default function MembershipTypesPanel({ org, readOnly, openBox = null, on
             onUndo={(word) => void fromList.undo(word)}
           />
 
-          {/* A box whose type has left the page since it opened is still drawn. */}
-          {fromList.preview !== null && boxRow === null ? giveBox(false) : null}
+          {giveBox}
 
           {/* A refused save is said in the form, beside its button; what a press about one
               membership did is said in that membership's row. */}
@@ -1398,12 +1447,13 @@ export default function MembershipTypesPanel({ org, readOnly, openBox = null, on
               ) : null}
             </div>
           ) : null}
+          {/* Billing rules (18a-i), under the price list bills are made from. */}
+          {formOpen ? null : <BillSettingsCard gymId={gymId} readOnly={readOnly} readOnlyLine={readOnlyNote(org.orgType)} />}
+          </div>
+          {/* Discounts and Tax for memberships, each a tab beside the price list (Kd, 2026-10-14). */}
+          {formOpen ? null : <MembershipDiscounts org={org} readOnly={readOnly} typesKey={list} onTaxChanged={() => void load()} tab={tab} tabsId={tabsId} />}
         </>
       )}
-      {/* Discounts for memberships, beside the price list they come off (Kd, 2026-10-14). */}
-      {formOpen || list === null ? null : <MembershipDiscounts org={org} readOnly={readOnly} typesKey={list} onTaxChanged={() => void load()} />}
-      {/* The gym's one setting for bills (18a-i), under the price list they are made from. */}
-      {formOpen ? null : <BillSettingsCard gymId={gymId} readOnly={readOnly} readOnlyLine={readOnlyNote(org.orgType)} />}
     </div>
   );
 }
