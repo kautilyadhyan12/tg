@@ -4,13 +4,14 @@
 // 21) and a copy built before 37p have none, and the beam shows the way travelled as before.
 import { useEffect, useState } from "react";
 import { AppState } from "react-native";
-import { phoneHeadingSchema, type PhoneHeading } from "@app/shared";
+import { phoneCompassSchema } from "@app/shared";
+import { headingOf, turnedEnough, type Heading } from "./compassHeading";
 import { runMotionNative } from "./runMotionNative";
 
 /** The compass while `on` and the app is in front; null before its first reading and on a phone with none.
  *  `place`: where the person is, for true north there. */
-export function useCompass(on: boolean, place: readonly [number, number] | null): PhoneHeading | null {
-  const [heading, setHeading] = useState<PhoneHeading | null>(null);
+export function useCompass(on: boolean, place: readonly [number, number] | null): Heading | null {
+  const [heading, setHeading] = useState<Heading | null>(null);
   const [front, setFront] = useState(AppState.currentState !== "background");
   useEffect(() => {
     const heard = AppState.addEventListener("change", (next) => {
@@ -27,8 +28,10 @@ export function useCompass(on: boolean, place: readonly [number, number] | null)
     let heard: { remove: () => void } | null = null;
     try {
       heard = native.addListener("heading", (raw) => {
-        const said = phoneHeadingSchema.safeParse(raw);
-        if (said.success) setHeading(said.data);
+        const said = phoneCompassSchema.safeParse(raw);
+        const now = said.success ? headingOf(said.data) : null;
+        // Drawn again only when it has turned: Android reads about 20 times a second.
+        if (now !== null) setHeading((was) => (turnedEnough(was, now) ? now : was));
       });
       if (!native.compassStart()) {
         heard.remove();

@@ -477,11 +477,20 @@ export type PhoneLocations = z.infer<typeof phoneLocationsSchema>;
 export const phoneMotionSchema = z.array(z.object({ at: z.number(), sd: z.number().nonnegative(), n: z.number().int().nonnegative() })).max(10_000);
 export type PhoneMotion = z.infer<typeof phoneMotionSchema>;
 
-/** What the phone's compass code hands over while a run's map is on screen (37p, `apps/mobile/modules/run-motion`):
- *  the way the phone points, in degrees clockwise from true north, and how sure Android is of it (its sensor status:
- *  3 high, 2 medium, 1 low, 0 unreliable, -1 no contact). Shown on the screen only; never kept or sent. */
-export const phoneHeadingSchema = z.object({ deg: z.number().min(0).max(360), sure: z.number().int().min(-1).max(3) });
-export type PhoneHeading = z.infer<typeof phoneHeadingSchema>;
+/** What the phone's compass code hands over while a run's map is on screen (37p, `apps/mobile/modules/run-motion`),
+ *  as Android reads it, the way it points worked out by the app (`compassHeading.ts`): `r` the rotation matrix
+ *  (row by row, the phone's axes in east, north and up), `rotation` the screen's turn from the phone's natural way up
+ *  (0 to 3, quarter turns), `declination` how far magnetic north lies east of true north at the person's place, in
+ *  degrees, `accuracy` Android's own estimate of the heading's error in radians (-1 where it gives none), `status`
+ *  its sensor status (3 high, 2 medium, 1 low, 0 unreliable, -1 no contact). Shown on the screen only; never kept or sent. */
+export const phoneCompassSchema = z.object({
+  r: z.array(z.number().min(-1.01).max(1.01)).length(9),
+  rotation: z.number().int().min(0).max(3),
+  declination: z.number().min(-180).max(180),
+  accuracy: z.number(),
+  status: z.number().int().min(-1).max(3),
+});
+export type PhoneCompass = z.infer<typeof phoneCompassSchema>;
 
 /** A saved run the server refused, kept whole on the phone: the person may send it again or
  *  remove it, and nothing they ran is ever thrown away by the app (round one of 37a, H1). */

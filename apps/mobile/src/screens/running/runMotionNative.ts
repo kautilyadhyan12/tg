@@ -15,7 +15,7 @@ export interface RunMotionNative {
   compassStop?(): void;
   /** Where the person is, for the gap between magnetic and true north there. */
   compassPlace?(lat: number, lng: number): void;
-  /** "heading": each turn of the phone while the compass reads (read through phoneHeadingSchema). */
+  /** "heading": each reading while the compass reads (read through phoneCompassSchema, worked out in compassHeading.ts). */
   addListener?(event: "heading", listener: (said: unknown) => void): { remove: () => void };
 }
 

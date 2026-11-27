@@ -2,6 +2,7 @@ package expo.modules.runmotion
 
 import android.content.Context
 import android.hardware.GeomagneticField
+import android.hardware.display.DisplayManager
 import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
@@ -10,12 +11,10 @@ import android.location.Location
 import android.os.Handler
 import android.os.HandlerThread
 import android.os.SystemClock
+import android.view.Display
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
-import kotlin.math.abs
-import kotlin.math.atan2
 import kotlin.math.floor
-import kotlin.math.hypot
 import kotlin.math.sqrt
 
 // The phone's motion during a run (ROADMAP Stage 5 item 37i): Android's own accelerometer, which needs no
@@ -46,8 +45,8 @@ class RunMotionModule : Module() {
 
     Events("heading")
 
-    /** Start reading the compass (37p), while a run's map is on screen: false on a phone with none. Each turn of the
-     *  phone is sent as "heading": { deg, sure }. Started twice, it is one listener. */
+    /** Start reading the compass (37p), while a run's map is on screen: false on a phone with none. Each reading is
+     *  sent as "heading": { r, rotation, declination, accuracy, status }. Started twice, it is one listener. */
     Function("compassStart") { context?.let { ctx -> Compass.start(ctx) { said -> sendEvent("heading", said) } } ?: false }
 
     /** Stop reading the compass. */
@@ -63,44 +62,47 @@ class RunMotionModule : Module() {
   }
 }
 
-// The way the phone points, for the beam on a run's map (ROADMAP Stage 5 item 37p), as Strava's and Google Maps' beam
-// turns with the phone. Android's rotation vector, which fuses the compass with the gyroscope and the accelerometer
-// (smooth, where the compass alone jumps), and needs no permission. The way the top of the phone points when it lies
-// flat, and the way its back points when it is held up to read; held between, both point the same way and are added,
-// so the answer never fails on a tilted phone. Turned from magnetic north to true north (the map's) at the person's
-// place. Read only while the map is on screen; nothing is kept.
+// The phone's compass, for the beam on a run's map (ROADMAP Stage 5 item 37p), as Strava's and Google Maps' beam turns
+// with the phone. Android's rotation vector, which fuses the compass with the gyroscope and the accelerometer (smooth,
+// where the compass alone jumps); on a phone with no gyroscope, its compass with the accelerometer alone. Neither needs
+// a permission. Nothing here works out which way the phone points: each reading is handed over as Android gives it (the
+// rotation matrix, Android's own estimate of its error, the screen's turn from the phone's natural way up, and how far
+// magnetic north lies from true north at the person's place), and the app's own code works it out, where every way of
+// holding a phone is tested (src/screens/running/compassHeading.ts). Read only while the map is on screen; nothing is kept.
 object Compass : SensorEventListener {
-  /** About 20 readings a second. */
+  /** About 20 readings a second, and never handed over more often than LEAST_MS however Android batches them. */
   private const val SAMPLE_US = 50_000
-  /** A heading is sent once it has turned this far, or its sureness changed, and never more often than this. */
-  private const val LEAST_DEG = 1.0
-  private const val LEAST_MS = 50L
+  private const val LEAST_MS = 45L
   /** The gap to true north is worked out again once the person is this far from where it was. */
   private const val REPLACE_M = 1_000f
-  /** Held face down and tilted past upright, the two ways cancel: no heading is sent. */
-  private const val LEAST_LEVEL = 0.2
+  /** The screen's turn is read again at most this often (a folding phone opened during a run). */
+  private const val ROTATION_MS = 1_000L
 
   private var manager: SensorManager? = null
   private var thread: HandlerThread? = null
   private var send: ((Map<String, Any>) -> Unit)? = null
+  private var displays: DisplayManager? = null
   private val matrix = FloatArray(9)
   private var declination = 0.0
   private var placeLat = Double.NaN
   private var placeLng = Double.NaN
-  private var lastDeg = Double.NaN
-  private var lastSure = Int.MIN_VALUE
-  private var lastAt = 0L
+  private var rotation = 0
+  private var rotationAt = Long.MIN_VALUE
+  private var lastAt = Long.MIN_VALUE
 
   @Synchronized
-  fun start(ctx: Context, onHeading: (Map<String, Any>) -> Unit): Boolean {
-    send = onHeading
+  fun start(ctx: Context, onReading: (Map<String, Any>) -> Unit): Boolean {
+    send = onReading
     if (manager != null) return true
     var started: HandlerThread? = null
     return try {
       val sensors = ctx.getSystemService(Context.SENSOR_SERVICE) as? SensorManager ?: return false
-      val rotation = sensors.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR) ?: return false
+      val compass = sensors.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR)
+        ?: sensors.getDefaultSensor(Sensor.TYPE_GEOMAGNETIC_ROTATION_VECTOR)
+        ?: return false
+      displays = ctx.getSystemService(Context.DISPLAY_SERVICE) as? DisplayManager
       started = HandlerThread("run-compass").also { it.start() }
-      if (!sensors.registerListener(this, rotation, SAMPLE_US, Handler(started.looper))) {
+      if (!sensors.registerListener(this, compass, SAMPLE_US, Handler(started.looper))) {
         started.quitSafely()
         return false
       }
@@ -129,8 +131,9 @@ object Compass : SensorEventListener {
     manager = null
     thread = null
     send = null
-    lastDeg = Double.NaN
-    lastSure = Int.MIN_VALUE
+    displays = null
+    lastAt = Long.MIN_VALUE
+    rotationAt = Long.MIN_VALUE
   }
 
   @Synchronized
@@ -150,29 +153,42 @@ object Compass : SensorEventListener {
     }
   }
 
+  /** The screen's turn from the phone's natural way up, in quarter turns (Surface.ROTATION_0 to ROTATION_270): a
+   *  tablet whose natural way up is landscape runs this portrait app turned a quarter. */
+  private fun screenTurn(now: Long): Int {
+    if (rotationAt != Long.MIN_VALUE && now - rotationAt < ROTATION_MS) return rotation
+    rotationAt = now
+    rotation = try {
+      (displays?.getDisplay(Display.DEFAULT_DISPLAY)?.rotation ?: 0).coerceIn(0, 3)
+    } catch (e: Exception) {
+      rotation
+    }
+    return rotation
+  }
+
   @Synchronized
   override fun onSensorChanged(event: SensorEvent) {
     // A reading already on its way when the map closed is nobody's.
     if (manager == null) return
     try {
-      // Some phones refuse more than four numbers here.
-      val values = if (event.values.size > 4) event.values.copyOf(4) else event.values
-      SensorManager.getRotationMatrixFromVector(matrix, values)
-      // The phone's top (its y axis) and its back (less its z axis), each as east and north on the ground.
-      val east = (matrix[1] - matrix[2]).toDouble()
-      val north = (matrix[4] - matrix[5]).toDouble()
-      if (hypot(east, north) < LEAST_LEVEL) return
-      val magnetic = Math.toDegrees(atan2(east, north))
-      val deg = ((magnetic + declination) % 360.0 + 360.0) % 360.0
-      if (!deg.isFinite()) return
-      val sure = event.accuracy
       val now = SystemClock.elapsedRealtime()
-      val turned = if (lastDeg.isNaN()) 360.0 else abs(((deg - lastDeg + 540.0) % 360.0) - 180.0)
-      if (sure == lastSure && (turned < LEAST_DEG || now - lastAt < LEAST_MS)) return
-      lastDeg = deg
-      lastSure = sure
+      if (lastAt != Long.MIN_VALUE && now - lastAt < LEAST_MS) return
+      val values = event.values
+      // Android's own estimate of the heading's error, in radians, where the phone gives one; -1 where not.
+      val accuracy = if (values.size >= 5 && values[4].isFinite()) values[4].toDouble() else -1.0
+      // Some phones refuse more than four numbers here.
+      SensorManager.getRotationMatrixFromVector(matrix, if (values.size > 4) values.copyOf(4) else values)
+      if (!matrix.all { it.isFinite() }) return
       lastAt = now
-      send?.invoke(mapOf("deg" to deg, "sure" to sure))
+      send?.invoke(
+        mapOf(
+          "r" to matrix.map { it.toDouble() },
+          "rotation" to screenTurn(now),
+          "declination" to declination,
+          "accuracy" to accuracy,
+          "status" to event.accuracy.coerceIn(-1, 3),
+        ),
+      )
     } catch (e: Exception) {
       // One reading that cannot be read is left out.
     }

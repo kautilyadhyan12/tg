@@ -413,9 +413,10 @@ jest.mock("../../src/screens/running/runVoiceNative", () => {
 // finished second over as the Android code would, whether it is reading or not: the app's own code must leave out
 // what is not the run's. `starts` and `stops` count the calls, `reading` says whether it reads now, `missing`
 // stands for a phone with no such code (an iPhone, a copy built before it), `fails` for a sensor that throws.
-// The compass for the map's beam (37p): `motion.turn(deg, sure)` sends a heading to whoever listens, as the Android
-// code would; `compass` counts its starts and stops and keeps the places it was told; `compass.none` is a phone
-// with no compass, `compass.old` a copy built before 37p (no compass functions at all).
+// The compass for the map's beam (37p): `motion.turn(deg, sure)` sends what the Android code would read from a phone
+// lying flat with its top at `deg` (Android's rotation matrix, its error estimate for `sure`: 10°, 30°, 45° or 90°);
+// `motion.read(raw)` sends anything at all; `compass` counts its starts and stops and keeps the places it was told;
+// `compass.none` is a phone with no compass, `compass.old` a copy built before 37p (no compass functions at all).
 jest.mock("../../src/screens/running/runMotionNative", () => {
   const freshCompass = () => ({ none: false, old: false, reading: false, starts: 0, stops: 0, places: [], listeners: [] });
   const fresh = () => ({ missing: false, fails: false, reading: false, starts: 0, stops: 0, waiting: [], compass: freshCompass() });
@@ -423,8 +424,15 @@ jest.mock("../../src/screens/running/runMotionNative", () => {
   motion.send = (at, sd, n = 25) => {
     motion.waiting.push({ at, sd, n });
   };
+  motion.read = (raw) => {
+    for (const listener of [...motion.compass.listeners]) listener(raw);
+  };
   motion.turn = (deg, sure = 3) => {
-    for (const listener of [...motion.compass.listeners]) listener({ deg, sure });
+    const a = (deg * Math.PI) / 180;
+    const c = Math.cos(a);
+    const s = Math.sin(a);
+    const error = [90, 45, 30, 10][sure] ?? 90;
+    motion.read({ r: [c, s, 0, -s, c, 0, 0, 0, 1], rotation: 0, declination: 0, accuracy: (error * Math.PI) / 180, status: 3 });
   };
   motion.reset = () => Object.assign(motion, fresh());
   const compassNative = {

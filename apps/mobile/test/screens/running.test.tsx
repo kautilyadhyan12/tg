@@ -1931,7 +1931,7 @@ describe("Elevation gain on the summary (37b-ii)", () => {
 // at the front of the live map turns with the phone, as Strava's and Google Maps' do.
 describe("the dot's beam follows the phone (37p)", () => {
   type Compass = { none: boolean; old: boolean; reading: boolean; starts: number; stops: number; places: [number, number][]; listeners: ((said: unknown) => void)[] };
-  const compassMotion = jest.requireMock<{ motion: { turn: (deg: number, sure?: number) => void; reset: () => void; compass: Compass } }>("../../src/screens/running/runMotionNative").motion;
+  const compassMotion = jest.requireMock<{ motion: { turn: (deg: number, sure?: number) => void; read: (raw: unknown) => void; reset: () => void; compass: Compass } }>("../../src/screens/running/runMotionNative").motion;
   const beam = () => screen.queryByTestId("front-beam");
   /** The beam's fan and the way it points, read back from what the drawing library hands the screen: its
    *  rotation as a matrix, [cos, sin, -sin, cos, 0, 0]. */
@@ -1974,7 +1974,7 @@ describe("the dot's beam follows the phone (37p)", () => {
       expect(s.saved).toHaveLength(1);
     });
     const sent = JSON.stringify(s.saved);
-    expect(sent).not.toMatch(/"deg"|"sure"|"heading"|123\.4/);
+    expect(sent).not.toMatch(/"deg"|"sure"|"heading"|"declination"|123\.4/);
     expect(s.requests.filter((r) => (r.body ?? "").includes("123.4"))).toEqual([]);
     expect(compassMotion.compass.reading).toBe(false);
   });
@@ -1997,11 +1997,18 @@ describe("the dot's beam follows the phone (37p)", () => {
     expect(beamProps()).toEqual({ d: fanPath(60, 66), transform: "rotate(10.0)" });
     // True north at the person's place: the compass is told where they are.
     expect(compassMotion.compass.places.at(-1)).toEqual([26.15, 91.7362]);
-    // A reading that is not a heading is left out.
+    // A reading that is not Android's shape is left out: the first build's own, and a matrix that is not one.
     await act(() => {
-      for (const listener of compassMotion.compass.listeners) listener({ deg: "north", sure: 3 });
+      compassMotion.read({ deg: 200, sure: 3 });
+      compassMotion.read({ r: [9, 9, 9, 9, 9, 9, 9, 9, 9], rotation: 0, declination: 0, accuracy: -1, status: 3 });
+      compassMotion.read({ r: [1, 0, 0, 0, 1, 0, 0, 0, 1], rotation: 4, declination: 0, accuracy: -1, status: 3 });
     });
     expect(beamProps().transform).toBe("rotate(10.0)");
+    // Under a degree of tremble, the beam is not drawn again; a degree is.
+    await turn(10.6, 0);
+    expect(beamProps().transform).toBe("rotate(10.0)");
+    await turn(11.2, 0);
+    expect(beamProps().transform).toBe("rotate(11.2)");
     expect(compassMotion.compass.starts).toBe(1);
   });
 
@@ -2026,6 +2033,25 @@ describe("the dot's beam follows the phone (37p)", () => {
     expect(beam()).toBeNull();
     await turn(300);
     expect(beamProps().transform).toBe("rotate(300.0)");
+    // Numbers in place of the map (round one, T2): no map, no compass.
+    await fireEvent.press(await screen.findByRole("button", { name: "Numbers" }));
+    expect(screen.queryByTestId("live-map")).toBeNull();
+    expect(compassMotion.compass.reading).toBe(false);
+    expect(compassMotion.compass.listeners).toHaveLength(0);
+    await fireEvent.press(await screen.findByRole("button", { name: "Map" }));
+    await waitFor(() => {
+      expect(compassMotion.compass.reading).toBe(true);
+    });
+    // The run's screen put away for the rest of the app, its bar over every tab: no compass until it is opened again.
+    await fireEvent.press(await screen.findByRole("button", { name: "Back to the app" }));
+    await waitFor(() => {
+      expect(compassMotion.compass.reading).toBe(false);
+    });
+    expect(compassMotion.compass.listeners).toHaveLength(0);
+    await fireEvent.press(await screen.findByRole("button", { name: "Open run" }));
+    await waitFor(() => {
+      expect(compassMotion.compass.reading).toBe(true);
+    });
     await fireEvent.press(await screen.findByRole("button", { name: "Pause" }));
     await fireEvent.press(await screen.findByRole("button", { name: "Finish" }));
     await waitFor(() => {
