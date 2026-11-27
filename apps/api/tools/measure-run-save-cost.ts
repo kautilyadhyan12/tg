@@ -18,7 +18,15 @@ import * as geo from "../src/modules/geo/service.js";
 import type { HeightMap } from "../src/modules/geo/heights.adapter.js";
 
 const url = process.env["DATABASE_URL"] ?? "";
-if (!/localhost|127\.0\.0\.1/.test(url)) {
+// The address's own host, never a word anywhere in it (round one, L4: `…neon.tech/db?x=localhost` passed).
+const host = ((): string => {
+  try {
+    return new URL(url).hostname;
+  } catch {
+    return "";
+  }
+})();
+if (!["localhost", "127.0.0.1"].includes(host)) {
   console.error("measure-run-save-cost: DATABASE_URL must be a local database");
   process.exit(2);
 }

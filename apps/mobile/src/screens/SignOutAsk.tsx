@@ -1,4 +1,4 @@
-import { useSyncExternalStore } from "react";
+import { useState, useSyncExternalStore } from "react";
 import { StyleSheet, View } from "react-native";
 import { Button } from "../look/Button";
 import { Sheet } from "../look/Sheet";
@@ -12,6 +12,8 @@ export function SignOutAsk({ open, onClose }: { open: boolean; onClose: () => vo
   const { session, state } = useSession();
   const run = useSyncExternalStore(subscribeRun, runNow);
   const mine = run !== null && state.kind === "in" && run.userId === state.user.id ? run : null;
+  // A run is finished and saved before the sign-out: the press is taken once, and says so meanwhile (round one, L3).
+  const [busy, setBusy] = useState(false);
   return (
     <Sheet open={open} title="Sign out?" onClose={onClose}>
       {mine === null ? null : (
@@ -21,7 +23,20 @@ export function SignOutAsk({ open, onClose }: { open: boolean; onClose: () => vo
       )}
       <View style={styles.two}>
         <Button label="Cancel" kind="plain" style={styles.half} onPress={onClose} />
-        <Button label="Sign out" kind="danger" icon="logout" style={styles.half} onPress={() => void session.signOut()} />
+        <Button
+          label="Sign out"
+          kind="danger"
+          icon="logout"
+          style={styles.half}
+          busy={busy}
+          onPress={() => {
+            if (busy) return;
+            setBusy(true);
+            void session.signOut().finally(() => {
+              setBusy(false);
+            });
+          }}
+        />
       </View>
     </Sheet>
   );

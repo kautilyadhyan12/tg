@@ -409,12 +409,17 @@ export async function workOutWaitingClimbs(
 /** A run this person has already saved under this id, read before any of its points are: a send
  *  repeated is answered from the row at no cost (round one of 37a, H2). null when there is none. */
 /** A run sent again: as saved, "removed" when the person deleted it, null when it is new. */
-export async function savedRunIfAny(deps: ReadDeps, userId: string, runId: string): Promise<SavedRun | "removed" | null> {
+export async function savedRunIfAny(deps: ReadDeps & { log: Pick<FastifyBaseLogger, "error"> }, userId: string, runId: string): Promise<SavedRun | "removed" | null> {
   const row = await repo.getSavedRun(deps.sql, userId, runId);
   if (row !== null) {
     // A run sent again is the one way its streak, badges and XP heal after a failure just after it was stored
-    // (the hunt's E2): they are worked out again from history, as a workout's repeat does. Its points are not.
-    await onWorkoutSynced({ sql: deps.sql }, userId, (await getUserSyncContext(deps.sql, userId)).timezone);
+    // (the hunt's E2): they are worked out again from history, as a workout's repeat does. Its points are not. The
+    // run's answer is its row whatever that work does (round one, H4): a fault there never makes a stored run fail.
+    try {
+      await onWorkoutSynced({ sql: deps.sql }, userId, (await getUserSyncContext(deps.sql, userId)).timezone);
+    } catch (err) {
+      deps.log.error({ event: "geo.run_repeat_heal_failed", userId, errName: err instanceof Error ? err.name : typeof err }, "streak, badges and XP not worked out again");
+    }
     return asSavedRun(row);
   }
   return (await repo.wasRunRemoved(deps.sql, userId, runId)) ? "removed" : null;
@@ -465,7 +470,7 @@ export async function saveRun(
   const saved = await repo.insertRun(deps.sql, userId, {
     id: input.runId,
     startedAt,
-    timeZone: ctx.timezone,
+    timeZone: await repo.knownTimeZone(deps.sql, ctx.timezone),
     name: input.name,
     effort: input.effort,
     note,

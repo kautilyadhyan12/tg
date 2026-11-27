@@ -143,9 +143,27 @@ const toSavedRoute = (r: SavedRouteDbRow): SavedRouteRow => ({
 /** A run's start on the clock of the zone it was run in (37o, E1), or of the person's zone now (`timeZone`, a
  *  safeTimeZone-validated IANA name, always a parameterized value) for a run saved with none. */
 const runLocal = (sql: Sql, timeZone: string) => sql`(started_at AT TIME ZONE coalesce(time_zone, ${timeZone}))`;
-/** The instant `day` begins in `timeZone`, a day early: no zone is a day from another, so a run of that day in its
- *  own zone is never before it. A coarse bound for the index; the run's own day is the test. */
-const dayEarly = (sql: Sql, day: string, timeZone: string) => sql`((${day}::date - 1)::timestamp AT TIME ZONE ${timeZone})`;
+/** Coarse bounds for the index; the run's own day is the test. Zones lie up to 26 hours apart (UTC−12 to UTC+14), so a
+ *  day of the run's own zone can begin 26 hours either side of that day in `timeZone`: two days' margin holds it (round
+ *  one, L1). `dayEarly`: two days before `day` begins; `monthLate`: two days after the month from `first` ends. */
+const dayEarly = (sql: Sql, day: string, timeZone: string) => sql`((${day}::date - 2)::timestamp AT TIME ZONE ${timeZone})`;
+const monthLate = (sql: Sql, first: string, timeZone: string) => sql`((${first}::date + interval '1 month 2 days')::timestamp AT TIME ZONE ${timeZone})`;
+
+/** The time zones Postgres knows, read once for the process: their names by their names in small letters. */
+let zoneNames: Promise<Map<string, string>> | null = null;
+/** `zone` as Postgres names it, in its own letters; null for a name it does not know, or none (37o, round one L2: the
+ *  list was read at every save, about 30 ms of a database connection). */
+export async function knownTimeZone(sql: Sql, zone: string | null): Promise<string | null> {
+  if (zone === null || zone === "") return null;
+  zoneNames ??= sql<{ name: string }[]>`SELECT name FROM pg_timezone_names`.then(
+    (rows) => new Map(rows.map((r) => [r.name.toLowerCase(), r.name])),
+    (err: unknown) => {
+      zoneNames = null;
+      throw err;
+    },
+  );
+  return (await zoneNames).get(zone.toLowerCase()) ?? null;
+}
 
 /** A page of the person's runs, newest first, from the cursor, or from the end of the day `upTo` of
  *  their own time zone (`timeZone`, a safeTimeZone-validated IANA name, always a parameterized value). */
@@ -168,7 +186,7 @@ export async function listRuns(
     FROM runs
     WHERE user_id = ${userId}
       AND (${cursor === null} OR (started_at, id) < (${cursor?.at ?? null}, ${cursor?.id ?? null}))
-      AND (${upTo === null} OR (started_at < ((${upTo}::date + 2)::timestamp AT TIME ZONE ${timeZone}) AND ${runLocal(sql, timeZone)}::date <= ${upTo}::date))
+      AND (${upTo === null} OR (started_at < ((${upTo}::date + 3)::timestamp AT TIME ZONE ${timeZone}) AND ${runLocal(sql, timeZone)}::date <= ${upTo}::date))
     ORDER BY started_at DESC, id DESC
     LIMIT ${limit + 1}`;
   return rows.map(toRun);
@@ -191,7 +209,7 @@ export async function getRunMonths(sql: Sql, userId: string, timeZone: string, m
     FROM runs
     WHERE user_id = ${userId}
       AND started_at >= ${dayEarly(sql, from, timeZone)}
-      AND started_at < ${dayEarly(sql, `${sorted[sorted.length - 1] ?? ""}-01`, timeZone)} + interval '1 month 2 days'
+      AND started_at < ${monthLate(sql, `${sorted[sorted.length - 1] ?? ""}-01`, timeZone)}
     GROUP BY month`;
   const wanted = new Set(months);
   return rows.filter((r) => wanted.has(r.month)).map((r) => ({ month: r.month, runs: Number(r.n), distanceM: Number(r.m) }));
@@ -205,7 +223,7 @@ export async function getRunCalendar(sql: Sql, userId: string, timeZone: string,
     FROM runs
     WHERE user_id = ${userId}
       AND started_at >= ${dayEarly(sql, first, timeZone)}
-      AND started_at < ${dayEarly(sql, first, timeZone)} + interval '1 month 2 days'
+      AND started_at < ${monthLate(sql, first, timeZone)}
       AND ${runLocal(sql, timeZone)}::date >= ${first}::date
       AND ${runLocal(sql, timeZone)}::date < (${first}::date + interval '1 month')::date
     GROUP BY day ORDER BY day`;
@@ -469,7 +487,7 @@ export class ForeignRunError extends Error {
 export interface NewRun {
   id: string;
   startedAt: Date;
-  /** The person's time zone as the run is saved (37o, E1); kept only if Postgres knows the name. */
+  /** The person's time zone as the run is saved (37o, E1), as Postgres names it (`knownTimeZone`); null for none. */
   timeZone: string | null;
   name: string;
   effort: number | null;
@@ -571,7 +589,7 @@ export async function insertRun(sql: Sql, userId: string, run: NewRun): Promise<
               ${run.climb.state === "done" ? run.climb.m : null}, ${run.climb.state}, ${run.shape},
               ${run.bests.k1}, ${run.bests.mile}, ${run.bests.k5}, ${run.bests.k10},
               ${run.heart?.avg ?? null}, ${run.heart?.max ?? null},
-              (SELECT name FROM pg_timezone_names WHERE name = ${run.timeZone} LIMIT 1))
+              ${run.timeZone})
       ON CONFLICT (id) DO NOTHING`;
     const rows = await tx<(SavedRunDbRow & { user_id: string })[]>`
       SELECT id, user_id, started_at, name, effort, note, distance_m, duration_s, elapsed_s, left_out_m,

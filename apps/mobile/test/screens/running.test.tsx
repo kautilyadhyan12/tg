@@ -8,6 +8,7 @@ import { RUN_BAR_ROOM } from "../../src/screens/running/RunLayer";
 import { MAP_CREDIT_PAGE, MAP_WAIT_MS } from "../../src/screens/running/RunMap";
 import { unitMarks } from "../../src/screens/running/routeShape";
 import { chooseAutoPause, finishRun, keepRunUnits, loadRun, pauseRun, phoneRunFiles, resetRecorder, runNow, startRun, takeLocations } from "../../src/screens/running/recorder";
+import * as runLiveModule from "../../src/screens/running/runLive";
 import { saveRequestOf, sentOf, sumsAt } from "../../src/screens/running/runLive";
 import { endRunAtLeaving } from "../../src/screens/running/runLeaving";
 import { spokenTime } from "../../src/screens/running/runVoice";
@@ -159,18 +160,20 @@ function runServer(user = RAVI, map: MapSource = OPENFREEMAP) {
   };
   // Each person's file of waiting runs, as the phone keeps one for each (37o, round one H3).
   const files = new Map<string, string>();
+  // `held`: a write of the file waits for it (a test's).
+  const writes: { held: Promise<void> | null } = { held: null };
   const runStore = (who: string) => ({
     read: () => Promise.resolve(files.get(who) ?? null),
-    write: (t: string) => {
+    write: async (t: string) => {
+      if (writes.held !== null) await writes.held;
       files.set(who, t);
-      return Promise.resolve();
     },
   });
   // What the phone's file of waiting runs holds before the app opens.
   const setFile = (text: string) => {
     files.set(user.id, text);
   };
-  return { ask, saved, posts, state, runStore, requests, climbAsks, file: (who: string = user.id) => files.get(who) ?? null, setFile };
+  return { ask, saved, posts, state, runStore, writes, requests, climbAsks, file: (who: string = user.id) => files.get(who) ?? null, setFile };
 }
 
 async function openRunning(s: ReturnType<typeof runServer>, user = RAVI) {
@@ -293,6 +296,32 @@ describe("the worst thing (37o): a run left recording somebody's location after 
     expect(added).toEqual([]);
   });
 
+  it("the box's Sign out is taken once: it turns busy at the press while the run is finished and saved (round one, L3)", async () => {
+    const s = runServer();
+    s.state.online = false;
+    await openRunning(s);
+    await startRunning();
+    await feed(0, 31, 3);
+    await fireEvent.press(screen.getByRole("button", { name: "Back to the app" }));
+    const tab = (await screen.findAllByRole("tab"))[4];
+    if (tab === undefined) throw new Error("no fifth tab");
+    await fireEvent.press(tab);
+    await fireEvent.press(await screen.findByLabelText("Settings"));
+    await fireEvent.press(await screen.findByRole("button", { name: "Sign out" }));
+    const inTheBox = screen.getAllByRole("button", { name: "Sign out" })[1];
+    if (inTheBox === undefined) throw new Error("the box's Sign out was expected");
+    let release: () => void = () => undefined;
+    s.writes.held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    await fireEvent.press(inTheBox);
+    expect(screen.getAllByRole("button", { name: "Sign out" })[1]?.props["accessibilityState"]).toMatchObject({ busy: true });
+    s.writes.held = null;
+    release();
+    expect(await screen.findByLabelText("Email")).toBeTruthy();
+    expect(readRunFile(s.file() ?? "").waiting).toHaveLength(1);
+  });
+
   it("with no run on the phone, the box has no line about one", async () => {
     const s = runServer();
     await openRunning(s);
@@ -412,6 +441,52 @@ describe("a phone whose clock is wrong (37o, the hunt's A6): the run is recorded
     expect(points[0]?.[0]).toBeLessThanOrEqual(1_200);
     expect(run().clockGapMs).toBeCloseTo(-300_000, -3);
   });
+});
+
+describe("the live numbers on a long run (37o, the hunt's A11; round one's untested two)", () => {
+  const wait = (ms: number) => act(() => new Promise<void>((resolve) => setTimeout(resolve, ms)));
+
+  it("paused, with nothing new come, the numbers are not worked out again", async () => {
+    const counts = jest.spyOn(runLiveModule, "sumsInSlices");
+    const s = runServer();
+    await openRunning(s);
+    await startRunning();
+    await feed(0, 31, 3);
+    await fireEvent.press(screen.getByRole("button", { name: "Pause" }));
+    expect(await screen.findByText("Paused")).toBeTruthy();
+    await wait(3_500);
+    const settled = counts.mock.calls.length;
+    await wait(5_000);
+    expect(counts.mock.calls.length).toBe(settled);
+    counts.mockRestore();
+  }, 20_000);
+
+  it("one count at a time: a slow one is never joined by another", async () => {
+    let going = 0;
+    let most = 0;
+    const counts = jest.spyOn(runLiveModule, "sumsInSlices").mockImplementation((run, at, kg, done) => {
+      going += 1;
+      most = Math.max(most, going);
+      const timer = setTimeout(() => {
+        going -= 1;
+        done(runLiveModule.sumsAt(run, at, kg));
+      }, 4_500);
+      return () => {
+        clearTimeout(timer);
+        going -= 1;
+      };
+    });
+    const s = runServer();
+    await openRunning(s);
+    await startRunning();
+    for (let k = 0; k < 4; k++) {
+      await feed(k * 3, 3, 3);
+      await wait(2_000);
+    }
+    expect(counts.mock.calls.length).toBeGreaterThan(0);
+    expect(most).toBe(1);
+    counts.mockRestore();
+  }, 20_000);
 });
 
 describe("a run, Start to Save", () => {

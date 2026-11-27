@@ -434,6 +434,30 @@ d("your runs (real Postgres)", () => {
     expect((await sql<{ time_zone: string | null }[]>`SELECT time_zone FROM runs WHERE id = ${run.runId}`)[0]?.time_zone).toBeNull();
   });
 
+  it.each<[string, string, string, string, string]>([
+    // 00:30 on 1 November at UTC+14, read by a person now at UTC−11: 25 hours apart (round one, L1).
+    ["the first of a month", "Pacific/Kiritimati", "2026-10-31T10:30:00.000Z", "Pacific/Pago_Pago", "2026-11-01"],
+    // 23:30 on 31 October at UTC−11, read by a person now at UTC+14.
+    ["the last day of a month", "Pacific/Pago_Pago", "2026-11-01T10:30:00.000Z", "Pacific/Kiritimati", "2026-10-31"],
+  ])("37o, round one L1: a run on %s in a zone a day from the person's now stays on its own day, in its month and on its calendar", async (_name, ranIn, at, nowIn, day) => {
+    const me = await makeUser(`far-${ranIn.slice(8, 12).toLowerCase()}`, ranIn);
+    const run = body({ startedAt: at });
+    expect((await save(me.cookies, run)).statusCode).toBe(201);
+    await sql`UPDATE users SET timezone = ${nowIn} WHERE id = ${me.id}`;
+    const month = day.slice(0, 7);
+    const calendar = runDaysResponseSchema.parse(JSON.parse((await inject({ method: "GET", url: `/v1/geo/runs/days?month=${month}`, cookies: me.cookies })).body));
+    expect(calendar.days.map((d) => d.day)).toEqual([day]);
+    expect((await list(me.cookies, `?upTo=${day}`)).items.map((r) => [r.id, r.day])).toEqual([[run.runId, day]]);
+    expect((await list(me.cookies)).months.find((m) => m.month === month)?.runs).toBe(1);
+  });
+
+  it("37o, round one L2: a zone written in other letters is kept as Postgres names it", async () => {
+    const me = await makeUser("letters", "asia/kolkata");
+    const run = body();
+    expect((await save(me.cookies, run)).statusCode).toBe(201);
+    expect((await sql<{ time_zone: string | null }[]>`SELECT time_zone FROM runs WHERE id = ${run.runId}`)[0]?.time_zone).toBe("Asia/Kolkata");
+  });
+
   it("thirty changes or deletes a minute for a person; somebody else at the same address goes on", async () => {
     const me = await makeUser("limit");
     const other = await makeUser("limit-other");
