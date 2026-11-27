@@ -412,6 +412,17 @@ function TypeForm({ gymId, orgType, country, currency, options, taxRates, onRate
   // What was opened, to say when something has changed and is not saved yet (the reply's list of who is on it aside).
   const [opened] = useState(() => formKey(draft));
   const changed = editing && formKey(draft) !== opened;
+  // Closing or reloading the tab with something typed asks first, as the browser does (as on a lead's page).
+  const typed = formKey(draft) !== opened;
+  useEffect(() => {
+    if (!typed) return undefined;
+    const ask = (event) => {
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', ask);
+    return () => window.removeEventListener('beforeunload', ask);
+  }, [typed]);
 
   // A refused save shows its first wrong box: the button is at the bottom of a long form,
   // and a sentence under a box that has scrolled away is a sentence nobody reads. Once a
@@ -1028,7 +1039,9 @@ function Notes({ error, listError, done }) {
  *  the page does (a button on another page led here); `onBoxOpened` is told once it has. */
 /** `section`: the tab the address asks for (`{ key, tab }`, a new `key` at every press of a link
  *  here); the price list without one. */
-export default function MembershipTypesPanel({ org, readOnly, openBox = null, onBoxOpened, section = null }) {
+/** `typePage`: the address of a type's page, from the Memberships page ({ open, set }), so the browser's Back closes it
+ *  as Cancel does; null where there is no address (the tests that draw the panel alone). */
+export default function MembershipTypesPanel({ org, readOnly, openBox = null, onBoxOpened, section = null, typePage = null }) {
   const gymId = org.id;
   const tabsId = useId();
   const asked = { key: section?.key ?? null, tab: section?.tab ?? 'price' };
@@ -1102,15 +1115,15 @@ export default function MembershipTypesPanel({ org, readOnly, openBox = null, on
       setList(res.data);
       return res.data;
     } catch (err) {
-      setActionError(errorText(err, fallback));
+      const said = errorText(err, fallback);
       if (errorCode(err) === 'membership_type_changed') {
-        // The form holds an older version: show the list as it is now, the form closed.
-        setDraft(null);
-        setDraftWord(null);
-        setShowProblems(false);
-        setRefused(0);
+        // The form holds an older version: show the list as it is now, the form closed, the reason in that type's row.
+        const id = draft?.id ?? null;
+        closeForm();
+        if (id !== null) setSavedNote({ typeId: id, text: null, error: said });
+        else setActionError(said);
         void load();
-      }
+      } else setActionError(said);
       return null;
     } finally {
       setBusy(false);
@@ -1128,6 +1141,7 @@ export default function MembershipTypesPanel({ org, readOnly, openBox = null, on
     setShowProblems(false);
     setRefused(0);
     setActionError(null);
+    typePage?.set(false);
   };
 
   const fromList = useListMemberships(gymId, list?.types);
@@ -1184,7 +1198,7 @@ export default function MembershipTypesPanel({ org, readOnly, openBox = null, on
     if (saved === null) return;
     const made = draft.id === null ? saved.types.find((t) => !had.has(t.id)) : undefined;
     // Back on the price list at the type's own row, where what happened is said.
-    if (made !== undefined) backTo.current = made.id;
+    if (made !== undefined) backTo.current = { type: made.id };
     closeForm();
     if (draft.id !== null) setSavedNote({ typeId: draft.id, text: body.raise !== undefined ? raisedNote(saved.raised ?? 0, body.raise.noticeDays) : 'Saved.' });
     else if (forWord === null && made !== undefined) setSavedNote({ typeId: made.id, text: 'Added to your price list.' });
@@ -1200,6 +1214,8 @@ export default function MembershipTypesPanel({ org, readOnly, openBox = null, on
     setDraftWord(word);
     setRestored(null);
     setTab('price');
+    backTo.current = { word: word.word };
+    typePage?.set(true);
     setDraft({ ...emptyDraft(), name: word.word });
   };
 
@@ -1210,14 +1226,18 @@ export default function MembershipTypesPanel({ org, readOnly, openBox = null, on
     setShowProblems(false);
     // Opened from the Discounts or Tax tab, it is saved on the price list, where its row is.
     setTab('price');
-    backTo.current = next.id;
+    backTo.current = next.id === null ? { add: true } : { type: next.id };
+    typePage?.set(true);
     setDraft(next);
   };
 
   const formOpen = draft !== null && draftCurrency !== null;
   // A type being added or changed is a page of its own (V4b-ii, board `MembershipAdd`): it opens at the top, its
-  // title in front of the keys, wherever on the list its button was; closed, the page is back at that type's row.
+  // title in front of the keys, wherever on the list its button was; closed, the page is back where it was opened (the
+  // type's row, the name's row or Add), the keys on that place's own button.
   const formTitle = useRef(null);
+  const addButton = useRef(null);
+  // { type: id } | { word } | { add: true } | null
   const backTo = useRef(null);
   useEffect(() => {
     if (formOpen) {
@@ -1229,9 +1249,24 @@ export default function MembershipTypesPanel({ org, readOnly, openBox = null, on
     const at = backTo.current;
     backTo.current = null;
     if (at === null) return;
-    const row = document.querySelector(`[data-type-row="${at}"]`);
-    if (row && typeof row.scrollIntoView === 'function') row.scrollIntoView({ block: 'center' });
+    const rowOf = (attr, value) => [...document.querySelectorAll(`[${attr}]`)].find((el) => el.getAttribute(attr) === value) ?? null;
+    const place = at.add ? addButton.current : at.type !== undefined ? rowOf('data-type-row', at.type) : rowOf('data-word-row', at.word);
+    if (place === null) return;
+    if (typeof place.scrollIntoView === 'function') place.scrollIntoView({ block: 'center' });
+    const key = at.add ? place : place.querySelector(at.type !== undefined ? 'button[aria-label^="Edit "]' : 'button');
+    if (key && !key.disabled) key.focus({ preventScroll: true });
   }, [formOpen]);
+  // The browser's Back took the page's address away: the page closes, as Cancel. An address kept with no page open
+  // (a reload, Forward) is tidied away.
+  const wasOnPage = useRef(typePage?.open === true);
+  useEffect(() => {
+    if (typePage === null) return;
+    if (wasOnPage.current && !typePage.open && formOpen) closeForm();
+    else if (typePage.open && !formOpen && draft === null && list !== null) typePage.set(false);
+    wasOnPage.current = typePage.open;
+    // closeForm and typePage are drawn again each time; what matters is the address and the page.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [typePage?.open, formOpen, list]);
   const formWords = draftWord === null ? null : formWordsFor(draftWord);
   const leaveForm = () => {
     if (!busy) closeForm();
@@ -1310,6 +1345,7 @@ export default function MembershipTypesPanel({ org, readOnly, openBox = null, on
           <button
             type="button"
             disabled={readOnly || anyBusy || locked}
+            ref={addButton}
             onClick={() => startDraft(emptyDraft())}
             className="c-btn c-btn-p w-full md:w-auto flex-shrink-0"
           >
@@ -1390,7 +1426,7 @@ export default function MembershipTypesPanel({ org, readOnly, openBox = null, on
                     busy={anyBusy}
                     formOpen={locked}
                     ties={typeTies(type, fromList.words, !readOnly)}
-                    note={noteRow === type.id ? { error: fromList.error, done: fromList.done } : savedNote?.typeId === type.id ? { error: null, done: savedNote.text } : null}
+                    note={noteRow === type.id ? { error: fromList.error, done: fromList.done } : savedNote?.typeId === type.id ? { error: savedNote.error ?? null, done: savedNote.text } : null}
                     onGive={(word, t) => void fromList.open(word.word, t.id)}
                     onUndo={(word) => void fromList.undo(word)}
                     onEdit={(t) => startDraft(draftFromType(t))}

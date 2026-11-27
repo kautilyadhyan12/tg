@@ -232,6 +232,8 @@ describe('Set up, in a gym that has set no price yet', () => {
     // The box is for the type just made, found by its id and not by its name.
     await waitFor(() => expect(orgService.previewMembershipLink).toHaveBeenCalledWith(GYM, { word: 'Gold', typeId: MADE.id }));
     const box = await screen.findByRole('dialog', { name: 'Give Gold to the people who have it on your member list?' });
+    // The next step is in front of them: the box is drawn over the page, wherever it is scrolled, with the keys in it.
+    await waitFor(() => expect(box.contains(document.activeElement)).toBe(true));
     expect(orgService.linkMembershipWord).not.toHaveBeenCalled();
 
     orgService.linkMembershipWord.mockResolvedValue({
@@ -360,9 +362,20 @@ describe('where the form for a name opens', () => {
     expect(screen.queryByRole('region', { name: 'On your member list, not set up yet' })).toBeNull();
     // Nothing else can be pressed while it is open: the other name is not on the screen.
     expect(screen.queryByRole('button', { name: 'Set up Gold' })).toBeNull();
-    fireEvent.click(within(form).getByRole('button', { name: 'Cancel' }));
-    expect((await block()).contains(screen.getByRole('button', { name: 'Set up Silver' }))).toBe(true);
-    expect(screen.getByRole('button', { name: 'Set up Silver' }).disabled).toBe(false);
+    const had = Element.prototype.scrollIntoView;
+    const into = vi.fn();
+    Element.prototype.scrollIntoView = into;
+    try {
+      fireEvent.click(within(form).getByRole('button', { name: 'Cancel' }));
+      const setUp = screen.getByRole('button', { name: 'Set up Silver' });
+      expect((await block()).contains(setUp)).toBe(true);
+      expect(setUp.disabled).toBe(false);
+      // Back at the name whose Set up was pressed, the keys on its button.
+      await waitFor(() => expect(into.mock.instances).toContain(setUp.closest('li')));
+      expect(document.activeElement).toBe(setUp);
+    } finally {
+      Element.prototype.scrollIntoView = had;
+    }
     expect(orgService.createMembershipType).not.toHaveBeenCalled();
   });
 });

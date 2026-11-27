@@ -362,7 +362,7 @@ export function NotSetUp({ rows, types, canCreate, off, busy, choosing, onChoose
           const archived = archivedLine(word);
           const again = againWords(word);
           return (
-            <li key={word.word} className="c-item">
+            <li key={word.word} className="c-item" data-word-row={word.word}>
               <div className="flex flex-wrap items-center gap-3">
                 <span className="c-s15 c-w6 c-t1 flex-grow min-w-0 break-words">{nameLine(word)}</span>
                 {choosing === word.word || asking === word.word ? null : (

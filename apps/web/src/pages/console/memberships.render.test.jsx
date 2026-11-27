@@ -6,7 +6,7 @@
 // asks the server for nothing.
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { Link, MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
+import { Link, MemoryRouter, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { ROLE_PRIVILEGES } from '@app/shared';
 
 vi.mock('../../api/orgsApi', async (importOriginal) => {
@@ -498,6 +498,55 @@ describe('staff who may', () => {
     resetConsoleOrgs();
     draw([gym({ orgType: 'studio' })]);
     expect(await screen.findByText(/Ask the owner to set it in Studio details./)).toBeTruthy();
+  });
+
+  it("a membership type's page is an entry of its own: the browser's Back closes it as Cancel does; Cancel and a reload leave no mark", async () => {
+    function Browser() {
+      const navigate = useNavigate();
+      const at = useLocation();
+      return (
+        <>
+          <button type="button" onClick={() => navigate(-1)}>
+            browser back
+          </button>
+          <span data-testid="at">{at.search}</span>
+        </>
+      );
+    }
+    const drawAt = (at) => {
+      orgService.getMine.mockResolvedValue({ data: { orgs: [gym()] } });
+      render(
+        <MemoryRouter initialEntries={['/console/iron-house/memberships', at]} initialIndex={1}>
+          <Browser />
+          <Routes>
+            <Route path="/console/:orgSlug/memberships" element={<ConsoleLayout><Memberships /></ConsoleLayout>} />
+          </Routes>
+        </MemoryRouter>,
+      );
+    };
+    drawAt('/console/iron-house/memberships');
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit Gold Monthly' }));
+    expect(screen.getByTestId('at').textContent).toBe('?page=membership-type');
+    fireEvent.change(screen.getByLabelText('Price (USD)'), { target: { value: '60' } });
+    fireEvent.click(screen.getByRole('button', { name: 'browser back' }));
+    await waitFor(() => expect(screen.queryByRole('form')).toBeNull());
+    expect(screen.getByTestId('at').textContent).toBe('');
+    expect(screen.getByRole('button', { name: 'Edit Gold Monthly' })).toBeTruthy();
+    expect(orgService.updateMembershipType).not.toHaveBeenCalled();
+
+    // Cancel takes the mark away in place.
+    fireEvent.click(screen.getByRole('button', { name: 'Edit Gold Monthly' }));
+    expect(screen.getByTestId('at').textContent).toBe('?page=membership-type');
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(screen.queryByRole('form')).toBeNull();
+    expect(screen.getByTestId('at').textContent).toBe('');
+    cleanup();
+
+    // Reloaded on the page's address: the price list, the address tidied.
+    drawAt('/console/iron-house/memberships?page=membership-type');
+    expect(await screen.findByRole('button', { name: 'Edit Gold Monthly' })).toBeTruthy();
+    await waitFor(() => expect(screen.getByTestId('at').textContent).toBe(''));
+    expect(screen.queryByRole('form')).toBeNull();
   });
 
   it("moving to another gym throws away what was typed for the first, and reads the second gym's own list", async () => {

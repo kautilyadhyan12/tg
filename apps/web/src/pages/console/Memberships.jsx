@@ -24,6 +24,24 @@ export default function Memberships() {
   const give = searchParams.get('give');
   const name = searchParams.get('name');
   const openBox = give !== null && give !== '' && name !== null && name !== '' ? { typeId: give, word: name } : null;
+  // A membership type's page (V4b-ii) is an entry of its own in the browser's history: Back closes it, as Cancel does;
+  // Cancel and Save take the entry's mark away in place.
+  const typePageOpen = searchParams.get('page') === 'membership-type';
+  const typePage = {
+    open: typePageOpen,
+    set: (on) => {
+      if (on === typePageOpen) return;
+      setSearchParams(
+        (was) => {
+          const params = new URLSearchParams(was);
+          if (on) params.set('page', 'membership-type');
+          else params.delete('page');
+          return params;
+        },
+        on ? undefined : { replace: true },
+      );
+    },
+  };
   const boxOpened = () =>
     setSearchParams(
       (was) => {
@@ -79,5 +97,5 @@ export default function Memberships() {
   }
 
   // Keyed on the gym: the address is one route for every gym, and the page holds a form.
-  return <MembershipTypesPanel key={`memberships-${org.id}`} org={org} readOnly={consoleIsReadOnly(org)} openBox={openBox} onBoxOpened={boxOpened} section={section} />;
+  return <MembershipTypesPanel key={`memberships-${org.id}`} org={org} readOnly={consoleIsReadOnly(org)} openBox={openBox} onBoxOpened={boxOpened} section={section} typePage={typePage} />;
 }
