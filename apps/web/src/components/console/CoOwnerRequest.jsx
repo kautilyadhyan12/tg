@@ -74,8 +74,8 @@ export default function CoOwnerRequest({ gymId, gymName, onAccepted, kind = 'co-
 
   if (done !== null) {
     return (
-      <p role="status" className="text-sm flex items-center gap-2" style={{ color: '#4ade80' }} data-testid={`${words.testId}-done`}>
-        <Check aria-hidden="true" className="w-4 h-4" />
+      <p role="status" className="c-s14 c-w6 c-pay-good flex items-center gap-2" data-testid={`${words.testId}-done`}>
+        <Check aria-hidden="true" size={16} />
         {done}
       </p>
     );
@@ -83,54 +83,36 @@ export default function CoOwnerRequest({ gymId, gymName, onAccepted, kind = 'co-
   if (request === null) return null;
   const who = request.ownerName || `The owner of ${gymName}`;
   return (
-    <div
-      data-testid={words.testId}
-      className="rounded-2xl p-5 flex flex-col gap-3"
-      style={{ background: '#121110', border: '1px solid rgba(255,138,31,0.35)' }}
-    >
+    <section data-testid={words.testId} className="c-card c-ov-ask p-5 flex flex-col gap-3" aria-label={words.title(gymName)}>
       <div className="flex items-start gap-3">
-        <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: 'rgba(255,138,31,0.15)' }}>
-          <ShieldCheck aria-hidden="true" className="w-5 h-5" style={{ color: '#FF8A1F' }} />
-        </div>
-        <div className="min-w-0">
-          <div className="font-semibold" style={{ color: '#fff' }}>
-            {words.title(gymName)}
-          </div>
-          <p className="text-sm mt-1" style={{ color: 'rgba(255,255,255,0.75)' }}>
+        <span className="c-pay-ic c-pay-ic-accent" aria-hidden="true">
+          <ShieldCheck size={20} />
+        </span>
+        <div className="flex flex-col gap-1 min-w-0">
+          <h2 className="c-s15 c-w6 c-t1">{words.title(gymName)}</h2>
+          <p className="c-s14 c-t2">
             {who} {words.asked}
           </p>
         </div>
       </div>
-      <p className="text-xs" style={{ color: 'rgba(255,255,255,0.6)' }}>
+      <p className="c-s14 c-t2">
         {words.what(request.ownerName || 'The owner', request)} The request works until {formatJoinedAt(request.expiresAt)}.
       </p>
       {problem !== null ? (
-        <p role="alert" className="text-xs" style={{ color: '#ef4444' }}>
+        <p role="alert" className="c-err">
           {problem}
         </p>
       ) : null}
-      <div className="flex items-center gap-2">
-        <button
-          type="button"
-          onClick={() => void answer(true)}
-          disabled={busy !== null}
-          className="rounded-xl px-4 py-2.5 text-sm font-semibold flex items-center gap-2 disabled:opacity-40"
-          style={{ background: 'linear-gradient(135deg,#FF8A1F,#FFB347)', color: '#0A0908', minHeight: 44 }}
-        >
-          {busy === 'accept' ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+      <div className="flex flex-wrap items-center gap-2">
+        <button type="button" onClick={() => void answer(true)} disabled={busy !== null} className="c-btn c-btn-p">
+          {busy === 'accept' ? <Loader2 size={16} className="animate-spin" aria-hidden="true" /> : null}
           Accept
         </button>
-        <button
-          type="button"
-          onClick={() => void answer(false)}
-          disabled={busy !== null}
-          className="rounded-xl px-4 py-2.5 text-sm flex items-center gap-2 disabled:opacity-40"
-          style={{ background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.7)', minHeight: 44 }}
-        >
-          {busy === 'decline' ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+        <button type="button" onClick={() => void answer(false)} disabled={busy !== null} className="c-btn c-btn-s">
+          {busy === 'decline' ? <Loader2 size={16} className="animate-spin" aria-hidden="true" /> : null}
           Decline
         </button>
       </div>
-    </div>
+    </section>
   );
 }

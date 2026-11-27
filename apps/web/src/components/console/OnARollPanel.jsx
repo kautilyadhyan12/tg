@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
 import { Loader2 } from 'lucide-react';
-import { ConsoleSection } from './ConsoleStates';
 import { orgService, errorCode, errorText } from '../../api/orgsApi';
 import { CHEER_CHOICES, cheerLine } from '../../utils/cheerPresets';
 import {
@@ -87,10 +86,6 @@ import {
 // a control on the roster needs that refusal RE-RULED first — it is not an
 // oversight to route around. `console.render.test.jsx` asserts the absence.
 
-const ORANGE = '#FF8A1F';
-const INK = 'rgba(255,255,255,0.92)';
-const MUTED = 'rgba(255,255,255,0.45)';
-const HAIRLINE = 'rgba(255,255,255,0.07)';
 
 /** No tap has been made on this row yet. A module-level constant so every
  *  untouched row shares one object rather than allocating per render.
@@ -256,14 +251,16 @@ export default function OnARollPanel({
   };
 
   return (
-    <div className="mt-5">
-      <ConsoleSection title="On a roll" defaultOpen>
+    <section className="c-card c-ov-box" data-testid="streaks" aria-label="Streaks">
+      <div className="c-ov-box-head">
+        <h2 className="c-h2">Streaks</h2>
+      </div>
         {state === 'empty' ? (
-          <p className="text-sm" style={{ color: MUTED }}>
+          <p className="c-s14 c-t2 c-ov-box-body">
             {emptyRegularsSentence()}
           </p>
         ) : (
-          <div className="flex flex-col">
+          <div className="flex flex-col pb-1">
             {previewRegulars(overview.onARoll).map((regular) => {
               const tap = taps.get(regular.userId) ?? IDLE;
               const button = cheerState(regular, {
@@ -290,11 +287,11 @@ export default function OnARollPanel({
               return (
                 <div
                   key={regular.userId}
-                  className="flex items-start justify-between gap-3 py-2.5"
-                  style={{ borderTop: `1px solid ${HAIRLINE}` }}
+                  className="c-ov-line"
+                  style={{ alignItems: 'flex-start' }}
                 >
-                  <div className="min-w-0">
-                    <div className="text-sm font-semibold truncate" style={{ color: INK }}>
+                  <div className="c-ov-line-text">
+                    <div className="c-s15 c-w6 c-t1 c-ell">
                       {regular.displayName}
                     </div>
                     {/* BOTH FIGURES AND THE VISITS, IN ONE SENTENCE BUILT ONE
@@ -302,24 +299,24 @@ export default function OnARollPanel({
                         run"* — and `streakText` is where the rule that hides a
                         one-day streak lives, so this row cannot arrange two
                         true numbers into a false one on its own. */}
-                    <div className="text-xs mt-0.5" style={{ color: MUTED }}>
+                    <div className="c-s14 c-t2">
                       {streakText(regular)}
                     </div>
                     {tap.error !== null ? (
-                      <div className="text-xs mt-1" style={{ color: '#ef4444' }}>
+                      <div className="c-err" role="alert">
                         {tap.error}
                       </div>
                     ) : null}
                   </div>
 
-                  <div className="flex-shrink-0 text-right">
+                  <div className="flex-none text-right ml-auto">
                     {button.disabled ? (
                       /* SAID, NEVER SILENTLY INERT (`:24141`): every dead
                          control on this console carries the sentence for why.
                          The three reasons are different facts — a role that
                          cannot, a gym with no plan, and a cheer already sent —
                          and `cheerState` asks them in the SERVER's order. */
-                      <div className="text-xs max-w-[13rem]" style={{ color: MUTED }}>
+                      <div className="c-s14 c-t2 max-w-[13rem]">
                         {button.text}
                       </div>
                     ) : (
@@ -332,7 +329,7 @@ export default function OnARollPanel({
                       <div className="relative" ref={chosen === null ? null : openBoxRef}>
                         <div className="flex items-center justify-end gap-1">
                           {tap.busy ? (
-                            <Loader2 className="w-4 h-4 animate-spin" style={{ color: ORANGE }} />
+                            <Loader2 size={16} className="animate-spin c-lk" aria-hidden="true" />
                           ) : (
                             CHEER_CHOICES.map((choice) => (
                               <button
@@ -364,13 +361,7 @@ export default function OnARollPanel({
                                    read (`:32395`, an icon carrying meaning). */
                                 title={choice.text}
                                 aria-label={`Cheer ${regular.displayName}: ${choice.text}`}
-                                className="rounded-lg px-2 py-1 text-base leading-none"
-                                style={{
-                                  background:
-                                    chosen?.preset === choice.preset
-                                      ? 'rgba(255,138,31,0.32)'
-                                      : 'rgba(255,138,31,0.12)',
-                                }}
+                                className={`c-ov-cheer${chosen?.preset === choice.preset ? ' c-ov-cheer-on' : ''}`}
                               >
                                 {choice.emoji}
                               </button>
@@ -387,15 +378,10 @@ export default function OnARollPanel({
                             entered). */}
                         {chosen === null ? null : (
                           <div
-                            className="absolute right-0 top-full z-10 mt-1 flex items-center gap-2 rounded-lg px-2.5 py-2 text-left"
-                            style={{
-                              background: '#1B1917',
-                              border: '1px solid rgba(255,255,255,0.12)',
-                              boxShadow: '0 8px 24px rgba(0,0,0,0.55)',
-                            }}
+                            className="c-ov-cheer-box"
                           >
                             <span className="text-base leading-none">{chosen.emoji}</span>
-                            <span className="text-xs" style={{ color: INK }}>
+                            <span className="c-s14 c-t1">
                               {chosen.text}
                             </span>
                             <button
@@ -408,8 +394,7 @@ export default function OnARollPanel({
                                  one-row fixture that left C220 alive
                                  (`:34809` §2), arriving through the label. */
                               aria-label={`Send to ${regular.displayName}: ${chosen.text}`}
-                              className="rounded-md px-2.5 py-1 text-xs font-semibold leading-none"
-                              style={{ background: ORANGE, color: '#0A0908' }}
+                              className="c-btn c-btn-p c-btn-sm"
                             >
                               Send
                             </button>
@@ -423,7 +408,6 @@ export default function OnARollPanel({
             })}
           </div>
         )}
-      </ConsoleSection>
-    </div>
+    </section>
   );
 }

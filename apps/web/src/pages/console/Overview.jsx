@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { Users, ChevronRight } from 'lucide-react';
+import { CalendarDays, CheckCircle2, ChevronRight, ClipboardCheck, Clock3, Users, Wallet } from 'lucide-react';
 import JoinCodeCard from '../../components/console/JoinCodeCard';
 import JoinCodesPanel from '../../components/console/JoinCodesPanel';
 import BringMembersInCard from '../../components/console/BringMembersInCard';
-import OverviewNumbers from '../../components/console/OverviewNumbers';
+import { AttendanceBox, CheckinsBox } from '../../components/console/OverviewNumbers';
+import OnARollPanel from '../../components/console/OnARollPanel';
 import StartHereCard from '../../components/console/StartHereCard';
 import LastSevenDays from '../../components/console/LastSevenDays';
 import FailedPaymentsCard from '../../components/console/FailedPaymentsCard';
@@ -15,14 +16,19 @@ import AppCancelsCard from '../../components/console/AppCancelsCard';
 import TrialCard from '../../components/console/TrialCard';
 import CoOwnerRequest from '../../components/console/CoOwnerRequest';
 import { refreshConsoleOrgsAfterChange } from './consoleOrgs';
-import { ConsoleCard, ConsoleFailed, ConsoleLoading } from '../../components/console/ConsoleStates';
+import { ConsoleFailed, ConsoleLoading } from '../../components/console/ConsoleStates';
 import { codesRetired, orgService, errorText, isRetryable } from '../../api/orgsApi';
+import { registerService } from '../../api/registerApi';
 import { useAuth } from '../../context/AuthContext';
 import { useConsoleOrg } from './useConsoleOrg';
 import { useSectionLink } from './useSectionLink';
-import { PLAN_SECTION } from './consolePlaces';
+import { useAttention } from './useAttention';
+import { PLAN_SECTION, canOpenPlace, placeFor } from './consolePlaces';
 import { consoleIsReadOnly } from './billingView';
 import { startHereView } from './startHereView';
+import { attentionLines, seesAnyPart } from './attentionView';
+import { overviewTiles } from './paymentsOverviewView';
+import { attendanceTiles, numbersState, overviewHeading } from './overviewView';
 import {
   codeToShow,
   joinedCount,
@@ -34,68 +40,81 @@ import {
   waitingCountLabel,
 } from './consoleView';
 
-// The gym's own screen. Part 3 §4.1 calls this Overview and specifies KPI tiles
-// (active members 30d, workouts this week, adoption %, average form score), an
-// eight-week trend chart and an at-risk list.
+// OVERVIEW, the page a business lands on (Part 3 §4.1; V5-a, spec Part 3 §17.11, the boards
+// `Overview`, `OverviewLight` and `Phone`): the greeting with Check in, Getting started, the
+// figures, Needs attention beside today's check-ins, the attendance chart beside Streaks and the
+// plan, Last 7 days beside the members and Details, then the money boxes Needs attention opens.
 //
-// ~~NONE OF THAT IS HERE, and the reason is not scope: §3.2 says every one of
-// those widgets reads `org_daily_stats`, `org_live_counters` or
-// `org_member_stats`, and not one of the three exists. There is no worker
-// building them and no route serving them. A tile drawn over that would print a
-// number nobody computed — which is the one thing the severity rule names
-// outright.~~ **— SPENT 2026-09-02. The numbers are here** (`OverviewNumbers`,
-// off `GET /v1/orgs/:gymId/overview`), and what they count is NOT what §4.1
-// says:
-//
-//   · **VISITS, NOT WORKOUTS** — Kd's ruling at :29961, a knowing deviation from
-//     §4.1 he was shown and took. A workout exists only if the member ALSO
-//     logged their training, so a workout tile can read zero on a day forty
-//     people came through the door.
-//   · **Average form score is not built** — struck by him at :26469 §1.1. The
-//     nightly job still WRITES the column, because a history nobody recorded
-//     cannot be recovered.
-//   · **The at-risk list and the rest of the people lists are the NEXT card**,
-//     which is his split at :29961 ruling 3: numbers first, lists second.
-//
-// **`org_daily_stats` HAS A WRITER NOW AND STILL NO READER, and that is a
-// decision rather than an oversight** (:30094 §2.1): a per-day DISTINCT count
-// cannot be summed across days, and a nightly table is partial for part of every
-// day. The route reads `gym_attendance` live. The aggregate is the durable
-// record — Reports' source, and what survives the day attendance rows become
-// deletable under DPDP, which is when this chart's source moves onto it.
-//
-// THE §4.2 BANNER USED TO BE ABSENT FOR THE SAME REASON AND IS NOT ANY MORE.
-// This comment said "its states are read off `subscriptions`, and billing does
-// not exist" — which was true when it was written and stopped being true on
-// 2026-08-27, when a gym gained the ability to start its own trial and wrote the
-// first `subscriptions` row in the product's history. Billing still does not
-// exist; the STATE does, `/v1/orgs/mine` now carries it, and the banner lives in
-// `ConsoleLayout` because §4.2 puts its slot above every console screen rather
-// than on this one. Corrected here rather than only where it was noticed
-// (:5748): this is the file somebody opens to ask why the console shows no
-// banner.
-//
-// ~~The KPI tiles above are untouched by any of that — `org_daily_stats` and its
-// two siblings still do not exist.~~ **— spent by the same card; see above.**
+// Each part is its own read with its own outcome: a role may hold one page and not another, so
+// one refused read never takes the page. Every figure is the server's (visits counted live from
+// `gym_attendance`; people, not workouts: Kd, :29961); nothing here adds figures up. The banner
+// above every page lives in `ConsoleLayout`.
 
-/* ROUND 2 Low-4's "would pressing Try again change anything?" predicate MOVED to
-   `orgsApi.js` beside `errorStatus` (T3 round 2 L-5). It was private here, the
-   Staff panel then inlined the same 403 test at two more sites, and three copies
-   of one rule is how two places come to disagree. Its full reasoning travelled
-   with it — Part 3 §4's "every error state has a retry" still holds for every
-   status except the permanent one. */
+const TILE_ICONS = { today: ClipboardCheck, week: CalendarDays, month: Users, revenue: Wallet, 'payment-due': Clock3 };
+const TONE_CLASS = { accent: 'c-pay-ic-accent', info: 'c-pay-ic-info', good: 'c-pay-ic-good', warn: 'c-pay-ic-warn', plain: 'c-pay-ic-info' };
+const FIGURE_CLASS = { warn: 'c-pay-warn' };
+const ARROW = { up: '▲', down: '▼' };
+const TILE_ORDER = ['today', 'revenue', 'payment-due', 'week', 'month'];
 
-/** One label/value line. Deliberately plain: every value on this screen is a
- *  fact the server stated, not a figure this page derived. */
+/** One figure: what it counts, the number, and a line under it (with the page it opens). */
+function Tile({ tile }) {
+  const Icon = TILE_ICONS[tile.key] ?? Users;
+  return (
+    <section className="c-card c-pay-tile" aria-label={tile.title} data-testid={`ov-tile-${tile.key}`}>
+      <span className="flex items-center gap-2.5 min-w-0">
+        <span className={`c-pay-ic ${TONE_CLASS[tile.tone] ?? TONE_CLASS.plain}`} aria-hidden="true">
+          <Icon size={18} />
+        </span>
+        <span className="c-s14 c-t2">{tile.title}</span>
+      </span>
+      <span className={`c-big ${FIGURE_CLASS[tile.tone] ?? 'c-t1'}`}>{tile.figure}</span>
+      <span className="c-s14 c-t3">
+        {tile.direction === 'up' || tile.direction === 'down' ? (
+          <span aria-hidden="true" className={`mr-1 c-w6 ${tile.direction === 'up' ? 'c-pay-good' : 'c-pay-bad'}`}>
+            {ARROW[tile.direction]}
+          </span>
+        ) : null}
+        {tile.note}
+        {tile.to ? (
+          <>
+            {' · '}
+            <Link to={tile.to} className="c-lk c-w6">
+              View
+            </Link>
+          </>
+        ) : null}
+      </span>
+    </section>
+  );
+}
+
+/** One line of Needs attention, the bell's own words, with the button to where it is dealt with. */
+function AttentionRow({ line }) {
+  return (
+    <div className="c-attn-row" data-testid="ov-attention-line">
+      <span className={`c-attn-dot${line.tone === 'plain' ? '' : ` c-attn-dot-${line.tone}`}`} aria-hidden="true" />
+      <span className="c-attn-text">
+        <span className="c-s15 c-w6 c-t1">{line.title}</span>
+        {line.note !== null ? <span className="c-s14 c-t3">{line.note}</span> : null}
+      </span>
+      <span className="c-attn-end">
+        {line.money !== null ? <span className="c-s15 c-w6 c-t1 c-num">{line.money}</span> : null}
+        {line.to !== null ? (
+          <Link to={line.to} className="c-btn c-btn-s c-btn-sm">
+            {line.button}
+          </Link>
+        ) : null}
+      </span>
+    </div>
+  );
+}
+
+/** One label and its value in Details. */
 function Fact({ label, value }) {
   return (
-    <div className="flex items-baseline justify-between gap-4 py-2">
-      <span className="text-sm" style={{ color: 'rgba(255,255,255,0.45)' }}>
-        {label}
-      </span>
-      <span className="text-sm text-right" style={{ color: 'rgba(255,255,255,0.85)' }}>
-        {value}
-      </span>
+    <div className="c-ov-kv">
+      <span className="c-s14 c-t3">{label}</span>
+      <span className="c-s14 c-w5 c-t1 text-right">{value}</span>
     </div>
   );
 }
@@ -176,6 +195,10 @@ export default function Overview() {
   // org is in hand — the loading and not-found states above name no type at
   // all, because at that point there is none to name.
   const words = orgWords(org?.orgType);
+  const { attention } = useAttention();
+  // REVENUE TODAY, Sell's own figure, read only for staff Sell gives takings to (V5-a).
+  const readsSell = org != null && canOpenPlace(viewerPrivileges(org), 'sell');
+  const [register, setRegister] = useState({ gymId: null, data: null });
 
   useEffect(() => {
     if (gymId === null) return undefined;
@@ -252,6 +275,20 @@ export default function Overview() {
   // is referentially stable per org type (`orgWords` returns one frozen table
   // per type), so it cannot cause a second round of reads for one gym.
   }, [gymId, attempt, words]);
+
+  useEffect(() => {
+    if (gymId === null || !readsSell) return undefined;
+    let live = true;
+    registerService.get(gymId).then(
+      (data) => {
+        if (live) setRegister({ gymId, data });
+      },
+      () => undefined,
+    );
+    return () => {
+      live = false;
+    };
+  }, [gymId, readsSell, attempt]);
 
   const retry = () => {
     setCodes({ loading: true, error: null, retryable: true, list: null, retired: false });
@@ -337,62 +374,87 @@ export default function Overview() {
 
   if (orgLoading) {
     return (
-      <div className="max-w-3xl mx-auto px-4 md:px-8 py-8">
-        <ConsoleLoading label="Loading your organisation…" />
+      <div className="c-page">
+        <ConsoleLoading label="Loading your organisation…" newLook />
       </div>
     );
   }
 
   if (orgError !== null) {
     return (
-      <div className="max-w-3xl mx-auto px-4 md:px-8 py-8">
-        <ConsoleFailed message={orgError} onRetry={reload} />
+      <div className="c-page">
+        <ConsoleFailed message={orgError} onRetry={reload} newLook />
       </div>
     );
   }
 
   if (notFound) {
     return (
-      <div className="max-w-3xl mx-auto px-4 md:px-8 py-8">
-        <ConsoleCard>
-          <p className="text-sm" style={{ color: 'rgba(255,255,255,0.75)' }}>
-            We couldn&apos;t find an organisation you run at this address.
-          </p>
-          <Link to="/console" className="text-sm inline-block mt-3" style={{ color: '#FF8A1F' }}>
+      <div className="c-page">
+        <section className="c-card p-5 md:p-6 flex flex-col gap-3">
+          <p className="c-s15 c-t2">We couldn&apos;t find an organisation you run at this address.</p>
+          <Link to="/console" className="c-s15 c-w6 c-lk self-start">
             Your organisations
           </Link>
-        </ConsoleCard>
+        </section>
       </div>
     );
   }
 
   const joined = joinedCount(members.page);
-  // The viewer is PASSED, not assumed (round 2 Low-3): "(you)" is a claim about
-  // who is reading, and this screen will one day be reachable by a manager.
+  // The viewer is passed, not assumed: "(you)" is a claim about who is reading.
   const countLine = memberCountLine(members.page, user?.id ?? null, org.orgType);
   const shownCode = codeToShow(codes.list);
   const list = startHereView(startHere, orgSlug, org.orgType);
   const readOnly = consoleIsReadOnly(org);
+  const privileges = viewerPrivileges(org);
+  const heading = overviewHeading({ now: new Date(), timezone: org.timezone, displayName: user?.displayName });
+  const checkInTo = readOnly ? null : placeFor(orgSlug, privileges, 'checkIn');
+  const attendanceTo = placeFor(orgSlug, privileges, 'attendance');
+
+  // The figures: attendance from the numbers' read, Revenue today and Payment due as Payments
+  // overview gives them, each only to staff whose role opens its page.
+  const numbers = !overview.loading && overview.error === null ? overview.data : null;
+  const moneyTiles = overviewTiles({
+    orgSlug,
+    register: register.gymId === org.id ? register.data : null,
+    attention,
+    payments: null,
+    privileges,
+    orgType: org.orgType,
+  }).filter((tile) => tile.key === 'revenue' || tile.key === 'payment-due');
+  const tiles = [...attendanceTiles(numbers, org.orgType), ...moneyTiles].sort((a, b) => TILE_ORDER.indexOf(a.key) - TILE_ORDER.indexOf(b.key));
+  const lines = attentionLines(attention, orgSlug, privileges, org.orgType);
+  const seesAttention = seesAnyPart(attention);
+  const streaks = numbersState(numbers) === 'ready';
 
   return (
-    <div className="max-w-3xl mx-auto px-4 md:px-8 py-8 flex flex-col gap-5">
-      <div>
-        <h1 className="text-2xl font-bold" style={{ color: '#fff' }}>
-          {org.name}
-        </h1>
-        <p className="text-sm mt-1" style={{ color: 'rgba(255,255,255,0.45)' }}>
-          {org.city ? `${org.city} · ` : ''}
-          {orgTypeLabel(org.orgType)}
-        </p>
-      </div>
+    <div className="c-page">
+      <header className="c-ov-head">
+        <div className="flex flex-col gap-1.5 min-w-0">
+          <p className="c-eyebrow" data-testid="ov-eyebrow">
+            {heading.eyebrow}
+          </p>
+          <h1 className="c-h1">{heading.greeting}</h1>
+          <p className="c-sub" data-testid="ov-business">
+            {org.name}
+            {org.city ? ` · ${org.city}` : ''} · {orgTypeLabel(org.orgType)}
+          </p>
+        </div>
+        {checkInTo !== null ? (
+          <Link to={checkInTo} className="c-btn c-btn-p c-btn-lg">
+            <ClipboardCheck size={18} aria-hidden="true" />
+            Check in
+          </Link>
+        ) : null}
+      </header>
 
-      {/* The owner asked this person to be a co-owner (4b-i): their answer, first. Accepting
-          changes what they may do, so the console's own read of the gym is taken again. */}
+      {/* The owner asked this person to be a co-owner (4b-i), or to take the business over
+          (4b-ii): their answer, first. Accepting changes what they may do, so the console's
+          own read of the business is taken again. */}
       <CoOwnerRequest gymId={org.id} gymName={org.name} onAccepted={refreshConsoleOrgsAfterChange} />
-      {/* The owner asked this co-owner to take the gym over (4b-ii). */}
       <CoOwnerRequest kind="owner" gymId={org.id} gymName={org.name} onAccepted={refreshConsoleOrgsAfterChange} />
 
-      {/* START HERE, first on the page (ROADMAP 23b): what to set up and where. */}
       {list.show === 'list' ? (
         <StartHereCard
           view={list}
@@ -404,232 +466,161 @@ export default function Overview() {
         />
       ) : null}
 
-      {/* THE PLAN, ABOVE THE JOIN CODE AND BELOW THE GYM'S NAME — what the gym
-          is on, and how many places are used. A code handed out by a gym on no
-          plan admits members who get nothing extra for being there, so the plan
-          is stated first. Draws nothing at all for anybody without
-          `billing.manage`, nothing for a gym on no plan, and needs no read of
-          its own: both facts arrive on the org row this screen already has.
-
-          THE CARD NO LONGER STARTS A TRIAL — Kd's ruling of 2026-08-28 (:22921
-          §1). The pre-trial button is deleted and the unskippable prompt in
-          `ConsoleLayout` is the only way a trial starts. A gym on no plan draws
-          nothing here because that owner is looking at the prompt, over this
-          whole screen.
-
-          THE KEY IS KEPT AND IS NOW BELT-AND-BRACES, which is a change of
-          status worth writing down rather than leaving to be inferred. It was
-          :20712's fix applied to the fourth component to need it: this card held
-          `justStarted` — the server's own answer to its button — and
-          `/console/:orgSlug` is ONE route, so walking from gym A to gym B does
-          not remount anything here and that answer followed the owner onto the
-          next gym. **The card holds no state at all any more**: the fact moved
-          into `consoleOrgs.js`, which is keyed by gym id by construction, and
-          the shell wraps every screen in a keyed Fragment as well (:22029, Kd's
-          redesign ruling). Left alone rather than deleted, on the same reasoning
-          that left the other per-panel keys standing. */}
-      <div id={PLAN_SECTION} style={{ scrollMarginTop: 16 }}>
-        <TrialCard key={org.id} org={org} />
-      </div>
-
-      {/* ── The numbers, on their own outcome ──────────────────────────── */}
-      {/* NO SPINNER OF ITS OWN, deliberately. All four reads are issued in one
-          `allSettled` and land in one `.then`, so every pane on this screen
-          flips at the same instant — a second spinner beside the codes one
-          would be two pieces of furniture for one wait. What must never be
-          silent is a FAILURE, and that is the arm below.
-
-          THE DUPLICATE IS SUPPRESSED THE WAY ROUND 2's Low-4 established: when
-          the connection drops, all four reads fail with the same sentence, and
-          the fix for two identical error cards was never to give the third and
-          fourth one each. The codes pane is the canonical one — it sits under
-          this and is the screen's subject — so this draws only a failure the
-          owner has not already been told about.
-
-          A REFUSAL DRAWS NOTHING AT ALL. `isRetryable` is false for a 403, and
-          a trainer whose gym unticked their attendance box is not missing
-          anything they can act on; a red card on every visit to their own home
-          screen would be noise about a decision their owner made. */}
+      {/* The numbers' failure, said once: when the connection drops every read fails with the
+          same sentence, and the codes or members pane already says it. A refusal (403) draws
+          nothing: the role's owner took the figures away, and there is nothing to retry. */}
       {!overview.loading && overview.error !== null && overview.retryable
       && overview.error !== codes.error && overview.error !== members.error ? (
-        <ConsoleFailed message={overview.error} onRetry={retry} />
-      ) : null}
-      {!overview.loading && overview.error === null ? (
-        <OverviewNumbers
-          overview={overview.data}
-          day={day}
-          orgSlug={orgSlug}
-          /* The words this panel and the cheer button speak (roadmap 2b). */
-          orgType={org.orgType}
-          /* THE CHEER'S THREE FACTS, and each is a DIFFERENT question the panel
-             cannot answer from the payload it draws.
-
-             `privileges` — the overview read is gated on `attendance.read`
-             while the cheer is gated on `members.read`. Two ticks, either of
-             which an owner may take away, so a staffer can legitimately SEE
-             this list and be refused the button on it. Drawing a live control
-             over that is :12518 C/H-2 — the trainer handed a Remove button the
-             server would refuse, one screen over.
-
-             `readOnly` — a cheer is a WRITE, and :23711 put every write on this
-             console behind the same gate. A lapsed gym stops acting on its
-             members; the button greys with the server's own sentence.
-
-             `onCheered` — the server owns `cheerableAt`. See `reloadOverview`. */
-          gymId={org.id}
-          privileges={viewerPrivileges(org)}
-          readOnly={consoleIsReadOnly(org)}
-          onCheered={reloadOverview}
-        />
+        <ConsoleFailed message={overview.error} onRetry={retry} newLook />
       ) : null}
 
-      {/* THE LAST 7 DAYS (20d-ii): new and left, at risk, visits and payments due, each
-          with a button to its page. It reads for itself, and the server sends each part
-          only to staff who may open that page. */}
-      <LastSevenDays gymId={org.id} orgSlug={orgSlug} orgType={org.orgType} />
+      {tiles.length > 0 ? (
+        <div className="c-ov-tiles" data-testid="ov-tiles">
+          {tiles.map((tile) => (
+            <Tile key={tile.key} tile={tile} />
+          ))}
+        </div>
+      ) : null}
 
-      {/* FAILED PAYMENTS (18d-iii-ii-b): how many card payments were declined and are still owed,
-          with a button to the list. Drawn only where there are some, for staff who take payments. */}
-      <FailedPaymentsCard gymId={org.id} orgSlug={orgSlug} privileges={viewerPrivileges(org)} />
+      <div className="c-ov-split">
+        <div className="c-ov-col c-ov-wide">
+          {seesAttention ? (
+            <section className="c-card c-pay-box" aria-label="Needs attention" data-testid="ov-attention">
+              <div className="c-attn-head">
+                <h2 className="c-h2">Needs attention</h2>
+                {lines.length > 0 ? (
+                  <span className="c-s14 c-t3">{lines.length === 1 ? '1 item' : `${String(lines.length)} items`} · by urgency</span>
+                ) : null}
+              </div>
+              {lines.length === 0 ? (
+                <p className="c-attn-none c-s14 c-w6" data-testid="ov-attention-none">
+                  <CheckCircle2 size={18} aria-hidden="true" />
+                  Nothing needs attention
+                </p>
+              ) : (
+                lines.map((line) => <AttentionRow key={line.key} line={line} />)
+              )}
+            </section>
+          ) : null}
+        </div>
+        <div className="c-ov-col c-ov-side">
+          <CheckinsBox day={day} orgSlug={orgSlug} attendanceTo={attendanceTo} anybodyCame={streaks} />
+        </div>
+      </div>
 
-      {/* REFUNDS TO REVIEW (18d-iv-b-iii): fees no longer owed and refunds that went wrong. Drawn only where there are some. */}
-      <RefundsToReviewCard org={org} orgSlug={orgSlug} privileges={viewerPrivileges(org)} readOnly={readOnly} />
+      <div className="c-ov-split">
+        <div className="c-ov-col c-ov-wide">
+          <AttendanceBox overview={numbers} attendanceTo={attendanceTo} orgType={org.orgType} />
+        </div>
+        <div className="c-ov-col c-ov-side">
+          {streaks ? (
+            <OnARollPanel
+              key={gymId}
+              gymId={gymId}
+              orgType={org.orgType}
+              overview={numbers}
+              privileges={privileges}
+              readOnly={readOnly}
+              onCheered={reloadOverview}
+            />
+          ) : null}
+          {/* The plan: what the business is on and how many places are used. Drawn only for
+              billing.manage and a business on a plan; the banner's Open Plan opens it here. */}
+          <div id={PLAN_SECTION} className="c-ov-col" style={{ scrollMarginTop: 16 }}>
+            <TrialCard key={org.id} org={org} />
+          </div>
+        </div>
+      </div>
 
-      {/* APP PAYMENTS TO REVIEW (18k-vi): payments in the app Square may have charged that weren't applied here. Drawn only
-          where there are some. */}
-      <AppPaymentChecksCard org={org} privileges={viewerPrivileges(org)} readOnly={readOnly} />
+      <div className="c-ov-split">
+        <div className="c-ov-col c-ov-wide">
+          {/* LAST 7 DAYS (20d-ii): it reads for itself, and the server sends each part only to
+              staff who may open that page. */}
+          <LastSevenDays gymId={org.id} orgSlug={orgSlug} orgType={org.orgType} />
+        </div>
+        <div className="c-ov-col c-ov-side">
+          {!members.loading && members.error !== null && members.error !== codes.error ? (
+            <ConsoleFailed message={members.error} onRetry={members.retryable ? retry : undefined} newLook />
+          ) : null}
+          {!members.loading && members.error === null ? (
+            <Link to={`/console/${orgSlug}/members`} className="c-card c-row" data-testid="ov-members">
+              <span className="c-pay-ic c-pay-ic-accent" aria-hidden="true">
+                <Users size={18} />
+              </span>
+              <span className="flex flex-col gap-0.5 min-w-0" style={{ flexGrow: 1 }}>
+                <span className="c-s15 c-w6 c-t1">{countLine ?? words.peopleCap}</span>
+                {/* People waiting outrank the empty-list nudge: a business with people waiting
+                    has somebody to talk about. */}
+                {typeof waiting === 'number' && waiting > 0 ? (
+                  <span className="c-s14 c-w6 c-lk">{waitingCountLabel(waiting)} — confirm them here</span>
+                ) : joined === 0 ? (
+                  <span className="c-s14 c-t2">
+                    {codes.retired ? `Nobody has joined yet — invite your ${words.people}.` : 'Nobody has joined yet — share your code.'}
+                  </span>
+                ) : null}
+              </span>
+              <ChevronRight size={18} className="c-t3 flex-none" aria-hidden="true" />
+            </Link>
+          ) : null}
+          <section className="c-card px-5 pt-4 pb-3" aria-label="Details">
+            <h2 className="c-h2 pb-1">Details</h2>
+            <Fact label="Currency" value={org.currencyDisplay} />
+            <Fact label="Time zone" value={org.timezone} />
+            <Fact label="Your role" value={roleLabel(org.staffRole, org.orgType, org.coOwner)} />
+          </section>
+        </div>
+      </div>
 
-      {/* CANCELLED IN THE APP (18l): members who cancelled in the app in the last 30 days. Drawn only where there are some. */}
-      <AppCancelsCard org={org} orgSlug={orgSlug} privileges={viewerPrivileges(org)} readOnly={readOnly} />
+      {/* The boxes Needs attention opens, each drawn only where it holds something:
+          failed card payments (18d-iii-ii-b), refunds to review (18d-iv-b-iii), app payments to
+          review (18k-vi), cancelled in the app (18l) and chargebacks (18d-iv-e-i). */}
+      <FailedPaymentsCard gymId={org.id} orgSlug={orgSlug} privileges={privileges} />
+      <RefundsToReviewCard org={org} orgSlug={orgSlug} privileges={privileges} readOnly={readOnly} />
+      <AppPaymentChecksCard org={org} privileges={privileges} readOnly={readOnly} />
+      <AppCancelsCard org={org} orgSlug={orgSlug} privileges={privileges} readOnly={readOnly} />
+      <ChargebacksCard org={org} orgSlug={orgSlug} privileges={privileges} readOnly={readOnly} />
 
-      {/* CHARGEBACKS (18d-iv-e-i): those still to answer in Square, the soonest date first. Drawn only where there are some. */}
-      <ChargebacksCard org={org} orgSlug={orgSlug} privileges={viewerPrivileges(org)} readOnly={readOnly} />
-
-      {/* ── The join code pane, on its own outcome ─────────────────────── */}
-      {codes.loading ? <ConsoleLoading label="Loading…" /> : null}
+      {/* Bringing people in. Join codes are switched off on the server (3c), so "Bring your
+          members in" stands where the code was; with codes on, the code and its panel. While
+          Getting started shows its own members step, the card is not drawn a second time. */}
+      {codes.loading ? <ConsoleLoading label="Loading…" newLook /> : null}
       {!codes.loading && codes.error !== null ? (
-        <ConsoleFailed message={codes.error} onRetry={codes.retryable ? retry : undefined} />
+        <ConsoleFailed message={codes.error} onRetry={codes.retryable ? retry : undefined} newLook />
       ) : null}
-      {/* While the Start here list shows its own "Bring your members in" step, with these
-          same two buttons, the card is not drawn a second time under it. */}
-      {codes.retired && viewerPrivileges(org).includes('members.confirm') && !list.hasMembers ? (
+      {codes.retired && privileges.includes('members.confirm') && !list.hasMembers ? (
         <BringMembersInCard orgSlug={orgSlug} orgType={org.orgType} readOnly={readOnly} />
       ) : null}
       {!codes.loading && codes.error === null && !codes.retired ? (
         shownCode !== null ? (
           <JoinCodeCard code={shownCode} orgType={org.orgType} />
         ) : (
-          <ConsoleCard>
-            <p className="text-sm" style={{ color: 'rgba(255,255,255,0.75)' }}>
-              This {orgWords(org.orgType).it} has no join code, so nobody can join it.
-            </p>
-          </ConsoleCard>
+          <section className="c-card p-5">
+            <p className="c-s14 c-t2">This {orgWords(org.orgType).it} has no join code, so nobody can join it.</p>
+          </section>
         )
       ) : null}
-
-      {/* MANAGING the codes, under the one being handed out. Kept on Overview
-          rather than given a tab of its own: §3.1 fixes the console's nav at six
-          screens and surfaces Groups as a filter rather than a screen, and the
-          confirm queue took the same decision one card ago. An owner looks for
-          their code here, so the controls belong beside it.
-
-          Drawn only on a SUCCESSFUL read: over a failed one the list is null,
-          and a panel that rendered "New code" over a gym whose codes it could
-          not read would offer a second code to a gym that may already be at its
-          limit. The failure card above already says what happened, with the
-          retry. */}
       {!codes.loading && codes.error === null && !codes.retired ? (
         <JoinCodesPanel
           gymId={org.id}
           orgType={org.orgType}
           codes={codes.list}
-          privileges={viewerPrivileges(org)}
-          // Part 3 §4.2's read-only console. The codes are still SHOWN and still
-          // copyable — read-only is about changing things, and a gym that cannot
-          // mint a code can still read the one it has (:23711: it "seals nobody
-          // out"). What goes quiet is minting, pausing, replacing and removing.
-          readOnly={consoleIsReadOnly(org)}
+          privileges={privileges}
+          readOnly={readOnly}
           onChanged={reloadCodes}
         />
       ) : null}
 
-      {/* ── The members pane, on ITS own outcome ───────────────────────── */}
-      {/* ROUND 2 Low-4, second half: when BOTH reads fail the same way — which
-          is the ordinary offline case — the L-3 split turned one error card into
-          two identical ones with two Try again buttons. Two true sentences, and
-          still a worse screen than the one it replaced. The duplicate is
-          suppressed; the panes stay independent, which is the part that
-          mattered. */}
-      {!members.loading && members.error !== null && members.error !== codes.error ? (
-        <ConsoleFailed message={members.error} onRetry={members.retryable ? retry : undefined} />
-      ) : null}
-      {!members.loading && members.error === null ? (
-        <Link
-          to={`/console/${orgSlug}/members`}
-          className="rounded-2xl p-4 flex items-center gap-4"
-          style={{ background: '#121110', border: '1px solid rgba(255,255,255,0.06)' }}
-        >
-          <div
-            className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
-            style={{ background: 'rgba(255,138,31,0.15)' }}
-          >
-            <Users className="w-5 h-5" style={{ color: '#FF8A1F' }} />
-          </div>
-          <div className="flex-1 min-w-0">
-            <div className="font-semibold" style={{ color: '#fff' }}>
-              {countLine ?? words.peopleCap}
-            </div>
-            {/* `joined` counts people who are NOT the owner (by role, or an old
-                complimentary seat), and is null when the page is truncated — in which case the
-                roster is plainly not empty and this line does not appear. The
-                count above says "1 member (you)" in this same case, so the two
-                sentences agree instead of reading as a contradiction (L-5). */}
-            {/* The waiting count outranks the empty-roster nudge: a gym with
-                three people waiting has not got "nobody" to talk about, and
-                telling them to share the code again would be the wrong next
-                step by a mile. */}
-            {typeof waiting === 'number' && waiting > 0 ? (
-              <div className="text-xs mt-0.5 font-medium" style={{ color: '#FF8A1F' }}>
-                {waitingCountLabel(waiting)} — confirm them here
-              </div>
-            ) : joined === 0 ? (
-              <div className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.45)' }}>
-                {codes.retired ? `Nobody has joined yet — invite your ${words.people}.` : 'Nobody has joined yet — share your code.'}
-              </div>
-            ) : null}
-          </div>
-          <ChevronRight className="w-5 h-5 flex-shrink-0" style={{ color: 'rgba(255,255,255,0.3)' }} />
-        </Link>
-      ) : null}
-
-      <ConsoleCard>
-        <div className="text-xs uppercase tracking-wider mb-2" style={{ color: 'rgba(255,255,255,0.35)' }}>
-          Details
-        </div>
-        <Fact label="Currency" value={org.currencyDisplay} />
-        <Fact label="Timezone" value={org.timezone} />
-        <Fact label="Your role" value={roleLabel(org.staffRole, org.orgType, org.coOwner)} />
-      </ConsoleCard>
-
-      {/* The hidden Start here list, brought back by whoever may hide it. */}
+      {/* The hidden Getting started list, brought back by whoever may hide it. */}
       {list.show === 'hidden' ? (
         <div data-testid="start-here-hidden" className="flex flex-col gap-2">
           <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-            <span className="text-sm" style={{ color: 'rgba(255,255,255,0.45)' }}>
-              The Start here list is hidden.
-            </span>
-            <button
-              type="button"
-              onClick={() => void setListHidden(false)}
-              disabled={hiding.busy || readOnly}
-              className="rounded-xl px-4 py-2 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-              style={{ background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.85)' }}
-            >
-              Show the Start here list
+            <span className="c-s14 c-t2">The Getting started list is hidden.</span>
+            <button type="button" onClick={() => void setListHidden(false)} disabled={hiding.busy || readOnly} className="c-btn c-btn-s c-btn-sm">
+              Show the Getting started list
             </button>
           </div>
           {hiding.error !== null ? (
-            <p role="alert" className="text-sm" style={{ color: '#ef4444' }}>
+            <p role="alert" className="c-err">
               {hiding.error}
             </p>
           ) : null}

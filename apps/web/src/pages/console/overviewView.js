@@ -406,3 +406,68 @@ export function barTitle(bar) {
   const when = bar?.isCurrent ? 'This week so far' : `Week of ${bar?.label ?? ''}`;
   return `${when}: ${visitsLabel(count(bar?.visits))}, ${peopleLabel(count(bar?.visitors))}`;
 }
+
+/** THE BUSIEST FINISHED WEEK, drawn in orange (V5-a; board `Overview`): the bar's key, or null
+ *  when no finished week had a visit. The current week is never it: it is not over. A tie goes
+ *  to the later week. */
+export function bestWeekKey(bars) {
+  let best = null;
+  for (const bar of Array.isArray(bars) ? bars : []) {
+    if (bar?.isCurrent) continue;
+    if (count(bar?.visits) === 0) continue;
+    if (best === null || count(bar.visits) >= count(best.visits)) best = bar;
+  }
+  return best === null ? null : best.key;
+}
+
+const GREETINGS = [
+  [5, 'Good morning'],
+  [12, 'Good afternoon'],
+  [18, 'Good evening'],
+];
+
+/** THE HEAD OF OVERVIEW (V5-a): "Overview · Monday 16 November" and "Good morning, Dana", both
+ *  in the business's own time zone, so an owner away from it reads its day. An unknown zone
+ *  reads the browser's. */
+export function overviewHeading({ now, timezone, displayName }) {
+  const parts = (zone) =>
+    new Intl.DateTimeFormat('en-GB', { timeZone: zone, weekday: 'long', day: 'numeric', month: 'long', hour: 'numeric', hourCycle: 'h23' }).formatToParts(now);
+  let found;
+  try {
+    found = parts(typeof timezone === 'string' && timezone !== '' ? timezone : undefined);
+  } catch {
+    found = parts(undefined);
+  }
+  const part = (type) => found.find((p) => p.type === type)?.value ?? '';
+  const hour = Number(part('hour'));
+  let hello = 'Good evening';
+  for (const [from, words] of GREETINGS) if (hour >= from) hello = words;
+  const first = String(displayName ?? '').trim().split(/\s+/)[0] ?? '';
+  return {
+    eyebrow: `Overview · ${part('weekday')} ${part('day')} ${part('month')}`,
+    greeting: first === '' || first.includes('@') ? hello : `${hello}, ${first}`,
+  };
+}
+
+/** THE ATTENDANCE FIGURES ACROSS THE TOP OF OVERVIEW (V5-a), from the numbers' own read: who
+ *  checked in today, this week against last, and the share of members who came in the last 30
+ *  days. People, never visits (Kd, 2026-09-03). None until somebody has come: the Attendance box
+ *  then says so in one sentence. */
+export function attendanceTiles(overview, orgType) {
+  if (numbersState(overview) !== 'ready') return [];
+  const { tiles } = overview;
+  const today = tileCounts(tiles.today);
+  const week = tileCounts(tiles.week);
+  const comparison = weekComparison(tiles.week);
+  const out = [
+    { key: 'today', icon: 'checkin', tone: 'accent', title: 'Checked in today', figure: n(today.value), note: today.unit, direction: null },
+    { key: 'week', icon: 'week', tone: 'info', title: 'This week', figure: n(week.value), note: comparison.direction === null ? `${week.unit} so far. ${comparison.text}` : `${week.unit} ${comparison.text}`, direction: comparison.direction },
+  ];
+  const adoption = adoptionLine(tiles.month, orgType);
+  if (adoption !== null) {
+    out.push({ key: 'month', icon: 'people', tone: 'good', title: 'Came in the last 30 days', figure: `${String(adoption.pct)}%`, note: adoption.text, direction: null });
+  }
+  return out;
+}
+
+const n = (value) => value.toLocaleString('en');

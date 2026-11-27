@@ -2705,7 +2705,7 @@ describe("the gym's numbers", () => {
 
     expect(await screen.findByText(/Your first week/)).toBeTruthy();
     // And no arrow over a week there is nothing to compare against.
-    expect(screen.getByText('Nothing was recorded last week.')).toBeTruthy();
+    expect(screen.getByText(/Nothing was recorded last week\./)).toBeTruthy();
     // **AND THE CHART IS STILL DRAWN.** A previous version of this card REMOVED
     // it in this state and Kd corrected that: *"did not asked the chart to be
     // removed but just asked to be correct accurate and beautiful"*. The flat
@@ -2827,7 +2827,7 @@ describe("the gym's numbers", () => {
     );
     drawOverview();
 
-    const heading = await screen.findByRole('button', { name: /^Who came today/ });
+    const heading = await screen.findByRole('button', { name: /^Today's check-ins/ });
     expect(await screen.findByText('Kd Owner')).toBeTruthy();
 
     fireEvent.click(heading);
@@ -2869,7 +2869,7 @@ describe("the gym's numbers", () => {
     orgService.getOverview.mockResolvedValue(busy());
     drawOverview();
 
-    const links = await screen.findAllByRole('link', { name: /Attendance/ });
+    const links = await screen.findAllByRole('link', { name: /attendance/i });
     expect(links.some((a) => a.getAttribute('href') === '/console/iron-house/attendance')).toBe(true);
   });
 

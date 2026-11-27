@@ -583,10 +583,10 @@ export const orgService = {
    *  each done or not, and whether the gym has hidden the list. Read once when Overview
    *  opens; 300 an hour a person. */
   getStartHere: (gymId) =>
-    readThrough(startHereResponseSchema, 'your Start here list', knownSteps(authApi.get(`/v1/orgs/${encodeURIComponent(gymId)}/start-here`))),
+    readThrough(startHereResponseSchema, 'your Getting started list', knownSteps(authApi.get(`/v1/orgs/${encodeURIComponent(gymId)}/start-here`))),
   /** Hide the list for the whole gym, or show it again (`org.manage`). */
   setStartHereHidden: (gymId, hidden) =>
-    readThrough(startHereResponseSchema, 'your Start here list', knownSteps(authApi.put(`/v1/orgs/${encodeURIComponent(gymId)}/start-here`, { hidden }))),
+    readThrough(startHereResponseSchema, 'your Getting started list', knownSteps(authApi.put(`/v1/orgs/${encodeURIComponent(gymId)}/start-here`, { hidden }))),
 
   /** GET /v1/orgs/:gymId/members — Part 3 §2.4's roster and nothing else:
    *  display name, join date, the label of the code they came in through, and
