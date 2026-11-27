@@ -417,7 +417,7 @@ const styles = StyleSheet.create({
 function MonitorLine() {
   const [open, setOpen] = useState(false);
   // Connected only while the Workout tab shows it, as the Running page's row is.
-  const { monitor, bpm } = useHeartNow(useIsFocused());
+  const { monitor, bpm, bluetooth } = useHeartNow(useIsFocused());
   return (
     <>
       <Pressable
@@ -433,7 +433,7 @@ function MonitorLine() {
           <View style={monitorStyles.grow}>
             <Txt kind="strong">Heart rate monitor</Txt>
             <Txt kind="small" numberOfLines={2}>
-              {monitor === null ? "Connect a chest strap or watch" : `${monitorName(monitor.name)} · ${bpmWords(bpm)}`}
+              {monitor === null ? "Connect a chest strap or watch" : `${monitorName(monitor.name)} · ${bpmWords(bpm, bluetooth)}`}
             </Txt>
           </View>
           <Icon name="go" size={18} colour="textFaint" />

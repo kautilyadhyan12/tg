@@ -32,7 +32,8 @@ import java.util.Locale
 // phone is kept awake (a partial wake lock: the screen stays off) only until the last of them. Android
 // closes its own speech service when memory is short and nothing is being said (measured 2026-11-11: a
 // line after 5 quiet minutes came 6 s late while it started again), so the engine is made afresh 15 s
-// before each of them.
+// before each of them, and each minute of a run. The fresh one is made beside the one in use and taken
+// in once it is ready and nothing is being said, so a line never waits for it (37n, the bug hunt's C7).
 class RunVoiceModule : Module() {
   private var engine: TextToSpeech? = null
   /** Which engine is the current one: an answer from one let go, or replaced, is not listened to. */
@@ -52,6 +53,16 @@ class RunVoiceModule : Module() {
   /** The lines handed over ahead are posted with this, so a new list takes their place alone. */
   private val timed = Any()
   private var awake: PowerManager.WakeLock? = null
+  /** A fresh engine made beside the one in use (`warm`), taken in once ready and nothing is being said. */
+  private var spare: TextToSpeech? = null
+  private var spareNo = 0
+  private var spareReady = false
+  private var spareEarly: Int? = null
+  /** When the fresh engine was made, on the uptime clock: one not ready WARM_AHEAD_MS later is let go (round one, L4). */
+  private var spareMadeAt = 0L
+  /** The last line said of those handed over ahead, and when, on the uptime clock (`hush`). */
+  private var timedLine: String? = null
+  private var timedAt = 0L
 
   private val speech: AudioAttributes = AudioAttributes.Builder()
     .setUsage(AudioAttributes.USAGE_ASSISTANCE_NAVIGATION_GUIDANCE)
@@ -77,6 +88,10 @@ class RunVoiceModule : Module() {
     /** The engine made ready now, so the next line is said at once (Run paused, a kilometre). */
     AsyncFunction("warm") { warm() }
 
+    /** The run paused: a line handed over ahead that began a moment ago, and is the only one being said, stops,
+     *  since the step it starts has not begun for the person (37n, C9). */
+    AsyncFunction("hush") { hush() }
+
     /** "ok", "off" (no text-to-speech that starts) or "noEnglish", for the Running page's line. */
     AsyncFunction("check") { promise: Promise -> check(promise) }
 
@@ -84,14 +99,22 @@ class RunVoiceModule : Module() {
   }
 
   @Synchronized
-  private fun say(text: String) {
+  private fun say(text: String, timedOne: Boolean = false) {
     val ctx = context ?: return
     if (engine == null) {
       makeEngine(ctx)
       // It failed inside its constructor: nothing is kept to be said later.
       if (engine == null) return
     }
-    if (ready) speakNow(text) else waiting.add(text)
+    if (!ready) {
+      waiting.add(text)
+      return
+    }
+    val id = speakNow(text) ?: return
+    if (timedOne) {
+      timedLine = id
+      timedAt = SystemClock.uptimeMillis()
+    }
   }
 
   private fun makeEngine(ctx: Context) {
@@ -105,14 +128,80 @@ class RunVoiceModule : Module() {
   }
 
   /** A fresh engine, its speech service started again if Android closed it: before a line handed
-   *  over ahead, at Go and each minute of a run. Never while a line is being said or waits for it. */
+   *  over ahead, at Go and each minute of a run. Made beside the one in use, which says every line until
+   *  the fresh one is ready and nothing is being said (`takeSpare`). */
   @Synchronized
   private fun warm() {
     val ctx = context ?: return
-    if (pending.isNotEmpty() || waiting.isNotEmpty()) return
-    engine?.shutdown()
-    engine = null
-    makeEngine(ctx)
+    if (engine == null) {
+      makeEngine(ctx)
+      return
+    }
+    // A fresh one that never answered is let go, so the next one is made (round one, L4).
+    if (spare != null && !spareReady && SystemClock.uptimeMillis() - spareMadeAt > WARM_AHEAD_MS) dropSpare()
+    // One starting already, or a fresh one waiting to be taken in.
+    if (!ready || spare != null) return
+    spareNo += 1
+    spareMadeAt = SystemClock.uptimeMillis()
+    val mine = spareNo
+    spareReady = false
+    spareEarly = null
+    val made = TextToSpeech(ctx) { status -> spareStarted(mine, status) }
+    spare = made
+    spareEarly?.let { spareStarted(mine, it) }
+  }
+
+  @Synchronized
+  private fun spareStarted(id: Int, status: Int) {
+    if (id != spareNo) return
+    val tts = spare
+    if (tts == null) {
+      spareEarly = status
+      return
+    }
+    if (spareReady) return
+    if (status != TextToSpeech.SUCCESS || useEnglish(tts) != "ok") {
+      // Not started: the engine in use goes on, and the next warm tries again.
+      spare = null
+      tts.shutdown()
+      return
+    }
+    listenTo(tts)
+    spareReady = true
+    takeSpare()
+  }
+
+  /** The fresh engine takes the place of the one in use, once nothing is being said or waits; `now` takes it
+   *  at once (the one in use refused a line). */
+  private fun takeSpare(now: Boolean = false): Boolean {
+    val fresh = spare ?: return false
+    if (!spareReady || (!now && (pending.isNotEmpty() || waiting.isNotEmpty()))) return false
+    val old = engine
+    engineNo += 1
+    engine = fresh
+    ready = true
+    spare = null
+    spareReady = false
+    old?.shutdown()
+    return true
+  }
+
+  private fun dropSpare() {
+    spareNo += 1
+    spare?.shutdown()
+    spare = null
+    spareReady = false
+  }
+
+  @Synchronized
+  private fun hush() {
+    val id = timedLine ?: return
+    timedLine = null
+    if (SystemClock.uptimeMillis() - timedAt > LATE_MS || pending.size != 1 || !pending.contains(id)) return
+    engine?.stop()
+    pending.clear()
+    dropFocus()
+    takeSpare()
   }
 
   @Synchronized
@@ -131,6 +220,14 @@ class RunVoiceModule : Module() {
       engine = null
       return
     }
+    listenTo(tts)
+    ready = true
+    val lines = waiting.toList()
+    waiting.clear()
+    for (line in lines) speakNow(line)
+  }
+
+  private fun listenTo(tts: TextToSpeech) {
     tts.setAudioAttributes(speech)
     tts.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
       override fun onStart(utteranceId: String?) = Unit
@@ -141,32 +238,37 @@ class RunVoiceModule : Module() {
       override fun onError(utteranceId: String?) = lineEnded(utteranceId)
       override fun onError(utteranceId: String?, errorCode: Int) = lineEnded(utteranceId)
     })
-    ready = true
-    for (line in waiting) speakNow(line)
-    waiting.clear()
   }
 
-  private fun speakNow(text: String) {
-    val tts = engine ?: return
+  /** The line's id once the engine has it; null when it was let go. */
+  private fun speakNow(text: String): String? {
+    val tts = engine ?: return null
     // Refused focus is a phone call or another app that may not be talked over: the line is let go.
-    if (pending.isEmpty() && !takeFocus()) return
+    if (pending.isEmpty() && !takeFocus()) return null
     lineNo += 1
     val id = "run-$lineNo"
-    if (tts.speak(text, TextToSpeech.QUEUE_ADD, Bundle(), id) == TextToSpeech.SUCCESS) {
+    var said = tts.speak(text, TextToSpeech.QUEUE_ADD, Bundle(), id) == TextToSpeech.SUCCESS
+    // The engine in use refused it (its speech service gone): a fresh one ready says it.
+    if (!said && takeSpare(now = true)) said = engine?.speak(text, TextToSpeech.QUEUE_ADD, Bundle(), id) == TextToSpeech.SUCCESS
+    if (said) {
       pending.add(id)
       // An engine that dies mid-line calls nothing back: the music is given back all the same, well
       // after the line, and those before it, would have ended (a voice says about 15 letters a second).
       queueEnds = maxOf(SystemClock.uptimeMillis(), queueEnds) + text.length * MS_PER_LETTER * 2
       main.postAtTime({ lineEnded(id) }, queueEnds + LINE_GRACE_MS)
-    } else if (pending.isEmpty()) {
-      dropFocus()
+      return id
     }
+    if (pending.isEmpty()) dropFocus()
+    return null
   }
 
   @Synchronized
   private fun lineEnded(id: String?) {
     if (id == null || !pending.remove(id)) return
-    if (pending.isEmpty()) dropFocus()
+    if (pending.isEmpty()) {
+      dropFocus()
+      takeSpare()
+    }
   }
 
   @Synchronized
@@ -179,7 +281,7 @@ class RunVoiceModule : Module() {
     for (i in texts.indices) {
       val wait = maxOf(0L, inMs[i].toLong())
       val text = texts[i]
-      main.postAtTime({ say(text) }, timed, now + wait)
+      main.postAtTime({ say(text, timedOne = true) }, timed, now + wait)
       if (wait > WARM_AHEAD_MS) main.postAtTime({ warm() }, timed, now + wait - WARM_AHEAD_MS)
       last = maxOf(last, wait)
     }
@@ -204,6 +306,8 @@ class RunVoiceModule : Module() {
     engine?.shutdown()
     engine = null
     ready = false
+    dropSpare()
+    timedLine = null
     pending.clear()
     main.removeCallbacksAndMessages(null)
     letSleep()
@@ -297,5 +401,7 @@ class RunVoiceModule : Module() {
     const val AWAKE_AFTER_MS = 30_000L
     /** The engine made again this long before a line handed over ahead: a cold start measured 7 s. */
     const val WARM_AHEAD_MS = 15_000L
+    /** A line handed over ahead stops at a pause this soon after it began (`hush`). */
+    const val LATE_MS = 1_500L
   }
 }

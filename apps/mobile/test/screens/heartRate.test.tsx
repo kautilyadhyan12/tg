@@ -4,6 +4,7 @@ import { AppState, Linking } from "react-native";
 import { heartSums, runSums, saveRunRequestSchema, type SaveRunRequest } from "@app/shared";
 import { App } from "../../src/App";
 import { HeartMonitorSheet } from "../../src/heart/HeartMonitor";
+import { HeartPill } from "../../src/heart/HeartPill";
 import { heartNative } from "../../src/heart/heartNative";
 import { forgetHeartMax } from "../../src/heart/heartMax";
 import { HEART_FRESH_MS, endTry, forgetMonitor, heartNow, heartQueue, holdHeart, loadMonitor, pairMonitor, pullHeart, resetHeart, saveMonitor, savedHeartNow, takeHeartReadings, tryMonitor } from "../../src/heart/monitor";
@@ -37,6 +38,9 @@ interface Strap {
   bond: (device: string, state: "bonded" | "bonding" | "none", silent?: boolean) => void;
   watched: string | null;
   watches: string[];
+  locationOff: boolean;
+  finding: boolean;
+  asks: number;
   scans: number;
   send: (id: string, bytes: number[], at?: number) => void;
   reset: () => void;
@@ -137,6 +141,89 @@ describe("the worst thing: a heart rate that is not the person's, shown as their
 // THE WORST THING THIS JOB COULD DO TO A REAL PERSON: a heart rate said out loud that is not theirs now (an
 // old reading from a strap that went quiet, a stranger's strap, a monitor tried in the box), so they push
 // harder than is safe. The mark is then said alone, never with that number.
+// 37n, the bug hunt's C1 to C3: the monitor is connected again by the phone itself (Bluetooth back on, Nearby devices
+// allowed again, a strap gone quiet). Whatever brings it back, what is watched is the person's own monitor.
+describe("the worst thing (37n): a monitor connected again by itself is only ever the person's own", () => {
+  beforeEach(async () => {
+    await loadMonitor(RAVI.id);
+    await saveMonitor({ id: MINE, name: "Polar H10 9EF6E824" });
+  });
+
+  it("Nearby devices refused at Go, allowed mid-run: the saved monitor is watched again, never another, and a stranger's readings stay out", () => {
+    let now = Date.now();
+    const clock = jest.spyOn(Date, "now").mockImplementation(() => now);
+    try {
+      strap.allowed = false;
+      const release = holdHeart();
+      expect(strap.asks).toBe(1);
+      expect(strap.watches).toEqual([]);
+      // Asked again at most every 3 s, never on every reading, refused or not (round one, tests).
+      pullHeart();
+      pullHeart();
+      expect(strap.asks).toBe(1);
+      // Not allowed: Android is not asked at all.
+      now += 5000;
+      pullHeart();
+      pullHeart();
+      expect(strap.asks).toBe(1);
+      expect(strap.watches).toEqual([]);
+      strap.allowed = true;
+      pullHeart();
+      expect(strap.asks).toBe(1);
+      now += 3000;
+      pullHeart();
+      pullHeart();
+      expect(strap.asks).toBe(2);
+      expect(strap.watches).toEqual([MINE]);
+      strap.send(STRANGER, polar(150), now);
+      pullHeart();
+      expect(heartNow(now)).toBeNull();
+      strap.send(MINE, polar(120), now);
+      expect(takeHeartReadings().map((r) => r.bpm)).toEqual([120]);
+      expect(heartNow(now)).toBe(120);
+      // Watched now: never asked again.
+      now += 10_000;
+      pullHeart();
+      expect(strap.asks).toBe(2);
+      release();
+    } finally {
+      clock.mockRestore();
+    }
+  });
+
+  it("a monitor tried in the box while refused, then let go: once allowed, the saved one is watched, never the one tried", () => {
+    let now = Date.now();
+    const clock = jest.spyOn(Date, "now").mockImplementation(() => now);
+    try {
+      strap.allowed = false;
+      const release = holdHeart();
+      tryMonitor(STRANGER);
+      endTry();
+      strap.allowed = true;
+      now += 3000;
+      pullHeart();
+      expect(strap.watches).toEqual([MINE]);
+      release();
+      // Refused again, then let go while a retry waits: once allowed, nothing is asked, since nothing holds it (re-check, N3).
+      strap.allowed = false;
+      const before = strap.asks;
+      const again = holdHeart();
+      expect(strap.asks).toBe(before + 1);
+      again();
+      const asked = strap.asks;
+      strap.allowed = true;
+      now += 3000;
+      pullHeart();
+      now += 3000;
+      pullHeart();
+      expect(strap.asks).toBe(asked);
+      expect(strap.watches).toEqual([MINE]);
+    } finally {
+      clock.mockRestore();
+    }
+  });
+});
+
 const voice = jest.requireMock<{ voice: { said: string[] } }>("../../src/screens/running/runVoiceNative").voice;
 const marksSaid = () => voice.said.filter((line) => /^\d+ kilometres?\./.test(line));
 
@@ -729,5 +816,146 @@ describe("a pause that is undone keeps its heart readings", () => {
     expect(runNow()?.phase).toBe("running");
     expect(runNow()?.pauses).toEqual([]);
     expect(runNow()?.heart.map(([ms]) => ms)).toEqual(Array.from({ length: 30 }, (_, i) => (i + 1) * 1000));
+  });
+});
+
+// 37n, the bug hunt's C1, C2 and C5: "No signal" with no reason, and nothing to press.
+describe("I see why my monitor has no signal, and fix it from that screen", () => {
+  const monitor = { id: MINE, name: "Polar H10 9EF6E824" };
+  beforeEach(async () => {
+    await loadMonitor(RAVI.id);
+    await saveMonitor(monitor);
+  });
+
+  it("Nearby devices taken back: the box says so with Allow, and once allowed the monitor connects again by itself", async () => {
+    strap.allowed = false;
+    await render(<HeartMonitorSheet open monitor={monitor} onClose={() => undefined} />);
+    expect(await screen.findByText("Allow Nearby devices to connect your monitor.")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Allow" })).toBeTruthy();
+    expect(strap.watched).toBeNull();
+    strap.allowed = true;
+    await waitFor(
+      () => {
+        expect(strap.watched).toBe(MINE);
+        expect(screen.queryByText("Allow Nearby devices to connect your monitor.")).toBeNull();
+      },
+      { timeout: 6000 },
+    );
+    strap.send(MINE, polar(118));
+    expect(await screen.findByText("118 bpm", {}, { timeout: 3000 })).toBeTruthy();
+  }, 15_000);
+
+  it("mid-run, Nearby devices taken back: the pill and the big figure say so, and the pill opens the box with Allow", async () => {
+    const s = runServer();
+    await openRunning(s);
+    await startRunning();
+    strap.allowed = false;
+    expect(await screen.findByRole("button", { name: "Heart rate: allow nearby devices. Open heart rate monitor" }, { timeout: 3000 })).toBeTruthy();
+    await fireEvent.press(screen.getByRole("button", { name: "Numbers" }));
+    // The pill and the big Heart rate figure: one answer.
+    expect(await screen.findAllByText("Allow Nearby devices", {}, { timeout: 3000 })).toHaveLength(2);
+    await fireEvent.press(screen.getByRole("button", { name: "Heart rate: allow nearby devices. Open heart rate monitor" }));
+    expect(await screen.findByText("Allow Nearby devices to connect your monitor.")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Allow" })).toBeTruthy();
+    // During a run the monitor is not changed or removed from here.
+    expect(screen.queryByRole("button", { name: "Change monitor" })).toBeNull();
+    strap.allowed = true;
+    strap.send(MINE, polar(141));
+    // With a heart rate the pill is the number again, not a button.
+    await waitFor(() => {
+      expect(screen.queryByRole("button", { name: /^Heart rate: / })).toBeNull();
+    }, { timeout: 3000 });
+  });
+
+  it("the run's pill says why there is no heart rate: Bluetooth off, Allow Nearby devices, Location off; otherwise No signal", async () => {
+    const shown = await render(<HeartPill bpm={null} max={null} bluetooth="off" />);
+    expect(screen.getByText("Bluetooth off")).toBeTruthy();
+    expect(screen.getByLabelText("Heart rate: bluetooth off")).toBeTruthy();
+    await shown.rerender(<HeartPill bpm={null} max={null} bluetooth="denied" />);
+    expect(screen.getByText("Allow Nearby devices")).toBeTruthy();
+    await shown.rerender(<HeartPill bpm={null} max={null} bluetooth="location" />);
+    expect(screen.getByText("Location off")).toBeTruthy();
+    await shown.rerender(<HeartPill bpm={null} max={null} bluetooth="on" />);
+    expect(screen.getByText("No signal")).toBeTruthy();
+    await shown.rerender(<HeartPill bpm={131} max={null} bluetooth="off" />);
+    expect(screen.getByText("131 bpm")).toBeTruthy();
+  });
+
+  it("Android 11 or older with Location off: Location is the reason only while the phone listens for the monitor, never under a heart rate (round one, H1)", async () => {
+    strap.locationOff = true;
+    await render(<HeartMonitorSheet open monitor={monitor} onClose={() => undefined} />);
+    // A monitor Android already knows connects with Location off: no Location line, no Location reason.
+    expect(await screen.findByText("No signal")).toBeTruthy();
+    expect(screen.queryByText("Turn on Location to connect your monitor.")).toBeNull();
+    strap.send(MINE, polar(118));
+    expect(await screen.findByText("118 bpm", {}, { timeout: 3000 })).toBeTruthy();
+    expect(screen.queryByText("Turn on Location to connect your monitor.")).toBeNull();
+    // A monitor the phone must listen for first, with no heart rate: Location is the reason, with its button.
+    strap.finding = true;
+    expect(await screen.findByText("Location off", {}, { timeout: 8000 })).toBeTruthy();
+    expect(screen.getByText("Turn on Location to connect your monitor.")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Turn on Location" })).toBeTruthy();
+  }, 15_000);
+
+  it("Android 11 or older with Location off: Look for monitors says Turn on Location, opens its setting, and looks once it is on", async () => {
+    forgetMonitor();
+    strap.locationOff = true;
+    const sendIntent = jest.spyOn(Linking, "sendIntent").mockResolvedValue(undefined);
+    await render(<HeartMonitorSheet open monitor={null} onClose={() => undefined} />);
+    expect(await screen.findByText("Turn on Location to find your monitor.")).toBeTruthy();
+    expect(strap.scans).toBe(0);
+    await fireEvent.press(screen.getByRole("button", { name: "Turn on Location" }));
+    expect(sendIntent).toHaveBeenCalledWith("android.settings.LOCATION_SOURCE_SETTINGS");
+    strap.locationOff = false;
+    expect(await screen.findByText("Wear your strap, or turn on your watch's heart rate broadcast.", {}, { timeout: 3000 })).toBeTruthy();
+    expect(strap.scans).toBe(1);
+  });
+});
+
+// 37n, the bug hunt's C6 and C9.
+describe("a pause keeps what came before it, and says nothing planned after it", () => {
+  beforeEach(async () => {
+    await loadMonitor(RAVI.id);
+    await saveMonitor({ id: MINE, name: "Polar H10 9EF6E824" });
+  });
+
+  /** Thirty seconds standing where the last point of `feed(1, 60)` was, in one batch, as Android hands them over. */
+  async function standAfterMinute(startedAt: number) {
+    const stillAt = 26.1445 + (60 * 3) / 111_132;
+    await act(() =>
+      takeLocations({ locations: Array.from({ length: 30 }, (_, i) => ({ timestamp: startedAt + (61 + i) * 1000, coords: { latitude: stillAt, longitude: 91.7362, accuracy: 5, speed: 0 } })) }),
+    );
+  }
+
+  it("the batch that Auto-pauses the run: every heart reading from before the pause is the run's", async () => {
+    const run = await startRun(RAVI.id, randomUUID(), true, Date.now());
+    await feed(1, 60, () => 140);
+    // The readings come in the same batch as the points that pause it.
+    for (let s = 61; s <= 90; s++) strap.send(MINE, polar(130), run.startedAt + s * 1000);
+    await standAfterMinute(run.startedAt);
+    const now = runNow();
+    expect(now?.phase).toBe("paused");
+    const pausedFrom = now?.pauses[0]?.[0] ?? 0;
+    // The pause began inside the batch, after some of its readings.
+    expect(pausedFrom).toBeGreaterThan(61_000);
+    const before = Array.from({ length: 90 }, (_, i) => (i + 1) * 1000).filter((ms) => ms < pausedFrom);
+    expect(now?.heart.map(([ms]) => ms)).toEqual(before);
+  });
+
+  it("Pause and Auto-pause each ask the phone's voice to stop a planned line just begun, before the pause is said", async () => {
+    const hushed = jest.requireMock<{ voice: { hushed: number[] } }>("../../src/screens/running/runVoiceNative").voice.hushed;
+    hushed.length = 0;
+    voice.said.length = 0;
+    const run = await startRun(RAVI.id, randomUUID(), true, Date.now());
+    await feed(1, 60, null);
+    await standAfterMinute(run.startedAt);
+    expect(runNow()?.phase).toBe("paused");
+    expect(hushed).toHaveLength(1);
+    expect(voice.said.slice(hushed[0])).toContain("Auto-paused.");
+    await feed(91, 10, null);
+    expect(runNow()?.phase).toBe("running");
+    await act(() => pauseRun());
+    expect(hushed).toHaveLength(2);
+    expect(voice.said.slice(hushed[1])).toEqual(["Run paused."]);
   });
 });

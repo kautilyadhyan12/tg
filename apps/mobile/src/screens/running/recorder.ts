@@ -263,6 +263,14 @@ function say(lines: readonly string[]): void {
   for (const line of lines) void runVoiceNative.say(line).catch(() => undefined);
 }
 
+/** The run paused: a planned line the phone's voice began a moment ago stops, since its step has not begun for the
+ *  person (37n, the bug hunt's C9). */
+function hushVoice(): void {
+  const native = runVoiceNative;
+  if (native?.hush === undefined) return;
+  void native.hush().catch(() => undefined);
+}
+
 function quietVoice(): void {
   void runVoiceNative?.quiet().catch(() => undefined);
 }
@@ -529,9 +537,16 @@ function takeMotion(run: LiveRun, until: number = RUN_MAX_ELAPSED_MS): void {
 function takeHeart(run: LiveRun): void {
   const readings = takeHeartReadings();
   if (run.phase !== "running") {
-    // Auto-paused: kept aside, in case the pause is undone or the clock starts again from before this batch.
+    // Auto-paused: the readings from before the pause began are the run's, as its points are (the batch that
+    // paused it came with them: 37n, the bug hunt's C6); the rest kept aside, in case the pause is undone or the
+    // clock starts again from before this batch.
     if (run.phase === "paused" && !run.pausedByPerson) {
-      for (const { at, bpm } of readings) pausedHeart.push([Math.round(at - run.startedAt), bpm]);
+      const pausedFrom = openPauseFrom(run) ?? 0;
+      for (const { at, bpm } of readings) {
+        const ms = Math.round(at - run.startedAt);
+        if (ms < pausedFrom) keepHeart(run, ms, bpm);
+        else pausedHeart.push([ms, bpm]);
+      }
       pausedHeart = pausedHeart.slice(-PAUSED_TAIL);
     }
     return;
@@ -764,6 +779,7 @@ export async function takeLocations(data: unknown, now: number = Date.now()): Pr
       writtenAt = 0;
     }
     const from = stopFrom(current);
+    hushVoice();
     say([...markNow(current, true), ...(from !== null && from < START_HUSH_MS ? [] : [PAUSE_WORDS.auto])]);
     scheduleGuide(current, now);
   }
@@ -916,7 +932,10 @@ export async function pauseRun(now: number = Date.now()): Promise<void> {
   wheelsAtPause = auto.wheels;
   auto = autoPausedFrom(openPauseFrom(run), wheelsAtPause);
   current = { ...run };
-  if (was === "running") say([...markNow(current, true), ...step.lines, PAUSE_WORDS.person]);
+  if (was === "running") {
+    hushVoice();
+    say([...markNow(current, true), ...step.lines, PAUSE_WORDS.person]);
+  }
   scheduleGuide(current, now);
   await keep(current);
   tell();
