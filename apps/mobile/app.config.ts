@@ -242,8 +242,9 @@ function appConfig(build: Build): ExpoConfig {
       "./plugins/shortNativeBuild.js",
       // The store's file is signed with KWAZO's own upload key, never the development one (21c-i).
       ...(build.signedForTheStore ? ["./plugins/storeSigning.js"] : []),
-      // A folder's copy holds the phone test's pose library (51a), which would send Google its usage reports.
-      ...(build.signedForTheStore ? [] : ["./plugins/noUsageReports.js"]),
+      // The pose library (the camera screen's, 53a, in every build; and the phone test's, 51a, in a folder's copy) would
+      // send Google its usage reports: every build takes the sender away.
+      "./plugins/noUsageReports.js",
     ],
     extra,
   };

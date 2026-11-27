@@ -14,6 +14,7 @@ import { Setup, accountUnits } from "./setup/Setup";
 import { SignOutAsk } from "./SignOutAsk";
 import { ProgressPage } from "./progress/ProgressPage";
 import { AchievementsPage } from "./achievements/AchievementsPage";
+import { TryCameraLink } from "./camera/TryCamera";
 import { ThisCopy } from "./ThisCopy";
 import { LibraryPart } from "./library/LibraryPart";
 import { MyWorkoutPart } from "./library/MyWorkoutPart";
@@ -91,6 +92,7 @@ export function MeScreen() {
       <SettingsLink />
       <SignOut />
       <ThisCopy />
+      <TryCameraLink />
     </Page>
   );
 }

@@ -508,6 +508,42 @@ jest.mock("../../src/library/clipNative", () => {
     },
   };
 });
+// The camera screen's camera (53a), modules/pose-camera's Android code. `poseCamera.props` is the newest view's; a test
+// hands over the model's answers with `poseCamera.answer(event)` and a stop with `poseCamera.fail(reason)`; `actives`
+// lists each `active` it was drawn with; `missing` stands for a copy built before it.
+jest.mock("../../src/camera/poseCameraNative", () => {
+  const React = require("react");
+  const { View } = require("react-native");
+  const poseCamera = {
+    missing: false,
+    props: null,
+    actives: [],
+    answer: (e) => poseCamera.props?.onPose({ nativeEvent: e }),
+    fail: (reason) => poseCamera.props?.onProblem({ nativeEvent: { reason } }),
+    reset: () => {
+      poseCamera.missing = false;
+      poseCamera.props = null;
+      poseCamera.actives = [];
+    },
+  };
+  function PoseCameraStandIn(props) {
+    poseCamera.props = props;
+    poseCamera.actives.push(props.active);
+    React.useEffect(
+      () => () => {
+        if (poseCamera.props === props) poseCamera.props = null;
+      },
+      [props],
+    );
+    return React.createElement(View, { testID: "pose-camera", active: props.active });
+  }
+  return {
+    poseCamera,
+    get PoseCameraView() {
+      return poseCamera.missing ? null : PoseCameraStandIn;
+    },
+  };
+});
 // The app's sound player (64a-vi), expo-audio's: `played` lists each sound handed to it, in order.
 jest.mock("../../src/sound/soundNative", () => {
   const sounds = { played: [] };

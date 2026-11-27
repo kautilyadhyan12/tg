@@ -54,7 +54,7 @@ export function discountInOldMoney(discount, currency) {
 
 /** What to do about one, said on its row. */
 export function oldMoneyLine(discount, currency) {
-  return `This amount is in ${discount.currency}. Press Change and save it again to use it in ${currency}.`;
+  return `This amount is in ${discount.currency}. Press Edit and save it again to use it in ${currency}.`;
 }
 
 /** The same, said on the sale form, which leaves such a discount out of its list; null
