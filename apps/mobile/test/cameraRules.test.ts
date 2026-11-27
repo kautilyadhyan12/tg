@@ -2,7 +2,7 @@ import { KEYPOINT_COUNT, KP, WORKOUT_SAVE_LIMITS } from "@app/shared";
 import { describe, expect, it } from "vitest";
 import { downOf, frameOf, type PoseEvent } from "../src/camera/poseFrame";
 import { BODY_LINES, BODY_RULES } from "../src/camera/skeleton";
-import { ended, pressTry, shownReps, startTry, type TryPress, type TrySet } from "../src/camera/trySet";
+import { ended, pressTry, shownOffset, shownReps, startTry, type TryPress, type TrySet } from "../src/camera/trySet";
 import { CAMERA_DIGITS, CAMERA_TILE, cameraSizes } from "../src/look/sizing";
 
 // The camera screen's rules that need no screen (ROADMAP Stage 5 53a): which way is down from the phone's gravity, an
@@ -224,5 +224,18 @@ describe("the camera screen's corners fit every phone", () => {
     expect(short.digits).toBe(56);
     expect(short.tile.height).toBeLessThanOrEqual(118);
     expect(short.tile.width / short.tile.height).toBeCloseTo(CAMERA_TILE.width / CAMERA_TILE.height, 1);
+  });
+});
+
+describe("the coach's count is the count shown (53b-i, round one L2)", () => {
+  const run = (s: TrySet, ...ps: TryPress[]): TrySet => ps.reduce(pressTry, s);
+  it.each([
+    ["the camera's own count", [{ kind: "camera", reps: 3, heldMs: 0 }]],
+    ["a rep added and one taken away by hand", [{ kind: "camera", reps: 3, heldMs: 0 }, { kind: "count", by: 1 }, { kind: "count", by: 1 }, { kind: "count", by: -1 }]],
+    ["a rep the camera counted while paused, which the set never took", [{ kind: "camera", reps: 3, heldMs: 0 }, { kind: "pause" }, { kind: "camera", reps: 4, heldMs: 0 }, { kind: "resume" }, { kind: "camera", reps: 5, heldMs: 0 }]],
+    ["paused, then one added by hand", [{ kind: "camera", reps: 2, heldMs: 0 }, { kind: "pause" }, { kind: "camera", reps: 4, heldMs: 0 }, { kind: "resume" }, { kind: "count", by: 1 }]],
+  ] as [string, TryPress[]][])("%s: the camera's count with the offset is what the screen shows", (_, presses) => {
+    const s = run(startTry("reps", 20), ...presses);
+    expect(s.cameraLast.reps + shownOffset(s)).toBe(shownReps(s));
   });
 });

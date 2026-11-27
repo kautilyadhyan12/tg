@@ -204,18 +204,22 @@ describe("what the coach says (53b-i)", () => {
     expect(talk(exercise("squat"), video("deadlift_barbell"), { byHand: 0, target: 10 })).toEqual([]);
   });
 
-  it("the person's own rep added by hand: \"Last one.\" comes a rep earlier, as the screen's count does", () => {
+  it("the person's own rep added by hand: \"Last one.\" comes exactly one counted rep earlier, where \"Two more.\" was", () => {
     const v = video("prisoner_squat_1");
-    const target = v.entry.reps ?? 0;
+    const target = (v.entry.reps ?? 0) + 1;
     const e = exercise("squat");
-    const lastAt = (byHand: number): number => {
+    const at = (byHand: number, words: string): number => {
       const set = new LiveSet(e.counts, e.camera, 1);
-      for (const f of withLeadIn(v.video).frames) if (set.next(eventOf(f), { byHand, target }).say?.words === "Last one.") return f.t;
+      for (const f of withLeadIn(v.video).frames) if (set.next(eventOf(f), { byHand, target }).say?.words === words) return f.t;
       return Number.NaN;
     };
-    expect(target).toBeGreaterThanOrEqual(3);
-    expect(lastAt(1)).toBeLessThan(lastAt(0));
+    // Four to do, her three counted: "Two more." at her second, "Last one." at her third. With one added by hand,
+    // "Last one." is at her second: a count taken twice, or any other offset, would put it elsewhere.
+    expect(target).toBe(4);
+    expect(at(1, "Last one.")).toBe(at(0, "Two more."));
+    expect(at(0, "Last one.")).toBeGreaterThan(at(0, "Two more."));
   });
+
   it("the person lost: said once, while the screen says so", () => {
     const v = video("prisoner_squat_1");
     const frames = withLeadIn(v.video).frames;
@@ -268,6 +272,20 @@ describe("the set's end", () => {
   it("an exercise with no camera file of its own counts, and has no summary yet", () => {
     const { set } = play(exercise("goblet"), video("goblet_squat_kettlebell"));
     expect(set.end().summary).toBeNull();
+  });
+
+  it("after the end nothing more is said, whatever the last picture said (round one, H1)", () => {
+    const e = exercise("squat");
+    const v = video("prisoner_squat_1");
+    const set = new LiveSet(e.counts, e.camera, 1);
+    const frames = withLeadIn(v.video).frames;
+    // The set ends right after the picture the coach says "Last one." at; the pictures already sent still arrive.
+    const k = frames.findIndex((f) => set.next(eventOf(f), { byHand: 0, target: v.entry.reps ?? 0 }).say?.words === "Last one.");
+    expect(k).toBeGreaterThan(0);
+    expect(set.end().say?.words).toBe("Set complete.");
+    const after = frames.slice(k + 1, k + 10).map((f) => set.next(eventOf(f), { byHand: 0, target: v.entry.reps ?? 0 }).say);
+    expect(after.length).toBeGreaterThan(3);
+    expect(after.every((say) => say === null)).toBe(true);
   });
 
   it("after the end, nothing more is counted", () => {

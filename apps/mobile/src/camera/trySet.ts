@@ -51,6 +51,10 @@ export const startTry = (measuredIn: "reps" | "time", target: number): TrySet =>
 /** The count shown: the camera's with the person's own changes, never below 0. */
 export const shownReps = (s: TrySet): number => Math.max(0, Math.min(WORKOUT_SAVE_LIMITS.repsMost, s.cameraReps + s.byHand));
 
+/** How far the count shown lies from the camera's own count (`LiveSet`'s), for the coach: the person's own changes, less
+ *  any rep the camera counted while the set was paused, which the set never took (round one, L2). */
+export const shownOffset = (s: TrySet): number => s.byHand + s.cameraReps - s.cameraLast.reps;
+
 /** The set has reached its target. */
 const reached = (s: TrySet): boolean => (s.measuredIn === "time" ? s.heldMs >= s.target * 1000 : shownReps(s) >= s.target);
 

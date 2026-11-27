@@ -15,6 +15,7 @@ import rep from "../../assets/sounds/rep.wav";
 import setEnd from "../../assets/sounds/set-end.wav";
 import type { Clip } from "../camera/voice";
 import { VOICE_CLIPS } from "../camera/voiceClips";
+import { VoiceQueue } from "./voiceQueue";
 
 export type SoundName = "rep" | "setEnd" | "count" | "go";
 
@@ -23,14 +24,15 @@ export interface SoundNative {
   /** One of the coach's clips: the music lowered while it speaks. A clip asked for while another speaks waits for it to
    *  end, and a newer one takes the waiting one's place, so lines never talk over each other or pile up. */
   speak(clip: Clip): void;
+  /** The coach falls silent: what waits is dropped and what speaks is stopped (Sound off, Pause, the count by hand, the
+   *  screen closed). */
+  hush(): void;
 }
 
 const FILES: Record<SoundName, number> = { rep, setEnd, count, go };
 
 const MIX: Partial<AudioMode> = { interruptionMode: "mixWithOthers", playsInSilentMode: true, shouldPlayInBackground: false, allowsRecording: false };
 const DUCK: Partial<AudioMode> = { ...MIX, interruptionMode: "duckOthers" };
-/** The longest clip is about 2.5 s: a clip that never said it ended frees the voice after this long, ms. */
-const LONGEST_CLIP_MS = 6000;
 
 type Audio = typeof ExpoAudio;
 
@@ -43,46 +45,51 @@ function phonePlayer(): SoundNative | null {
   });
   const players = new Map<SoundName, AudioPlayer>();
   const voices = new Map<number, AudioPlayer>();
-  /** Until when the voice is speaking (the phone's clock), or null. */
-  let speakingUntil: number | null = null;
-  let waiting: number | null = null;
-
-  const finished = (audio: Audio): void => {
-    const next = waiting;
-    waiting = null;
-    if (next !== null) {
-      void voice(audio, next).catch(() => undefined);
-      return;
-    }
-    speakingUntil = null;
-    void audio.setAudioModeAsync(MIX).catch(() => undefined);
-  };
-
-  const voice = async (audio: Audio, file: number): Promise<void> => {
-    speakingUntil = Date.now() + LONGEST_CLIP_MS;
-    await audio.setAudioModeAsync(DUCK);
-    const made = voices.get(file);
-    if (made !== undefined) await made.seekTo(0);
-    const player = made ?? audio.createAudioPlayer(file);
-    if (made === undefined) {
-      player.addListener("playbackStatusUpdate", (status) => {
-        if (status.didJustFinish) finished(audio);
-      });
-      voices.set(file, player);
-    }
-    player.play();
-  };
+  let audio: Audio | null = null;
+  let speaking: AudioPlayer | null = null;
+  // One clip at a time (voiceQueue.ts); the clip's own end, or its time running out, lets the next one speak.
+  const queue: VoiceQueue = new VoiceQueue(
+    {
+      play: async (file) => {
+        if (audio === null) return;
+        await audio.setAudioModeAsync(DUCK);
+        const made = voices.get(file);
+        if (made !== undefined) await made.seekTo(0);
+        const player = made ?? audio.createAudioPlayer(file);
+        if (made === undefined) {
+          player.addListener("playbackStatusUpdate", (status) => {
+            if (status.didJustFinish && speaking === player) queue.ended();
+          });
+          voices.set(file, player);
+        }
+        speaking = player;
+        player.play();
+      },
+      stop: () => {
+        speaking?.pause();
+        speaking = null;
+      },
+      rest: () => {
+        speaking = null;
+        void audio?.setAudioModeAsync(MIX).catch(() => undefined);
+      },
+    },
+    (then, ms) => setTimeout(then, ms),
+    (timer) => {
+      clearTimeout(timer);
+    },
+  );
 
   return {
     // Each play on its own, never behind the one before: a seek that never settled would otherwise silence every sound
     // after it (round one, L2).
     play: (name) => {
       void ready
-        .then(async (audio) => {
+        .then(async (loaded) => {
           const made = players.get(name);
           // A new player is at its start already; one played before goes back to it.
           if (made !== undefined) await made.seekTo(0);
-          const player = made ?? audio.createAudioPlayer(FILES[name]);
+          const player = made ?? loaded.createAudioPlayer(FILES[name]);
           players.set(name, player);
           player.play();
         })
@@ -92,16 +99,14 @@ function phonePlayer(): SoundNative | null {
       const file = VOICE_CLIPS[clip.id]?.[clip.index];
       if (file === undefined) return;
       void ready
-        .then(async (audio) => {
-          if (speakingUntil !== null && Date.now() < speakingUntil) {
-            waiting = file;
-            return;
-          }
-          await voice(audio, file);
+        .then((loaded) => {
+          audio = loaded;
+          queue.speak(file);
         })
-        .catch(() => {
-          speakingUntil = null;
-        });
+        .catch(() => undefined);
+    },
+    hush: () => {
+      queue.hush();
     },
   };
 }

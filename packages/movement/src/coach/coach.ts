@@ -17,7 +17,7 @@
 //   - the count: "Halfway.", "Two more.", "Last one." against the set's target; "Set complete." when it ends;
 //   - the person lost: once, until they are back, and not again within 10 s.
 // A correction outranks praise, praise the count. A line that only encourages (praise, the count) is left out when it
-// would come within 0.8 s of the line before, the shortest clip's length; the app's player makes any other line wait for
+// would come within 0.8 s of the line before, about the length of the short count lines; the app's player makes any other line wait for
 // the one speaking, so lines never talk over each other.
 import type { ExerciseCamera, Voice, VoiceWhen } from "@app/shared";
 import { checkedOf } from "../movement/form.js";
@@ -65,7 +65,7 @@ export interface CoachLimits {
 }
 
 /** The numbers are a coach's sense of when to speak, not measured thresholds: two reps running is the least "more than
- *  one rep" of §12.6; 0.8 s is the shortest clip ("Two more.", 0.81 s; Kd's squat jumps come about a second apart, and a
+ *  one rep" of §12.6; 0.8 s is about the length of the short count lines ("Two more.", 0.81 s; "Better." is 0.59; Kd's squat jumps come about a second apart, and a
  *  quiet of 2 s lost every "Last one." of theirs); 10 s lets a person back in view settle before being told again. "Halfway." from 8 reps or 20 s held, "Two more." from 4, so that a short set is not talked through. */
 export const COACH_LIMITS: CoachLimits = { repsMade: 2, quiet: 800, lostAgain: 10_000, holdUnseen: 2000, halfwayFrom: 8, holdHalfwayFrom: 20, twoMoreFrom: 4 };
 

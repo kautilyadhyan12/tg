@@ -639,7 +639,11 @@ export const MOVEMENT_VIDEOS: readonly MovementVideo[] = [
           why:
             "None: a video reported, never judged. From in front and above, the laptop's reading loses his hips' height at the top of his " +
             "first thrust for longer than a break, the phone's does not, so the phone counts it where the laptop says it could not see it.",
-          differences: ["the laptop counts 0, the phone 1", "the laptop says 2.6 s unseen (depth), the phone 2.6 s counted"],
+          differences: [
+            "the laptop counts 0, the phone 1",
+            "the laptop says 2.6 s unseen (depth), the phone 2.6 s counted",
+            'the coach says "Keep your whole body in view." on the laptop, "" on the phone',
+          ],
         },
       },
     },
@@ -674,7 +678,7 @@ export const MOVEMENT_VIDEOS: readonly MovementVideo[] = [
             "53 and 54: facing the phone, as she lowers after her second thrust the phone's reading puts her hips back up 0.17 of a leg before " +
             "the video ends, so it would tell her \"Push your hips higher to count.\" for a thrust she never began (the laptop reads her down). " +
             "A hip thrust's phone stands side-on; the side-on woman's thrusts read the same on both.",
-          differences: ["the phone also says 8.3 s short (hips open)"],
+          differences: ["the phone also says 8.3 s short (hips open)", 'the coach says "" on the laptop, "Push your hips higher to count." on the phone'],
         },
       },
     },

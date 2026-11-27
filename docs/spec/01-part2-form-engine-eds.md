@@ -2771,7 +2771,7 @@ never follows itself, in its next wording when it comes back; "Better." on the f
 is seen fine, "That one counts." on the first counted rep after a reason; the count against the set's target as the screen
 shows it, the person's own changes included ("Halfway." from 8 reps or 20 s held, "Two more." from 4, "Last one."); "Set
 complete." at the end; the person lost once, and not again within 10 s. A correction outranks praise, praise the count; a
-line that only encourages is left out within 0.8 s of the line before, the shortest clip (a quiet of 2 s lost every "Last
+line that only encourages is left out within 0.8 s of the line before, about the length of the short count lines (a quiet of 2 s lost every "Last
 one." of Kd's squat jumps, about a second apart). The camera screen shows a correction or praise at its foot as it is said,
 in the page's own dark; the count's lines are the digits'. The voice follows Sound on or off. **The player**
 (`sound/soundNative.ts`, expo-audio, the one player of §13.6) asks for "duckOthers" for each clip, in which expo-audio asks

@@ -6,7 +6,7 @@ import { CAMERA_EXERCISES, type CameraExercise } from "../../camera/cameraExerci
 import { LiveSet } from "../../camera/liveSet";
 import { PoseCameraView } from "../../camera/poseCameraNative";
 import { clipOf } from "../../camera/voice";
-import { ended, pressTry, shownReps, startTry, type TryPress, type TrySet } from "../../camera/trySet";
+import { ended, pressTry, shownOffset, shownReps, startTry, type TryPress, type TrySet } from "../../camera/trySet";
 import { cameraToldFile, workoutSoundsFile } from "../../library/files";
 import { holdWords } from "../../library/records";
 import { Button } from "../../look/Button";
@@ -103,11 +103,17 @@ function TrySetScreen({ me, exercise, onClose }: { me: string; exercise: CameraE
   // The screen stays awake while the camera is up: the person is metres from it.
   useEffect(() => {
     void activateKeepAwakeAsync(AWAKE_TAG).catch(() => undefined);
-    return () => { void deactivateKeepAwake(AWAKE_TAG).catch(() => undefined); };
+    return () => {
+      void deactivateKeepAwake(AWAKE_TAG).catch(() => undefined);
+      // The screen closed: nothing of the coach is said on another screen.
+      soundNative?.hush();
+    };
   }, []);
 
   const press = useCallback(
     (p: TryPress) => {
+      // Paused, or counted by hand from here: the coach falls silent at once (round one, L1).
+      if (p.kind === "pause" || p.kind === "stopped") soundNative?.hush();
       if (p.kind === "reset") setLive(new LiveSet(exercise.counts, exercise.camera, 1));
       setSet((s) => pressTry(s, p));
     },
@@ -128,7 +134,7 @@ function TrySetScreen({ me, exercise, onClose }: { me: string; exercise: CameraE
   const reference = useReference(exercise, !set.paused && result === null);
   const timed = exercise.measuredIn === "time";
   const digits = timed ? holdWords(set.heldMs / 1000).replace(" s", "") : String(shownReps(set)).padStart(2, "0");
-  const sound = { on: soundOn, flip: () => { const next = !soundOn; setSoundOn(next); void soundFile.current.write(soundText(next)).catch(() => undefined); } };
+  const sound = { on: soundOn, flip: () => { const next = !soundOn; setSoundOn(next); if (!next) soundNative?.hush(); void soundFile.current.write(soundText(next)).catch(() => undefined); } };
   return (
     <CameraSet
       live={live}
@@ -137,7 +143,7 @@ function TrySetScreen({ me, exercise, onClose }: { me: string; exercise: CameraE
       of={timed ? `/ ${holdWords(set.target)}` : `/ ${String(set.target)}`}
       paused={set.paused || result !== null}
       sound={soundOn}
-      now={{ byHand: set.byHand, target: set.target }}
+      now={{ byHand: shownOffset(set), target: set.target }}
       stopped={stopped}
       reference={reference}
       onCamera={(reps, heldMs) => { press({ kind: "camera", reps, heldMs }); }}

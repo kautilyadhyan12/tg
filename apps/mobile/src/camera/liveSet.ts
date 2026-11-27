@@ -85,7 +85,8 @@ export class LiveSet {
 
   /** The screen after one answer. An answer that is broken, or whose clock went back, changes nothing and says nothing. */
   next(e: PoseEvent, now: SetNow = NO_SET): LiveView {
-    if (this.ended !== null) return this.view;
+    // After the end nothing more is said: pictures the phone had already sent still arrive (round one, H1).
+    if (this.ended !== null) return { ...this.view, say: null };
     if (this.firstAt === null) this.firstAt = e.t;
     const t = e.t - this.firstAt;
     if (t < this.lastT) return { ...this.view, say: null };

@@ -153,7 +153,7 @@ describe("every clip in the app was heard saying its own words", () => {
     expect(record?.clips.map((c) => [c.file, c.words])).toEqual(wordingsOf(VOICE).map((w) => [clipName(w.line, w.index), w.words]));
   });
 
-  it("each clip's bytes are the very clip that was heard, and it was heard saying exactly its wording", () => {
+  it("each clip's bytes are the very clip the tool kept (its SHA-256), and the record it wrote says its wording", () => {
     const wrong = (record?.clips ?? []).flatMap((c) => {
       const file = join(CLIPS, c.file);
       if (!existsSync(file)) return [`${c.file}: missing`];
