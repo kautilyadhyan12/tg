@@ -2821,8 +2821,11 @@ is crowded. An exercise with no clip and no picture offers none. **The camera of
 its camera view is no longer drawn and the phone's camera is let go, and a camera screen that has gone does nothing with an
 answer still on its way (no count, no sound, no word). "Camera off · Tap to turn on" brings the camera back until the set has
 ended. **The screen:** the clip fills the phone under the timer, shown whole as its picture is, the timer's lit digits in the
-top left (GET READY amber, TIME LEFT red, PAUSED), the exercise and its set at the foot; a tap opens its box (the time, the
-weight, Set done with the time followed, Pause, Sound, End, Reset set, Count this set myself, Skip exercise). **The timer**
+top left (GET READY amber, TIME LEFT red, PAUSED), the exercise and its set at the foot; its box (the time, the weight, Set
+done with the time followed, Pause, Sound, End, Reset set, Count this set myself, Skip exercise) opens from a button at the
+foot, "Time, weight, pause", or a tap anywhere. **The box's button** (Kd's click-through: a tap anywhere opened the camera's
+box, and nobody would know): the camera screen's foot now has one too, "Reps, weight, pause" ("Time, weight, pause" for a
+hold), while the person sets up as well, so a target is set before the first rep; it waits under the box while it is open. **The timer**
 (`apps/mobile/src/camera/followAlong.ts`, pure, table-tested): 10 s to get ready, as a timed set in a workout has (Start now
 skips it), then the set's own time: a set of reps at 3 s a rep (10 reps, 30 s; at least 5 s, at most an hour), a hold its own
 time; changed in the camera box's steps of a time (5 s under a minute); the set's clock moves on by the time that passed,
