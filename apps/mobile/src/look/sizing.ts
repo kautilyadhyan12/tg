@@ -86,3 +86,8 @@ export function cameraSizes(screenHeight: number): { digits: number; tile: { wid
   const tall = Math.round(Math.min(CAMERA_TILE.height, screenHeight * (CAMERA_TILE.height / 960)));
   return { digits, tile: { width: Math.round((tall * CAMERA_TILE.width) / CAMERA_TILE.height), height: tall } };
 }
+
+/** Follow along's timer (53b-ii, Kd's drawing of 2026-11-27): "00:30" takes five places where the camera's count takes two,
+ *  so its digits are smaller, and on a short or opened phone never more of its height than on his. */
+export const FOLLOW_DIGITS = 84;
+export const followDigits = (screenHeight: number): number => Math.round(Math.min(FOLLOW_DIGITS, screenHeight * (FOLLOW_DIGITS / 960)));

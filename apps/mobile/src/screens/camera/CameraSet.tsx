@@ -7,6 +7,7 @@ import type { PoseEvent } from "../../camera/poseFrame";
 import { BODY_RULES } from "../../camera/skeleton";
 import { clipOf } from "../../camera/voice";
 import { colours, shadows } from "../../look/colours";
+import { Icon } from "../../look/Icon";
 import { MOST_TEXT_GROWTH, cameraSizes } from "../../look/sizing";
 import { EYEBROW, Txt, fonts } from "../../look/Txt";
 import { soundNative } from "../../sound/soundNative";
@@ -22,6 +23,11 @@ export const STOPPED_WORDS = "The camera stopped. Count this set yourself.";
 export const SET_UP_WORDS = "Step back until the camera sees you like the picture.";
 export const SET_UP_LINE = "Stand the phone on the floor, a bench or a shelf, 2 to 3 m away. From another angle the count may be wrong.";
 export const TAP_WORDS = "Tap the screen to change reps, weight or pause";
+/** Under the reference clip: the other way to do the set, for a room where the camera may not follow the person (53b-ii). */
+export const FOLLOW_WORDS = "Follow along";
+/** Said before every camera set, whatever the room, as an instruction beside the way to it (RULINGS 2026-08-17: the app
+ *  cannot know a room is crowded, so it never says it only then). */
+export const FOLLOW_LINE = "In a busy room? Tap the clip to follow along.";
 /** Over the corners round the person the camera follows. */
 export const TRACKING_WORDS = "Tracking you";
 
@@ -69,11 +75,13 @@ export interface CameraSetProps {
   onCamera: (reps: number, heldMs: number) => void;
   onProblem: () => void;
   onTap: () => void;
+  /** Follow along (53b-ii): the clip in the corner, and the button under it, open it. Not offered once the set is over. */
+  onFollow?: (() => void) | undefined;
   /** The box over the camera, while open. */
   children?: ReactNode;
 }
 
-export function CameraSet({ live, title, digits, of, paused, sound, now, stopped, reference, onCamera, onProblem, onTap, children }: CameraSetProps) {
+export function CameraSet({ live, title, digits, of, paused, sound, now, stopped, reference, onCamera, onProblem, onTap, onFollow, children }: CameraSetProps) {
   const insets = useSafeAreaInsets();
   const screen = useWindowDimensions();
   const sizes = cameraSizes(screen.height);
@@ -109,6 +117,8 @@ export function CameraSet({ live, title, digits, of, paused, sound, now, stopped
   const on = Camera !== null && stopped === null;
   const line: FootLine | null = stopped === "failed" ? { words: STOPPED_WORDS, tone: "stopped" } : on ? view.line : null;
   const setUp = on && view.stage === "setUp";
+  // Follow along follows the reference: no tile, nothing to follow.
+  const follow = reference === null ? undefined : onFollow;
   return (
     <View testID="camera-screen" style={styles.page}>
       {on ? (
@@ -124,15 +134,28 @@ export function CameraSet({ live, title, digits, of, paused, sound, now, stopped
       ) : null}
       <Pressable testID="camera-tap" style={StyleSheet.absoluteFill} onPress={onTap} accessibilityRole="button" accessibilityLabel={TAP_WORDS}>
         <View pointerEvents="none" style={[styles.foot, styles.shade]} />
-        <View style={[styles.corners, { top: insets.top + 10 }]} pointerEvents="none">
-          <View style={styles.count} accessible accessibilityLabel={`${digits} ${of}`}>
+        <View style={[styles.corners, { top: insets.top + 10 }]} pointerEvents="box-none">
+          <View style={styles.count} accessible accessibilityLabel={`${digits} ${of}`} pointerEvents="none">
             <Led text={digits} colour={view.flash && !paused ? "ledGreen" : "ledRed"} height={sizes.digits} bare />
             <Txt kind="h1" style={styles.of}>
               {of}
             </Txt>
           </View>
           {reference === null ? null : (
-            <View style={[styles.tile, { width: sizes.tile.width, height: sizes.tile.height }, setUp ? styles.tileSetUp : null]}>{reference}</View>
+            <View style={styles.side} pointerEvents="box-none">
+              {/* A press on the clip itself is the same as its button: the button is the one a screen reader finds. */}
+              <Pressable testID="camera-tile" accessible={false} disabled={follow === undefined} onPress={follow} style={[styles.tile, { width: sizes.tile.width, height: sizes.tile.height }, setUp ? styles.tileSetUp : null]}>
+                {reference}
+              </Pressable>
+              {follow === undefined ? null : (
+                <Pressable accessibilityRole="button" accessibilityLabel={FOLLOW_WORDS} onPress={follow} style={[styles.follow, { width: sizes.tile.width }]}>
+                  <Icon name="expand" size={15} colour="orangeLight" />
+                  <Txt kind="small" colour="text" style={styles.followWords}>
+                    {FOLLOW_WORDS}
+                  </Txt>
+                </Pressable>
+              )}
+            </View>
           )}
         </View>
         <View style={[styles.bottom, { paddingBottom: insets.bottom + 20 }]} pointerEvents="none">
@@ -144,6 +167,14 @@ export function CameraSet({ live, title, digits, of, paused, sound, now, stopped
               <Txt kind="body" colour="text" style={styles.shadow}>
                 {SET_UP_LINE}
               </Txt>
+              {follow === undefined ? null : (
+                <View style={styles.busy}>
+                  <Icon name="users" size={18} colour="orangeLight" />
+                  <Txt kind="strong" style={[styles.grow, styles.shadow]}>
+                    {FOLLOW_LINE}
+                  </Txt>
+                </View>
+              )}
             </View>
           ) : (
             <>
@@ -198,6 +229,11 @@ const styles = StyleSheet.create({
   of: { color: colours.text, textShadowColor: colours.wordShadow, textShadowRadius: 6, textShadowOffset: { width: 0, height: 1 } },
   tile: { borderRadius: 18, overflow: "hidden", borderWidth: 1, borderColor: colours.lineStrong, backgroundColor: colours.raised, boxShadow: shadows.cameraTile },
   tileSetUp: { borderWidth: 2, borderColor: colours.orange },
+  side: { alignItems: "center", gap: 8 },
+  follow: { minHeight: 44, borderRadius: 22, borderWidth: 1, borderColor: colours.orange, backgroundColor: colours.raised, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7, paddingHorizontal: 8, paddingVertical: 6 },
+  followWords: { fontFamily: fonts.semibold, textAlign: "center", flexShrink: 1 },
+  busy: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 4, paddingTop: 10, borderTopWidth: 1, borderTopColor: colours.lineStrong },
+  grow: { flex: 1 },
   foot: { position: "absolute", left: 0, right: 0, bottom: 0, height: "22%" },
   shade: { experimental_backgroundImage: `linear-gradient(to bottom, ${colours.cameraShadeClear}, ${colours.cameraShade})` },
   bottom: { position: "absolute", left: 16, right: 16, bottom: 0, gap: 6 },

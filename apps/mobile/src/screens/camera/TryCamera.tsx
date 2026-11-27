@@ -1,11 +1,12 @@
 import { useCameraPermissions } from "expo-camera";
 import { activateKeepAwakeAsync, deactivateKeepAwake } from "expo-keep-awake";
 import { useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
-import { Image, Pressable, StyleSheet, View } from "react-native";
+import { AppState, Image, Pressable, StyleSheet, View } from "react-native";
 import { CAMERA_EXERCISES, type CameraExercise } from "../../camera/cameraExercises";
+import { followPress, followSounds, startFollow, type Follow, type FollowPress } from "../../camera/followAlong";
 import { LiveSet } from "../../camera/liveSet";
 import { PoseCameraView } from "../../camera/poseCameraNative";
-import { clipOf } from "../../camera/voice";
+import { clipFor, clipOf } from "../../camera/voice";
 import { ended, pressTry, shownOffset, shownReps, startTry, type TryPress, type TrySet } from "../../camera/trySet";
 import { cameraToldFile, workoutSoundsFile } from "../../library/files";
 import { holdWords } from "../../library/records";
@@ -26,6 +27,7 @@ import { CopyContext } from "../ThisCopy";
 import { CameraBox, repsWords } from "./CameraBox";
 import { CameraFirst } from "./CameraFirst";
 import { CameraSet } from "./CameraSet";
+import { FollowAlong, FollowBox, FollowDone } from "./FollowAlong";
 
 // "Try the camera" (ROADMAP Stage 5 53a): a folder's copy's door to the camera screen, before the workout carries it
 // (job 64b: Camera or Count myself, picked every time). One set of an exercise the camera counts today, from the box
@@ -33,6 +35,8 @@ import { CameraSet } from "./CameraSet";
 // end. Never in the store's app, and nothing of it is saved: the set is shown and gone.
 
 const AWAKE_TAG = "camera";
+/** How often Follow along's timer is read again while it runs. */
+export const FOLLOW_TICK_MS = 250;
 
 type Step = { kind: "first"; exercise: CameraExercise } | { kind: "set"; exercise: CameraExercise };
 
@@ -96,7 +100,13 @@ function TrySetScreen({ me, exercise, onClose }: { me: string; exercise: CameraE
   const [stopped, setStopped] = useState<"failed" | "byHand" | null>(null);
   const [result, setResult] = useState<{ reps: number; heldMs: number; form: number | null } | null>(null);
   const [soundOn, setSoundOn] = useState(true);
+  const soundNow = useRef(soundOn);
+  soundNow.current = soundOn;
   const soundFile = useRef(workoutSoundsFile(me));
+  // Follow along (53b-ii): while it is on, the camera is off and its screen is gone; the set is the timer's.
+  const [follow, setFollow] = useState<Follow | null>(null);
+  const following = useRef<Follow | null>(null);
+  const [followBox, setFollowBox] = useState(false);
   useEffect(() => {
     void soundFile.current.read().then((text) => { setSoundOn(soundOnIn(text)); }).catch(() => undefined);
   }, []);
@@ -119,6 +129,61 @@ function TrySetScreen({ me, exercise, onClose }: { me: string; exercise: CameraE
     },
     [exercise],
   );
+
+  // Follow along's own presses: the timer's steps (followAlong.ts), then what they sound.
+  const pressFollow = useCallback((p: FollowPress) => {
+    const before = following.current;
+    if (before === null) return;
+    const now = Date.now();
+    const after = followPress(before, p, now);
+    following.current = after;
+    setFollow(after);
+    if (p.kind === "pause") soundNative?.hush();
+    if (!soundNow.current) return;
+    const heard = followSounds(before, after, p, now);
+    for (const beep of heard.beeps) soundNative?.play(beep);
+    const clip = heard.say === null ? null : clipFor(heard.say);
+    if (clip !== null) soundNative?.speak(clip);
+  }, []);
+  // The clip made the set: the camera's set is put aside and the set starts again, its target made a time, its weight
+  // kept. A set is counted one way: the camera's reps and the person's own count of the clip are never added together.
+  const startFollowing = () => {
+    soundNative?.hush();
+    const next = startFollow(exercise.measuredIn, set.target, Date.now());
+    following.current = next;
+    setFollow(next);
+    setFollowBox(false);
+    setBox(false);
+    if (soundNow.current) {
+      const clip = clipFor("get ready");
+      if (clip !== null) soundNative?.speak(clip);
+    }
+  };
+  // Leaving Follow along: the set starts again, with the camera on (or counted by hand), its target and weight kept.
+  const stopFollowing = (byHand: boolean) => {
+    soundNative?.hush();
+    following.current = null;
+    setFollow(null);
+    setFollowBox(false);
+    setBox(false);
+    setLive(new LiveSet(exercise.counts, exercise.camera, 1));
+    const again = { ...startTry(set.measuredIn, set.target), weightGrams: set.weightGrams };
+    setSet(byHand ? pressTry(again, { kind: "stopped" }) : again);
+    setStopped(byHand ? "byHand" : null);
+  };
+  // The timer moves while it runs, read only while the app is in front, as the workout's own is: back from away, the next
+  // reading takes in the whole time away, and sounds none of it.
+  const ticking = follow !== null && !follow.paused && follow.phase !== "done";
+  useEffect(() => {
+    if (!ticking) return undefined;
+    const timer = setInterval(() => {
+      if (AppState.currentState !== "active") return;
+      pressFollow({ kind: "tick" });
+    }, FOLLOW_TICK_MS);
+    return () => {
+      clearInterval(timer);
+    };
+  }, [ticking, pressFollow]);
   // The set reached its end, by its target or by Set done: the camera's last rep judged, and its summary read once.
   useEffect(() => {
     if (!set.done || result !== null) return;
@@ -131,10 +196,40 @@ function TrySetScreen({ me, exercise, onClose }: { me: string; exercise: CameraE
     if (clip !== null && soundOn) soundNative?.speak(clip);
   }, [set, live, result, soundOn]);
 
-  const reference = useReference(exercise, !set.paused && result === null);
+  const referenceOf = useReference(exercise);
   const timed = exercise.measuredIn === "time";
   const digits = timed ? holdWords(set.heldMs / 1000).replace(" s", "") : String(shownReps(set)).padStart(2, "0");
   const sound = { on: soundOn, flip: () => { const next = !soundOn; setSoundOn(next); if (!next) soundNative?.hush(); void soundFile.current.write(soundText(next)).catch(() => undefined); } };
+  if (follow !== null) {
+    return (
+      <FollowAlong
+        follow={follow}
+        name={exercise.name}
+        setWords="Set 1 of 1"
+        reference={referenceOf("follow", follow.phase !== "done" && !follow.paused)}
+        press={pressFollow}
+        onTap={() => { setFollowBox(true); }}
+        onCamera={() => { stopFollowing(false); }}
+      >
+        {follow.phase === "done" ? (
+          <FollowDone follow={follow} press={pressFollow} onDone={onClose} />
+        ) : followBox ? (
+          <FollowBox
+            follow={follow}
+            weightGrams={set.weightGrams}
+            units={units}
+            sound={sound}
+            press={pressFollow}
+            onWeight={(by) => { press({ kind: "weight", by, units }); }}
+            onClose={() => { setFollowBox(false); }}
+            onByHand={() => { stopFollowing(true); }}
+            onEnd={onClose}
+            onSkip={onClose}
+          />
+        ) : undefined}
+      </FollowAlong>
+    );
+  }
   return (
     <CameraSet
       live={live}
@@ -145,10 +240,15 @@ function TrySetScreen({ me, exercise, onClose }: { me: string; exercise: CameraE
       sound={soundOn}
       now={{ byHand: shownOffset(set), target: set.target }}
       stopped={stopped}
-      reference={reference}
-      onCamera={(reps, heldMs) => { press({ kind: "camera", reps, heldMs }); }}
+      reference={referenceOf("tile", !set.paused && result === null)}
+      onCamera={(reps, heldMs) => {
+        // Following the clip, nothing the camera saw is the set's, even an answer still on its way as the camera went.
+        if (following.current !== null) return;
+        press({ kind: "camera", reps, heldMs });
+      }}
       onProblem={() => { setStopped("failed"); press({ kind: "stopped" }); }}
       onTap={() => { setBox(true); }}
+      onFollow={result === null ? startFollowing : undefined}
     >
       {result !== null ? (
         <Done result={result} timed={timed} onDone={onClose} />
@@ -185,23 +285,33 @@ function Done({ result, timed, onDone }: { result: { reps: number; heldMs: numbe
 }
 
 /** The exercise's own picture, its clip playing over it, from the Library kept on the phone, once it has come; until the
- *  Library has a picture of its own, the app's own picture of it; null for an exercise with neither (no tile is drawn). */
-function useReference(exercise: CameraExercise, playing: boolean): ReactNode {
+ *  Library has a picture of its own, the app's own picture of it; null for an exercise with neither (no tile is drawn).
+ *  In the camera's corner tile the picture fills the tile; filling the phone for Follow along (53b-ii) it is shown whole,
+ *  as its clip is, so that the two lie on each other. */
+function useReference(exercise: CameraExercise): (where: "tile" | "follow", playing: boolean) => ReactNode {
   const named = useNamed();
   const own = exercise.libraryId === null ? null : named(exercise.libraryId);
   useKeepMedia([own?.picture?.file, own?.clip?.file].filter((f): f is string => f !== undefined));
   const uri = useOwnPicture(own?.picture ?? null);
-  if (own?.picture !== null && own?.picture !== undefined && uri !== null) {
-    const ground = own.picture.ground;
+  return (where, playing) => {
+    const fit = where === "tile" ? "cover" : "contain";
+    const prefix = where === "tile" ? "camera" : "follow";
+    if (own?.picture !== null && own?.picture !== undefined && uri !== null) {
+      const ground = own.picture.ground;
+      return (
+        <View style={[styles.fill, { backgroundColor: ground }]}>
+          <Image source={{ uri }} resizeMode={fit} style={styles.whole} accessible={false} />
+          <ClipOver id={`${prefix}-${exercise.key}`} clip={own.clip} playing={playing} ground={ground} />
+        </View>
+      );
+    }
+    if (exercise.picture === null) return null;
     return (
-      <View style={[styles.fill, { backgroundColor: ground }]}>
-        <Image source={{ uri }} resizeMode="cover" style={styles.whole} accessible={false} />
-        <ClipOver id={`camera-${exercise.key}`} clip={own.clip} playing={playing} ground={ground} />
+      <View style={styles.fill}>
+        <Image testID={`${prefix}-picture-${exercise.key}`} source={pictures[exercise.picture]} resizeMode={fit} style={styles.whole} accessible={false} />
       </View>
     );
-  }
-  if (exercise.picture === null) return null;
-  return <Image testID={`camera-picture-${exercise.key}`} source={pictures[exercise.picture]} resizeMode="cover" style={styles.whole} accessible={false} />;
+  };
 }
 
 const styles = StyleSheet.create({

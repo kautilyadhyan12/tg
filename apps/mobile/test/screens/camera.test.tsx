@@ -2,7 +2,7 @@ import { act, fireEvent, render, screen, waitFor, within } from "@testing-librar
 import type { MovementFrame } from "@app/shared";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { Linking, processColor } from "react-native";
+import { AppState, Linking, processColor } from "react-native";
 import { decodeBodyPoints } from "../../../../packages/movement/scripts/bodyPoints";
 import { App } from "../../src/App";
 import type { PoseEvent } from "../../src/camera/poseFrame";
@@ -10,7 +10,9 @@ import { FIRST_LINE, FIRST_TITLE } from "../../src/screens/camera/CameraFirst";
 import type { BodyDrawing } from "../../src/camera/poseCameraNative";
 import { BODY_LINES } from "../../src/camera/skeleton";
 import { colours } from "../../src/look/colours";
-import { SET_UP_WORDS, STOPPED_WORDS } from "../../src/screens/camera/CameraSet";
+import { FOLLOW_LINE, FOLLOW_WORDS, SET_UP_WORDS, STOPPED_WORDS } from "../../src/screens/camera/CameraSet";
+import { ASK_REPS_WORDS, CAMERA_OFF_WORDS, CAMERA_ON_WORDS, FOLLOW_TAP_WORDS } from "../../src/screens/camera/FollowAlong";
+import { FOLLOW_TICK_MS } from "../../src/screens/camera/TryCamera";
 import { RAVI, fakeServer, kept, memoryStore, tokens } from "../kit";
 
 // The camera screen (ROADMAP Stage 5 53a), tried from a folder's copy: Me → Try the camera → an exercise → the set, as Kd's
@@ -435,5 +437,225 @@ describe("who is offered it", () => {
     await fireEvent.press(await screen.findByRole("tab", { name: "Me" }));
     await screen.findByText(/Exercise 1 test copy/);
     expect(screen.queryByRole("button", { name: "Try the camera" })).toBeNull();
+  });
+});
+
+// Follow along (ROADMAP Stage 5 53b-ii; Kd's drawing of 2026-11-27; RULINGS 2026-08-17). The task in the person's own words:
+// "the gym is busy, so I tap the clip, follow it on a timer, and say how many reps I did."
+//
+// THE WORST THING THIS JOB COULD DO TO A REAL PERSON: the camera still watching a busy room after the screen says "Camera
+// off", or a count the app made up. So first: Follow along takes the camera away, and a whole set of squats the camera saw
+// just before counts nothing; the count asked at the end is the timer's, never the camera's.
+
+/** The phone's clock, held and moved by hand, and Follow along's own timer read again at once (no fake clock: it hangs the
+ *  whole app's tests on GitHub). */
+function heldClock() {
+  let now = Date.now();
+  jest.spyOn(Date, "now").mockImplementation(() => now);
+  const intervals = jest.spyOn(global, "setInterval");
+  AppState.currentState = "active";
+  /** A second at a time, as the phone reads it (a reading that comes late, the app asleep, sounds nothing). */
+  return {
+    async pass(ms: number) {
+      for (let left = ms; left > 0; left -= 1000) {
+        now += Math.min(1000, left);
+        const call = [...intervals.mock.calls].reverse().find((c) => c[1] === FOLLOW_TICK_MS);
+        const tick = call?.[0];
+        if (typeof tick === "function") {
+          await act(() => {
+            tick();
+          });
+        }
+      }
+    },
+  };
+}
+
+const timerSays = (): string | undefined => screen.getByLabelText(/^(get ready|time left|paused) \d\d:\d\d$/).props.accessibilityLabel as string | undefined;
+const CAMERA_BACK = `${CAMERA_OFF_WORDS}. ${CAMERA_ON_WORDS}`;
+
+describe("Follow along (53b-ii): the worst thing first, the camera is off and counts nothing", () => {
+  it("Follow along takes the camera away; squats the camera saw just before count nothing, and the count asked is the timer's", async () => {
+    const clock = heldClock();
+    await openTry();
+    await turnOn();
+    // A target of 3, so that the camera's three squats, were they taken, would end the camera's set.
+    await fireEvent.press(screen.getByTestId("camera-tap"));
+    for (let n = 0; n < 7; n++) await fireEvent.press(screen.getByRole("button", { name: "Lower the target" }));
+    await fireEvent.press(screen.getByTestId("camera-box-close"));
+    const late = poseCamera.props as unknown as { onPose: (e: { nativeEvent: PoseEvent }) => void };
+    await fireEvent.press(screen.getByRole("button", { name: FOLLOW_WORDS }));
+    // The camera is gone: its view is no longer drawn, so the phone's camera is let go.
+    expect(screen.queryByTestId("pose-camera")).toBeNull();
+    expect(poseCamera.props).toBeNull();
+    expect(screen.getByRole("button", { name: CAMERA_BACK })).toBeTruthy();
+    // Answers still on their way from the camera as it went: a whole set of squats.
+    for (const e of SQUATS) {
+      await act(() => {
+        late.onPose({ nativeEvent: e });
+      });
+    }
+    expect(screen.getByTestId("follow-screen")).toBeTruthy();
+    expect(screen.queryByTestId("camera-done")).toBeNull();
+    expect(timerSays()).toBe("get ready 00:10");
+    // 3 reps are 9 s: followed to the end, the count asked is the timer's 3, at 3 s a rep.
+    await clock.pass(10_000);
+    await clock.pass(9_000);
+    const done = await screen.findByTestId("follow-done");
+    expect(within(done).getByText(`9 s · ${ASK_REPS_WORDS}`)).toBeTruthy();
+    expect(within(done).getByRole("button", { name: "Done · 3 reps" })).toBeTruthy();
+    expect(screen.queryByTestId("pose-camera")).toBeNull();
+  });
+
+  it("back to the camera, the camera's set starts again: nothing it saw before Follow along is kept", async () => {
+    await openTry();
+    await turnOn();
+    await play(SQUATS);
+    expect(countSays()).toBe("03 / 10");
+    await fireEvent.press(screen.getByRole("button", { name: FOLLOW_WORDS }));
+    await fireEvent.press(screen.getByRole("button", { name: CAMERA_BACK }));
+    expect(await screen.findByTestId("pose-camera")).toBeTruthy();
+    expect(screen.queryByTestId("follow-screen")).toBeNull();
+    expect(countSays()).toBe("00 / 10");
+    expect(screen.getByText(SET_UP_WORDS)).toBeTruthy();
+    // And the camera counts again, a minute later.
+    await play(SQUATS.map((e) => ({ ...e, t: e.t + 60_000 })));
+    expect(countSays()).toBe("03 / 10");
+  });
+});
+
+describe("Follow along (53b-ii): the gym is busy, so I tap the clip, follow it on a timer, and say how many reps I did", () => {
+  it("before every camera set the app says it is there, and the clip's button stays all through the set", async () => {
+    await openTry();
+    await turnOn();
+    expect(screen.getByText(SET_UP_WORDS)).toBeTruthy();
+    expect(screen.getByText(FOLLOW_LINE)).toBeTruthy();
+    expect(screen.getByRole("button", { name: FOLLOW_WORDS })).toBeTruthy();
+    await play(SQUATS);
+    // Standing ready, the set-up's words go; the way to Follow along stays under the clip.
+    expect(screen.queryByText(FOLLOW_LINE)).toBeNull();
+    expect(screen.getByRole("button", { name: FOLLOW_WORDS })).toBeTruthy();
+  });
+
+  it("a press on the clip itself is Follow along too, and the clip then fills the phone", async () => {
+    await openTry();
+    await turnOn();
+    await fireEvent.press(screen.getByTestId("camera-tile"));
+    expect(screen.getByTestId("follow-screen")).toBeTruthy();
+    expect(screen.getByTestId("follow-picture-squat")).toBeTruthy();
+    expect(screen.queryByTestId("camera-picture-squat")).toBeNull();
+  });
+
+  it("the whole set: get ready, follow, the time changed, the end, my own count, Done", async () => {
+    const clock = heldClock();
+    await openTry();
+    await turnOn();
+    // The person's own Sound choice is kept on the phone: a test before may have left it off.
+    await fireEvent.press(screen.getByTestId("camera-tap"));
+    const off = screen.queryByRole("button", { name: "Sound off" });
+    if (off !== null) await fireEvent.press(off);
+    await fireEvent.press(screen.getByTestId("camera-box-close"));
+    sounds.spoken.length = 0;
+    sounds.played.length = 0;
+    await fireEvent.press(screen.getByRole("button", { name: FOLLOW_WORDS }));
+    // Getting ready: 10 s, Start now, the set's time, and the coach's "Get ready."
+    expect(timerSays()).toBe("get ready 00:10");
+    expect(screen.getByText("Set 1 of 1 · 30 s")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Start now" })).toBeTruthy();
+    expect(sounds.spoken).toEqual([{ id: "get_ready", index: 0 }]);
+    await clock.pass(4_000);
+    expect(timerSays()).toBe("get ready 00:06");
+    await clock.pass(6_000);
+    expect(timerSays()).toBe("time left 00:30");
+    expect(sounds.played).toEqual(["count", "count", "count", "go"]);
+    expect(screen.getByText("Squat · Set 1 of 1")).toBeTruthy();
+    expect(screen.getByText(FOLLOW_TAP_WORDS)).toBeTruthy();
+    await clock.pass(15_000);
+    expect(timerSays()).toBe("time left 00:15");
+    expect(sounds.spoken[sounds.spoken.length - 1]).toEqual({ id: "halfway", index: 0 });
+    // A tap: the time made longer, and the timer says so at once.
+    await fireEvent.press(screen.getByTestId("follow-tap"));
+    const box = screen.getByTestId("follow-box");
+    for (const name of ["Pause", "End", "Reset set", "Count this set myself", "Skip exercise", "Set done · 15 s"]) expect(within(box).getByRole("button", { name })).toBeTruthy();
+    await fireEvent.press(within(box).getByRole("button", { name: "Lengthen the time" }));
+    expect(timerSays()).toBe("time left 00:20");
+    await fireEvent.press(screen.getByTestId("follow-box-close"));
+    expect(screen.queryByTestId("follow-box")).toBeNull();
+    await clock.pass(20_000);
+    // The end: how long it was followed, and my own count, started from it at 3 s a rep.
+    const done = await screen.findByTestId("follow-done");
+    expect(within(done).getByText(`35 s · ${ASK_REPS_WORDS}`)).toBeTruthy();
+    expect(sounds.spoken[sounds.spoken.length - 1]).toEqual({ id: "set_complete", index: 0 });
+    await fireEvent.press(within(done).getByRole("button", { name: "One rep less" }));
+    await fireEvent.press(within(done).getByRole("button", { name: "One rep less" }));
+    await fireEvent.press(within(done).getByRole("button", { name: "Done · 10 reps" }));
+    await waitFor(() => { expect(screen.queryByTestId("follow-screen")).toBeNull(); });
+    expect(screen.getByRole("button", { name: "Try the camera" })).toBeTruthy();
+  });
+
+  it("Pause stands the timer still and says so; Reset set gets ready again; Set done ends it with the time followed", async () => {
+    const clock = heldClock();
+    await openTry();
+    await turnOn();
+    await fireEvent.press(screen.getByRole("button", { name: FOLLOW_WORDS }));
+    await fireEvent.press(screen.getByRole("button", { name: "Start now" }));
+    await clock.pass(5_000);
+    await fireEvent.press(screen.getByTestId("follow-tap"));
+    await fireEvent.press(screen.getByRole("button", { name: "Pause" }));
+    expect(timerSays()).toBe("paused 00:25");
+    await clock.pass(30_000);
+    expect(timerSays()).toBe("paused 00:25");
+    await fireEvent.press(screen.getByRole("button", { name: "Resume" }));
+    await clock.pass(4_000);
+    expect(timerSays()).toBe("time left 00:21");
+    await fireEvent.press(screen.getByRole("button", { name: "Reset set" }));
+    expect(timerSays()).toBe("get ready 00:10");
+    await fireEvent.press(screen.getByRole("button", { name: "Set done · 0 s" }));
+    const done = await screen.findByTestId("follow-done");
+    expect(within(done).getByRole("button", { name: "Done · 0 reps" })).toBeTruthy();
+  });
+
+  it("Count this set myself: the camera stays off, the box with the count stays open", async () => {
+    await openTry();
+    await turnOn();
+    await fireEvent.press(screen.getByRole("button", { name: FOLLOW_WORDS }));
+    await fireEvent.press(screen.getByTestId("follow-tap"));
+    await fireEvent.press(screen.getByRole("button", { name: "Count this set myself" }));
+    expect(screen.queryByTestId("follow-screen")).toBeNull();
+    expect(screen.queryByTestId("pose-camera")).toBeNull();
+    const box = screen.getByTestId("camera-box");
+    await fireEvent.press(within(box).getByRole("button", { name: "One rep more" }));
+    expect(countSays()).toBe("01 / 10");
+  });
+
+  it("with Sound off the timer is silent; End closes it", async () => {
+    const clock = heldClock();
+    await openTry();
+    await turnOn();
+    await fireEvent.press(screen.getByTestId("camera-tap"));
+    const on = screen.queryByRole("button", { name: "Sound on" });
+    if (on !== null) await fireEvent.press(on);
+    await fireEvent.press(screen.getByTestId("camera-box-close"));
+    sounds.spoken.length = 0;
+    sounds.played.length = 0;
+    await fireEvent.press(screen.getByRole("button", { name: FOLLOW_WORDS }));
+    for (let n = 0; n < 45; n++) await clock.pass(1_000);
+    expect(await screen.findByTestId("follow-done")).toBeTruthy();
+    expect(sounds.spoken).toEqual([]);
+    expect(sounds.played).toEqual([]);
+    await fireEvent.press(within(screen.getByTestId("follow-done")).getByRole("button", { name: "Done · 10 reps" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Try the camera" }));
+    await fireEvent.press(await screen.findByText("Squat"));
+    await fireEvent.press(await screen.findByRole("button", { name: FOLLOW_WORDS }));
+    await fireEvent.press(screen.getByTestId("follow-tap"));
+    await fireEvent.press(screen.getByRole("button", { name: "End" }));
+    await waitFor(() => { expect(screen.queryByTestId("follow-screen")).toBeNull(); });
+  });
+
+  it("an exercise with nothing to follow offers no Follow along", async () => {
+    await openTry("Lunge");
+    await turnOn();
+    expect(screen.queryByRole("button", { name: FOLLOW_WORDS })).toBeNull();
+    expect(screen.queryByText(FOLLOW_LINE)).toBeNull();
   });
 });
