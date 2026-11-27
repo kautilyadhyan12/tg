@@ -12,7 +12,7 @@
 //   - for a movement counted one side at a time (52c-i), each of those reps' side, the leg a lunge is given;
 //   - for an exercise's form check (52b-ii-a), the mistakes marked in each rep both count, paired by when it was (so
 //     even where the two count apart), the same ones;
-//   - and the coach's lines, once there are any (53 makes them): until then there is nothing more to compare.
+//   - and the coach's lines (53b-i), the same words in the same order.
 // A dip read as another movement says nothing and is not compared, only counted in the table.
 // A phone file is judged only when it is the phone's own reading of the very frames of the kept file under its name, from
 // the chosen set-up; anything else is refused and never judged, and a video with no phone file is never "the same": the
@@ -26,6 +26,7 @@ import { readKept, type KeptFile, type Video } from "./bodyCheck.js";
 import { LEAD_IN, runMovement, type Run } from "./movementCheck.js";
 import { MOVEMENT_VIDEOS, framesOf, labelOf, type MovementVideo } from "./movementVideos.js";
 import { PHONE_GAPS, phoneLabel } from "./replays.js";
+import { saidOf } from "./coachCheck.js";
 
 const TEST = join(import.meta.dirname, "../test");
 
@@ -84,7 +85,7 @@ export function pairedMarks(laptop: Run, phone: Run): { at: string; laptop: stri
 }
 
 /** What differs between the laptop's run and the phone's, in words; empty when a person would be told the same. */
-export function differences(laptop: Run, phone: Run): string[] {
+export function differences(laptop: Run, phone: Run, exercise: ExerciseCamera | null = null): string[] {
   const out: string[] = [];
   if (laptop.count !== phone.count) out.push(`the laptop counts ${String(laptop.count)}, the phone ${String(phone.count)}`);
   const a = laptop.reps.filter(says);
@@ -104,6 +105,9 @@ export function differences(laptop: Run, phone: Run): string[] {
   for (const p of pairedMarks(laptop, phone)) {
     if (p.laptop !== p.phone) out.push(`at ${p.at} the laptop marks ${p.laptop || "no mistake"}, the phone ${p.phone || "no mistake"}`);
   }
+  // 53b-i: what the coach says over the set, the same words in the same order.
+  const said = (run: Run): string => saidOf(run.reps, exercise).map((x) => x.words).join(" / ");
+  if (said(laptop) !== said(phone)) out.push(`the coach says "${said(laptop)}" on the laptop, "${said(phone)}" on the phone`);
   return out;
 }
 
@@ -129,7 +133,7 @@ export function judgePhone(movement: Movement, entry: MovementVideo, kept: KeptF
   const refused = refusal(kept, phone, madeFrom, run);
   if (refused !== null) return { label, entry, verdict: "refused", why: [refused], laptop, phone: null };
   const phoneRun = runMovement(movement, asVideo(phone), exercise);
-  const diff = differences(laptop, phoneRun);
+  const diff = differences(laptop, phoneRun, exercise);
   return { label, entry, verdict: diff.length === 0 ? "same" : "differs", why: diff, laptop, phone: phoneRun };
 }
 

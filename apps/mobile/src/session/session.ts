@@ -112,7 +112,13 @@ export interface Session {
   /** Whether the last places the server answered held one the person belongs to; null before any. */
   belongs: () => boolean | null;
   keepBelongs: (belongs: boolean) => Promise<void>;
+  /** Told before anybody is signed out, by their own Sign out, the server, or a deleted account, while the
+   *  person is still the one signed in: a run going on is finished and kept for them (37o). Returns the undo. */
+  beforeLeaving: (listener: LeavingListener) => () => void;
 }
+
+/** Why the person is leaving: `deleted` when the account is gone, and nothing of theirs is kept. */
+export type LeavingListener = (userId: string, why: "out" | "deleted") => Promise<void>;
 
 export function createSession({
   server,
@@ -130,6 +136,19 @@ export function createSession({
   let refreshing: { run: Promise<void>; of: PhoneKeptSession } | null = null;
   let signIns = 0;
   let here = false;
+  const leaving = new Set<LeavingListener>();
+
+  /** Each listener in turn; one that fails never stops the sign-out. */
+  const tellLeaving = async (userId: string | undefined, why: "out" | "deleted") => {
+    if (userId === undefined) return;
+    for (const listener of [...leaving]) {
+      try {
+        await listener(userId, why);
+      } catch {
+        // The sign-out goes on.
+      }
+    }
+  };
 
   const show = (next: SessionState) => {
     state = next;
@@ -247,6 +266,9 @@ export function createSession({
       // `mine` is read now, after the reply, so a tick kept while this was away comes with it.
       await keep({ ...mine, refreshToken: answer.data.tokens.refreshToken }, answer.data.tokens.accessToken);
     } else if (answer.status === 401) {
+      await tellLeaving(mine.user.id, "out");
+      // Signed out, or signed in again, while the listeners were told: the answer is nobody's now.
+      if (kept !== mine) return "done";
       await forget();
       show({
         kind: "out",
@@ -417,6 +439,7 @@ export function createSession({
     },
 
     signOut: async () => {
+      await tellLeaving(kept?.user.id, "out");
       const mine = kept;
       await forget();
       show({ kind: "out", note: SIGNED_OUT_NOTES.own });
@@ -427,11 +450,19 @@ export function createSession({
     },
 
     accountDeleted: async (note) => {
+      await tellLeaving(kept?.user.id, "deleted");
       await forget();
       show({ kind: "out", note });
     },
 
     tellOwedSignOut,
+
+    beforeLeaving: (listener) => {
+      leaving.add(listener);
+      return () => {
+        leaving.delete(listener);
+      };
+    },
   };
 }
 

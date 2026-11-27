@@ -425,6 +425,8 @@ export const keptRunStateSchema = z.object({
   still: z.array(z.tuple([z.number(), z.number().nullable()])).default([]),
   /** The seconds each Auto-pause was dated back over (37k); none for one kept before. */
   datedBack: z.array(z.tuple([z.number(), z.number()])).default([]),
+  /** The GPS's time less the phone's, taken off each point's (37o); null until known, as for one kept before. */
+  clockGapMs: z.number().nullable().default(null),
 });
 /** A run's heart rate kept beside its points: [ms into the run, bpm]. */
 export const keptRunHeartSchema = z.array(z.tuple([z.number(), z.number().int().min(HEART_BPM_LEAST).max(HEART_BPM_MOST)]));

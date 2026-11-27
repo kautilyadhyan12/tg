@@ -1,0 +1,32 @@
+{
+  "format": 1,
+  "version": 1,
+  "voice": {
+    "name": "Korina",
+    "model": "Eleven v4",
+    "settings": "Stability 50%, Similarity 75%, the rest as ElevenLabs sets them; MP3 at 44.1 kHz, 128 kbps"
+  },
+  "lines": [
+    { "id": "go_lower", "when": "rule", "wordings": ["Go lower to count.", "A little lower to count.", "Go a little deeper to count."] },
+    { "id": "sit_up_higher", "when": "rule", "wordings": ["Sit up higher to count.", "Come up a little higher to count."] },
+    { "id": "hips_higher", "when": "rule", "wordings": ["Push your hips higher to count.", "Drive your hips a little higher to count."] },
+    { "id": "whole_body", "when": "rule", "wordings": ["Keep your whole body in view.", "Make sure the camera can see your whole body."] },
+    { "id": "chest_up", "when": "rule", "wordings": ["Keep your chest up.", "Lift your chest.", "Chest up."] },
+    {
+      "id": "knees_out",
+      "when": "rule",
+      "wordings": ["Keep your knees in line with your toes.", "Push your knees out over your toes.", "Knees in line with your toes."]
+    },
+    { "id": "halfway", "when": "halfway", "wordings": ["Halfway.", "Halfway there."] },
+    { "id": "two_more", "when": "two more", "wordings": ["Two more.", "Two more to go."] },
+    { "id": "last_one", "when": "last one", "wordings": ["Last one.", "Last rep."] },
+    { "id": "set_complete", "when": "set complete", "wordings": ["Set complete.", "That's the set."] },
+    { "id": "lost", "when": "lost", "wordings": ["The camera can't see you.", "Step back into view of the camera."] },
+    { "id": "counts_now", "when": "counts now", "wordings": ["That one counts.", "Better. That one counts."] },
+    { "id": "better", "when": "better", "wordings": ["Better.", "That's better."] },
+    { "id": "get_ready", "when": "get ready", "wordings": ["Get ready."] },
+    { "id": "rest", "when": "rest", "wordings": ["Rest.", "Take a rest."] },
+    { "id": "next_exercise", "when": "next exercise", "wordings": ["Next exercise."] },
+    { "id": "workout_complete", "when": "workout complete", "wordings": ["Workout complete.", "That's the workout."] }
+  ]
+}

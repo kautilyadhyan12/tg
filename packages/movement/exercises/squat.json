@@ -1,7 +1,7 @@
 {
   "format": 1,
   "id": "squat",
-  "version": 1,
+  "version": 2,
   "movement": "squat",
   "research": "Kd's research file, \"Normal Squat (Bodyweight Squat) Guide\" (his folder, squat normal), its eleven common mistakes; and the Library's source for the squat, ACE's Exercise Library: Bodyweight Squat.",
   "mistakes": [
@@ -27,6 +27,9 @@
       "refused": {
         "rule": "chest up",
         "words": "Keep your chest up."
+      },
+      "coach": {
+        "silent": "No published source gives a fixed lean as a mistake: the research file's 30 to 45 degrees is a usual range, and Myer et al. 2014 (Strength Cond J), the trunk about parallel to the shins, reads proper squats of three people up to 20.8 degrees past it, its line 12 to 25 with one person left out (measured 2026-11-27). Spoken once Kd rules it or more side-on bodies set it (54)."
       },
       "from": "Set by form-check: the further out of the form standard, 45 (its source beside it), and the furthest proper rep that reads it, as filmed and as each replay that sets numbers (40.06; 14 reps as filmed, 3 people), plus the camera's own room: the same rep's change from as filmed to each such replay, in 99 reps of 100 (126 reps): 0.41; rounded outward."
     },
@@ -62,6 +65,9 @@
       "view": "front",
       "against": "standing",
       "atLeast": -0.12,
+      "coach": {
+        "words": "Keep your knees in line with your toes."
+      },
       "standard": {
         "at": 0,
         "source": "ACE: keep your knees in line with your second toes; the research file: let your knees track outward over your toes. So the knees never come closer together, against the feet, than they stood."

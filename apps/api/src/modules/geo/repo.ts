@@ -140,6 +140,31 @@ const toSavedRoute = (r: SavedRouteDbRow): SavedRouteRow => ({
 
 // ── runs (read-only; record/sync = P5) ──────────────────────────────────────
 
+/** A run's start on the clock of the zone it was run in (37o, E1), or of the person's zone now (`timeZone`, a
+ *  safeTimeZone-validated IANA name, always a parameterized value) for a run saved with none. */
+const runLocal = (sql: Sql, timeZone: string) => sql`(started_at AT TIME ZONE coalesce(time_zone, ${timeZone}))`;
+/** Coarse bounds for the index; the run's own day is the test. Zones lie up to 26 hours apart (UTC−12 to UTC+14), so a
+ *  day of the run's own zone can begin 26 hours either side of that day in `timeZone`: two days' margin holds it (round
+ *  one, L1). `dayEarly`: two days before `day` begins; `monthLate`: two days after the month from `first` ends. */
+const dayEarly = (sql: Sql, day: string, timeZone: string) => sql`((${day}::date - 2)::timestamp AT TIME ZONE ${timeZone})`;
+const monthLate = (sql: Sql, first: string, timeZone: string) => sql`((${first}::date + interval '1 month 2 days')::timestamp AT TIME ZONE ${timeZone})`;
+
+/** The time zones Postgres knows, read once for the process: their names by their names in small letters. */
+let zoneNames: Promise<Map<string, string>> | null = null;
+/** `zone` as Postgres names it, in its own letters; null for a name it does not know, or none (37o, round one L2: the
+ *  list was read at every save, about 30 ms of a database connection). */
+export async function knownTimeZone(sql: Sql, zone: string | null): Promise<string | null> {
+  if (zone === null || zone === "") return null;
+  zoneNames ??= sql<{ name: string }[]>`SELECT name FROM pg_timezone_names`.then(
+    (rows) => new Map(rows.map((r) => [r.name.toLowerCase(), r.name])),
+    (err: unknown) => {
+      zoneNames = null;
+      throw err;
+    },
+  );
+  return (await zoneNames).get(zone.toLowerCase()) ?? null;
+}
+
 /** A page of the person's runs, newest first, from the cursor, or from the end of the day `upTo` of
  *  their own time zone (`timeZone`, a safeTimeZone-validated IANA name, always a parameterized value). */
 export async function listRuns(
@@ -154,14 +179,14 @@ export async function listRuns(
   // yet (saved before 37c-i), once.
   const rows = await sql<RunDbRow[]>`
     SELECT id, started_at, duration_s, distance_m, route_name, kcal_point, source, NULL AS polyline,
-           name, elapsed_s, climb_m, shape, to_char(started_at AT TIME ZONE ${timeZone}, 'YYYY-MM-DD') AS day,
+           name, elapsed_s, climb_m, shape, to_char(${runLocal(sql, timeZone)}, 'YYYY-MM-DD') AS day,
            CASE WHEN shape IS NULL THEN polyline END AS shape_polyline,
            CASE WHEN shape IS NULL THEN splits END AS shape_splits,
            legacy_mongo_id IS NOT NULL AS legacy
     FROM runs
     WHERE user_id = ${userId}
       AND (${cursor === null} OR (started_at, id) < (${cursor?.at ?? null}, ${cursor?.id ?? null}))
-      AND (${upTo === null} OR started_at < ((${upTo}::date + 1)::timestamp AT TIME ZONE ${timeZone}))
+      AND (${upTo === null} OR (started_at < ((${upTo}::date + 3)::timestamp AT TIME ZONE ${timeZone}) AND ${runLocal(sql, timeZone)}::date <= ${upTo}::date))
     ORDER BY started_at DESC, id DESC
     LIMIT ${limit + 1}`;
   return rows.map(toRun);
@@ -179,13 +204,12 @@ export async function getRunMonths(sql: Sql, userId: string, timeZone: string, m
   if (months.length === 0) return [];
   const sorted = [...months].sort();
   const from = `${sorted[0] ?? ""}-01`;
-  const to = `${sorted[sorted.length - 1] ?? ""}-01`;
   const rows = await sql<{ month: string; n: string; m: string }[]>`
-    SELECT to_char(started_at AT TIME ZONE ${timeZone}, 'YYYY-MM') AS month, count(*) AS n, coalesce(sum(distance_m), 0) AS m
+    SELECT to_char(${runLocal(sql, timeZone)}, 'YYYY-MM') AS month, count(*) AS n, coalesce(sum(distance_m), 0) AS m
     FROM runs
     WHERE user_id = ${userId}
-      AND started_at >= (${from}::date::timestamp AT TIME ZONE ${timeZone})
-      AND started_at < ((${to}::date + interval '1 month')::timestamp AT TIME ZONE ${timeZone})
+      AND started_at >= ${dayEarly(sql, from, timeZone)}
+      AND started_at < ${monthLate(sql, `${sorted[sorted.length - 1] ?? ""}-01`, timeZone)}
     GROUP BY month`;
   const wanted = new Set(months);
   return rows.filter((r) => wanted.has(r.month)).map((r) => ({ month: r.month, runs: Number(r.n), distanceM: Number(r.m) }));
@@ -195,11 +219,13 @@ export async function getRunMonths(sql: Sql, userId: string, timeZone: string, m
 export async function getRunCalendar(sql: Sql, userId: string, timeZone: string, month: string): Promise<{ day: string; runs: number; distanceM: number }[]> {
   const first = `${month}-01`;
   const rows = await sql<{ day: string; n: string; m: string }[]>`
-    SELECT to_char(started_at AT TIME ZONE ${timeZone}, 'YYYY-MM-DD') AS day, count(*) AS n, coalesce(sum(distance_m), 0) AS m
+    SELECT to_char(${runLocal(sql, timeZone)}, 'YYYY-MM-DD') AS day, count(*) AS n, coalesce(sum(distance_m), 0) AS m
     FROM runs
     WHERE user_id = ${userId}
-      AND started_at >= (${first}::date::timestamp AT TIME ZONE ${timeZone})
-      AND started_at < ((${first}::date + interval '1 month')::timestamp AT TIME ZONE ${timeZone})
+      AND started_at >= ${dayEarly(sql, first, timeZone)}
+      AND started_at < ${monthLate(sql, first, timeZone)}
+      AND ${runLocal(sql, timeZone)}::date >= ${first}::date
+      AND ${runLocal(sql, timeZone)}::date < (${first}::date + interval '1 month')::date
     GROUP BY day ORDER BY day`;
   return rows.map((r) => ({ day: r.day, runs: Number(r.n), distanceM: Number(r.m) }));
 }
@@ -207,7 +233,7 @@ export async function getRunCalendar(sql: Sql, userId: string, timeZone: string,
 /** The day of the person's first run, in their own time zone; null with none. */
 export async function getFirstRunDay(sql: Sql, userId: string, timeZone: string): Promise<string | null> {
   const [r] = await sql<{ day: string | null }[]>`
-    SELECT to_char(min(started_at) AT TIME ZONE ${timeZone}, 'YYYY-MM-DD') AS day FROM runs WHERE user_id = ${userId}`;
+    SELECT to_char(min(${runLocal(sql, timeZone)}), 'YYYY-MM-DD') AS day FROM runs WHERE user_id = ${userId}`;
   return r?.day ?? null;
 }
 
@@ -238,7 +264,7 @@ export async function getRunDays(
   timeZone: string,
 ): Promise<{ date: string; runs: number }[]> {
   const rows = await sql<{ day: string; n: string }[]>`
-    SELECT to_char(started_at AT TIME ZONE ${timeZone}, 'YYYY-MM-DD') AS day, count(*) AS n
+    SELECT to_char(${runLocal(sql, timeZone)}, 'YYYY-MM-DD') AS day, count(*) AS n
     FROM runs
     WHERE user_id = ${userId} AND (${since === null} OR started_at >= ${since})
     GROUP BY day ORDER BY day ASC`;
@@ -247,7 +273,7 @@ export async function getRunDays(
 
 const runDetailColumns = (sql: Sql, timeZone: string) => sql`
   id, started_at, duration_s, distance_m, route_name, kcal_point, source, polyline, name, elapsed_s, climb_m, shape,
-  to_char(started_at AT TIME ZONE ${timeZone}, 'YYYY-MM-DD') AS day,
+  to_char(${runLocal(sql, timeZone)}, 'YYYY-MM-DD') AS day,
   CASE WHEN shape IS NULL THEN polyline END AS shape_polyline, CASE WHEN shape IS NULL THEN splits END AS shape_splits,
   splits, effort, note, left_out_m, left_out_s, legacy_mongo_id IS NOT NULL AS legacy,
   best_1k_s, best_mile_s, best_5k_s, best_10k_s, heart_avg, heart_max`;
@@ -323,7 +349,7 @@ export async function getRunRecords(sql: Sql, userId: string, timeZone: string):
   const rows = await sql<{ kind: RunRecordKind; id: string; name: string | null; started_at: Date; day: string; value: number; before: number | null }[]>`
     WITH mine AS (
       SELECT id, name, started_at, distance_m, best_1k_s, best_mile_s, best_5k_s, best_10k_s,
-             to_char(started_at AT TIME ZONE ${timeZone}, 'YYYY-MM-DD') AS day
+             to_char(${runLocal(sql, timeZone)}, 'YYYY-MM-DD') AS day
       FROM runs WHERE user_id = ${userId} AND run_calc_version IS NOT NULL
     ), fastest AS (
       SELECT m.id, m.name, m.started_at, m.day, k.kind,
@@ -461,6 +487,8 @@ export class ForeignRunError extends Error {
 export interface NewRun {
   id: string;
   startedAt: Date;
+  /** The person's time zone as the run is saved (37o, E1), as Postgres names it (`knownTimeZone`); null for none. */
+  timeZone: string | null;
   name: string;
   effort: number | null;
   note: string | null;
@@ -554,13 +582,14 @@ export async function insertRun(sql: Sql, userId: string, run: NewRun): Promise<
       INSERT INTO runs (id, user_id, started_at, duration_s, distance_m, polyline, splits, kcal_point,
                         kcal_calc_version, source, name, effort, note, elapsed_s, left_out_m, left_out_s,
                         run_calc_version, climb_m, climb_state, shape, best_1k_s, best_mile_s, best_5k_s, best_10k_s,
-                        heart_avg, heart_max)
+                        heart_avg, heart_max, time_zone)
       VALUES (${run.id}, ${userId}, ${run.startedAt}, ${run.movingS}, ${run.distanceM}, ${run.polyline},
               ${tx.json(run.splits)}, ${run.kcal}, ${run.calcVersion}, 'mobile', ${run.name}, ${run.effort},
               ${run.note}, ${run.elapsedS}, ${run.leftOutM}, ${run.leftOutS}, ${run.calcVersion},
               ${run.climb.state === "done" ? run.climb.m : null}, ${run.climb.state}, ${run.shape},
               ${run.bests.k1}, ${run.bests.mile}, ${run.bests.k5}, ${run.bests.k10},
-              ${run.heart?.avg ?? null}, ${run.heart?.max ?? null})
+              ${run.heart?.avg ?? null}, ${run.heart?.max ?? null},
+              ${run.timeZone})
       ON CONFLICT (id) DO NOTHING`;
     const rows = await tx<(SavedRunDbRow & { user_id: string })[]>`
       SELECT id, user_id, started_at, name, effort, note, distance_m, duration_s, elapsed_s, left_out_m,
@@ -658,12 +687,13 @@ export async function getRunPlanDays(
 ): Promise<{ day: string; distanceM: number; longestM: number; movingS: number; effort: number | null; longestAfterM: number }[]> {
   // longest_after: the day's longest run started at or after `after` (one's own week saved, 37d-iii-b).
   const rows = await sql<{ day: string; m: string; longest: number; moving: number; effort: number | null; longest_after: number | null }[]>`
-    SELECT to_char(started_at AT TIME ZONE ${timeZone}, 'YYYY-MM-DD') AS day,
+    SELECT to_char(${runLocal(sql, timeZone)}, 'YYYY-MM-DD') AS day,
            sum(distance_m) AS m, max(distance_m) AS longest, max(duration_s) AS moving, (array_agg(effort ORDER BY distance_m DESC, started_at))[1] AS effort,
            max(distance_m) FILTER (WHERE ${after}::timestamptz IS NULL OR started_at >= ${after}::timestamptz) AS longest_after
     FROM runs
     WHERE user_id = ${userId} AND run_calc_version IS NOT NULL
-      AND started_at >= (${fromDay}::date::timestamp AT TIME ZONE ${timeZone})
+      AND started_at >= ${dayEarly(sql, fromDay, timeZone)}
+      AND ${runLocal(sql, timeZone)}::date >= ${fromDay}::date
     GROUP BY 1 ORDER BY 1`;
   return rows.map((r) => ({ day: r.day, distanceM: Number(r.m), longestM: r.longest, movingS: r.moving, effort: r.effort, longestAfterM: r.longest_after ?? 0 }));
 }

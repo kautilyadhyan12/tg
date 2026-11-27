@@ -9,7 +9,8 @@
   "exports": {
     ".": "./src/index.ts",
     "./movements/*.json": "./movements/*.json",
-    "./exercises/*.json": "./exercises/*.json"
+    "./exercises/*.json": "./exercises/*.json",
+    "./voice/*.json": "./voice/*.json"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
@@ -28,7 +29,9 @@
     "phone-counts": "tsx scripts/phone-counts.ts",
     "floor-view": "tsx scripts/floor-view.ts",
     "lock-check": "tsx scripts/lock-check.ts",
-    "turn-check": "tsx scripts/turn-check.ts"
+    "turn-check": "tsx scripts/turn-check.ts",
+    "voice-script": "tsx scripts/voice-script.ts",
+    "voice-cut": "tsx scripts/voice-cut.ts"
   },
   "devDependencies": {
     "@app/config": "workspace:*",

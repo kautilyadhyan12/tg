@@ -17,7 +17,9 @@ import type { TextStore } from "../food/outbox";
  *  `kept`: the server has it (a 2xx is only answered once the run is stored) in words this copy of the app
  *  cannot read, as when a store build lags behind the server: let go, and lists of runs read again.
  *  `deleted`: the person deleted it, on this phone or another, while it waited to be sent (37c-i). */
-export type RunSendResult = { kind: "done"; run: SavedRun } | { kind: "kept" } | { kind: "later" } | { kind: "failed" } | { kind: "refused"; message: string } | { kind: "deleted" };
+/** `passed`: the server's front door answered for an api that could not (37m's L5): the next run is tried, and this one
+ *  is never counted towards giving up on it, as the api down for a while answers so for every run (round one, H2). */
+export type RunSendResult = { kind: "done"; run: SavedRun } | { kind: "kept" } | { kind: "later" } | { kind: "failed" } | { kind: "passed" } | { kind: "refused"; message: string } | { kind: "deleted" };
 export type RunSender = (run: SaveRunRequest) => Promise<RunSendResult>;
 
 export type { RefusedRun };
@@ -75,8 +77,10 @@ export function runSender(session: Session): RunSender {
       const saved = saveRunResponseSchema.safeParse(answer.data);
       return saved.success ? { kind: "done", run: saved.data.run } : { kind: "kept" };
     }
-    if (nothingGoes(answer) || answer.kind !== "refused") return { kind: "later" };
+    // The front door's 502, 503 or 504 (37m's L5): a run that broke the api never holds back the runs after it.
+    if (answer.kind === "no_answer" && answer.gateway === true) return { kind: "passed" };
     if (notNow(answer)) return { kind: "failed" };
+    if (nothingGoes(answer) || answer.kind !== "refused") return { kind: "later" };
     if (answer.status === 410) return { kind: "deleted" };
     // A shape the server would not read is the app's fault, never words for the person.
     return { kind: "refused", message: REFUSED_WORDS };
@@ -169,6 +173,11 @@ export function createRunOutbox(store: TextStore, send: RunSender, now: () => nu
         fails.clear();
         if (view.failing.length > 0) set({ ...view, failing: [] });
         return;
+      }
+      if (result.kind === "passed") {
+        // Said as not sent yet; counted nowhere, so a server down for an hour gives up on no run.
+        if (!view.failing.includes(next.runId)) set({ ...view, failing: [...view.failing, next.runId] });
+        continue;
       }
       if (result.kind === "failed") {
         const was = fails.get(next.runId);

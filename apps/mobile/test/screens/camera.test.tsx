@@ -34,7 +34,7 @@ interface PoseCameraFake {
 }
 const poseCamera = jest.requireMock<{ poseCamera: PoseCameraFake }>("../../src/camera/poseCameraNative").poseCamera;
 const camera = jest.requireMock<{ camera: { permission: unknown; afterAsk: unknown; asked: number } }>("expo-camera").camera;
-const sounds = jest.requireMock<{ sounds: { played: string[] } }>("../../src/sound/soundNative").sounds;
+const sounds = jest.requireMock<{ sounds: { played: string[]; spoken: { id: string; index: number }[]; hushed: number } }>("../../src/sound/soundNative").sounds;
 interface FakeFile {
   delete: () => void;
   exists: boolean;
@@ -120,6 +120,8 @@ beforeEach(() => {
   camera.afterAsk = GRANTED;
   camera.asked = 0;
   sounds.played.length = 0;
+  sounds.spoken.length = 0;
+  sounds.hushed = 0;
 });
 afterEach(() => {
   jest.restoreAllMocks();
@@ -242,6 +244,63 @@ describe("I stand my phone up, step back, do my squats, and the phone counts the
     await fireEvent.press(within(done).getByRole("button", { name: "Done" }));
     await waitFor(() => { expect(screen.queryByTestId("camera-done")).toBeNull(); });
     expect(screen.getByRole("button", { name: "Try the camera" })).toBeTruthy();
+  });
+
+  it("the coach says the count as I near my target, and \"Set complete.\" when I end the set (53b-i)", async () => {
+    await openTry();
+    await turnOn();
+    // Her three squats against a target of 4: "Two more." after the second, "Last one." after the third.
+    await fireEvent.press(screen.getByTestId("camera-tap"));
+    for (let n = 0; n < 6; n++) await fireEvent.press(screen.getByRole("button", { name: "Lower the target" }));
+    await fireEvent.press(screen.getByTestId("camera-box-close"));
+    await play(SQUATS);
+    expect(countSays()).toBe("03 / 4");
+    expect(sounds.spoken).toEqual([
+      { id: "two_more", index: 0 },
+      { id: "last_one", index: 0 },
+    ]);
+    // Proper squats: nothing to correct, and the line at the foot says nothing of the coach's.
+    expect(screen.queryByTestId("camera-line")).toBeNull();
+    await fireEvent.press(screen.getByTestId("camera-tap"));
+    await fireEvent.press(screen.getByRole("button", { name: "Set done · 3 reps" }));
+    await screen.findByTestId("camera-done");
+    expect(sounds.spoken[sounds.spoken.length - 1]).toEqual({ id: "set_complete", index: 0 });
+  });
+
+  it("with Sound off the coach says nothing, and no rep sounds", async () => {
+    await openTry();
+    await turnOn();
+    await fireEvent.press(screen.getByTestId("camera-tap"));
+    for (let n = 0; n < 6; n++) await fireEvent.press(screen.getByRole("button", { name: "Lower the target" }));
+    await fireEvent.press(screen.getByRole("button", { name: "Sound on" }));
+    await fireEvent.press(screen.getByTestId("camera-box-close"));
+    await play(SQUATS);
+    expect(countSays()).toBe("03 / 4");
+    await fireEvent.press(screen.getByTestId("camera-tap"));
+    await fireEvent.press(screen.getByRole("button", { name: "Set done · 3 reps" }));
+    await screen.findByTestId("camera-done");
+    expect(sounds.spoken).toEqual([]);
+    expect(sounds.played).toEqual([]);
+  });
+
+  it("the coach falls silent at once on Sound off, on Pause, on Count this set myself and when the screen closes (round one, L1)", async () => {
+    await openTry();
+    await turnOn();
+    await play(SQUATS.slice(0, 40));
+    // Counted from here: the screen of the test before may close after this test began (an unmount is not awaited).
+    await fireEvent.press(screen.getByTestId("camera-tap"));
+    // The person's own Sound choice is kept on the phone: a test before may have left it off. On first, then counted.
+    const off = screen.queryByRole("button", { name: "Sound off" });
+    if (off !== null) await fireEvent.press(off);
+    const from = sounds.hushed;
+    await fireEvent.press(screen.getByRole("button", { name: "Sound on" }));
+    expect(sounds.hushed - from).toBe(1);
+    await fireEvent.press(screen.getByRole("button", { name: "Pause" }));
+    expect(sounds.hushed - from).toBe(2);
+    await fireEvent.press(screen.getByRole("button", { name: "Count this set myself" }));
+    expect(sounds.hushed - from).toBe(3);
+    await fireEvent.press(screen.getByRole("button", { name: "End" }));
+    await waitFor(() => { expect(sounds.hushed - from).toBe(4); });
   });
 
   it("the set ends by itself at its target", async () => {

@@ -1723,6 +1723,13 @@
       "when": 1790985600246,
       "tag": "0246_workout_kcal_weight",
       "breakpoints": true
+    },
+    {
+      "idx": 246,
+      "version": "7",
+      "when": 1790985600247,
+      "tag": "0247_run_time_zone",
+      "breakpoints": true
     }
   ]
 }

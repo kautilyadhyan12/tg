@@ -316,7 +316,7 @@ jest.mock("expo-secure-store", () => {
 // reads what was asked of it; the points themselves are handed in by the test, as Android hands them
 // to the run's task.
 jest.mock("expo-location", () => {
-  const state = { services: true, granted: true, canAskAgain: true, accuracy: "fine", asked: 0, started: [], running: false, watching: 0, acceptsTurnOn: true, whileStopping: null, refusesStart: false };
+  const state = { services: true, granted: true, canAskAgain: true, accuracy: "fine", asked: 0, started: [], running: false, watching: 0, acceptsTurnOn: true, whileStopping: null, refusesStart: false, lastKnown: null, lastKnownAsked: [] };
   const answer = () => ({ granted: state.granted, canAskAgain: state.canAskAgain, status: state.granted ? "granted" : "denied", android: { accuracy: state.granted ? state.accuracy : "none" } });
   return {
     state,
@@ -355,6 +355,11 @@ jest.mock("expo-location", () => {
       if (typeof meanwhile === "function") return meanwhile().then(stop);
       stop();
       return Promise.resolve();
+    },
+    // Where Android last knew the phone was (`lastKnown`, a test's), and what each ask allowed.
+    getLastKnownPositionAsync: (options) => {
+      state.lastKnownAsked.push(options);
+      return Promise.resolve(state.lastKnown);
     },
     watchPositionAsync: () => {
       state.watching += 1;
@@ -544,10 +549,11 @@ jest.mock("../../src/camera/poseCameraNative", () => {
     },
   };
 });
-// The app's sound player (64a-vi), expo-audio's: `played` lists each sound handed to it, in order.
+// The app's sound player (64a-vi, 53b-i), expo-audio's: `played` lists each sound handed to it, in order, and `spoken`
+// each of the coach's clips.
 jest.mock("../../src/sound/soundNative", () => {
-  const sounds = { played: [] };
-  return { sounds, soundNative: { play: (name) => sounds.played.push(name) } };
+  const sounds = { played: [], spoken: [], hushed: 0 };
+  return { sounds, soundNative: { play: (name) => sounds.played.push(name), speak: (clip) => sounds.spoken.push(clip), hush: () => { sounds.hushed += 1; } } };
 });
 // The heart rate monitor's Bluetooth (37f-i), modules/heart-rate's Android code. `strap.near`: the monitors in
 // reach, each with the bytes it sends (`send(id, bytes, at)` hands one notification over as the Android code

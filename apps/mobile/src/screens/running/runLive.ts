@@ -1,7 +1,7 @@
 // The numbers the run's screen shows while it goes on: its clock and its current pace. Pure, so the
 // rules are tested second by second (the running faults of 2026-11-20, A3 and A5: the clock that went
 // back and forth while the person stood, and a pace nobody runs from one point the phone was unsure of).
-import { GPS_WORST_ACCURACY_M, RUN_MAX_ELAPSED_MS, RUN_MAX_PAUSES, geodesicMetres, recordSpeed, runSums, type RunPause, type RunPoint, type RunSums, type Units } from "@app/shared";
+import { GPS_WORST_ACCURACY_M, RUN_MAX_ELAPSED_MS, RUN_MAX_PAUSES, RUN_MAX_POINTS, geodesicMetres, recordSpeed, runSums, runSumsInSlices, type RunClimbRequest, type RunPause, type RunPoint, type RunSums, type SaveRunRequest, type Units } from "@app/shared";
 import type { LiveRun } from "./recorder";
 import { pace } from "./runWords";
 
@@ -20,6 +20,72 @@ export function closedStill(run: LiveRun, nowMs: number): RunPause[] {
 /** The run's numbers at `at` ms into it, from its points, pauses and still stretches: the screen, the voice and
  *  the guide read them so, and the server works the saved run out from the same three. */
 export const sumsAt = (run: LiveRun, at: number, kg: number): RunSums => runSums(run.points, closedPauses(run, at), at, kg, closedStill(run, at));
+
+/** What the server is sent of a finished run: asked for the climb (37b-ii), and saved with the same points. */
+export function sentOf(run: LiveRun): RunClimbRequest {
+  const finished = run.finishedMs ?? 0;
+  const end = Math.round(finished);
+  // The stretches the phone felt still (37k), sent only by a run that has one: a server from before them
+  // refuses the field.
+  const still = closedStill(run, finished)
+    .map(([a, b]): [number, number] => [Math.round(a), Math.min(end, Math.round(b))])
+    .filter(([a, b]) => b > a);
+  return {
+    elapsedMs: end,
+    points: run.points.slice(0, RUN_MAX_POINTS).map(([at, lat, lng, acc]) => [Math.round(at), lat, lng, acc]),
+    pauses: closedPauses(run, finished).map(([a, b]) => [Math.round(a), Math.round(b)]),
+    ...(still.length > 0 ? { still } : {}),
+  };
+}
+
+/** When Go was pressed by the GPS's clock: the phone's own, less a gap the run found in it (A6). */
+export const trueStart = (run: LiveRun): Date => new Date(run.startedAt + (run.clockGapMs ?? 0));
+
+/** A finished run as Save sends it, with the name, feel and note the person gave. */
+export function saveRequestOf(run: LiveRun, sent: RunClimbRequest, name: string, effort: number | null, note: string | null): SaveRunRequest {
+  return {
+    runId: run.runId,
+    startedAt: trueStart(run).toISOString(),
+    ...sent,
+    ...(run.heart.length > 0 ? { heart: run.heart.slice(0, RUN_MAX_POINTS) } : {}),
+    name,
+    effort,
+    note,
+  };
+}
+
+/** How long one slice of the live numbers' work may hold the phone before it lets the screen draw and be pressed. */
+export const SLICE_MS = 12;
+
+/** `sumsAt`, worked out a slice at a time between the screen's own work (37o, A11: a day's run took the phone 1.4 s
+ *  in one go, and the clock and every button stood still for it). The run as it is now is copied first: points keep
+ *  coming while the work goes on. `done` is told the sums, the same as `sumsAt`'s; the answer is the stop. */
+export function sumsInSlices(run: LiveRun, at: number, kg: number, done: (sums: RunSums) => void, now: () => number = Date.now): () => void {
+  const points = run.points.slice();
+  const still = closedStill(run, at).map(([a, b]): RunPause => [a, b]);
+  const work = runSumsInSlices(points, closedPauses(run, at), at, kg, still);
+  let stopped = false;
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  const go = (): void => {
+    timer = null;
+    if (stopped) return;
+    const until = now() + SLICE_MS;
+    for (;;) {
+      const step = work.next();
+      if (step.done === true) {
+        done(step.value);
+        return;
+      }
+      if (now() >= until) break;
+    }
+    timer = setTimeout(go, 0);
+  };
+  timer = setTimeout(go, 0);
+  return () => {
+    stopped = true;
+    if (timer !== null) clearTimeout(timer);
+  };
+}
 
 /** The run's clock at `at` ms into it: the pauses before it left out. */
 export const clockAt = (run: LiveRun, at: number): number =>

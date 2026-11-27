@@ -15,6 +15,7 @@ import type { CheckedMistake, ExerciseCamera, Movement } from "@app/shared";
 import { MEASURE_LIST, checkedOf, type RepResult } from "../src/index.js";
 import { asReplayed, countedTimes, fit, proofVideos, repsOf, roomOfReading, runMovement, seedOf, withNumbers, type ProofVideo } from "./movementCheck.js";
 import { REPLAYS, type Replay } from "./replays.js";
+import { saidOf, speaking, type Said } from "./coachCheck.js";
 
 const UNIT: ReadonlyMap<string, string> = new Map(MEASURE_LIST.map((m) => [m.name, m.unit]));
 
@@ -108,6 +109,8 @@ export interface FormRow {
   readonly made: readonly Made[];
   /** The reps refused for a mistake and told its words (the squat's "Keep your chest up."): on a good-form video, none. */
   readonly told: readonly Made[];
+  /** What the coach says over the set (53b-i), every checked mistake spoken (`speaking`): on a good-form video, nothing. */
+  readonly said: readonly Said[];
 }
 
 const madeOf = (reps: readonly RepResult[]): Made[] =>
@@ -136,11 +139,11 @@ export function formRows(movement: Movement, exercise: ExerciseCamera, replays: 
       const frames = replay === null ? v.video.frames : replay.edit(v.video.frames, seedOf(v.video.label, replay.name), countedTimes(movement, v.video));
       const video = { ...v.video, frames };
       const run = runMovement(movement, video, exercise);
-      const own: FormRow = { label: v.video.label, person: v.entry.person, replay, leftOut: false, counted: run.count, made: madeOf(run.reps), told: toldOf(run.reps) };
+      const own: FormRow = { label: v.video.label, person: v.entry.person, replay, leftOut: false, counted: run.count, made: madeOf(run.reps), told: toldOf(run.reps), said: saidOf(run.reps, speaking(exercise, movement)) };
       if (!v.video.sets) return [own];
       const fold = foldOf(v.entry.person);
       const out = runMovement(fold.movement, video, fold.exercise);
-      return [own, { label: v.video.label, person: v.entry.person, replay, leftOut: true, counted: out.count, made: madeOf(out.reps), told: toldOf(out.reps) }];
+      return [own, { label: v.video.label, person: v.entry.person, replay, leftOut: true, counted: out.count, made: madeOf(out.reps), told: toldOf(out.reps), said: saidOf(out.reps, speaking(fold.exercise, fold.movement)) }];
     }),
   );
 }

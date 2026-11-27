@@ -6,7 +6,7 @@ import { AppState, Linking, Pressable, ScrollView, StyleSheet, TextInput, Vibrat
 import * as Location from "expo-location";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
-  RUN_MAX_POINTS,
+  GPS_WORST_ACCURACY_M,
   heartLineOf,
   heartSums,
   heartZoneSeconds,
@@ -16,7 +16,6 @@ import {
   type RunClimbRequest,
   type RunRecords,
   type RunSums,
-  type SaveRunRequest,
   type Units,
 } from "@app/shared";
 import { BottomRoom } from "../../look/BottomRoom";
@@ -67,7 +66,7 @@ import { FeelCard, NoteCard, PaceCard, RouteCard, RunFigures, SplitsCard } from 
 import { newRecords, RECORDS_PATH } from "./runRecords";
 import { RunMap, useMapScheme } from "./RunMap";
 import { useRunOutbox } from "./RunOutbox";
-import { closedStill, currentPace, sumsAt } from "./runLive";
+import { currentPace, saveRequestOf, sentOf, sumsAt, sumsInSlices, trueStart } from "./runLive";
 import { clock, distance, pace, paceWord, runName, runWhen, unitWord, METRES_PER_MILE } from "./runWords";
 
 /** What stood in the way of Start, said under it with its button. */
@@ -112,6 +111,8 @@ export function useRunLayer(): RunLayerValue {
 }
 
 const COUNT_FROM = 3;
+/** The oldest place Android kept that the map opens on before a run's first point (A9). */
+export const LAST_KNOWN_MS = 2 * 60_000;
 
 /** The person's own run: shown only to them. */
 function useMyRun(me: string | null): LiveRun | null {
@@ -337,12 +338,33 @@ function useLiveNumbers(run: LiveRun, kg: number): { now: number; sums: RunSums 
   useEffect(() => {
     if (runIsFull(run, now)) void finishRun();
   }, [run, now]);
+  // Paused, nothing the numbers are worked out from changes until a point, a pause or a still stretch comes: they
+  // are not worked out again (37o, A11: a day's run took the phone 1.4 s each time, paused or not).
+  const lastPaused = useRef<string | null>(null);
+  /** The stop of the count going on; null when none is. */
+  const working = useRef<(() => void) | null>(null);
   useEffect(() => {
     const every = 2000 + count * 0.1;
     if (sums !== null && now - lastWork.current < every) return;
+    const open = run.pauses[run.pauses.length - 1];
+    const from = run.phase === "paused" ? `${String(count)} ${String(run.pauses.length)} ${String(open?.[0])} ${String(run.still.length)} ${String(run.datedBack.length)} ${String(kg)}` : null;
+    if (sums !== null && from !== null && from === lastPaused.current) return;
+    // One count at a time: the next starts once this one is on screen.
+    if (working.current !== null) return;
+    lastPaused.current = from;
     lastWork.current = now;
-    setSums(sumsAt(run, elapsedMs(run, now), kg));
+    working.current = sumsInSlices(run, elapsedMs(run, now), kg, (made) => {
+      working.current = null;
+      setSums(made);
+    });
   }, [now, count, run, kg, sums]);
+  useEffect(
+    () => () => {
+      working.current?.();
+      working.current = null;
+    },
+    [],
+  );
   return { now, sums };
 }
 
@@ -411,9 +433,26 @@ function Live({ run, units, kg, onHide }: { run: LiveRun; units: Units; kg: numb
   const [panel, setPanel] = useState(0);
   const source = useMapSource(session);
   const lastPoint = run.points[run.points.length - 1];
+  // Before the run's first point, the map opens where Android last knew the phone was, in the last two minutes
+  // and sure to GPS_WORST_ACCURACY_M, never a dark space (the hunt's A9); the GPS light still says Finding GPS.
+  const noPlace = run.here === null && lastPoint === undefined;
+  const [before, setBefore] = useState<readonly [number, number] | null>(null);
+  useEffect(() => {
+    if (!noPlace) return undefined;
+    let live = true;
+    Location.getLastKnownPositionAsync({ maxAge: LAST_KNOWN_MS, requiredAccuracy: GPS_WORST_ACCURACY_M }).then(
+      (where) => {
+        if (live && where !== null) setBefore([where.coords.latitude, where.coords.longitude]);
+      },
+      () => undefined,
+    );
+    return () => {
+      live = false;
+    };
+  }, [noPlace]);
   // The dot is where the phone last said the person is, which a pause or a stop never holds back; the
   // route ends where the run last counted a point.
-  const here: readonly [number, number] | null = run.here ?? (lastPoint === undefined ? null : [lastPoint[1], lastPoint[2]]);
+  const here: readonly [number, number] | null = run.here ?? (lastPoint === undefined ? (noPlace ? before : null) : [lastPoint[1], lastPoint[2]]);
   const scheme = useMapScheme(here);
   const track = sums !== null && sums.track.length > 0 ? sums.track : here === null ? [] : [here];
   const press = (work: () => Promise<unknown>) => () => {
@@ -659,7 +698,7 @@ function Summary({ run, units, kg, onSaved }: { run: LiveRun; units: Units; kg: 
   const zoneSeconds = useMemo(() => heartZoneSeconds(run.heart, closedPauses(run, finished), finished, maxNow), [run, finished, maxNow]);
   const [settingMax, setSettingMax] = useState(false);
   const { session } = useSession();
-  const startedAt = new Date(run.startedAt);
+  const startedAt = trueStart(run);
   const [name, setName] = useState(runName(startedAt));
   const [naming, setNaming] = useState(false);
   const [effort, setEffort] = useState<number | null>(null);
@@ -668,20 +707,7 @@ function Summary({ run, units, kg, onSaved }: { run: LiveRun; units: Units; kg: 
   const [busy, setBusy] = useState(false);
   const [notKept, setNotKept] = useState(false);
   // What the server is sent: asked for the climb now (37b-ii), and saved with the same points at Save.
-  const sent = useMemo((): RunClimbRequest => {
-    const end = Math.round(finished);
-    // The stretches the phone felt still (37k), sent only by a run that has one: a server from before them
-    // refuses the field.
-    const still = closedStill(run, finished)
-      .map(([a, b]): [number, number] => [Math.round(a), Math.min(end, Math.round(b))])
-      .filter(([a, b]) => b > a);
-    return {
-      elapsedMs: end,
-      points: run.points.slice(0, RUN_MAX_POINTS).map(([at, lat, lng, acc]) => [Math.round(at), lat, lng, acc]),
-      pauses: closedPauses(run, finished).map(([a, b]) => [Math.round(a), Math.round(b)]),
-      ...(still.length > 0 ? { still } : {}),
-    };
-  }, [run, finished]);
+  const sent = useMemo((): RunClimbRequest => sentOf(run), [run]);
   const climb = useRunClimb(session, sent);
   // The person's records as the server last gave them (37c-ii): the boxes wait for them, and a read that
   // fails (no signal) shows none, never a record the run may not have set. Read again each time the server
@@ -706,15 +732,7 @@ function Summary({ run, units, kg, onSaved }: { run: LiveRun; units: Units; kg: 
     if (outbox === null || busy) return;
     setBusy(true);
     const kept = name.trim() === "" ? runName(startedAt) : name.trim().slice(0, 60);
-    const body: SaveRunRequest = {
-      runId: run.runId,
-      startedAt: startedAt.toISOString(),
-      ...sent,
-      ...(run.heart.length > 0 ? { heart: run.heart.slice(0, RUN_MAX_POINTS) } : {}),
-      name: kept,
-      effort,
-      note: note.trim() === "" ? null : note.trim().slice(0, 1000),
-    };
+    const body = saveRequestOf(run, sent, kept, effort, note.trim() === "" ? null : note.trim().slice(0, 1000));
     // The recorder's own files go only once the outbox holds the run on the phone (round one, L1).
     if (!(await outbox.add(body))) {
       setBusy(false);

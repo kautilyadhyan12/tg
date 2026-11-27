@@ -33,6 +33,7 @@ import { beginLine, guideAdvance, guideDone, guideNextLook, guideSchedule, guide
 import { PAUSE_WORDS, START_HUSH_MS, VOICE_AFTER_LOAD, VOICE_START, heartLine, voiceCheck, type VoiceState } from "./runVoice";
 import { runVoiceNative } from "./runVoiceNative";
 import { runMotionNative } from "./runMotionNative";
+import { judgeClock, type ClockGuess } from "./runClock";
 import { holdHeart, loadMonitor, savedHeartNow, takeHeartReadings } from "../../heart/monitor";
 
 // The run's clock is its own pure rules (runLive.ts); the screens read it from here as before.
@@ -80,6 +81,9 @@ export interface LiveRun {
   /** With Auto-pause on, the seconds each Auto-pause was dated back over (37k): from where the stop began to
    *  where the clock stopped, which is never before the time it showed. Sent with the run as standing. */
   datedBack: [number, number][];
+  /** The GPS's time less the phone's (A6, `runClock.ts`), taken off every point's time; null until two deliveries
+   *  have shown it, none (0) for a phone whose clock is right. Missing in a test's run: 0. */
+  clockGapMs?: number | null;
 }
 
 // ── The run kept on the phone ─────────────────────────────────────────────────────────────────
@@ -134,6 +138,8 @@ let heartHeld: (() => void) | null = null;
  *  a phone on wheels from the pause's own start, once it has travelled 40 m or more (37j). */
 const PAUSED_TAIL = 300;
 let pausedTail: RunPoint[] = [];
+/** A big gap between the GPS's clock and the phone's seen once, waiting for the next delivery (A6). */
+let clockGuess: ClockGuess = null;
 /** The heart readings taken while Auto-paused, as many as the points: a pause undone (a phone on wheels, 37j)
  *  gives them back to the run. */
 let pausedHeart: [number, number][] = [];
@@ -399,6 +405,7 @@ export function resetRecorder(withFiles: RunFiles = phoneRunFiles): void {
   warmedAt = 0;
   files = withFiles;
   current = null;
+  clockGuess = null;
   auto = AUTO_START;
   wheelsAtPause = false;
   pausedTail = [];
@@ -433,6 +440,8 @@ async function writeState(run: LiveRun): Promise<void> {
       motionFiles: Math.ceil(run.motion.length / POINTS_PER_FILE),
       still: run.still,
       datedBack: run.datedBack,
+      // Not known yet is kept as not known (round one, H1): read back as none, a fast clock lost the run.
+      clockGapMs: run.clockGapMs ?? null,
     }),
   );
 }
@@ -619,6 +628,7 @@ export async function loadRun(): Promise<LiveRun | null> {
       motion,
       still: state.still,
       datedBack: state.datedBack,
+      clockGapMs: state.clockGapMs,
     };
     if (current.phase !== "finished") {
       holdMonitor(current.userId);
@@ -677,9 +687,11 @@ export async function takeLocations(data: unknown, now: number = Date.now()): Pr
   let resumedFrom: number | null = null;
   // Before the points: Auto-pause reads the motion of their seconds (37j).
   takeMotion(run);
+  learnClock(run, parsed.data.locations, now);
+  const gap = run.clockGapMs ?? 0;
   let full = false;
   for (const location of parsed.data.locations) {
-    const at = location.timestamp - run.startedAt;
+    const at = location.timestamp - gap - run.startedAt;
     const lastAt = Math.max(run.points[run.points.length - 1]?.[0] ?? -1, pausedTail[pausedTail.length - 1]?.[0] ?? -1);
     if (at < 0 || at <= lastAt) continue;
     // The server takes a day at most: a run left going past it ends there, kept whole.
@@ -689,7 +701,7 @@ export async function takeLocations(data: unknown, now: number = Date.now()): Pr
     }
     const accuracyM = location.coords.accuracy ?? null;
     const point: RunPoint = [at, location.coords.latitude, location.coords.longitude, accuracyM === null ? null : Math.round(accuracyM * 10) / 10];
-    run.lastFix = { at: location.timestamp, accuracyM };
+    run.lastFix = { at: location.timestamp - gap, accuracyM };
     if (accuracyM === null || accuracyM <= GPS_WORST_ACCURACY_M) run.here = [point[1], point[2]];
     // Past the most pauses a run may hold, Auto-pause pauses no more, but still starts one it holds. With
     // Auto-pause off the same rule runs while the run does, and opens and closes still stretches instead (37k).
@@ -797,7 +809,7 @@ async function takeLate(run: LiveRun, locations: PhoneLocations["locations"], mi
   if (end === null) return;
   let added = 0;
   for (const location of locations) {
-    const at = location.timestamp - run.startedAt;
+    const at = location.timestamp - (run.clockGapMs ?? 0) - run.startedAt;
     const lastAt = run.points[run.points.length - 1]?.[0] ?? -1;
     const inPause = run.pauses.some(([from, to]) => at >= from && at <= (to ?? end));
     if (at <= lastAt || at > end || inPause || run.points.length >= RUN_MAX_POINTS) continue;
@@ -810,6 +822,28 @@ async function takeLate(run: LiveRun, locations: PhoneLocations["locations"], mi
   current = { ...run };
   await keep(current);
   tell();
+}
+
+/** The gap between the GPS's clock and the phone's, judged from each delivery until it is decided (A6). A gap
+ *  decided once points were taken with none moves them to where they belong; one before Go is not the run's. */
+function learnClock(run: LiveRun, locations: PhoneLocations["locations"], now: number): void {
+  if (run.clockGapMs !== null && run.clockGapMs !== undefined) return;
+  const newest = locations[locations.length - 1];
+  if (newest === undefined) return;
+  const judged = judgeClock(clockGuess, newest.timestamp - now, now);
+  if ("guess" in judged) {
+    clockGuess = judged.guess;
+    return;
+  }
+  clockGuess = null;
+  run.clockGapMs = judged.decided;
+  writtenAt = 0;
+  if (judged.decided === 0) return;
+  const moved = (list: RunPoint[]): RunPoint[] => list.map(([at, lat, lng, acc]): RunPoint => [at - judged.decided, lat, lng, acc]).filter(([at]) => at >= 0);
+  run.points = moved(run.points);
+  pausedTail = moved(pausedTail);
+  unwritten = run.points.length;
+  auto = AUTO_START;
 }
 
 /** The end of the last closed pause: a new one never starts inside it. */
@@ -882,6 +916,7 @@ export async function startRun(userId: string, runId: string, autoPause: boolean
     motion: [],
     still: [],
     datedBack: [],
+    clockGapMs: null,
   };
   generation += 1;
   current = run;
@@ -890,6 +925,7 @@ export async function startRun(userId: string, runId: string, autoPause: boolean
   voice = VOICE_START;
   pausedTail = [];
   pausedHeart = [];
+  clockGuess = null;
   loaded = true;
   unwritten = 0;
   heartUnwritten = 0;
@@ -1077,6 +1113,7 @@ export async function forgetRun(): Promise<void> {
   wheelsAtPause = false;
   pausedTail = [];
   pausedHeart = [];
+  clockGuess = null;
   tell();
 }
 

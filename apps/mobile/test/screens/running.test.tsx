@@ -1,19 +1,22 @@
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react-native";
 import { AppState, Linking } from "react-native";
 import type { StyleSpecification } from "@maplibre/maplibre-react-native";
-import { HEIGHT_MAP_CREDITS, OPENFREEMAP, RUN_MAX_POINTS, geodesicMetres, runSums, saveRunRequestSchema, type MapSource, type RunClimb, type RunPoint, type RunRecords, type SaveRunRequest } from "@app/shared";
+import { GPS_WORST_ACCURACY_M, HEIGHT_MAP_CREDITS, OPENFREEMAP, RUN_MAX_POINTS, geodesicMetres, runSums, saveRunRequestSchema, type MapSource, type RunClimb, type RunPoint, type RunRecords, type SaveRunRequest } from "@app/shared";
 import { App } from "../../src/App";
 import { resetMapSource } from "../../src/screens/running/mapSource";
 import { RUN_BAR_ROOM } from "../../src/screens/running/RunLayer";
 import { MAP_CREDIT_PAGE, MAP_WAIT_MS } from "../../src/screens/running/RunMap";
 import { unitMarks } from "../../src/screens/running/routeShape";
-import { chooseAutoPause, finishRun, keepRunUnits, pauseRun, phoneRunFiles, resetRecorder, runNow, startRun, takeLocations } from "../../src/screens/running/recorder";
-import { sumsAt } from "../../src/screens/running/runLive";
+import { chooseAutoPause, finishRun, keepRunUnits, loadRun, pauseRun, phoneRunFiles, resetRecorder, runNow, startRun, takeLocations } from "../../src/screens/running/recorder";
+import * as runLiveModule from "../../src/screens/running/runLive";
+import { saveRequestOf, sentOf, sumsAt } from "../../src/screens/running/runLive";
+import { endRunAtLeaving } from "../../src/screens/running/runLeaving";
 import { spokenTime } from "../../src/screens/running/runVoice";
 import { readRunFile } from "../../src/screens/running/runQueue";
 import { clock, distance, runName } from "../../src/screens/running/runWords";
 import type { Ask, AskInit } from "../../src/session/calls";
-import { RAVI, fakeServer, kept, memoryStore, profile, tokens, type Reply } from "../kit";
+import { SIGNED_IN_ELSEWHERE } from "@app/shared";
+import { RAVI, fakeServer, kept, memoryStore, profile, refusal, tokens, type Reply } from "../kit";
 import { realRuns, type RealPoint } from "../realRuns";
 
 // Record a run (ROADMAP Stage 5 37a), through the whole app. The worst thing on the phone's side:
@@ -26,7 +29,7 @@ const PATH = "/v1/geo/runs";
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
 // The phone's location, as the setup's stand-in holds it.
-const location = jest.requireMock<{ state: { services: boolean; granted: boolean; canAskAgain: boolean; accuracy: string; asked: number; started: { task: string; options: { foregroundService?: { notificationTitle: string } } }[]; running: boolean; acceptsTurnOn: boolean; refusesStart: boolean } }>("expo-location").state;
+const location = jest.requireMock<{ state: { services: boolean; granted: boolean; canAskAgain: boolean; accuracy: string; asked: number; started: { task: string; options: { foregroundService?: { notificationTitle: string } } }[]; running: boolean; acceptsTurnOn: boolean; refusesStart: boolean; lastKnown: { coords: { latitude: number; longitude: number } } | null; lastKnownAsked: unknown[] } }>("expo-location").state;
 
 // Each map drawn, as the setup's stand-in keeps it (37b-i).
 type DrawnMap = {
@@ -83,7 +86,7 @@ beforeEach(async () => {
     handlers.push(handler);
     return { remove: () => undefined };
   });
-  Object.assign(location, { services: true, granted: true, canAskAgain: true, accuracy: "fine", asked: 0, started: [], running: false, acceptsTurnOn: true, refusesStart: false });
+  Object.assign(location, { services: true, granted: true, canAskAgain: true, accuracy: "fine", asked: 0, started: [], running: false, acceptsTurnOn: true, refusesStart: false, lastKnown: null, lastKnownAsked: [] });
   stopping.whileStopping = null;
   for (const name of ["run-now.json", "run-now-0.json", "run-now-1.json", "run-settings.json", "run-map.json"]) phoneRunFiles.remove(name);
   resetRecorder();
@@ -155,19 +158,22 @@ function runServer(user = RAVI, map: MapSource = OPENFREEMAP) {
     }
     return server.ask(url, init);
   };
-  let file: string | null = null;
-  const runStore = () => ({
-    read: () => Promise.resolve(file),
-    write: (t: string) => {
-      file = t;
-      return Promise.resolve();
+  // Each person's file of waiting runs, as the phone keeps one for each (37o, round one H3).
+  const files = new Map<string, string>();
+  // `held`: a write of the file waits for it (a test's).
+  const writes: { held: Promise<void> | null } = { held: null };
+  const runStore = (who: string) => ({
+    read: () => Promise.resolve(files.get(who) ?? null),
+    write: async (t: string) => {
+      if (writes.held !== null) await writes.held;
+      files.set(who, t);
     },
   });
   // What the phone's file of waiting runs holds before the app opens.
   const setFile = (text: string) => {
-    file = text;
+    files.set(user.id, text);
   };
-  return { ask, saved, posts, state, runStore, requests, climbAsks, file: () => file, setFile };
+  return { ask, saved, posts, state, runStore, writes, requests, climbAsks, file: (who: string = user.id) => files.get(who) ?? null, setFile };
 }
 
 async function openRunning(s: ReturnType<typeof runServer>, user = RAVI) {
@@ -210,6 +216,277 @@ describe("the worst thing: somebody's run shown to another person on the same ph
     expect(screen.queryByTestId("live-route")).toBeNull();
     expect(screen.queryByRole("button", { name: "Open run" })).toBeNull();
   });
+});
+
+describe("the worst thing (37o): a run left recording somebody's location after they sign out, or lost (the hunt's A7)", () => {
+  /** The fifth tab's Settings, then Sign out and the box's own Sign out, reading the box's line first. */
+  async function signOutFromSettings(): Promise<string | null> {
+    const tab = (await screen.findAllByRole("tab"))[4];
+    if (tab === undefined) throw new Error("no fifth tab");
+    await fireEvent.press(tab);
+    await fireEvent.press(await screen.findByLabelText("Settings"));
+    await fireEvent.press(await screen.findByRole("button", { name: "Sign out" }));
+    const line: unknown = screen.queryByText(/^Your run will be/)?.props["children"] ?? null;
+    const inTheBox = screen.getAllByRole("button", { name: "Sign out" })[1];
+    if (inTheBox === undefined) throw new Error("the box's Sign out was expected");
+    await fireEvent.press(inTheBox);
+    expect(await screen.findByLabelText("Email")).toBeTruthy();
+    return typeof line === "string" ? line : null;
+  }
+
+  it("Sign out mid-run: the box says the run is finished and saved first; the location and the voice stop; the run waits in the person's saved runs, whole, and is sent when they sign in again", async () => {
+    const s = runServer();
+    s.state.online = false;
+    await openRunning(s);
+    await startRunning();
+    const points = await feed(0, 61, 3);
+    const run = runNow();
+    if (run === null) throw new Error("no run going");
+    await fireEvent.press(screen.getByRole("button", { name: "Back to the app" }));
+    expect(await signOutFromSettings()).toBe("Your run will be finished and saved first.");
+    expect(location.running).toBe(false);
+    expect(runNow()).toBeNull();
+    expect(await phoneRunFiles.read("run-now.json")).toBeNull();
+    // Points Android hands over after the sign-out are nobody's run.
+    await act(() => takeLocations({ locations: [{ timestamp: run.startedAt + 70_000, coords: { latitude: 26.2, longitude: 91.8, accuracy: 5, speed: 3 } }] }));
+    expect(runNow()).toBeNull();
+    const waiting = readRunFile(s.file() ?? "").waiting;
+    expect(waiting).toHaveLength(1);
+    expect(waiting[0]).toMatchObject({ runId: run.runId, name: runName(new Date(run.startedAt)), effort: null, note: null });
+    expect(waiting[0]?.points).toHaveLength(points.length);
+    expect(s.posts).toHaveLength(0);
+  });
+
+  it("a finished run not saved yet is saved at Sign out, and the box says so", async () => {
+    const s = runServer();
+    s.state.online = false;
+    await openRunning(s);
+    await startRunning();
+    await feed(0, 31, 3);
+    await fireEvent.press(screen.getByRole("button", { name: "Pause" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Finish" }));
+    const run = runNow();
+    if (run === null) throw new Error("no run");
+    expect(await screen.findByRole("button", { name: "Save run" })).toBeTruthy();
+    // The phone's own back, as Android hands it to the run's screen.
+    const runScreen = screen.container.queryAll((node) => node.props["visible"] === true && typeof node.props["onRequestClose"] === "function").at(-1);
+    if (runScreen === undefined) throw new Error("no run screen");
+    await fireEvent(runScreen, "requestClose");
+    expect(await signOutFromSettings()).toBe("Your run will be saved first.");
+    expect(runNow()).toBeNull();
+    expect(readRunFile(s.file() ?? "").waiting.map((r) => r.runId)).toEqual([run.runId]);
+  });
+
+  it("an account deleted mid-run: the run is thrown away, the location stops, nothing is put in its saved runs; another person's run is left alone", async () => {
+    const s = runServer();
+    await openRunning(s);
+    await startRunning();
+    await feed(0, 31, 3);
+    const added: unknown[] = [];
+    const add = (r: SaveRunRequest) => {
+      added.push(r);
+      return Promise.resolve(true);
+    };
+    await act(() => endRunAtLeaving("5f0c8a52-6f0e-4d59-9a3c-1f2e3d4c5b6b", "out", add));
+    expect(runNow()?.phase).toBe("running");
+    await act(() => endRunAtLeaving(RAVI.id, "deleted", add));
+    expect(runNow()).toBeNull();
+    expect(location.running).toBe(false);
+    expect(await phoneRunFiles.read("run-now.json")).toBeNull();
+    expect(added).toEqual([]);
+  });
+
+  it("the box's Sign out is taken once: it turns busy at the press while the run is finished and saved (round one, L3)", async () => {
+    const s = runServer();
+    s.state.online = false;
+    await openRunning(s);
+    await startRunning();
+    await feed(0, 31, 3);
+    await fireEvent.press(screen.getByRole("button", { name: "Back to the app" }));
+    const tab = (await screen.findAllByRole("tab"))[4];
+    if (tab === undefined) throw new Error("no fifth tab");
+    await fireEvent.press(tab);
+    await fireEvent.press(await screen.findByLabelText("Settings"));
+    await fireEvent.press(await screen.findByRole("button", { name: "Sign out" }));
+    const inTheBox = screen.getAllByRole("button", { name: "Sign out" })[1];
+    if (inTheBox === undefined) throw new Error("the box's Sign out was expected");
+    let release: () => void = () => undefined;
+    s.writes.held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    await fireEvent.press(inTheBox);
+    expect(screen.getAllByRole("button", { name: "Sign out" })[1]?.props["accessibilityState"]).toMatchObject({ busy: true });
+    s.writes.held = null;
+    release();
+    expect(await screen.findByLabelText("Email")).toBeTruthy();
+    expect(readRunFile(s.file() ?? "").waiting).toHaveLength(1);
+  });
+
+  it("with no run on the phone, the box has no line about one", async () => {
+    const s = runServer();
+    await openRunning(s);
+    expect(await signOutFromSettings()).toBeNull();
+  });
+
+  const OTHER = "5f0c8a52-6f0e-4d59-9a3c-1f2e3d4c5b6b";
+  const OTHER_RUN = "1b9d6bcd-bbfd-4b2d-9b5d-ab8dfbbd4bed";
+  /** Another person's run left on this phone, going or finished and not saved. */
+  async function othersRun(phase: "running" | "finished") {
+    await phoneRunFiles.write("run-now.json", JSON.stringify({ runId: OTHER_RUN, userId: OTHER, startedAt: Date.now() - 600_000, phase, pausedByPerson: false, autoPause: true, pauses: [], finishedMs: phase === "finished" ? 1000 : null, files: 1 }));
+    await phoneRunFiles.write("run-now-0.json", JSON.stringify([[0, 26.2, 91.8, 5], [1000, 26.2001, 91.8, 5]]));
+  }
+
+  it.each<["running" | "finished"]>([["running"], ["finished"]])("another person's run (%s) found when this one signs in stops, goes to that person's own saved runs whole, is never shown, and this person's Start writes over nothing (round one, H3)", async (phase) => {
+    await othersRun(phase);
+    location.running = phase === "running";
+    const s = runServer();
+    await openRunning(s);
+    await waitFor(() => {
+      expect(readRunFile(s.file(OTHER) ?? "").waiting.map((r) => r.runId)).toEqual([OTHER_RUN]);
+    });
+    expect(location.running).toBe(false);
+    expect(runNow()).toBeNull();
+    expect(readRunFile(s.file() ?? "").waiting).toEqual([]);
+    expect(screen.queryByRole("button", { name: "Open run" })).toBeNull();
+    await startRunning();
+    expect(runNow()?.userId).toBe(RAVI.id);
+    expect(readRunFile(s.file(OTHER) ?? "").waiting.map((r) => r.points.length)).toEqual([2]);
+  });
+
+  it("signed out by the server as the app opens, before any screen of the tabs (round one, H3): the run stops and waits in its person's saved runs", async () => {
+    await phoneRunFiles.write("run-now.json", JSON.stringify({ runId: OTHER_RUN, userId: RAVI.id, startedAt: Date.now() - 600_000, phase: "running", pausedByPerson: false, autoPause: true, pauses: [], finishedMs: null, files: 1 }));
+    await phoneRunFiles.write("run-now-0.json", JSON.stringify([[0, 26.2, 91.8, 5], [1000, 26.2001, 91.8, 5]]));
+    location.running = true;
+    const s = runServer();
+    const refreshed = fakeServer({ "/v1/auth/refresh": () => refusal(401, SIGNED_IN_ELSEWHERE.error, SIGNED_IN_ELSEWHERE.message) });
+    const ask: Ask = (url, init) => (new URL(url).pathname === "/v1/auth/refresh" ? refreshed.ask(url, init) : s.ask(url, init));
+    await render(<App extra={extra} store={memoryStore(kept(1, RAVI))} ask={ask} runStore={s.runStore} />);
+    expect(await screen.findByLabelText("Email")).toBeTruthy();
+    await waitFor(() => {
+      expect(readRunFile(s.file() ?? "").waiting.map((r) => r.runId)).toEqual([OTHER_RUN]);
+    });
+    expect(location.running).toBe(false);
+    expect(runNow()).toBeNull();
+  });
+});
+
+describe("a phone whose clock is wrong (37o, the hunt's A6): the run is recorded from Go all the same", () => {
+  const T0 = 1_790_000_000_000;
+  /** One delivery a second, as Android hands them over: the point's GPS time `gpsAheadMs` from the phone's, and
+   *  handed over 200 ms after it was taken. */
+  async function deliver(fromS: number, seconds: number, gpsAheadMs: number) {
+    for (let i = fromS; i < fromS + seconds; i++) {
+      const phoneAt = T0 + i * 1000;
+      await takeLocations({ locations: [{ timestamp: phoneAt + gpsAheadMs, coords: { latitude: 26.1445 + (i * 3) / 111_132, longitude: 91.7362, accuracy: 5, speed: 3 } }] }, phoneAt + 200);
+    }
+  }
+  const run = () => {
+    const now = runNow();
+    if (now === null) throw new Error("no run going");
+    return now;
+  };
+
+  it.each<[string, number]>([
+    ["the phone's clock 5 minutes fast", -300_000],
+    ["the phone's clock 5 minutes slow", 300_000],
+    ["the phone's clock 2 hours fast", -7_200_000],
+  ])("%s: points from the first seconds, in order, on the run's own clock, and Save sends the GPS's start", async (_name, gpsAheadMs) => {
+    await startRun(RAVI.id, "1b9d6bcd-bbfd-4b2d-9b5d-ab8dfbbd4bed", false, T0);
+    await deliver(0, 120, gpsAheadMs);
+    const points = run().points;
+    expect(points.length).toBeGreaterThanOrEqual(119);
+    // Within the 200 ms a point takes to be handed over.
+    expect(points[0]?.[0]).toBeLessThanOrEqual(1_200);
+    expect(points.at(-1)?.[0]).toBeLessThanOrEqual(119_200);
+    expect(points.every((p, i) => i === 0 || p[0] > (points[i - 1]?.[0] ?? Infinity))).toBe(true);
+    expect(run().clockGapMs).toBeCloseTo(gpsAheadMs, -3);
+    expect(sumsAt(run(), 120_000, 60).distanceM).toBeGreaterThan(300);
+    const done = await finishRun(T0 + 120_000);
+    if (done === null) throw new Error("no run");
+    const sent = saveRequestOf(done, sentOf(done), "Morning Run", null, null);
+    expect(Math.abs(Date.parse(sent.startedAt) - (T0 + gpsAheadMs))).toBeLessThan(1_000);
+    expect(saveRunRequestSchema.safeParse(sent).success).toBe(true);
+  });
+
+  it("a right clock, with an old point Android kept from before Go handed over first: no gap, and the old point is not the run's", async () => {
+    await startRun(RAVI.id, "1b9d6bcd-bbfd-4b2d-9b5d-ab8dfbbd4bed", false, T0);
+    await takeLocations({ locations: [{ timestamp: T0 - 240_000, coords: { latitude: 26.3, longitude: 91.9, accuracy: 5, speed: 0 } }] }, T0 + 300);
+    await deliver(1, 60, 0);
+    expect(run().clockGapMs).toBe(0);
+    expect(run().points[0]).toEqual([1_000, 26.1445 + 3 / 111_132, 91.7362, 5]);
+    expect(run().points).toHaveLength(60);
+  });
+
+  it("a right clock: no point is moved, from the first", async () => {
+    await startRun(RAVI.id, "1b9d6bcd-bbfd-4b2d-9b5d-ab8dfbbd4bed", false, T0);
+    await deliver(0, 30, 900);
+    expect(run().clockGapMs).toBe(0);
+    expect(run().points.map((p) => p[0])).toEqual(Array.from({ length: 30 }, (_, i) => i * 1000 + 900));
+  });
+
+  it.each<[string, number]>([
+    ["the gap decided before the app was closed", 20],
+    // Round one, H1: Android restarting the app during Finding GPS, before the gap was known.
+    ["the app closed before the gap was known", 0],
+  ])("%s: opened again, the points still land from Go", async (_name, before) => {
+    await startRun(RAVI.id, "1b9d6bcd-bbfd-4b2d-9b5d-ab8dfbbd4bed", false, T0);
+    await deliver(0, before, -300_000);
+    // The app closed and opened again: the recorder starts from its files.
+    resetRecorder();
+    await loadRun();
+    await deliver(before, 60, -300_000);
+    const points = run().points;
+    // A restart may lose the seconds since the last write (every 10 s), never the run.
+    expect(points.length).toBeGreaterThanOrEqual(before + 48);
+    expect(points[0]?.[0]).toBeLessThanOrEqual(1_200);
+    expect(run().clockGapMs).toBeCloseTo(-300_000, -3);
+  });
+});
+
+describe("the live numbers on a long run (37o, the hunt's A11; round one's untested two)", () => {
+  const wait = (ms: number) => act(() => new Promise<void>((resolve) => setTimeout(resolve, ms)));
+
+  it("paused, with nothing new come, the numbers are not worked out again", async () => {
+    const counts = jest.spyOn(runLiveModule, "sumsInSlices");
+    const s = runServer();
+    await openRunning(s);
+    await startRunning();
+    await feed(0, 31, 3);
+    await fireEvent.press(screen.getByRole("button", { name: "Pause" }));
+    expect(await screen.findByText("Paused")).toBeTruthy();
+    await wait(3_500);
+    const settled = counts.mock.calls.length;
+    await wait(5_000);
+    expect(counts.mock.calls.length).toBe(settled);
+    counts.mockRestore();
+  }, 20_000);
+
+  it("one count at a time: a slow one is never joined by another", async () => {
+    let going = 0;
+    let most = 0;
+    const counts = jest.spyOn(runLiveModule, "sumsInSlices").mockImplementation((run, at, kg, done) => {
+      going += 1;
+      most = Math.max(most, going);
+      const timer = setTimeout(() => {
+        going -= 1;
+        done(runLiveModule.sumsAt(run, at, kg));
+      }, 4_500);
+      return () => {
+        clearTimeout(timer);
+        going -= 1;
+      };
+    });
+    const s = runServer();
+    await openRunning(s);
+    await startRunning();
+    for (let k = 0; k < 4; k++) {
+      await feed(k * 3, 3, 3);
+      await wait(2_000);
+    }
+    expect(counts.mock.calls.length).toBeGreaterThan(0);
+    expect(most).toBe(1);
+    counts.mockRestore();
+  }, 20_000);
 });
 
 describe("a run, Start to Save", () => {
@@ -1124,6 +1401,32 @@ describe("the map under the run (37b-i)", () => {
     expect(asked.every((r) => r.method === "GET" && r.search === "" && r.body === undefined)).toBe(true);
     const lat = (points[100]?.[1] ?? 0).toFixed(5);
     expect(s.requests.filter((r) => r.path !== PATH && (r.body ?? "").includes(lat))).toEqual([]);
+  });
+
+  it("before the first point, the map opens where Android last knew the phone was, in the last two minutes; the light says Finding GPS (37o, the hunt's A9)", async () => {
+    location.lastKnown = { coords: { latitude: 26.1445, longitude: 91.7362 } };
+    const s = runServer();
+    await openRunning(s);
+    await startRunning();
+    const map = await waitFor(() => drawnMap("live-map-view"));
+    expect(map.markers.at(-1)).toEqual([91.7362, 26.1445]);
+    expect(screen.getByLabelText("Finding GPS")).toBeTruthy();
+    expect(location.lastKnownAsked).toEqual([{ maxAge: 120_000, requiredAccuracy: GPS_WORST_ACCURACY_M }]);
+    // The first point: the dot is the run's own.
+    await feed(0, 1, 0, 26.15);
+    await waitFor(() => {
+      expect(drawnMap("live-map-view").markers.at(-1)).toEqual([91.7362, 26.15]);
+    });
+  });
+
+  it("with no place Android kept, nothing is drawn until the first point", async () => {
+    const s = runServer();
+    await openRunning(s);
+    await startRunning();
+    await waitFor(() => {
+      expect(location.lastKnownAsked).toHaveLength(1);
+    });
+    expect(maplibre.maps.filter((m) => !m.gone && m.props.testID === "live-map-view")).toHaveLength(0);
   });
 
   it("standing after Go, the distance stays 0.00 and no route is drawn (testers on Google Play, 2026-11-17)", async () => {
