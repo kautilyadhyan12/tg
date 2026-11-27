@@ -164,8 +164,10 @@ export function createRunOutbox(store: TextStore, send: RunSender, now: () => nu
       const result = await send(next);
       if (isStopped()) return;
       if (result.kind === "later") {
-        // Only an unbroken spell of failures counts: a time with no signal between two short outages starts it again.
-        if (fails.has(next.runId)) set({ ...view, failing: notFailing(next.runId) });
+        // Nothing can go now: every run's spell of failures ends, so only an unbroken spell counts and a time
+        // with no signal between two short outages starts each count again.
+        fails.clear();
+        if (view.failing.length > 0) set({ ...view, failing: [] });
         return;
       }
       if (result.kind === "failed") {

@@ -117,6 +117,31 @@ describe("one run the server cannot take (37m; the hunt's B1, B2, B7)", () => {
     expect(outbox.view().waiting.map((r) => r.runId)).toEqual([run(1).runId]);
   });
 
+  it("a time with no signal ends every run's spell of failures, not only the run it stopped at (re-check, L4)", async () => {
+    const m = memory();
+    let clock = 0;
+    let offline = false;
+    const outbox = createRunOutbox(m.store, (): Promise<RunSendResult> => Promise.resolve(offline ? { kind: "later" } : { kind: "failed" }), () => clock);
+    await outbox.start();
+    await outbox.add(run(1));
+    await outbox.add(run(2));
+    // Both fail once; then 15 minutes with no signal, the round stopping at the first run.
+    await outbox.send();
+    expect(outbox.view().failing).toEqual([run(1).runId, run(2).runId]);
+    offline = true;
+    clock = 15 * 60_000;
+    await outbox.send();
+    expect(outbox.view().failing).toEqual([]);
+    // Then four failures each in a one-minute restart: neither run is refused.
+    offline = false;
+    for (let i = 0; i < 4; i++) {
+      clock += 15_000;
+      await outbox.send();
+    }
+    expect(outbox.view().refused).toEqual([]);
+    expect(outbox.view().waiting.map((r) => r.runId)).toEqual([run(1).runId, run(2).runId]);
+  });
+
   it("with no answer at all, sends nothing past it and counts nothing: a phone offline never loses a run", async () => {
     const m = memory();
     let clock = 0;
