@@ -191,7 +191,7 @@ d("your runs (real Postgres)", () => {
       expect((await remove(me.cookies, run.runId)).statusCode).toBe(204);
       // A retry whose first look found no row (the first send not yet kept) reaches the save after the delete.
       const kept = await insertRun(sql, me.id, {
-        id: run.runId, startedAt: new Date(run.startedAt), name: "Morning Run", effort: null, note: null, distanceM: 1, movingS: 1, elapsedS: 1,
+        id: run.runId, startedAt: new Date(run.startedAt), timeZone: null, name: "Morning Run", effort: null, note: null, distanceM: 1, movingS: 1, elapsedS: 1,
         leftOutM: 0, leftOutS: 0, kcal: 0, splits: { km: [], mi: [], starts: [0], pace: [], hills: [] }, polyline: "", calcVersion: 1, climb: { state: "none" }, shape: null, bests: { k1: null, mile: null, k5: null, k10: null },
       });
       expect(kept).toBe("removed");
@@ -400,6 +400,62 @@ d("your runs (real Postgres)", () => {
     for (const bad of ["", "?month=2026-13", "?month=2026-1", "?month=11-2026", "?month=2026-11&x=1"]) {
       expect((await inject({ method: "GET", url: `/v1/geo/runs/days${bad}`, cookies: me.cookies })).statusCode, bad).toBe(400);
     }
+  });
+
+  it("37o, the hunt's E1: a run keeps the day of the zone it was run in after the person moves; one saved with none follows theirs; a zone Postgres does not know is kept as none", async () => {
+    // 23:30 on 10 June in London; in Kolkata it is already 04:00 on 11 June.
+    const me = await makeUser("moved", "Europe/London");
+    const late = body({ startedAt: "2026-06-10T22:30:00.000Z" });
+    expect((await save(me.cookies, late)).statusCode).toBe(201);
+    expect((await sql<{ time_zone: string | null }[]>`SELECT time_zone FROM runs WHERE id = ${late.runId}`)[0]?.time_zone).toBe("Europe/London");
+    // One saved before runs kept a zone: 20:00 UTC on 20 June, 01:30 on 21 June in Kolkata.
+    const old = body({ startedAt: "2026-06-20T20:00:00.000Z" });
+    expect((await save(me.cookies, old)).statusCode).toBe(201);
+    await sql`UPDATE runs SET time_zone = NULL WHERE id = ${old.runId}`;
+    await sql`UPDATE users SET timezone = 'Asia/Kolkata' WHERE id = ${me.id}`;
+
+    const days = Object.fromEntries((await list(me.cookies)).items.map((r) => [r.id, r.day]));
+    expect(days[late.runId]).toBe("2026-06-10");
+    expect(days[old.runId]).toBe("2026-06-21");
+    const opened = await open(me.cookies, late.runId);
+    expect(opened.statusCode).toBe(200);
+    expect(runDetailResponseSchema.parse(JSON.parse(opened.body)).run.day).toBe("2026-06-10");
+    const month = runDaysResponseSchema.parse(JSON.parse((await inject({ method: "GET", url: "/v1/geo/runs/days?month=2026-06", cookies: me.cookies })).body));
+    expect(month.days.map((d) => d.day)).toEqual(["2026-06-10", "2026-06-21"]);
+    expect(month.first).toBe("2026-06-10");
+    // Up to a day: the run of 10 June is in it, though in Kolkata it began on the 11th.
+    expect((await list(me.cookies, "?upTo=2026-06-10")).items.map((r) => r.id)).toEqual([late.runId]);
+    const page = await list(me.cookies);
+    expect(page.months.find((m) => m.month === "2026-06")?.runs).toBe(2);
+
+    const lost = await makeUser("nowhere", "Mars/Olympus_Mons");
+    const run = body();
+    expect((await save(lost.cookies, run)).statusCode).toBe(201);
+    expect((await sql<{ time_zone: string | null }[]>`SELECT time_zone FROM runs WHERE id = ${run.runId}`)[0]?.time_zone).toBeNull();
+  });
+
+  it.each<[string, string, string, string, string]>([
+    // 00:30 on 1 November at UTC+14, read by a person now at UTC−11: 25 hours apart (round one, L1).
+    ["the first of a month", "Pacific/Kiritimati", "2026-10-31T10:30:00.000Z", "Pacific/Pago_Pago", "2026-11-01"],
+    // 23:30 on 31 October at UTC−11, read by a person now at UTC+14.
+    ["the last day of a month", "Pacific/Pago_Pago", "2026-11-01T10:30:00.000Z", "Pacific/Kiritimati", "2026-10-31"],
+  ])("37o, round one L1: a run on %s in a zone a day from the person's now stays on its own day, in its month and on its calendar", async (_name, ranIn, at, nowIn, day) => {
+    const me = await makeUser(`far-${ranIn.slice(8, 12).toLowerCase()}`, ranIn);
+    const run = body({ startedAt: at });
+    expect((await save(me.cookies, run)).statusCode).toBe(201);
+    await sql`UPDATE users SET timezone = ${nowIn} WHERE id = ${me.id}`;
+    const month = day.slice(0, 7);
+    const calendar = runDaysResponseSchema.parse(JSON.parse((await inject({ method: "GET", url: `/v1/geo/runs/days?month=${month}`, cookies: me.cookies })).body));
+    expect(calendar.days.map((d) => d.day)).toEqual([day]);
+    expect((await list(me.cookies, `?upTo=${day}`)).items.map((r) => [r.id, r.day])).toEqual([[run.runId, day]]);
+    expect((await list(me.cookies)).months.find((m) => m.month === month)?.runs).toBe(1);
+  });
+
+  it("37o, round one L2: a zone written in other letters is kept as Postgres names it", async () => {
+    const me = await makeUser("letters", "asia/kolkata");
+    const run = body();
+    expect((await save(me.cookies, run)).statusCode).toBe(201);
+    expect((await sql<{ time_zone: string | null }[]>`SELECT time_zone FROM runs WHERE id = ${run.runId}`)[0]?.time_zone).toBe("Asia/Kolkata");
   });
 
   it("thirty changes or deletes a minute for a person; somebody else at the same address goes on", async () => {

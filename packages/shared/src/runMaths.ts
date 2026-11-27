@@ -362,14 +362,24 @@ interface Piece {
   from: number;
   to: number;
 }
-function piecesBetweenPauses(points: readonly RunPoint[], pauses: [number, number][], elapsedMs: number): Piece[] {
-  const sorted = points
-    .filter(([at, lat, lng, acc]) =>
+function* piecesBetweenPauses(points: readonly RunPoint[], pauses: [number, number][], elapsedMs: number): Generator<void, Piece[]> {
+  const sorted: Fix[] = [];
+  for (let i = 0; i < points.length; i++) {
+    if (i % SLICE === SLICE - 1) yield;
+    const point = points[i];
+    if (point === undefined) continue;
+    const [at, lat, lng, acc] = point;
+    if (
       Number.isFinite(at) && at >= 0 && at <= elapsedMs &&
       Number.isFinite(lat) && Math.abs(lat) <= 90 && Number.isFinite(lng) && Math.abs(lng) <= 180 &&
-      (acc === null || (Number.isFinite(acc) && acc >= 0 && acc <= GPS_WORST_ACCURACY_M)))
-    .map(([at, lat, lng, acc]): Fix => ({ at, lat, lng, acc: acc === null || acc === 0 ? GPS_UNKNOWN_ACCURACY_M : acc }))
-    .sort((a, b) => a.at - b.at);
+      (acc === null || (Number.isFinite(acc) && acc >= 0 && acc <= GPS_WORST_ACCURACY_M))
+    ) {
+      sorted.push({ at, lat, lng, acc: acc === null || acc === 0 ? GPS_UNKNOWN_ACCURACY_M : acc });
+    }
+  }
+  // A phone's points come in order: sorted only when they are not (the sort is stable, so the order is the same
+  // either way), as a sort of a day's points took a fifth of a phone's time for the live numbers (37o, A11).
+  if (!inOrder(sorted)) sorted.sort((a, b) => a.at - b.at);
   const pieces: Piece[] = [];
   let piece: Fix[] = [];
   let pauseIndex = 0; // the pauses over before this point
@@ -378,6 +388,7 @@ function piecesBetweenPauses(points: readonly RunPoint[], pauses: [number, numbe
   const close = (): void => {
     if (piece.length > 0) pieces.push({ fixes: piece, from: pauses[pieceIndex - 1]?.[1] ?? 0, to: pauses[pieceIndex]?.[0] ?? elapsedMs });
   };
+  yield;
   for (const fix of sorted) {
     if (fix.at <= lastAt) continue; // two points at one moment: the first is kept
     while ((pauses[pauseIndex]?.[1] ?? Infinity) <= fix.at) pauseIndex++;
@@ -392,6 +403,12 @@ function piecesBetweenPauses(points: readonly RunPoint[], pauses: [number, numbe
   }
   close();
   return pieces;
+}
+
+/** Whether each fix is at or after the one before. */
+function inOrder(fixes: readonly Fix[]): boolean {
+  for (let i = 1; i < fixes.length; i++) if ((fixes[i]?.at ?? 0) < (fixes[i - 1]?.at ?? 0)) return false;
+  return true;
 }
 
 /** A point that jumps away and back, faster than anybody runs, is the phone's mistake: left out. */
@@ -418,7 +435,7 @@ const LOCAL_SPEED_HALF_S = 5;
 /** Which steps of a piece are left out: those inside a stretch faster than the world record for
  *  its length of time (measured from where it started to where it ended), and themselves going
  *  faster than that record. Step i is from point i to point i + 1. */
-function tooFastSteps(piece: Fix[]): boolean[] {
+function* tooFastSteps(piece: Fix[]): Generator<void, boolean[]> {
   const n = piece.length;
   const first = piece[0];
   if (first === undefined) return [];
@@ -440,20 +457,31 @@ function tooFastSteps(piece: Fix[]): boolean[] {
     ts[i] = fix.at;
   });
   const apart = (a: number, b: number): number => Math.hypot((xs[b] ?? 0) - (xs[a] ?? 0), (ys[b] ?? 0) - (ys[a] ?? 0));
+  // The path walked from the first point to each: no stretch is farther from end to end than the path between its
+  // ends, so a stretch whose path is short of the record by more than rounding can be passed without measuring it
+  // (37o, A11: the check of every window from every point took a third of a phone's time for the live numbers).
+  // The margin covers the rounding of the sums and of each measure: what is passed is never a stretch the measure
+  // itself would find too fast.
+  const path = new Float64Array(n);
+  for (let i = 1; i < n; i++) path[i] = (path[i - 1] ?? 0) + apart(i - 1, i);
+  const shortOf = (a: number, b: number, metres: number): boolean => ((path[b] ?? 0) - (path[a] ?? 0)) * (1 + 1e-9) + 1e-3 < metres;
   // The lowest record speed of any too-fast stretch each step lies in.
   const ceiling = new Float64Array(n).fill(Infinity);
   const cover = new Int32Array(n + 1);
   for (const window of STRETCH_WINDOWS_S) {
+    yield;
     const limit = recordSpeed(window);
     cover.fill(0);
     let j = 0;
     for (let i = 0; i < n; i++) {
+      if (i % SLICE === SLICE - 1) yield;
       const at = ts[i] ?? 0;
       if (j < i) j = i;
       while (j < n && (ts[j] ?? Infinity) - at < window * 1000) j++;
       if (j >= n) break;
       const seconds = ((ts[j] ?? 0) - at) / 1000;
-      if (apart(i, j) > recordSpeedAt(seconds) * seconds) {
+      const most = recordSpeedAt(seconds) * seconds;
+      if (!shortOf(i, j, most) && apart(i, j) > most) {
         cover[i] = (cover[i] ?? 0) + 1;
         cover[j] = (cover[j] ?? 0) - 1;
       }
@@ -464,6 +492,7 @@ function tooFastSteps(piece: Fix[]): boolean[] {
       if (running > 0 && limit < (ceiling[k] ?? Infinity)) ceiling[k] = limit;
     }
   }
+  yield;
   const flagged = piece.map(() => false);
   let lo = 0;
   let hi = 0;
@@ -484,7 +513,7 @@ function tooFastSteps(piece: Fix[]): boolean[] {
 /** Each fix moved toward where the phone was sure it was, so the wander of the signal is smoothed
  *  out: a Kalman filter forward, taking each point as far as its own accuracy deserves, then the
  *  Rauch–Tung–Striebel pass back, so no point lags behind where the person really was. */
-function smoothed(piece: Fix[]): Fix[] {
+function* smoothed(piece: Fix[]): Generator<void, Fix[]> {
   const first = piece[0];
   if (first === undefined) return [];
   // Metres east and north of the piece's first point, on the ellipsoid's radii there.
@@ -500,6 +529,7 @@ function smoothed(piece: Fix[]): Fix[] {
   after[0] = first.acc * first.acc;
   before[0] = after[0];
   for (let i = 1; i < n; i++) {
+    if (i % SLICE === 0) yield;
     const fix = piece[i];
     const prev = piece[i - 1];
     if (fix === undefined || prev === undefined) continue;
@@ -513,6 +543,7 @@ function smoothed(piece: Fix[]): Fix[] {
     after[i] = prior * (1 - gain);
   }
   for (let i = n - 2; i >= 0; i--) {
+    if (i % SLICE === 0) yield;
     const share = (after[i] ?? 0) / (before[i + 1] ?? 1);
     xs[i] = (xs[i] ?? 0) + share * ((xs[i + 1] ?? 0) - (xs[i] ?? 0));
     ys[i] = (ys[i] ?? 0) + share * ((ys[i + 1] ?? 0) - (ys[i] ?? 0));
@@ -655,7 +686,7 @@ const STAND_TRAVEL_M = 42;
 const STAND_SURE_M = 10;
 /** The spans of a smoothed piece spent standing, each STILL_MS or longer: the points whose window is still,
  *  grown at each end while the path stays within STILL_M of the span's first or last point. */
-function standingSpans(path: Fix[]): [number, number][] {
+function* standingSpans(path: Fix[]): Generator<void, [number, number][]> {
   const n = path.length;
   const still = new Array<boolean>(n).fill(false);
   // How far the smoothed path has gone by each point: a runner going round a small loop comes back to the
@@ -664,6 +695,7 @@ function standingSpans(path: Fix[]): [number, number][] {
   // How many points up to each are less sure than STAND_SURE_M: a window holding any is not judged.
   const unsure: number[] = [(path[0]?.acc ?? 0) > STAND_SURE_M ? 1 : 0];
   for (let k = 1; k < n; k++) {
+    if (k % SLICE === 0) yield;
     const p = path[k - 1];
     const q = path[k];
     walked.push((walked[k - 1] ?? 0) + (p !== undefined && q !== undefined ? quickMetres(p, q) : 0));
@@ -672,6 +704,7 @@ function standingSpans(path: Fix[]): [number, number][] {
   let a = 0;
   let b = 0;
   for (let k = 0; k < n; k++) {
+    if (k % SLICE === SLICE - 1) yield;
     const at = path[k]?.at ?? 0;
     while (a < k && (path[a]?.at ?? 0) < at - STAND_HALF_MS) a++;
     while (b + 1 < n && (path[b + 1]?.at ?? 0) <= at + STAND_HALF_MS) b++;
@@ -856,6 +889,21 @@ function firstAfter(n: number, after: (i: number) => boolean): number {
 /** Everything a run's summary shows, from its points and pauses. `kg` is the person's weight. `still`: the
  *  stretches the phone felt the person standing with no pause (37k: `felt`), counted as standing. */
 export function runSums(points: readonly RunPoint[], pauses: readonly RunPause[], elapsedMs: number, kg: number, felt: readonly RunPause[] = []): RunSums {
+  const work = runSumsInSlices(points, pauses, elapsedMs, kg, felt);
+  for (;;) {
+    const step = work.next();
+    if (step.done === true) return step.value;
+  }
+}
+
+/** Every point between two places the work may stop: at most about 40 ms of a phone's time (37o, A11). */
+const SLICE = 8_192;
+
+/** `runSums`, worked out a slice at a time: each `next()` does a part and the last gives the sums. The run's screen
+ *  works a long run out so, between the seconds of its clock, so the phone never stops answering for it (37o, A11:
+ *  a day's run took the phone 1.4 s in one go); the answer is the same, number for number. The lists handed in are
+ *  read as the work goes, so they must not change until it is done. */
+export function* runSumsInSlices(points: readonly RunPoint[], pauses: readonly RunPause[], elapsedMs: number, kg: number, felt: readonly RunPause[] = []): Generator<void, RunSums> {
   const elapsed = Math.max(0, Math.min(elapsedMs, RUN_MAX_ELAPSED_MS));
   const cleaned = cleanPauses(pauses, elapsed);
   const held = cleanPauses(felt, elapsed);
@@ -874,8 +922,9 @@ export function runSums(points: readonly RunPoint[], pauses: readonly RunPause[]
   let walked = 0;
   // Every place the distance was counted to, with its clock, in order: the pace line's places in time.
   const marks: RunMark[] = [];
-  for (const { fixes: raw, from, to } of piecesBetweenPauses(points, cleaned, elapsed)) {
+  for (const { fixes: raw, from, to } of yield* piecesBetweenPauses(points, cleaned, elapsed)) {
     const whole = withoutSpikes(raw);
+    yield;
     // Where the phone felt the person stand (37k): a pause to the route, standing to the clock.
     const kept = stillHeld(whole, held, from, to);
     for (const [k, piece] of heldApart(whole, kept).entries()) {
@@ -886,11 +935,12 @@ export function runSums(points: readonly RunPoint[], pauses: readonly RunPause[]
       }
       // On the smoothed path: the raw points of a phone standing still wander past STILL_M, and the stop
       // was counted as moving and drawn as a crawl on the pace chart (round one of 37c-iii, H3).
-      for (const span of standingSpans(smoothed(piece))) {
+      const smooth = yield* smoothed(piece);
+      for (const span of yield* standingSpans(smooth)) {
         stillMs += span[1] - span[0];
         still.list.push(span);
       }
-      const flagged = tooFastSteps(piece);
+      const flagged = yield* tooFastSteps(piece);
       // The piece is cut where a too-fast stretch is left out; each part is smoothed on its own.
       let part: Fix[] = [];
       const parts: Fix[][] = [];
@@ -913,7 +963,8 @@ export function runSums(points: readonly RunPoint[], pauses: readonly RunPause[]
           segment = [];
         }
         if (p.length < 2) continue; // a lone point between two left-out steps covers no ground
-        const path = smoothed(p);
+        // With no step left out the part is the piece, already smoothed for standing (37o, A11: smoothed twice).
+        const path = parts.length === 1 ? smooth : yield* smoothed(p);
         let last = path[0];
         if (last === undefined) continue;
         trackStarts.push(track.length);
@@ -921,6 +972,7 @@ export function runSums(points: readonly RunPoint[], pauses: readonly RunPause[]
         segment.push({ d: walked, t: last.at });
         marks.push({ d: walked, t: last.at });
         for (let i = 1; i < path.length; i++) {
+          if (i % SLICE === 0) yield;
           const fix = path[i];
           if (fix === undefined) continue;
           // Standing, the route holds still: the phone's wander adds no metres and draws no line, and the
@@ -939,10 +991,12 @@ export function runSums(points: readonly RunPoint[], pauses: readonly RunPause[]
     }
   }
   if (segment.length > 0) segments.push(segment);
+  yield;
   const distanceM = steps.reduce((sum, step) => sum + step.m, 0);
   const movingS = Math.max(0, (elapsed - pausedMs - leftOutMs - stillMs) / 1000);
   const splitsKm = splitsOf(steps, 1000);
   const paceLine = paceLineOf(steps);
+  yield;
   // Calories: each kilometre at its own speed, and any moving time no step covers (before the first
   // point, a gap in the signal) at the run's average speed.
   const stepS = steps.reduce((sum, step) => sum + step.s, 0);
@@ -951,6 +1005,15 @@ export function runSums(points: readonly RunPoint[], pauses: readonly RunPause[]
   const kcal =
     splitsKm.reduce((sum, split) => sum + (split.s > 0 ? kcalFor(split.m / split.s, weight, split.s) : 0), 0) +
     (movingS > stepS ? kcalFor(average, weight, movingS - stepS) : 0);
+  const splitsMi = splitsOf(steps, 1609.344);
+  yield;
+  const k1 = fastestStretch(segments, RECORD_DISTANCES_M.k1);
+  const mile = fastestStretch(segments, RECORD_DISTANCES_M.mile);
+  yield;
+  const k5 = fastestStretch(segments, RECORD_DISTANCES_M.k5);
+  const k10 = fastestStretch(segments, RECORD_DISTANCES_M.k10);
+  yield;
+  const paceSpans = placeSpansOf(marks, paceLine.length);
   return {
     distanceM: Math.round(distanceM),
     elapsedS: Math.round(elapsed / 1000),
@@ -960,17 +1023,12 @@ export function runSums(points: readonly RunPoint[], pauses: readonly RunPause[]
     leftOutS: Math.round(leftOutMs / 1000),
     kcal: Math.round(kcal),
     splitsKm: splitsKm.map((x) => ({ m: Math.round(x.m), s: Math.round(x.s) })),
-    splitsMi: splitsOf(steps, 1609.344).map((x) => ({ m: Math.round(x.m), s: Math.round(x.s) })),
+    splitsMi: splitsMi.map((x) => ({ m: Math.round(x.m), s: Math.round(x.s) })),
     track,
     trackStarts,
-    bests: {
-      k1: fastestStretch(segments, RECORD_DISTANCES_M.k1),
-      mile: fastestStretch(segments, RECORD_DISTANCES_M.mile),
-      k5: fastestStretch(segments, RECORD_DISTANCES_M.k5),
-      k10: fastestStretch(segments, RECORD_DISTANCES_M.k10),
-    },
+    bests: { k1, mile, k5, k10 },
     paceLine,
-    paceSpans: placeSpansOf(marks, paceLine.length),
+    paceSpans,
   };
 }
 

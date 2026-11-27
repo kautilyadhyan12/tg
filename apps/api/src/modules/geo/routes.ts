@@ -199,7 +199,7 @@ export function registerGeoRoutes(
       // repeat costs the server a lookup, never the maths (round one of 37a, H2).
       const key = req.headers["idempotency-key"];
       if (typeof key === "string" && UUID.test(key)) {
-        const already = await service.savedRunIfAny(readDeps, authedUserId(req), key);
+        const already = await service.savedRunIfAny({ ...readDeps, log: req.log }, authedUserId(req), key);
         if (already === "removed") return runDeleted(req, reply);
         if (already !== null) return await reply.status(200).send({ status: "duplicate", run: already });
       }

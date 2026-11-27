@@ -391,6 +391,24 @@ d("record a run (real Postgres)", () => {
     const streak = await sql<{ current: number }[]>`SELECT current FROM streaks WHERE user_id = ${me.id}`;
     expect(streak[0]?.current).toBe(1);
   });
+
+  it("37o, the hunt's E2: a run stored whose streak and XP failed after it is healed by the phone's send again, answered from the row", async () => {
+    const me = await makeUser("heal");
+    const run = body({ points: northRun(120, 3), elapsedMs: 120_000 }); // about 360 m
+    expect((await save(me.cookies, run)).statusCode).toBe(201);
+    const xp = await xpOf(me.id);
+    expect(xp).toBeGreaterThan(0);
+    // As if the server failed just after the run was stored: no streak, no XP, no badges worked out.
+    await sql`DELETE FROM user_achievements WHERE user_id = ${me.id}`;
+    await sql`DELETE FROM user_xp WHERE user_id = ${me.id}`;
+    await sql`DELETE FROM streaks WHERE user_id = ${me.id}`;
+    const again = await save(me.cookies, run);
+    expect(again.statusCode).toBe(200);
+    expect(saveRunResponseSchema.parse(again.json()).status).toBe("duplicate");
+    expect(await xpOf(me.id)).toBe(xp);
+    const streak = await sql<{ current: number }[]>`SELECT current FROM streaks WHERE user_id = ${me.id}`;
+    expect(streak[0]?.current).toBe(1);
+  });
 });
 
 d("round one of 37a: nothing a person ran is refused for the phone's clock, and the server is never kept busy", () => {

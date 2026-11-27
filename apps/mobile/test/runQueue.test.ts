@@ -195,6 +195,31 @@ describe("one run the server cannot take (37m; the hunt's B1, B2, B7)", () => {
   });
 });
 
+describe("the server down for a while, its front door answering for it (37o, round one H2)", () => {
+  it("eleven minutes of 502s for two waiting runs: both still waiting, said as not sent yet, none given up on; sent once it is back", async () => {
+    const m = memory();
+    let clock = 0;
+    let down = true;
+    const gateway = { kind: "no_answer", gateway: true } as const;
+    const session = {
+      signedIn: (request: { body?: unknown }) =>
+        Promise.resolve(down ? gateway : { kind: "ok", data: { status: "created", run: saved(request.body as SaveRunRequest) } }),
+    } as unknown as Session;
+    const outbox = createRunOutbox(m.store, runSender(session), () => clock);
+    await outbox.start();
+    await outbox.add(run(1));
+    await outbox.add(run(2));
+    for (; clock <= 11 * 60_000; clock += 15_000) await outbox.send();
+    expect(outbox.view().waiting.map((r) => r.runId)).toEqual([run(1).runId, run(2).runId]);
+    expect(outbox.view().failing).toEqual([run(1).runId, run(2).runId]);
+    expect(outbox.view().refused).toEqual([]);
+    down = false;
+    await outbox.send();
+    expect(outbox.view()).toMatchObject({ waiting: [], failing: [], refused: [] });
+    expect(outbox.view().saved.map((r) => r.id).sort()).toEqual([run(1).runId, run(2).runId].sort());
+  });
+});
+
 describe("what each answer of the server becomes (37m)", () => {
   const refusal = (status: number) => ({ kind: "refused", status, error: "x", message: "No.", retryAfterSeconds: null, robotCheckKey: null, body: null });
   it.each([
@@ -202,6 +227,8 @@ describe("what each answer of the server becomes (37m)", () => {
     // A 2xx is answered only once the run is stored: on the server, whatever its words (round one, H1).
     ["the run kept, in words this copy cannot read", { kind: "ok", data: { status: "created" } }, "kept"],
     ["no answer", { kind: "no_answer" }, "later"],
+    // 37m's L5: the front door answering for an api that broke on the run, or was down.
+    ["by the server's front door (502, 503, 504 in words not the api's)", { kind: "no_answer", gateway: true }, "passed"],
     ["a sign-in being renewed", refusal(401), "later"],
     ["too many at once", refusal(429), "later"],
     ["the server's own timeout", refusal(408), "failed"],

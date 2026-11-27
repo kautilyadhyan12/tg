@@ -17,7 +17,9 @@ export interface Shape<T> {
   safeParse: (raw: unknown) => { success: true; data: T } | { success: false };
 }
 
-/** `no_answer`: no reply, a late one, or one that is not this api's. It never signs anybody out. */
+/** `no_answer`: no reply, a late one, or one that is not this api's. It never signs anybody out. `gateway`: the
+ *  server's front door answered for the api, which could not (502, 503 or 504 in words not the api's: it was down,
+ *  restarting or broke on the request); a sender that must tell a fault of the server's from no signal reads it. */
 export type Answer<T> =
   | { kind: "ok"; data: T }
   | {
@@ -30,7 +32,7 @@ export type Answer<T> =
       /** The whole reply, for a refusal that says more than its words (a finish names what is open). */
       body: unknown;
     }
-  | { kind: "no_answer" };
+  | { kind: "no_answer"; gateway?: true };
 
 export interface Server {
   apiUrl: string;
@@ -38,6 +40,9 @@ export interface Server {
 }
 
 const LATE = Symbol("late");
+const NOT_JSON = Symbol("not JSON");
+/** What a proxy in front of the api answers for it when it cannot reach it, or it broke on the request. */
+const GATEWAY: readonly number[] = [502, 503, 504];
 
 /** One POST, its reply read through its shape. A reply that comes after `waitMs` is dropped. */
 export function post<T>(server: Server, path: string, body: unknown, shape: Shape<T>, waitMs = 15_000): Promise<Answer<T>> {
@@ -92,16 +97,18 @@ export async function call<T>(server: Server, request: Request, shape: Shape<T>,
       late,
     ]);
     if (reply === LATE) return { kind: "no_answer" };
+    const gateway = GATEWAY.includes(reply.status);
     // 204 has no body, nor has 304 (not changed, asked for with `etag`): its shape is read against null.
     const notChanged = reply.status === 304 && request.etag !== undefined;
-    const raw = reply.status === 204 || notChanged ? null : await Promise.race([reply.json(), late]);
+    const raw = reply.status === 204 || notChanged ? null : await Promise.race([reply.json().catch(() => NOT_JSON), late]);
+    if (raw === NOT_JSON) return gateway ? { kind: "no_answer", gateway: true } : { kind: "no_answer" };
     if (raw === LATE) return { kind: "no_answer" };
     if (reply.ok || notChanged) {
       const parsed = shape.safeParse(raw);
       return parsed.success ? { kind: "ok", data: parsed.data } : { kind: "no_answer" };
     }
     const refusal = apiRefusalSchema.safeParse(raw);
-    if (!refusal.success) return { kind: "no_answer" };
+    if (!refusal.success) return gateway ? { kind: "no_answer", gateway: true } : { kind: "no_answer" };
     const { error, message, retryAfterSeconds, robotCheckKey } = refusal.data;
     return { kind: "refused", status: reply.status, error, message, retryAfterSeconds: retryAfterSeconds ?? null, robotCheckKey: robotCheckKey ?? null, body: raw };
   } catch {

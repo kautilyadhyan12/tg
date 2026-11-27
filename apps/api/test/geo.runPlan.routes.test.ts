@@ -108,7 +108,7 @@ d("the run plan (real Postgres)", () => {
   const keep = async (userId: string, at: string, distanceM: number, movingS: number, opts: { old?: boolean } = {}) => {
     const id = randomUUID();
     await insertRun(sql, userId, {
-      id, startedAt: new Date(at), name: "Run", effort: null, note: null, distanceM, movingS, elapsedS: movingS, leftOutM: 0, leftOutS: 0, kcal: 0,
+      id, startedAt: new Date(at), timeZone: null, name: "Run", effort: null, note: null, distanceM, movingS, elapsedS: movingS, leftOutM: 0, leftOutS: 0, kcal: 0,
       splits: { km: [], mi: [], starts: [0], pace: [], hills: [] }, polyline: "", calcVersion: 2, climb: { state: "none" }, shape: null,
       bests: { k1: null, mile: null, k5: null, k10: null },
     });
