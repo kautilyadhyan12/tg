@@ -68,7 +68,7 @@ import { newRecords, RECORDS_PATH } from "./runRecords";
 import { RunMap, useMapScheme } from "./RunMap";
 import { useRunOutbox } from "./RunOutbox";
 import { endRunAtLeaving } from "./runLeaving";
-import { closedStill, currentPace, saveRequestOf, sentOf, sumsAt } from "./runLive";
+import { closedStill, currentPace, saveRequestOf, sentOf, sumsAt, trueStart } from "./runLive";
 import { clock, distance, pace, paceWord, runName, runWhen, unitWord, METRES_PER_MILE } from "./runWords";
 
 /** What stood in the way of Start, said under it with its button. */
@@ -678,7 +678,7 @@ function Summary({ run, units, kg, onSaved }: { run: LiveRun; units: Units; kg: 
   const zoneSeconds = useMemo(() => heartZoneSeconds(run.heart, closedPauses(run, finished), finished, maxNow), [run, finished, maxNow]);
   const [settingMax, setSettingMax] = useState(false);
   const { session } = useSession();
-  const startedAt = new Date(run.startedAt);
+  const startedAt = trueStart(run);
   const [name, setName] = useState(runName(startedAt));
   const [naming, setNaming] = useState(false);
   const [effort, setEffort] = useState<number | null>(null);

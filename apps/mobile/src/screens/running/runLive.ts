@@ -38,11 +38,14 @@ export function sentOf(run: LiveRun): RunClimbRequest {
   };
 }
 
+/** When Go was pressed by the GPS's clock: the phone's own, less a gap the run found in it (A6). */
+export const trueStart = (run: LiveRun): Date => new Date(run.startedAt + (run.clockGapMs ?? 0));
+
 /** A finished run as Save sends it, with the name, feel and note the person gave. */
 export function saveRequestOf(run: LiveRun, sent: RunClimbRequest, name: string, effort: number | null, note: string | null): SaveRunRequest {
   return {
     runId: run.runId,
-    startedAt: new Date(run.startedAt).toISOString(),
+    startedAt: trueStart(run).toISOString(),
     ...sent,
     ...(run.heart.length > 0 ? { heart: run.heart.slice(0, RUN_MAX_POINTS) } : {}),
     name,

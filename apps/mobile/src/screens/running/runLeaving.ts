@@ -2,7 +2,7 @@
 // by the server, or with the account deleted. Nothing of it may go on with nobody signed in to stop it.
 import type { SaveRunRequest } from "@app/shared";
 import { finishRun, forgetRun, loadRun, runNow } from "./recorder";
-import { saveRequestOf, sentOf } from "./runLive";
+import { saveRequestOf, sentOf, trueStart } from "./runLive";
 import { runName } from "./runWords";
 
 /** Signed out: the person's run is finished (the location, the voice, the monitor and the motion stop) and put in
@@ -17,6 +17,6 @@ export async function endRunAtLeaving(userId: string, why: "out" | "deleted", ad
   }
   const done = await finishRun(now);
   if (done === null || add === null) return;
-  const saved = saveRequestOf(done, sentOf(done), runName(new Date(done.startedAt)), null, null);
+  const saved = saveRequestOf(done, sentOf(done), runName(trueStart(done)), null, null);
   if (await add(saved)) await forgetRun();
 }

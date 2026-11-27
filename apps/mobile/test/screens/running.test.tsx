@@ -8,7 +8,7 @@ import { RUN_BAR_ROOM } from "../../src/screens/running/RunLayer";
 import { MAP_CREDIT_PAGE, MAP_WAIT_MS } from "../../src/screens/running/RunMap";
 import { unitMarks } from "../../src/screens/running/routeShape";
 import { chooseAutoPause, finishRun, keepRunUnits, pauseRun, phoneRunFiles, resetRecorder, runNow, startRun, takeLocations } from "../../src/screens/running/recorder";
-import { sumsAt } from "../../src/screens/running/runLive";
+import { saveRequestOf, sentOf, sumsAt } from "../../src/screens/running/runLive";
 import { endRunAtLeaving } from "../../src/screens/running/runLeaving";
 import { spokenTime } from "../../src/screens/running/runVoice";
 import { readRunFile } from "../../src/screens/running/runQueue";
@@ -309,6 +309,69 @@ describe("the worst thing (37o): a run left recording somebody's location after 
     expect(location.running).toBe(false);
     expect(runNow()?.userId).toBe("5f0c8a52-6f0e-4d59-9a3c-1f2e3d4c5b6b");
     expect(screen.queryByRole("button", { name: "Open run" })).toBeNull();
+  });
+});
+
+describe("a phone whose clock is wrong (37o, the hunt's A6): the run is recorded from Go all the same", () => {
+  const T0 = 1_790_000_000_000;
+  /** One delivery a second, as Android hands them over: the point's GPS time `gpsAheadMs` from the phone's, and
+   *  handed over 200 ms after it was taken. */
+  async function deliver(fromS: number, seconds: number, gpsAheadMs: number) {
+    for (let i = fromS; i < fromS + seconds; i++) {
+      const phoneAt = T0 + i * 1000;
+      await takeLocations({ locations: [{ timestamp: phoneAt + gpsAheadMs, coords: { latitude: 26.1445 + (i * 3) / 111_132, longitude: 91.7362, accuracy: 5, speed: 3 } }] }, phoneAt + 200);
+    }
+  }
+  const run = () => {
+    const now = runNow();
+    if (now === null) throw new Error("no run going");
+    return now;
+  };
+
+  it.each<[string, number]>([
+    ["the phone's clock 5 minutes fast", -300_000],
+    ["the phone's clock 5 minutes slow", 300_000],
+    ["the phone's clock 2 hours fast", -7_200_000],
+  ])("%s: points from the first seconds, in order, on the run's own clock, and Save sends the GPS's start", async (_name, gpsAheadMs) => {
+    await startRun(RAVI.id, "1b9d6bcd-bbfd-4b2d-9b5d-ab8dfbbd4bed", false, T0);
+    await deliver(0, 120, gpsAheadMs);
+    const points = run().points;
+    expect(points.length).toBeGreaterThanOrEqual(119);
+    // Within the 200 ms a point takes to be handed over.
+    expect(points[0]?.[0]).toBeLessThanOrEqual(1_200);
+    expect(points.at(-1)?.[0]).toBeLessThanOrEqual(119_200);
+    expect(points.every((p, i) => i === 0 || p[0] > (points[i - 1]?.[0] ?? Infinity))).toBe(true);
+    expect(run().clockGapMs).toBeCloseTo(gpsAheadMs, -3);
+    expect(sumsAt(run(), 120_000, 60).distanceM).toBeGreaterThan(300);
+    const done = await finishRun(T0 + 120_000);
+    if (done === null) throw new Error("no run");
+    const sent = saveRequestOf(done, sentOf(done), "Morning Run", null, null);
+    expect(Math.abs(Date.parse(sent.startedAt) - (T0 + gpsAheadMs))).toBeLessThan(1_000);
+    expect(saveRunRequestSchema.safeParse(sent).success).toBe(true);
+  });
+
+  it("a right clock, with an old point Android kept from before Go handed over first: no gap, and the old point is not the run's", async () => {
+    await startRun(RAVI.id, "1b9d6bcd-bbfd-4b2d-9b5d-ab8dfbbd4bed", false, T0);
+    await takeLocations({ locations: [{ timestamp: T0 - 240_000, coords: { latitude: 26.3, longitude: 91.9, accuracy: 5, speed: 0 } }] }, T0 + 300);
+    await deliver(1, 60, 0);
+    expect(run().clockGapMs).toBe(0);
+    expect(run().points[0]).toEqual([1_000, 26.1445 + 3 / 111_132, 91.7362, 5]);
+    expect(run().points).toHaveLength(60);
+  });
+
+  it("a right clock: no point is moved, from the first", async () => {
+    await startRun(RAVI.id, "1b9d6bcd-bbfd-4b2d-9b5d-ab8dfbbd4bed", false, T0);
+    await deliver(0, 30, 900);
+    expect(run().clockGapMs).toBe(0);
+    expect(run().points.map((p) => p[0])).toEqual(Array.from({ length: 30 }, (_, i) => i * 1000 + 900));
+  });
+
+  it("the gap is kept with the run: the app closed and opened again keeps taking it off", async () => {
+    await startRun(RAVI.id, "1b9d6bcd-bbfd-4b2d-9b5d-ab8dfbbd4bed", false, T0);
+    await deliver(0, 20, -300_000);
+    await finishRun(T0 + 20_000);
+    const state: unknown = JSON.parse((await phoneRunFiles.read("run-now.json")) ?? "{}");
+    expect(state).toMatchObject({ clockGapMs: expect.closeTo(-300_000, -3) as unknown });
   });
 });
 
