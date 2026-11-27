@@ -3,11 +3,14 @@
 // (scripts/replays.ts), counts 0 and is given no word. The first half of the replays; the second is in
 // movementReplaysOthers2.test.ts.
 import { describe, expect, it } from "vitest";
-import { openRow } from "../scripts/movementCheck.js";
+import { openRow, readExercise, readMovement } from "../scripts/movementCheck.js";
+import { saidOf, speaking } from "../scripts/coachCheck.js";
 import { HELD, rowsOf } from "./helpers/replays.js";
 
 const REPLAYS = HELD.slice(0, 7);
 const ROWS = rowsOf(REPLAYS, "other");
+/** The squat's camera file with every mistake it checks spoken (53b-i): the coach's worst case. */
+const LOUD = speaking(readExercise("squat"), readMovement("squat"));
 
 describe("the worst thing: no other movement is counted as a squat however the world changes it (first half)", () => {
   it("tries every other movement under each replay", () => {
@@ -26,6 +29,10 @@ describe("the worst thing: no other movement is counted as a squat however the w
     // nothing (13 dips of 6 videos under all the held replays speak so, none as filmed: movementMatcher.test.ts).
     const spoken = r.reps.filter((x) => x.reason !== null && !(r.entry.told !== undefined && x.verdict === "short"));
     expect(spoken.map((x) => [x.verdict, x.reason])).toEqual(spoken.map(() => ["unseen", "Keep your whole body in view."]));
+    // 53b-i: the coach says no more than the screen does, never a correction, praise or the count, every mistake spoken.
+    const said = saidOf(r.reps, LOUD);
+    expect(said.filter((s) => s.kind !== "reason").map((s) => s.words)).toEqual([]);
+    expect(said.filter((s) => s.words !== "Keep your whole body in view." && !(r.entry.told !== undefined && s.words === "Go lower to count.")).map((s) => s.words)).toEqual([]);
   });
 
   it("the rows open today are listed here, each with the job that closes it, and say nothing", () => {

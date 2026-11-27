@@ -544,10 +544,11 @@ jest.mock("../../src/camera/poseCameraNative", () => {
     },
   };
 });
-// The app's sound player (64a-vi), expo-audio's: `played` lists each sound handed to it, in order.
+// The app's sound player (64a-vi, 53b-i), expo-audio's: `played` lists each sound handed to it, in order, and `spoken`
+// each of the coach's clips.
 jest.mock("../../src/sound/soundNative", () => {
-  const sounds = { played: [] };
-  return { sounds, soundNative: { play: (name) => sounds.played.push(name) } };
+  const sounds = { played: [], spoken: [], hushed: 0 };
+  return { sounds, soundNative: { play: (name) => sounds.played.push(name), speak: (clip) => sounds.spoken.push(clip), hush: () => { sounds.hushed += 1; } } };
 });
 // The heart rate monitor's Bluetooth (37f-i), modules/heart-rate's Android code. `strap.near`: the monitors in
 // reach, each with the bytes it sends (`send(id, bytes, at)` hands one notification over as the Android code

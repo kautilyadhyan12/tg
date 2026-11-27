@@ -103,11 +103,12 @@ describe("the set's record", () => {
 });
 
 describe("the camera file's version, which a saved set names, is raised whenever its numbers change", () => {
-  it("both squat files, the camera file and its movement, are what version 1 was made from: change either and raise it here", () => {
+  it("both squat files, the camera file and its movement, are what version 2 was made from: change either and raise it here", () => {
     // Round one: the movement's numbers moved in this very job and nothing would have asked for the version to change.
+    // Version 2 (53b-i): each checked mistake says what the coach says of it.
     const text = (path: string): string => readFileSync(join(import.meta.dirname, "..", path), "utf8").replace(/\r\n/g, "\n");
     const made = createHash("sha256").update(text("exercises/squat.json")).update(text("movements/squat.json")).digest("hex");
-    expect([EXERCISE.version, made]).toEqual([1, "09275ad83d9334076d8c4289381e66669123d49142cd850bc0df3801d7705e9d"]);
+    expect([EXERCISE.version, made]).toEqual([2, "4c1f5b1678c655dbcdc44e86119ec3e54a749034d96976b9851922436fd8b651"]);
   });
 });
 

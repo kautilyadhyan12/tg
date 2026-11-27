@@ -15,12 +15,15 @@ import { bendOf, drawnTo, kneesIn, leanForward, perRep, trunkOf, type DrawnRep }
 import { runOf } from "../scripts/measureCheck.js";
 import { LEAD_IN, proofVideos, readExercise, readMovement, replayTable, runMovement } from "../scripts/movementCheck.js";
 import { REPLAYS } from "../scripts/replays.js";
+import { correctionsOf, saidOf, speaking } from "../scripts/coachCheck.js";
 
 const SQUAT = readMovement("squat");
 const EXERCISE = readExercise("squat");
 const VIDEOS = proofVideos();
 const SETTING = VIDEOS.filter((v) => v.entry.movement === "squat" && v.video.sets);
 const GOOD = VIDEOS.filter((v) => v.entry.movement === "squat" && v.entry.reps !== null && v.entry.open === undefined);
+/** The camera file with every mistake it checks spoken (53b-i): the coach's worst case. */
+const LOUD = speaking(EXERCISE, SQUAT);
 
 describe("the worst thing, under every replay of the world: no proper squat is told to change its form", () => {
   const held = REPLAYS.filter((r) => r.hold);
@@ -36,6 +39,12 @@ describe("the worst thing, under every replay of the world: no proper squat is t
     expect(marked).toEqual([]);
     const told = rows.filter((r) => r.replay?.name === name && r.told.length > 0).map((r) => `${r.label}${r.leftOut ? " (left out)" : ""}: ${String(r.told.length)}`);
     expect(told).toEqual([]);
+  });
+
+  // 53b-i: the coach, every mistake the camera checks spoken, says nothing to a proper squat: no correction, no reason.
+  it.each(["as filmed", ...held.map((r) => r.name)])("%s: the coach says nothing", (name) => {
+    const said = rows.filter((r) => (r.replay?.name ?? "as filmed") === name && r.said.length > 0).map((r) => `${r.label}${r.leftOut ? " (left out)" : ""}: ${r.said.map((x) => x.words).join(" / ")}`);
+    expect(said).toEqual([]);
   });
 });
 
@@ -251,6 +260,26 @@ describe("each mistake drawn onto real squats is marked, and no other", () => {
       it(`${word}: each still counts, and ${off > 0 ? "only this mistake is" : "no mistake is"} marked`, () => {
         expect(drawn.filter((r) => r.verdict !== "counted")).toEqual([]);
         expect(drawn.filter((r) => r.made.join() !== (off > 0 ? id : ""))).toEqual([]);
+      });
+
+      // 53b-i: the coach over each drawn set, every mistake spoken: past the line, this mistake's correction and nothing
+      // else, after the second rep it is made in and every second one after; short of it, nothing.
+      it(`${word}: the coach says ${off > 0 ? "this mistake's correction, after every second rep it is made in, and nothing else" : "nothing"}`, () => {
+        const words = correctionsOf(LOUD).get(id);
+        const sets = [...new Set(all.map((r) => r.label))];
+        const heard = sets.map((label) => {
+          const v = GOOD.find((x) => x.video.label === label);
+          if (v === undefined) throw new Error(`no ${label}`);
+          const mine = all.filter((r) => r.label === label);
+          const reps = runMovement(SQUAT, { ...v.video, frames: draw(perRep(mine))(v.video.frames) }, EXERCISE).reps;
+          const made = reps.filter((r) => r.verdict === "counted" && r.form.some((f) => f.mistake === id && f.status === "made")).length;
+          return { label, made, said: saidOf(reps, LOUD).map((x) => x.words) };
+        });
+        expect(heard.filter((h) => h.said.some((w) => w !== words)).map((h) => `${h.label}: ${h.said.join(" / ")}`)).toEqual([]);
+        if (off > 0) {
+          expect(heard.filter((h) => h.said.length !== Math.floor(h.made / 2)).map((h) => `${h.label}: made ${String(h.made)}, said ${String(h.said.length)}`)).toEqual([]);
+          expect(heard.some((h) => h.said.length > 0)).toBe(true);
+        } else expect(heard.flatMap((h) => h.said)).toEqual([]);
       });
     }
   });
