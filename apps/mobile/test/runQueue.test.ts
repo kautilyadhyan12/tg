@@ -202,6 +202,8 @@ describe("what each answer of the server becomes (37m)", () => {
     // A 2xx is answered only once the run is stored: on the server, whatever its words (round one, H1).
     ["the run kept, in words this copy cannot read", { kind: "ok", data: { status: "created" } }, "kept"],
     ["no answer", { kind: "no_answer" }, "later"],
+    // 37m's L5: the front door answering for an api that broke on the run, or was down.
+    ["by the server's front door (502, 503, 504 in words not the api's)", { kind: "no_answer", gateway: true }, "failed"],
     ["a sign-in being renewed", refusal(401), "later"],
     ["too many at once", refusal(429), "later"],
     ["the server's own timeout", refusal(408), "failed"],

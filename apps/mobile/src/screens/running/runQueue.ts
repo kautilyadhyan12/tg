@@ -60,10 +60,12 @@ export const RUN_FAILING_MS = 10 * 60_000;
 
 /** Nothing can go now: a lost connection, a sign-in being renewed or gone, or too many at once. */
 const nothingGoes = (answer: Answer<unknown>): boolean =>
-  answer.kind === "no_answer" || (answer.kind === "refused" && (answer.status === 401 || answer.status === 429));
+  (answer.kind === "no_answer" && answer.gateway !== true) || (answer.kind === "refused" && (answer.status === 401 || answer.status === 429));
 
-/** The server answered and could not take it now: a timeout of its own (408, 425) or a fault of its own. */
-const notNow = (answer: Answer<unknown>): boolean => answer.kind === "refused" && (answer.status === 408 || answer.status === 425 || answer.status >= 500);
+/** The server answered and could not take it now: a timeout of its own (408, 425) or a fault of its own, its front
+ *  door's 502, 503 or 504 among them (37m's L5: a run that broke the api held back every run after it). */
+const notNow = (answer: Answer<unknown>): boolean =>
+  (answer.kind === "no_answer" && answer.gateway === true) || (answer.kind === "refused" && (answer.status === 408 || answer.status === 425 || answer.status >= 500));
 
 /** Any reply, read here and not by the call: a reply that is not a saved run is told apart from no reply. */
 const anyReply: Shape<unknown> = { safeParse: (raw) => ({ success: true, data: raw }) };
@@ -75,8 +77,8 @@ export function runSender(session: Session): RunSender {
       const saved = saveRunResponseSchema.safeParse(answer.data);
       return saved.success ? { kind: "done", run: saved.data.run } : { kind: "kept" };
     }
-    if (nothingGoes(answer) || answer.kind !== "refused") return { kind: "later" };
     if (notNow(answer)) return { kind: "failed" };
+    if (nothingGoes(answer) || answer.kind !== "refused") return { kind: "later" };
     if (answer.status === 410) return { kind: "deleted" };
     // A shape the server would not read is the app's fault, never words for the person.
     return { kind: "refused", message: REFUSED_WORDS };
