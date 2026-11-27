@@ -7,13 +7,14 @@
 // nothing at all is written. What each clip was heard saying is kept in packages/movement/voice/heard.json.
 //
 // whisper.cpp lives outside git, on the laptop only (Kd's yes, 53b-i's plan): `WHISPER_CLI` and `WHISPER_MODEL` name it,
-// else ~/tools/whisper.cpp-1.9.5/bin/Release/whisper-cli.exe and its ggml-base.en.bin (release b5454, 2026-10-06, its
-// zip's SHA-256 6ba69e34…16ccb; the model's a03779c8…6d002, as GitHub and Hugging Face list them).
+// else ~/tools/whisper.cpp-1.9.5/bin/Release/whisper-cli.exe with ggml-base.en.bin, then ggml-small.en.bin (release b5454,
+// 2026-10-06, its zip's SHA-256 6ba69e34…16ccb; the models' a03779c8…6d002 and c6138d6d…41e5d, as GitHub and Hugging Face
+// list them).
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { copyFileSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { clipName, type VoiceHeard } from "@app/shared";
 import { CLIPS, HEARD_FILE, readVoice, scriptParts, type Wording } from "./voiceLines.js";
 import { heardOf, loudnessOf, QUIET_DB, QUIET_S, saysIt, silencesOf, silentClip, spansOf, type Span } from "./voiceCut.js";
@@ -21,7 +22,11 @@ import { CLIPS_MODULE, clipsModule } from "./voiceClips.js";
 
 const WHISPER_HOME = join(homedir(), "tools", "whisper.cpp-1.9.5");
 const READER = process.env.WHISPER_CLI ?? join(WHISPER_HOME, "bin", "Release", "whisper-cli.exe");
-const MODEL = process.env.WHISPER_MODEL ?? join(WHISPER_HOME, "ggml-base.en.bin");
+/** The reader's models, in turn: a clip is kept when one of them hears exactly its wording. Each stumbles on a few very
+ *  short clips the other hears right (2026-11-27: base.en heard two takes of "Workout complete." as "Workout completes.",
+ *  small.en heard nothing in "That one counts."), and neither ever turns another line into a clip's very words: a clip cut
+ *  or named wrongly says another line, which neither hears as this one. */
+const MODELS: readonly string[] = process.env.WHISPER_MODEL !== undefined ? [process.env.WHISPER_MODEL] : ["ggml-base.en.bin", "ggml-small.en.bin"].map((m) => join(WHISPER_HOME, m));
 
 function run(cmd: string, args: readonly string[]): { out: string; err: string } {
   const r = spawnSync(cmd, args, { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
@@ -46,10 +51,24 @@ function cut(part: string, span: Span, m4a: string, wav: string): number {
   const m = loudnessOf(first);
   const measured = `measured_I=${m.input_i}:measured_TP=${m.input_tp}:measured_LRA=${m.input_lra}:measured_thresh=${m.input_thresh}:offset=${m.target_offset}:linear=true`;
   run("ffmpeg", ["-hide_banner", "-nostats", "-y", ...where, "-af", `${fade},loudnorm=${target}:${measured}`, "-ar", "44100", "-ac", "1", "-c:a", "aac", "-b:a", "96k", "-map_metadata", "-1", "-movflags", "+faststart", m4a]);
-  run("ffmpeg", ["-hide_banner", "-nostats", "-y", "-i", m4a, "-ar", "16000", "-ac", "1", "-c:a", "pcm_s16le", wav]);
+  // The reader's own copy, with half a second of silence each side: a speech reader stumbles on a clip that starts and ends
+  // on its first and last sound. The app's clip is the AAC above.
+  run("ffmpeg", ["-hide_banner", "-nostats", "-y", "-i", m4a, "-af", "adelay=500,apad=pad_dur=0.5", "-ar", "16000", "-ac", "1", "-c:a", "pcm_s16le", wav]);
   return Number(m.input_i);
 }
-const heard = (wav: string): string => heardOf(run(READER, ["-m", MODEL, "-f", wav, "-l", "en", "-nt", "-np"]).out);
+
+const modelName = (path: string): string => basename(path).replace(/\.bin$/, "");
+
+/** What the models heard, in turn, until one heard exactly the wording: the model that did, or null when none did. */
+function heard(wav: string, wording: string): { text: string; by: string | null } {
+  const tried: string[] = [];
+  for (const model of MODELS) {
+    const text = heardOf(run(READER, ["-m", model, "-f", wav, "-l", "en", "-nt", "-np"]).out);
+    if (saysIt(text, wording)) return { text, by: modelName(model) };
+    tried.push(`${modelName(model)}: "${text}"`);
+  }
+  return { text: tried.join(", "), by: null };
+}
 
 function newestDownloads(count: number): string[] {
   const dir = join(homedir(), "Downloads");
@@ -86,7 +105,7 @@ function spansIn(file: string, n: number): { duration: number; spans: Span[] | s
 }
 
 const work = mkdtempSync(join(tmpdir(), "voice-cut-"));
-const rows: { wording: Wording; file: string; m4a: string; heard: string; ok: boolean; seconds: number }[] = [];
+const rows: { wording: Wording; file: string; m4a: string; heard: string; by: string; ok: boolean; seconds: number }[] = [];
 const refused: string[] = [];
 try {
   const again = redoFile === null ? null : spansIn(redoFile, 1);
@@ -120,11 +139,11 @@ try {
         console.log(`  cut     ${name.padEnd(22)} ${seconds.toFixed(2)} s  "${wording.words}"  ${loud.toFixed(1)} LUFS as recorded`);
         return;
       }
-      const text = heard(wav);
-      const ok = saysIt(text, wording.words);
-      rows.push({ wording, file: name, m4a, heard: text, ok, seconds });
-      console.log(`  ${ok ? "ok     " : "REFUSED"} ${name.padEnd(22)} ${seconds.toFixed(2)} s  "${wording.words}"  heard "${text}"`);
-      if (!ok) refused.push(`${name} should say "${wording.words}" and was heard saying "${text}"`);
+      const read = heard(wav, wording.words);
+      const ok = read.by !== null;
+      rows.push({ wording, file: name, m4a, heard: read.text, by: read.by ?? "", ok, seconds });
+      console.log(`  ${ok ? "ok     " : "REFUSED"} ${name.padEnd(22)} ${seconds.toFixed(2)} s  "${wording.words}"  heard ${ok ? `"${read.text}" (${read.by ?? ""})` : read.text}`);
+      if (!ok) refused.push(`${name} should say "${wording.words}" and was heard: ${read.text}`);
     });
   });
   if (check) {
@@ -140,9 +159,9 @@ try {
     const clips: VoiceHeard["clips"] = rows.map((r) => {
       copyFileSync(r.m4a, join(CLIPS, r.file));
       const sha256 = createHash("sha256").update(readFileSync(join(CLIPS, r.file))).digest("hex");
-      return { file: r.file, words: r.wording.words, heard: r.heard, sha256, seconds: Math.round(r.seconds * 100) / 100 };
+      return { file: r.file, words: r.wording.words, heard: r.heard, by: r.by, sha256, seconds: Math.round(r.seconds * 100) / 100 };
     });
-    const record: VoiceHeard = { version: voice.version, voice: `${voice.voice.name}, ${voice.voice.model}`, reader: "whisper.cpp 1.9.5, ggml-base.en", clips };
+    const record: VoiceHeard = { version: voice.version, voice: `${voice.voice.name}, ${voice.voice.model}`, reader: `whisper.cpp 1.9.5: ${MODELS.map(modelName).join(", then ")} where the one before did not hear the clip`, clips };
     writeFileSync(HEARD_FILE, `${JSON.stringify(record, null, 2)}\n`);
     writeFileSync(CLIPS_MODULE, clipsModule(voice));
     const bytes = clips.reduce((n, c) => n + statSync(join(CLIPS, c.file)).size, 0);

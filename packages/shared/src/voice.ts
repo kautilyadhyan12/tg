@@ -103,6 +103,8 @@ export const voiceHeardSchema = z
             file: z.string().regex(/^[a-z][a-z0-9_]*_\d+\.m4a$/),
             words: wording,
             heard: z.string().max(400),
+            /** The reader's model that heard it say exactly its wording. */
+            by: z.string().min(1).max(60),
             sha256: z.string().regex(/^[0-9a-f]{64}$/),
             seconds: z.number().positive(),
           })
