@@ -19,6 +19,7 @@ import {
   pairOutcome,
   phoneBondedSchema,
   phoneHeartSamplesSchema,
+  phoneHeartStatusSchema,
   type HeartBond,
   type HeartFound,
 } from "@app/shared";
@@ -71,6 +72,11 @@ let person: string | null = null;
 let saved: Monitor | null = null;
 /** What the Bluetooth code was told to watch; null for nothing. */
 let watching: string | null = null;
+/** When the Bluetooth code last refused to watch it (Nearby devices not allowed then), on the phone's clock; null
+ *  when it took it. It is asked again, at most each WATCH_AGAIN_MS, once allowed (37n, the bug hunt's C2). */
+let refusedAt: number | null = null;
+/** A watch the Bluetooth code refused is asked again this often. */
+const WATCH_AGAIN_MS = 3000;
 /** A monitor picked in the box and not yet saved: watched in place of the saved one while it is tried. */
 let trying: string | null = null;
 let holds = 0;
@@ -104,6 +110,7 @@ export function resetHeart(withNative: HeartNative | null = heartNative, withFil
   person = null;
   saved = null;
   watching = null;
+  refusedAt = null;
   trying = null;
   holds = 0;
   generation += 1;
@@ -118,9 +125,19 @@ function rewatch(): void {
   if (same(target, watching) || (target === null && watching === null)) return;
   watching = target;
   latest = null;
+  refusedAt = null;
   if (native === null) return;
   if (target === null) native.unwatch();
-  else native.watch(target);
+  else if (!native.watch(target)) refusedAt = Date.now();
+}
+
+/** A watch refused (Nearby devices not allowed at the time, perhaps taken back mid-run) asked again once it is
+ *  allowed: the monitor watched, and only ever the one being watched, never another (37n, C2). */
+function watchAgain(): void {
+  if (native === null || watching === null || refusedAt === null) return;
+  const now = Date.now();
+  if (Math.abs(now - refusedAt) < WATCH_AGAIN_MS) return;
+  refusedAt = native.allowed() && native.watch(watching) ? null : now;
 }
 
 /** This person's monitor, read once they are signed in. Anything unreadable is no monitor. */
@@ -188,6 +205,7 @@ export const tryingNow = (): string | null => trying;
  *  count; the saved one's wait for the run (`takeHeartReadings`), a monitor being tried keeps none. */
 export function pullHeart(): void {
   if (native === null) return;
+  watchAgain();
   const parsed = phoneHeartSamplesSchema.safeParse(native.take());
   if (!parsed.success) return;
   let moved = false;
@@ -329,13 +347,26 @@ export function pairMonitor(found: HeartFound, waitMs: number = PAIR_WAIT_MS): P
   });
 }
 
-export type BluetoothState = "none" | "denied" | "off" | "on";
+/** "location": Android 11 and older with Location off, which hear no monitor (37n, the bug hunt's C5). */
+export type BluetoothState = "none" | "denied" | "off" | "location" | "on";
 export function bluetoothState(): BluetoothState {
   if (native === null) return "none";
   const radio = native.radio();
   if (radio === "none") return "none";
   if (!native.allowed()) return "denied";
-  return radio === "on" ? "on" : "off";
+  if (radio !== "on") return "off";
+  // A copy of the app built before 37n has no such question: as before, on.
+  return native.locationOff?.() === true ? "location" : "on";
+}
+
+/** As `bluetoothState`, for the monitor watched: Location off is the reason for no heart rate only while the phone is
+ *  listening for it (not paired, not heard since the app started). A monitor Android already knows connects with
+ *  Location off (round one, H1). */
+export function monitorBluetoothState(): BluetoothState {
+  const state = bluetoothState();
+  if (state !== "location" || native === null) return state;
+  const status = phoneHeartStatusSchema.safeParse(native.status());
+  return status.success && status.data.finding ? "location" : "on";
 }
 
 /** Android's "Nearby devices" (12 and later), or the location older Androids need to find a monitor.
@@ -377,5 +408,5 @@ export function useHeartNow(active: boolean): { monitor: Monitor | null; bpm: nu
       release();
     };
   }, [active, monitor]);
-  return { monitor, bpm: monitor === null ? null : heartNow(Date.now()), bluetooth: bluetoothState() };
+  return { monitor, bpm: monitor === null ? null : heartNow(Date.now()), bluetooth: monitorBluetoothState() };
 }

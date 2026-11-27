@@ -12,6 +12,7 @@ import { Sheet } from "../look/Sheet";
 import { Txt } from "../look/Txt";
 import { runNow } from "../screens/running/recorder";
 import { heartNative } from "./heartNative";
+import { noSignalWords } from "./HeartPill";
 import {
   askBluetoothOn,
   askNearby,
@@ -40,7 +41,8 @@ const LOOK_MS = 30_000;
 const QUIET_MS = 15_000;
 
 export const monitorName = (name: string): string => (name.trim() === "" ? "Heart rate monitor" : name.trim());
-export const bpmWords = (bpm: number | null): string => (bpm === null ? "No signal" : `${String(bpm)} bpm`);
+/** The heart rate now; with none, why, where the phone knows (Bluetooth off, Nearby devices or Location off). */
+export const bpmWords = (bpm: number | null, bluetooth: BluetoothState = "on"): string => (bpm === null ? noSignalWords(bluetooth) : `${String(bpm)} bpm`);
 
 function readHeard(raw: unknown): Heard | null {
   const heard = heartFoundSchema.safeParse(raw);
@@ -57,6 +59,9 @@ const PAIR_SAID = {
 
 const openBluetoothSettings = (): void => {
   void Linking.sendIntent("android.settings.BLUETOOTH_SETTINGS").catch(() => Linking.openSettings());
+};
+const openLocationSettings = (): void => {
+  void Linking.sendIntent("android.settings.LOCATION_SOURCE_SETTINGS").catch(() => Linking.openSettings());
 };
 
 /** Bluetooth's state, asked again each second and when the person comes back to the app. */
@@ -217,7 +222,7 @@ function SavedStep({ monitor, said, running, onChange, onRemove }: { monitor: Mo
       <View style={styles.live}>
         <Icon name="heart" size={28} colour={bpm === null ? "textFaint" : "orange"} />
         <Txt kind="h1" fit numberOfLines={1}>
-          {bpmWords(bpm)}
+          {bpmWords(bpm, bluetooth)}
         </Txt>
       </View>
       <Txt kind="strong" style={styles.centredText}>
@@ -228,7 +233,8 @@ function SavedStep({ monitor, said, running, onChange, onRemove }: { monitor: Mo
           {said}
         </Txt>
       )}
-      <BluetoothProblem state={bluetooth} />
+      {/* Only with no heart rate: a reading coming in is the monitor working, whatever else is off (round one, H1). */}
+      {bpm === null ? <BluetoothProblem state={bluetooth} doing="connect" /> : null}
       {bluetooth === "on" && bpm === null ? (
         <Txt kind="small" colour="textFaint" style={styles.centredText}>
           {running ? "Wear it to connect." : "Wear it to connect. Still no signal? Change monitor and find it again."}
@@ -249,7 +255,6 @@ function FindStep({ active, onPick }: { active: boolean; onPick: (heard: Heard) 
   const [heard, setHeard] = useState<Heard[]>([]);
   const [looking, setLooking] = useState(false);
   const [round, setRound] = useState(0);
-  const [blocked, setBlocked] = useState(false);
   useEffect(() => {
     if (!active || bluetooth !== "on" || heartNative === null) return;
     const native = heartNative;
@@ -273,26 +278,7 @@ function FindStep({ active, onPick }: { active: boolean; onPick: (heard: Heard) 
   if (bluetooth !== "on") {
     return (
       <View style={styles.step}>
-        {bluetooth === "denied" ? (
-          <>
-            <Txt kind="body">Allow Nearby devices to find your monitor.</Txt>
-            {blocked ? (
-              <Button label="Open settings" wide onPress={() => void Linking.openSettings()} />
-            ) : (
-              <Button
-                label="Allow"
-                wide
-                onPress={() =>
-                  void askNearby().then((answer) => {
-                    setBlocked(answer === "blocked");
-                  })
-                }
-              />
-            )}
-          </>
-        ) : (
-          <BluetoothProblem state={bluetooth} />
-        )}
+        <BluetoothProblem state={bluetooth} doing="find" />
       </View>
     );
   }
@@ -372,11 +358,42 @@ function TryStep({ heard, since, onSave, onNotThis }: { heard: Heard; since: num
   );
 }
 
-/** What stands in the way of a monitor: no Bluetooth on the phone, or Bluetooth off. */
-function BluetoothProblem({ state }: { state: BluetoothState }) {
-  if (state === "on" || state === "denied") return null;
+/** What stands in the way of a monitor, with the button that clears it: no Bluetooth on the phone, Nearby devices
+ *  not allowed (refused, or taken back mid-run: 37n, the bug hunt's C2), Location off on Android 11 and older (C5),
+ *  or Bluetooth off. `doing`: finding a monitor in the box, or connecting the one saved. */
+function BluetoothProblem({ state, doing }: { state: BluetoothState; doing: "find" | "connect" }) {
+  const [blocked, setBlocked] = useState(false);
+  if (state === "on") return null;
   if (state === "none") {
     return <Txt kind="body">This phone can't connect to a heart rate monitor.</Txt>;
+  }
+  if (state === "denied") {
+    return (
+      <View style={styles.problem}>
+        <Txt kind="body">{`Allow Nearby devices to ${doing} your monitor.`}</Txt>
+        {blocked ? (
+          <Button label="Open settings" wide onPress={() => void Linking.openSettings()} />
+        ) : (
+          <Button
+            label="Allow"
+            wide
+            onPress={() =>
+              void askNearby().then((answer) => {
+                setBlocked(answer === "blocked");
+              })
+            }
+          />
+        )}
+      </View>
+    );
+  }
+  if (state === "location") {
+    return (
+      <View style={styles.problem}>
+        <Txt kind="body">{`Turn on Location to ${doing} your monitor.`}</Txt>
+        <Button label="Turn on Location" wide onPress={openLocationSettings} />
+      </View>
+    );
   }
   return (
     <View style={styles.problem}>
@@ -389,8 +406,8 @@ function BluetoothProblem({ state }: { state: BluetoothState }) {
 /** The row on the Running page, and under Settings' own heading (`named` false): the monitor and its heart
  *  rate now, or Connect. */
 export function HeartMonitorRow({ active, onOpen, named = true }: { active: boolean; onOpen: () => void; named?: boolean }) {
-  const { monitor, bpm } = useHeartNow(active);
-  const what = monitor === null ? "Chest strap or watch" : named ? `${monitorName(monitor.name)} · ${bpmWords(bpm)}` : monitorName(monitor.name);
+  const { monitor, bpm, bluetooth } = useHeartNow(active);
+  const what = monitor === null ? "Chest strap or watch" : named ? `${monitorName(monitor.name)} · ${bpmWords(bpm, bluetooth)}` : monitorName(monitor.name);
   return (
     <>
       <View style={styles.rowWords}>
@@ -401,7 +418,7 @@ export function HeartMonitorRow({ active, onOpen, named = true }: { active: bool
         </Txt>
         {!named && monitor !== null ? (
           <Txt kind="small" colour="textFaint">
-            {bpmWords(bpm)}
+            {bpmWords(bpm, bluetooth)}
           </Txt>
         ) : null}
       </View>

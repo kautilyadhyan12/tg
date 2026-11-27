@@ -1973,7 +1973,7 @@ describe("heart rate and sounds in a workout (64a-vi)", () => {
   const MINE = "F8:A6:6F:94:AA:27";
   const STRANGER = "C0:FF:EE:12:34:56";
   const polar = (bpm: number): number[] => [16, bpm, 25, 3, 15, 3, 0];
-  const strap = jest.requireMock<{ strap: { send: (id: string, bytes: number[], at?: number) => void; reset: () => void } }>("../../src/heart/heartNative").strap;
+  const strap = jest.requireMock<{ strap: { send: (id: string, bytes: number[], at?: number) => void; reset: () => void; radio: string } }>("../../src/heart/heartNative").strap;
   const sounds = jest.requireMock<{ sounds: { played: string[] } }>("../../src/sound/soundNative").sounds;
   const SQUAT = { id: "squat", plan: { measuredIn: "reps", sets: [{ target: 2, weightGrams: null, restSeconds: null }] } };
   const write = (name: string, text: string) => {
@@ -2035,6 +2035,18 @@ describe("heart rate and sounds in a workout (64a-vi)", () => {
     expect(bpms.every((b) => b === 132)).toBe(true);
     // Under a minute of heart rate: no line on the summary, as the server keeps none.
     expect(screen.queryByText(/^Heart rate \d+ average/)).toBeNull();
+  });
+
+  it("Bluetooth off during a workout: the pill says so and opens the monitor box, where Turn on Bluetooth is (37n)", async () => {
+    await loadMonitor(RAVI.id);
+    await saveMonitor({ id: MINE, name: "Polar H10 9EF6E824" });
+    await openLibrary(saving().ask);
+    await openMine();
+    await fireEvent.press(await screen.findByRole("button", { name: "Start workout" }));
+    strap.radio = "off";
+    await fireEvent.press(await screen.findByRole("button", { name: "Heart rate: bluetooth off. Open heart rate monitor" }, { timeout: 3000 }));
+    expect(await screen.findByText("Bluetooth is off.")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Turn on Bluetooth" })).toBeTruthy();
   });
 
   it("with no monitor there is no heart rate on the workout, and the sound switch is there", async () => {
