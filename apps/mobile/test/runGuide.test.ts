@@ -25,6 +25,7 @@ import {
   spokenLength,
   stepName,
 } from "../src/screens/running/runGuide";
+import { sessionDetail, sessionTitle } from "../src/screens/running/runPlanWords";
 
 const SESSIONS = C25K_WEEK_COUNT * C25K_RUNS_A_WEEK;
 const walkRun = (index: number): PlanSession => ({ kind: "walk_run", week: Math.floor(index / 3) + 1, run: (index % 3) + 1, parts: c25kParts(index) });
@@ -429,6 +430,36 @@ describe("a runner's planned run", () => {
     expect(beginLine(guideOf({ kind: "steady", m: 12000, reps: { count: 2, m: 1600, restS: 60 } }, "t"), 1, "imperial")).toBe("Repeat 1 of 2. Run 1 mile at tempo pace.");
   });
 
+  // The hunt's D3: in miles a 1 km repeat was "1 km" in the plan, "0.7 mi" on its card and "0.6 miles"
+  // in the voice; an 8 km run "4.9 mi" in the plan, "4.9 miles" said and "5.0 mi left" on the card.
+  it.each([
+    ["a 1 km repeat", { kind: "fast", m: 9000, reps: { count: 3, m: 1000, restS: 90 } }, 1, "1 km", "1 kilometre", "1.0 km left"],
+    ["an 800 m repeat", { kind: "fast", m: 9000, reps: { count: 3, m: 800, restS: 90 } }, 1, "800 m", "800 metres", "0.8 km left"],
+    ["a 1.6 km repeat, a mile", { kind: "steady", m: 12000, reps: { count: 2, m: 1600, restS: 60 } }, 1, "1 mi", "1 mile", "1.0 mi left"],
+    ["a 2.4 km tempo", { kind: "steady", m: 8000, reps: { count: 1, m: 2400, restS: 60 } }, 1, "2.4 km", "2.4 kilometres", "2.4 km left"],
+    ["an 8 km easy run", { kind: "easy", m: 8000, reps: null }, 0, "4.9 mi", "4.9 miles", "4.9 mi left"],
+    ["a 5 mile long run", { kind: "long", m: 8047, reps: null }, 0, "5 mi", "5 miles", "5.0 mi left"],
+  ] as const)("in miles, %s has one length: the plan's, the card's and the voice's", (_name, session, index, shown, said, left) => {
+    const guide = guideOf(session, "t");
+    const step = guide.steps[index];
+    if (step === undefined) throw new Error("no step");
+    if (session.reps !== null) expect(plain(sessionDetail(session, null, "imperial"))).toContain(` ${shown} at `);
+    else expect(plain(sessionTitle(session, "imperial"))).toContain(shown);
+    // The card's "Next:" before it, the line said as it begins, and the card's time left as it begins.
+    const before = { ...guide, at: { index: Math.max(0, index - 1), fromMs: 0, fromM: 0 } };
+    if (index > 0) expect(plain(nextWords(before, "imperial"))).toMatch(new RegExp(` ${shown}$`));
+    expect(beginLine(guide, index, "imperial")).toContain(said);
+    const begun = { ...guide, at: { index, fromMs: 0, fromM: 0 } };
+    expect(plain(leftWords(begun, 0, 0, "imperial"))).toBe(left);
+  });
+
+  it("never shows nothing left while some is, and nothing more than is left", () => {
+    const easy = guideOf({ kind: "easy", m: 5000, reps: null }, "t");
+    expect(plain(leftWords(easy, 0, 4_960, "metric"))).toBe("0.1 km left");
+    expect(plain(leftWords(easy, 0, 4_399, "metric"))).toBe("0.6 km left");
+    expect(plain(leftWords(easy, 0, 5_000, "metric"))).toBe("0.0 km left");
+  });
+
   it("in miles a whole mile is said by the mile voice, and 6 km is not a whole mile", () => {
     expect(beginLine(guideOf({ kind: "easy", m: 8047, reps: null }, "t"), 1, "imperial")).toBe(DONE_LINE);
     expect(beginLine(guideOf({ kind: "easy", m: 6000, reps: null }, "t"), 1, "imperial")).toBe(`That's 3.7 miles. ${DONE_LINE}`);
@@ -453,6 +484,19 @@ describe("a runner's planned run", () => {
     ]);
     expect(heard.at(-1)?.[2]).toBe(DONE_LINE);
     expect(heard.at(-1)?.[1]).toBeGreaterThanOrEqual(8000);
+  });
+
+  it("after a timed recovery jog, the next repeat counts from where the clock ended the jog, not from a late look (the hunt's D5)", () => {
+    // Warm-up done at 1,500 m and 500 s; the jog of 90 s ends at 590 s, 1,700 m in. The points of the
+    // next 8 s come in one late batch: 1,730 m by then.
+    const g = guideOf({ kind: "fast", m: 9000, reps: { count: 3, m: 800, restS: 90 } }, "t");
+    const onJog = { ...g, at: { index: 2, fromMs: 500_000, fromM: RUN_WARM_M + 800 } };
+    const metresAt = (ms: number): number => (ms <= 590_000 ? 2_300 + (ms - 500_000) / 450 : 2_500 + (ms - 590_000) / 1000 * 3.75);
+    const late = guideAdvance(onJog, 598_000, () => 2_530, () => 598_000, metresAt).guide;
+    expect(late.at).toEqual({ index: 3, fromMs: 590_000, fromM: 2_500 });
+    expect(leftOf(late, 598_000, 2_530)).toEqual({ kind: "m", amount: 770 });
+    // With no way to know, it counts from where the person is, as before.
+    expect(guideAdvance(onJog, 598_000, () => 2_530).guide.at.fromM).toBe(2_530);
   });
 
   it("Skip step on a recovery jog: the next repeat is said once, at the press, and the jog's line never comes late", () => {
@@ -498,8 +542,9 @@ describe("the screen's words", () => {
     expect(nameAt(later)).toBe("Walk");
     const t = guideOf({ kind: "steady", m: 8000, reps: { count: 3, m: 1000, restS: 60 } }, "t");
     expect(t.steps.map(stepName)).toEqual(["Warm-up", "Tempo 1 of 3", "Recovery jog", "Tempo 2 of 3", "Recovery jog", "Tempo 3 of 3", "Cool-down"]);
-    expect(plain(leftWords(t, 0, 940, "metric"))).toBe("0.6 km left");
-    expect(plain(nextWords(t, "metric"))).toBe("Next: Tempo 1 of 3 1.0 km");
+    // 560 m left of the warm-up: tenths rounded down, as the plan rounds a distance.
+    expect(plain(leftWords(t, 0, 940, "metric"))).toBe("0.5 km left");
+    expect(plain(nextWords(t, "metric"))).toBe("Next: Tempo 1 of 3 1 km");
     // A jog of 3:20, as the voice says it, not rounded down to 3 min.
     const jog = guideOf({ kind: "fast", m: 9000, reps: { count: 3, m: 800, restS: 200 } }, "t");
     expect(plain(nextWords(guideAdvance(jog, 1, () => RUN_WARM_M).guide, "metric"))).toBe("Next: Recovery jog 3:20");

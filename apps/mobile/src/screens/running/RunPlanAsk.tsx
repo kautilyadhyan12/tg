@@ -64,7 +64,9 @@ export function RunPlanAsk({ open, units, before, onClose, onSaved }: { open: bo
   const [saving, setSaving] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
 
-  // Opened: the answers given before are picked, and it starts at the first question.
+  // Opened: the answers given before are picked, and it starts at the first question. Only when it
+  // opens: the plan read again while it is open (back to the app, a run sent) leaves the answers being
+  // given alone, as Build my own week does.
   useEffect(() => {
     if (!open) return;
     const a = before !== null && before.doesRun !== "no" ? before : null;
@@ -78,7 +80,8 @@ export function RunPlanAsk({ open, units, before, onClose, onSaved }: { open: bo
     setRace(a?.race ?? null);
     setRaceDistance(a?.race?.distanceM ?? null);
     setProblem(null);
-  }, [open, before]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
 
   const runner = jog === "30plus";
   const send = async (answers: RunPlanAnswers) => {
@@ -175,7 +178,11 @@ export function RunPlanAsk({ open, units, before, onClose, onSaved }: { open: bo
                   accessibilityRole="checkbox"
                   accessibilityState={{ checked: on }}
                   accessibilityLabel={weekdayShort(d)}
-                  onPress={() => { setDays((was) => (was.includes(d) ? was.filter((x) => x !== d) : [...was, d])); }}
+                  onPress={() => {
+                    setDays((was) => (was.includes(d) ? was.filter((x) => x !== d) : [...was, d]));
+                    // What was said about the days before is about the days as they were.
+                    setProblem(null);
+                  }}
                   style={[styles.day, on ? styles.dayOn : null]}
                 >
                   <Txt kind="small" colour={on ? "onOrange" : "textSoft"} style={styles.dayWord} numberOfLines={1}>

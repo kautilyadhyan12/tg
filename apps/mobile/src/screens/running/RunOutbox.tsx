@@ -40,7 +40,7 @@ export function RunOutboxProvider({ store, children }: { store: (userId: string)
   return <RunOutboxContext.Provider value={outbox}>{children}</RunOutboxContext.Provider>;
 }
 
-const EMPTY: RunOutboxView = { waiting: [], saved: [], refused: [], sent: 0, unsaved: false };
+const EMPTY: RunOutboxView = { waiting: [], failing: [], saved: [], refused: [], sent: 0, unsaved: false };
 const noListen = () => () => undefined;
 
 /** The outbox and what it holds now; null until the person's file is open. */

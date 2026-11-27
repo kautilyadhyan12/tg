@@ -195,7 +195,7 @@ export function saleProblem({ product, quantity, who, person, currency, discount
   if (product === null || product === undefined) return 'Pick a product.';
   // Taxes past 30% together (18b-v-a): the server sells it at no total, so say why and where.
   if (tax !== null && productRates(tax, product).reduce((n, r) => n + r.pcm, 0) > SALES_TAX_PCM_MAX) {
-    return `The taxes on ${product.name} come to more than 30% together. Press Change on ${product.name} under Products and untick one.`;
+    return `The taxes on ${product.name} come to more than 30% together. Press Edit on ${product.name} under Products and untick one.`;
   }
   // Priced before the gym changed its country: the server will not sell it either.
   if (typeof currency === 'string' && product.currency !== currency) return productCurrencyLine(product, currency);
@@ -618,7 +618,7 @@ export function restoredWords(product, page) {
   const taken = productRates(page.tax, product).filter((r) => now !== undefined && !(now.taxRateIds ?? []).includes(r.id));
   if (taken.length === 0) return `${product.name} is for sale again.`;
   const were = taken.length === 1 ? 'was' : 'were';
-  return `${product.name} is for sale again. ${ratesLabel(taken)} ${were} taken off it, as its taxes came to more than 30% together. Press Change on ${product.name} to check its tax.`;
+  return `${product.name} is for sale again. ${ratesLabel(taken)} ${were} taken off it, as its taxes came to more than 30% together. Press Edit on ${product.name} to check its tax.`;
 }
 
 /** One product in the Products list. */
