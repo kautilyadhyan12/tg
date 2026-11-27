@@ -69,10 +69,10 @@ private const val QUIET_MS = 5_000L
 /** A gravity reading older than this says nothing about now. */
 private const val GRAVITY_STALE_NS = 1_000_000_000L
 private const val TAG = "PoseCamera"
-/** How many turned pictures go round (`picture`). */
-private const val TURNED = 3
-/** A picture the model has not answered in this long is given up on, and the next is handed over. */
-private const val BUSY_MOST_MS = 1_000L
+/** How many turned pictures go round (`picture`): the model on the graphics chip reads the next while it finishes the
+ *  last, and a picture is copied for the screen once answered, at up to 20 a second and with the model's answer taking up
+ *  to about 150 ms, so six are never drawn over while either still reads one. */
+private const val TURNED = 6
 
 /**
  * The selfie camera's pictures across the whole view, mirrored as every selfie camera shows a person, each the very
@@ -158,8 +158,6 @@ class PoseCameraView(context: Context, appContext: AppContext) : ExpoView(contex
     private var rawPicture: Bitmap? = null
     /** The turned pictures, used in turn (`picture`). */
     private val turned = ArrayDeque<Bitmap>(TURNED)
-    /** When the picture the model is reading was handed over; 0 when it is reading none. */
-    @Volatile private var busySince = 0L
     /** The two pictures the screen shows in turn, each a copy of one the model has answered. */
     private val showing = arrayOfNulls<Bitmap>(2)
     private var nextShown = 0
@@ -276,19 +274,17 @@ class PoseCameraView(context: Context, appContext: AppContext) : ExpoView(contex
       }, ContextCompat.getMainExecutor(context))
     }
 
-    /** One camera picture, on the worker: turned upright, never mirrored, and handed to the model, but only once it has
-     *  answered the one before: a picture it would drop is never turned (work, and heat, for nothing). The pictures'
-     *  memory is made once and used again for every picture: two new pictures each time (CameraX's own and the turned one)
-     *  were about 40 MB of throwaway memory a second, and on Kd's phone Android's clean-up of it took nearly half a core
-     *  away from the model (53a, the 20-minute run). The turned pictures go round three, so the one the model reads and the
-     *  one the screen copies from are never drawn over. */
+    /** One camera picture, on the worker: turned upright, never mirrored, and handed to the model, which drops it if it
+     *  cannot take it now (its live mode). Not held back until the picture before is answered: on the graphics chip the
+     *  model reads the next while it finishes the last, and held back it answered 11 times a second where it can 20 (53a's
+     *  12-minute run). The pictures' memory is made once and used again for every picture: two new pictures each time
+     *  (CameraX's own and the turned one) were about 40 MB of throwaway memory a second, and on Kd's phone Android's
+     *  clean-up of it took nearly half a core away from the model (53a, the 20-minute run). */
     private fun picture(proxy: ImageProxy) {
       lastPicture = SystemClock.elapsedRealtime()
       try {
         val model = landmarker ?: return
         if (closed || failed) return
-        val since = busySince
-        if (since != 0L && SystemClock.uptimeMillis() - since < BUSY_MOST_MS) return
         val raw = rawOf(proxy)
         val turn = proxy.imageInfo.rotationDegrees
         val sideways = turn % 180 != 0
@@ -307,7 +303,6 @@ class PoseCameraView(context: Context, appContext: AppContext) : ExpoView(contex
           lastTimestamp = ts
           ts
         }
-        busySince = SystemClock.uptimeMillis()
         model.detectAsync(BitmapImageBuilder(upright).build(), timestamp)
       } catch (e: Throwable) {
         fail("model", e)
@@ -318,7 +313,6 @@ class PoseCameraView(context: Context, appContext: AppContext) : ExpoView(contex
 
     /** One answer, on the model's own thread: to the screen with the picture it read, and gone. */
     private fun answer(result: PoseLandmarkerResult, image: MPImage) {
-      busySince = 0L
       if (closed) return
       val picture = showingCopy(image)
       val points = result.landmarks().firstOrNull()?.takeIf { it.size == POINTS }

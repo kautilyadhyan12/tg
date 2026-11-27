@@ -88,8 +88,10 @@ describe("the camera as the phone test picked it (51b-ii)", () => {
     expect(view).toContain("?.filter { it.upper in FRAMES_LEAST..FRAMES_MOST }");
     expect(view).toContain("compareByDescending<Range<Int>> { it.lower >= FRAMES_LEAST }");
     expect(view).toContain("Camera2Interop.Extender(builder).setCaptureRequestOption(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, it)");
-    // A picture is handed over only once the one before is answered: none is turned for nothing.
-    expect(view).toContain("if (since != 0L && SystemClock.uptimeMillis() - since < BUSY_MOST_MS) return");
+    // Every picture is handed over, as the model's live mode takes them: held back until the one before was answered, the
+    // graphics chip answered 11 a second where it can 20. Six turned pictures, so none is drawn over while still read.
+    expect(view).not.toMatch(/busySince/);
+    expect(view).toContain("private const val TURNED = 6");
   });
 
   it("the full model, asked for one person, at the sureness every kept file was measured with, on the main chip's 4 cores", () => {
