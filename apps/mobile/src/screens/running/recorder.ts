@@ -317,6 +317,23 @@ function reachedAt(run: LiveRun, m: number, nowMs: number): number {
   return Math.min(nowMs, clockAt(run, points[low - 1]?.[0] ?? 0));
 }
 
+/** The metres the run had at moving ms `ms`: those to its last point on the clock by then. A step by
+ *  distance after one the clock ended counts from there, not from a late batch of points. */
+function metresAt(run: LiveRun, ms: number): number {
+  const points = run.points;
+  let low = 0;
+  let high = points.length;
+  // The number of points on the clock by `ms`: the clock never goes back along the points.
+  while (low < high) {
+    const mid = Math.floor((low + high) / 2);
+    if (clockAt(run, points[mid]?.[0] ?? 0) <= ms) low = mid + 1;
+    else high = mid;
+  }
+  if (low === 0) return 0;
+  const at = points[low - 1]?.[0] ?? 0;
+  return sumsAt({ ...run, points: points.slice(0, low) }, at, 0).distanceM;
+}
+
 const runMetres = (run: LiveRun): number => {
   const at = run.points[run.points.length - 1]?.[0] ?? 0;
   return sumsAt(run, at, 0).distanceM;
@@ -334,14 +351,16 @@ function scheduleGuide(run: LiveRun | null, now: number): void {
 /** The guide moved on to `now`: the line to say when a step by distance ended (one the clock ended
  *  was said by the phone's voice), and the lines ahead handed over again then. `run` is changed in
  *  place; `moved` when the step changed, to be written at once. */
-function guideNow(run: LiveRun, now: number, force: boolean): { lines: string[]; moved: boolean } {
+function guideNow(run: LiveRun, now: number, force: boolean, paused = false): { lines: string[]; moved: boolean } {
   const guide = run.guide;
-  if (guide === null || run.phase !== "running" || guideDone(guide)) return { lines: [], moved: false };
+  // `paused`: Skip step while paused first brings the guide to where the clock stopped.
+  const looking = run.phase === "running" || (paused && run.phase === "paused");
+  if (guide === null || !looking || guideDone(guide)) return { lines: [], moved: false };
   const ms = movingMsOf(run, now);
   if (!force && ms < guideLookAt) return { lines: [], moved: false };
   let metres: number | null = null;
   const dist = () => (metres ??= runMetres(run));
-  const { guide: next, begun } = guideAdvance(guide, ms, dist, (m) => reachedAt(run, m, ms));
+  const { guide: next, begun } = guideAdvance(guide, ms, dist, (m) => reachedAt(run, m, ms), (at) => metresAt(run, at));
   run.guide = next;
   guideLookAt = guideNextLook(next, ms, dist);
   const last = begun[begun.length - 1];
@@ -931,7 +950,8 @@ export async function skipStep(now: number = Date.now()): Promise<void> {
   if (run === null || run.phase === "finished" || run.guide === null) return;
   // First to now, so the step skipped is the one on the screen; a line a distance just began is
   // not said, as the next one is said in its place.
-  const caught = run.phase === "running" ? guideNow(run, now, true) : { lines: [], moved: false };
+  // Paused too: a step the clock ended before the pause is past, and the step skipped is the one after it.
+  const caught = guideNow(run, now, true, true);
   const guide = run.guide;
   if (guideDone(guide)) {
     // The last step had just ended: its line is the one said.

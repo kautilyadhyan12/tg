@@ -47,7 +47,7 @@ describe("a rep's score: of the mistakes the camera could see, the share that we
 });
 
 /** A frame as the matcher returns it, at `t`, with a rep judged in it or none. */
-const frame = (t: number, seen = true, judged: RepResult | null = null): MatchFrame => ({ t, state: "ready", count: 0, progress: null, rep: judged, seen });
+const frame = (t: number, seen = true, judged: RepResult | null = null): MatchFrame => ({ t, state: "ready", count: 0, progress: null, rep: judged, seen, turned: null });
 
 describe("the set's record", () => {
   const record = (): SetRecord => new SetRecord(EXERCISE, SQUAT, 2);

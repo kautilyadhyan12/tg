@@ -26,10 +26,18 @@ interface Listed {
   next: string | null;
   months: Map<string, RunMonthTotal>;
   total: { runs: number; distanceM: number } | null;
+  /** The number of the first read these runs came from: "More runs" goes on from that read only. */
+  read: number;
+  /** The day these runs are on and before; null for the newest. */
+  upTo: string | null;
 }
-const EMPTY: Listed = { items: [], next: null, months: new Map(), total: null };
+const EMPTY: Listed = { items: [], next: null, months: new Map(), total: null, read: 0, upTo: null };
 
-type Status = "loading" | "ok" | "failed";
+/** The most runs one read gives (the server's own limit). */
+const MOST_READ = 100;
+
+/** `stale`: a list is shown, and reading it again failed. */
+type Status = "loading" | "ok" | "stale" | "failed";
 
 const runsWords = (runs: number, metres: number, units: Units): string =>
   `${String(runs)} ${runs === 1 ? "run" : "runs"} · ${distance(metres, units)} ${unitWord(units)}`;
@@ -59,18 +67,30 @@ export function RunsPage({ open, units, onClose, onStart }: { open: boolean; uni
     return number === reading.current && now.kind === "in" && now.user.id === me;
   }, [session, me]);
 
+  // How many runs the list holds, read through a ref: read again, it reads as many as were shown, so it
+  // stays where the person was. A day picked, or Show newest, reads its first page only.
+  const shownCount = useRef(0);
+  shownCount.current = listed.upTo === upTo ? listed.items.length : 0;
+  const statusNow = useRef(status);
+  statusNow.current = status;
+
   const first = useCallback(async () => {
     reading.current += 1;
     const mine = reading.current;
-    const answer = await session.signedIn({ method: "GET", path: `${RUNS_PATH}?limit=${String(PAGE)}${upTo === null ? "" : `&upTo=${upTo}`}` }, runPageSchema);
+    // A "More runs" still on its way belongs to the list as it was.
+    setMore("idle");
+    const limit = Math.min(MOST_READ, Math.max(PAGE, shownCount.current));
+    const answer = await session.signedIn({ method: "GET", path: `${RUNS_PATH}?limit=${String(limit)}${upTo === null ? "" : `&upTo=${upTo}`}` }, runPageSchema);
     if (!stillMine(mine)) return;
     if (answer.kind !== "ok") {
-      setStatus((was) => (was === "ok" ? "ok" : "failed"));
+      // A list already shown stays, says it could not be read again, and More runs still goes on from it.
+      const shown = statusNow.current === "ok" || statusNow.current === "stale";
+      setStatus(shown ? "stale" : "failed");
+      if (shown) setListed((was) => ({ ...was, read: mine }));
       return;
     }
-    setListed({ items: answer.data.items, next: answer.data.nextCursor, months: new Map(answer.data.months.map((m) => [m.month, m])), total: answer.data.total });
+    setListed({ items: answer.data.items, next: answer.data.nextCursor, months: new Map(answer.data.months.map((m) => [m.month, m])), total: answer.data.total, read: mine, upTo });
     setStatus("ok");
-    setMore("idle");
   }, [session, upTo, stillMine]);
 
   // Read when the page opens, when a day is picked, when a run is sent or changed.
@@ -91,9 +111,10 @@ export function RunsPage({ open, units, onClose, onStart }: { open: boolean; uni
 
   const loadMore = useCallback(async () => {
     const cursor = listed.next;
-    if (cursor === null || more === "loading") return;
+    // Only from the newest list: a day picked, or the list read again, since it was shown is not gone on from.
+    const mine = listed.read;
+    if (cursor === null || more === "loading" || mine !== reading.current) return;
     setMore("loading");
-    const mine = reading.current;
     const answer = await session.signedIn({ method: "GET", path: `${RUNS_PATH}?limit=${String(PAGE)}&cursor=${encodeURIComponent(cursor)}` }, runPageSchema);
     if (!stillMine(mine)) return;
     if (answer.kind !== "ok") {
@@ -104,10 +125,10 @@ export function RunsPage({ open, units, onClose, onStart }: { open: boolean; uni
       const months = new Map(was.months);
       for (const m of answer.data.months) months.set(m.month, m);
       const seen = new Set(was.items.map((r) => r.id));
-      return { items: [...was.items, ...answer.data.items.filter((r) => !seen.has(r.id))], next: answer.data.nextCursor, months, total: was.total };
+      return { items: [...was.items, ...answer.data.items.filter((r) => !seen.has(r.id))], next: answer.data.nextCursor, months, total: was.total, read: was.read, upTo: was.upTo };
     });
     setMore("idle");
-  }, [listed.next, more, session, stillMine]);
+  }, [listed.next, listed.read, more, session, stillMine]);
 
   // The runs under their months, in the list's order.
   const groups: { month: string; runs: RunSummary[] }[] = [];
@@ -156,7 +177,15 @@ export function RunsPage({ open, units, onClose, onStart }: { open: boolean; uni
           <Txt kind="small" style={styles.grow}>
             {`Runs on ${dayWords(upTo)} and before`}
           </Txt>
-          <Button label="Show newest" kind="link" onPress={() => { setUpTo(null); }} />
+          <Button
+            label="Show newest"
+            kind="link"
+            onPress={() => {
+              setSaid(null);
+              setStatus("loading");
+              setUpTo(null);
+            }}
+          />
         </View>
       )}
       {view.waiting.map((r) => (
@@ -167,12 +196,20 @@ export function RunsPage({ open, units, onClose, onStart }: { open: boolean; uni
           <View style={styles.grow}>
             <Txt kind="strong">{r.name}</Txt>
             <Txt kind="small" colour="textSoft">
-              Waiting to send. It goes when you're online.
+              {view.failing.includes(r.runId) ? "Not sent yet. Trying again soon." : "Waiting to send. It goes when you're online."}
             </Txt>
           </View>
         </View>
       ))}
       <RefusedRuns />
+      {status === "stale" ? (
+        <View style={styles.row}>
+          <Txt kind="small" style={styles.grow}>
+            Your runs couldn't refresh.
+          </Txt>
+          <Button label="Try again" kind="link" say="Refresh your runs" onPress={() => void first()} />
+        </View>
+      ) : null}
       {status === "loading" ? (
         <Txt kind="small">Loading your runs…</Txt>
       ) : status === "failed" ? (
@@ -220,7 +257,7 @@ export function RunsPage({ open, units, onClose, onStart }: { open: boolean; uni
           </Txt>
           <Button label="Try again" kind="link" say="Try more runs again" onPress={() => void loadMore()} />
         </View>
-      ) : listed.next !== null && status === "ok" ? (
+      ) : listed.next !== null && (status === "ok" || status === "stale") ? (
         <Button label={more === "loading" ? "Loading…" : "More runs"} kind="link" style={styles.centred} onPress={() => void loadMore()} />
       ) : null}
       <RunCalendar

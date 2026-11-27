@@ -3,6 +3,7 @@
 // both say the same of them.
 import { useState } from "react";
 import { StyleSheet, View } from "react-native";
+import { saveRunRequestSchema } from "@app/shared";
 import { Button } from "../../look/Button";
 import { Sheet } from "../../look/Sheet";
 import { Txt } from "../../look/Txt";
@@ -19,7 +20,8 @@ export function RefusedRuns() {
             {`${r.name}: ${r.message}`}
           </Txt>
           <View style={styles.choices}>
-            {r.run === undefined ? null : (
+            {/* Try again only for a run the server could take: one the app cannot read again is for Remove. */}
+            {!saveRunRequestSchema.safeParse(r.run).success ? null : (
               <Button
                 kind="link"
                 label="Try again"

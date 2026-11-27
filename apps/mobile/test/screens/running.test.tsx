@@ -96,7 +96,15 @@ beforeEach(async () => {
 function runServer(user = RAVI, map: MapSource = OPENFREEMAP) {
   const saved: SaveRunRequest[] = [];
   const posts: { body: unknown; key: string | undefined }[] = [];
-  const state: { online: boolean; mapHeld: Promise<void> | null; climb: RunClimb; records: RunRecords | null } = { online: true, mapHeld: null, climb: { state: "done", m: 28, hills: [] }, records: null };
+  // `postHeld`: a save's answer waits for it; `postDown`: the server answers every save with a fault of its own.
+  const state: { online: boolean; mapHeld: Promise<void> | null; postHeld: Promise<void> | null; postDown: boolean; climb: RunClimb; records: RunRecords | null } = {
+    online: true,
+    mapHeld: null,
+    postHeld: null,
+    postDown: false,
+    climb: { state: "done", m: 28, hills: [] },
+    records: null,
+  };
   const climbAsks: unknown[] = [];
   const server = fakeServer({
     // The run's elevation gain, as the server's height map works it out (37b-ii).
@@ -142,6 +150,8 @@ function runServer(user = RAVI, map: MapSource = OPENFREEMAP) {
     if (path === PATH && init.method === "POST") {
       if (!state.online) throw new Error("no signal");
       posts.push({ body: init.body === undefined ? undefined : JSON.parse(init.body), key: init.headers?.["idempotency-key"] });
+      if (state.postHeld !== null) await state.postHeld;
+      if (state.postDown) return { ok: false, status: 503, json: () => Promise.resolve({ error: "unavailable", message: "Try again later." }) };
     }
     return server.ask(url, init);
   };
@@ -153,7 +163,11 @@ function runServer(user = RAVI, map: MapSource = OPENFREEMAP) {
       return Promise.resolve();
     },
   });
-  return { ask, saved, posts, state, runStore, requests, climbAsks, file: () => file };
+  // What the phone's file of waiting runs holds before the app opens.
+  const setFile = (text: string) => {
+    file = text;
+  };
+  return { ask, saved, posts, state, runStore, requests, climbAsks, file: () => file, setFile };
 }
 
 async function openRunning(s: ReturnType<typeof runServer>, user = RAVI) {
@@ -271,6 +285,96 @@ describe("a run, Start to Save", () => {
     await act(() => new Promise((resolve) => setTimeout(resolve, 50)));
     expect(s.posts).toHaveLength(1);
     expect(readRunFile(s.file() ?? "").waiting).toHaveLength(0);
+  });
+
+  it("on a slow signal, Save says at once the run is on the phone, then that it is saved when the server has it (37m; the hunt's B8)", async () => {
+    const s = runServer();
+    await openRunning(s);
+    await startRunning();
+    await feed(0, 61, 3);
+    await fireEvent.press(await screen.findByRole("button", { name: "Pause" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Finish" }));
+    const name = runName(new Date(runNow()?.startedAt ?? 0));
+    const answer: { give: () => void } = { give: () => undefined };
+    s.state.postHeld = new Promise<void>((resolve) => {
+      answer.give = resolve;
+    });
+    await fireEvent.press(await screen.findByRole("button", { name: "Save run" }));
+    // The server has not answered: the page says where the run is now, not nothing.
+    expect(await screen.findByText(`${name} is saved on this phone. It will be sent when you're online.`)).toBeTruthy();
+    expect(s.saved).toHaveLength(0);
+    await act(async () => {
+      answer.give();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(await screen.findByText(`${name} is saved.`)).toBeTruthy();
+    expect(screen.queryByText(/is saved on this phone/)).toBeNull();
+  });
+
+  it("a run the server keeps failing says so under Your runs, as not sent yet (37m; the hunt's B1)", async () => {
+    const s = runServer();
+    await openRunning(s);
+    // A first run saved, so the Running page has its box of runs.
+    await startRunning();
+    await feed(0, 61, 3);
+    await fireEvent.press(await screen.findByRole("button", { name: "Pause" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Finish" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Save run", }));
+    await waitFor(() => {
+      expect(s.saved).toHaveLength(1);
+    });
+    // The second, which the server fails.
+    s.state.postDown = true;
+    await startRunning();
+    await feed(0, 61, 3);
+    await fireEvent.press(await screen.findByRole("button", { name: "Pause" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Finish" }));
+    const second = runName(new Date(runNow()?.startedAt ?? 0));
+    await fireEvent.press(await screen.findByRole("button", { name: "Save run" }));
+    // The Running page gives it the same words as Your runs, never "when you're online" (round one, L3).
+    expect(await screen.findByText(`${second} is saved on this phone. Not sent yet. Trying again soon.`, {}, { timeout: 4000 })).toBeTruthy();
+    await fireEvent.press(await screen.findByRole("button", { name: "See all your runs" }, { timeout: 4000 }));
+    expect(await screen.findByText("Not sent yet. Trying again soon.", {}, { timeout: 4000 })).toBeTruthy();
+    expect(s.saved).toHaveLength(1);
+  });
+
+  it("a run that couldn't be saved has Try again only when the server could take it; one the app cannot read has Remove (round one, L1)", async () => {
+    const s = runServer();
+    const whole: SaveRunRequest = { runId: "7a1d2c3b-4a5e-4f60-8a7b-9c0d1e2f3a4b", startedAt: "2026-11-20T06:00:00.000Z", elapsedMs: 60_000, name: "Canal loop", effort: null, note: null, points: [[0, 26.1, 91.7, 5], [1000, 26.10003, 91.7, 5]], pauses: [] };
+    const unread = { runId: "8a1d2c3b-4a5e-4f60-8a7b-9c0d1e2f3a4b", name: "Hill run", points: "cut short" };
+    s.setFile(JSON.stringify({ version: 1, waiting: [], refused: [
+      { runId: whole.runId, name: whole.name, message: "This run couldn't be saved.", run: whole },
+      { runId: unread.runId, name: unread.name, message: "This run couldn't be saved.", run: unread },
+    ] }));
+    await openRunning(s);
+    expect(await screen.findByText("Canal loop: This run couldn't be saved.")).toBeTruthy();
+    expect(screen.getByText("Hill run: This run couldn't be saved.")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Send Canal loop again" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Send Hill run again" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Remove Hill run" })).toBeTruthy();
+  });
+
+  it("after Finish, Save run and Discard run are always on screen, under the run's long page, never at its end (Kd, 2026-11-26)", async () => {
+    const s = runServer();
+    await openRunning(s);
+    await startRunning();
+    await feed(0, 61, 3);
+    await fireEvent.press(await screen.findByRole("button", { name: "Pause" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Finish" }));
+    const save = await screen.findByRole("button", { name: "Save run" });
+    const discard = screen.getByRole("button", { name: "Discard run" });
+    // Neither is inside the page that scrolls, as the run's name at its top is: no scrolling finds them.
+    const scrolls = (from: unknown): boolean => {
+      let at: unknown = from;
+      while (typeof at === "object" && at !== null) {
+        if ("type" in at && at.type === "RCTScrollView") return true;
+        at = "parent" in at ? at.parent : null;
+      }
+      return false;
+    };
+    expect(scrolls(screen.getByRole("button", { name: /^Rename / }))).toBe(true);
+    expect(scrolls(save)).toBe(false);
+    expect(scrolls(discard)).toBe(false);
   });
 
   it("Discard asks first, and then nothing is sent or kept", async () => {

@@ -11,6 +11,7 @@
 // (`schedule`), so they are said on the second with the screen locked, or with no GPS (a
 // treadmill); the lines after a step ended by distance are said as the points show it.
 import { RUN_WARM_M, type GuidePlace, type GuideStep, type KeptRunGuide, type PlanSession, type Units } from "@app/shared";
+import { planDistance, repDistance } from "./runPlanWords";
 import { spokenTime } from "./runVoice";
 import { METRES_PER_MILE, clock } from "./runWords";
 
@@ -55,12 +56,15 @@ function stepEnd(step: GuideStep, at: GuidePlace): { ms: number } | { m: number 
 /** The steps begun since the last look, oldest first, each with whether the clock began it (its line
  *  was handed to the phone's voice ahead) or the distance did (its line is said now). `metres` is
  *  worked out only when a step by distance needs it; `reachedAt(m)`, the moving ms when the run first
- *  had `m` metres, so a step after it is timed from there and not from a late batch of points. */
+ *  had `m` metres, so a step after it is timed from there and not from a late batch of points;
+ *  `metresAt(ms)`, the metres the run had at that moving ms, so a step by distance after one the clock
+ *  ended counts from where the clock ended it, not from where the person was at the next look. */
 export function guideAdvance(
   guide: KeptRunGuide,
   movingMs: number,
   metres: () => number,
   reachedAt: (m: number) => number = () => movingMs,
+  metresAt: (ms: number) => number = () => metres(),
 ): { guide: KeptRunGuide; begun: { index: number; byClock: boolean }[] } {
   let { index, fromMs, fromM } = guide.at;
   let known: number | null = null;
@@ -73,9 +77,9 @@ export function guideAdvance(
     if ("ms" in end) {
       if (movingMs < end.ms) break;
       fromMs = end.ms;
-      // The next step by distance counts from where the person is.
+      // The next step by distance counts from where the person was when the clock ended this one.
       const next = guide.steps[index + 1];
-      if (next !== undefined && !("s" in next.until)) fromM = Math.max(fromM, run());
+      if (next !== undefined && !("s" in next.until)) fromM = Math.max(fromM, Math.min(run(), metresAt(end.ms)));
       index += 1;
       begun.push({ index, byClock: true });
     } else {
@@ -162,7 +166,18 @@ export function spokenLength(seconds: number): string {
   return seconds % 60 === 30 ? `${String(whole)} and a half minutes` : counted(whole, "minute", "minutes");
 }
 
-/** "1.5 kilometres", "800 metres", "0.9 miles", "1 mile": a repeat as a track measures it. */
+/** A tempo or interval repeat is measured as a track measures it, as the plan names it ("1 km",
+ *  "800 m"); any other step by distance in the person's own units. */
+const trackMeasured = (step: GuideStep): boolean => step.kind === "tempo" || step.kind === "fast";
+
+/** The units a step's distance is said and shown in: a repeat's are the track's, a mile's for 1600 m. */
+function stepUnits(step: GuideStep, units: Units): Units {
+  if (!trackMeasured(step)) return units;
+  return "m" in step.until && step.until.m === 1600 ? units : "metric";
+}
+
+/** "1.5 kilometres", "800 metres", "0.9 miles", "1 mile", as the plan and the step's card show them:
+ *  tenths, never rounded up. */
 export function spokenDistance(metres: number, units: Units): string {
   if (metres < 1000) return `${String(Math.round(metres))} metres`;
   if (units === "imperial" && metres === 1600) return "1 mile";
@@ -193,7 +208,7 @@ export function beginLine(guide: KeptRunGuide, index: number, units: Units): str
     return only !== undefined && "m" in only && !wholeUnit(only.m, units) ? `That's ${spokenDistance(only.m, units)}. ${DONE_LINE}` : DONE_LINE;
   }
   const u = step.until;
-  const length = "s" in u ? spokenLength(u.s) : "m" in u ? spokenDistance(u.m, units) : "";
+  const length = "s" in u ? spokenLength(u.s) : "m" in u ? spokenDistance(u.m, stepUnits(step, units)) : "";
   const rep = step.rep !== null && step.rep[1] > 1 ? `Repeat ${String(step.rep[0])} of ${String(step.rep[1])}. ` : "";
   switch (step.kind) {
     case "warm_walk":
@@ -227,7 +242,7 @@ export function nowLine(guide: KeptRunGuide, movingMs: number, metres: number, u
   if (step === undefined) return DONE_LINE;
   const word = step.kind === "run" ? "Now run." : step.kind === "walk" || step.kind === "warm_walk" || step.kind === "cool_walk" ? "Now walk." : `${stepName(step)}.`;
   const left = leftOf(guide, movingMs, metres);
-  const said = left.kind === "s" ? spokenTime(Math.ceil(left.amount)) : spokenDistance(Math.max(0, left.amount), units);
+  const said = left.kind === "s" ? spokenTime(Math.ceil(left.amount)) : spokenDistance(Math.max(0, left.amount), stepUnits(step, units));
   return `${word} ${said} left.`;
 }
 
@@ -259,17 +274,23 @@ export function leftOf(guide: KeptRunGuide, movingMs: number, metres: number): {
   return "ms" in end ? { kind: "s", amount: Math.max(0, (end.ms - movingMs) / 1000) } : { kind: "m", amount: Math.max(0, end.m - metres) };
 }
 
-/** "0.6 km" or "0.4 mi" left: tenths, never rounded down to nothing while some is left. */
-function shortDistance(metres: number, units: Units): string {
-  const per = units === "imperial" ? METRES_PER_MILE : 1000;
-  const tenths = Math.ceil((metres / per) * 10) / 10;
+/** "0.6 km" or "0.4 mi" left: tenths rounded down as the plan rounds a distance, so a step begins at
+ *  the number the plan gave it, and never nothing while some is left. */
+function shortDistance(metres: number, units: Units, per = units === "imperial" ? METRES_PER_MILE : 1000): string {
+  // A hair under a tenth is that tenth: 0.6 km is never shown as 0.5 for the sum's own rounding.
+  const tenths = metres <= 0 ? 0 : Math.max(0.1, Math.floor((metres / per) * 10 + 1e-9) / 10);
   return `${tenths.toFixed(1)} ${units === "imperial" ? "mi" : "km"}`;
 }
 
 /** "0:42 left", "0.6 km left". */
 export function leftWords(guide: KeptRunGuide, movingMs: number, metres: number, units: Units): string {
   const left = leftOf(guide, movingMs, metres);
-  return `${left.kind === "s" ? clock(Math.ceil(left.amount)) : shortDistance(left.amount, units)} left`;
+  const step = guide.steps[guide.at.index];
+  if (left.kind === "s") return `${clock(Math.ceil(left.amount))} left`;
+  const shownIn = step === undefined ? units : stepUnits(step, units);
+  // A repeat of 1.6 km is a track's mile: it counts down from 1.0, as it is named.
+  const trackMile = step !== undefined && trackMeasured(step) && "m" in step.until && step.until.m === 1600 && shownIn === "imperial";
+  return `${trackMile ? shortDistance(left.amount, shownIn, 1600) : shortDistance(left.amount, shownIn)} left`;
 }
 
 /** "1½ min", "800 m", "1 km": a step's own length on the screen. */
@@ -282,7 +303,8 @@ function shortLength(step: GuideStep, units: Units): string {
     if (u.s % 30 !== 0) return clock(u.s);
     return `${whole === 0 ? "" : String(whole)}${u.s % 60 >= 30 ? "½" : ""} min`;
   }
-  if ("m" in u) return u.m < 1000 ? `${String(u.m)} m` : units === "imperial" && u.m === 1600 ? "1 mi" : shortDistance(u.m, units);
+  // The plan's own words for it: a repeat as a track measures it, any other distance as the plan rounds it.
+  if ("m" in u) return (trackMeasured(step) ? repDistance(u.m, units) : u.m < 1000 ? `${String(u.m)} m` : planDistance(u.m, units)).replace(" ", "\u00a0");
   return "";
 }
 
