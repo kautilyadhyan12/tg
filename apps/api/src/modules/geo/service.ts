@@ -465,6 +465,7 @@ export async function saveRun(
   const saved = await repo.insertRun(deps.sql, userId, {
     id: input.runId,
     startedAt,
+    timeZone: ctx.timezone,
     name: input.name,
     effort: input.effort,
     note,

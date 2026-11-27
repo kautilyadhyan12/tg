@@ -59,6 +59,9 @@ export const runs = pgTable(
     // 0235 (ROADMAP 37f-i): the average and highest heart rate from a strap or watch (`heartSums`).
     heartAvg: smallint("heart_avg"),
     heartMax: smallint("heart_max"),
+    // 0247 (ROADMAP 37o): the person's time zone when the run was saved, a name Postgres knows, so a past run's day
+    // never moves with a later zone; null where none was known (the zone they have now is used).
+    timeZone: text("time_zone"),
   },
   (t) => [
     index("runs_user_started_idx").on(t.userId, t.startedAt.desc()),
