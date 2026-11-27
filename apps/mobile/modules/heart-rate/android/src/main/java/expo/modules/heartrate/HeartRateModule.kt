@@ -10,6 +10,7 @@ import android.bluetooth.BluetoothGattCharacteristic
 import android.bluetooth.BluetoothGattDescriptor
 import android.bluetooth.BluetoothManager
 import android.bluetooth.BluetoothProfile
+import android.bluetooth.BluetoothStatusCodes
 import android.bluetooth.le.ScanCallback
 import android.bluetooth.le.ScanFilter
 import android.bluetooth.le.ScanResult
@@ -19,10 +20,13 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
+import android.location.LocationManager
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.os.ParcelUuid
+import android.os.SystemClock
+import android.provider.Settings
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
 import java.util.UUID
@@ -59,12 +63,15 @@ class HeartRateModule : Module() {
     /** Whether the app may look for and connect to monitors (Android's "Nearby devices"). */
     Function("allowed") { allowed(context) }
 
+    /** True on Android 11 and older with Location off, where no monitor can be heard (Android's own rule). */
+    Function("locationOff") { locationOff(context) }
+
     /** Look for heart rate monitors for SCAN_MS; each one heard is sent as "found". */
     Function("scan") { scan() }
     Function("stopScan") { stopScan() }
 
     /** Connect to this monitor, and keep connecting to it whenever it is in reach, until `unwatch`. */
-    Function("watch") { address: String -> context?.let { Strap.watch(it, address) } ?: false }
+    Function("watch") { address: String -> context?.let { Strap.watch(it, address, synchronized(heardDevices) { heardDevices[address] }) } ?: false }
     Function("unwatch") { Strap.unwatch() }
 
     /** Every reading since the last take, and forgets them. */
@@ -290,6 +297,17 @@ class HeartRateModule : Module() {
       return if (adapter.isEnabled) "on" else "off"
     }
 
+    /** Android 11 and older hear no Bluetooth device while Location is off; 12 and later need no Location. */
+    fun locationOff(ctx: Context?): Boolean {
+      if (ctx == null || Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) return false
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+        val manager = ctx.getSystemService(Context.LOCATION_SERVICE) as? LocationManager ?: return false
+        return !manager.isLocationEnabled
+      }
+      @Suppress("DEPRECATION")
+      return Settings.Secure.getInt(ctx.contentResolver, Settings.Secure.LOCATION_MODE, Settings.Secure.LOCATION_MODE_OFF) == Settings.Secure.LOCATION_MODE_OFF
+    }
+
     fun allowed(ctx: Context?): Boolean {
       if (ctx == null) return false
       val needs = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -307,46 +325,73 @@ class HeartRateModule : Module() {
  *  monitor's. A monitor whose address changes (a watch's or a phone's private address) is followed only once
  *  it is paired (37f-ii-b): it is then watched at its lasting address, which Android finds whatever address
  *  it shows. Unpaired, after a change the person finds it again in the box. A stranger's of the same name is
- *  never connected (round one of 37f-i, H1). */
+ *  never connected (round one of 37f-i, H1).
+ *
+ *  37n: a monitor not paired and not heard since the app started is listened for first, and connected as it
+ *  was heard: Android then knows what kind of address it has, which a strap with a random address needs (C4).
+ *  Bluetooth switched on again connects it afresh (C1). Connected and sending nothing for QUIET_MS, it is
+ *  let go and connected again, which asks it for its heart rate again (C3). */
 @SuppressLint("MissingPermission")
 object Strap {
   /** At most this many readings wait to be taken: hours of them at one a second, then the oldest go. */
   private const val MOST_WAITING = 20_000
+  /** Connected and asked, with no reading for this long: let go and connected again. */
+  private const val QUIET_MS = 15_000L
+  /** Listening for the monitor is started again this often: Android turns a long scan down to almost nothing
+   *  after 30 minutes. */
+  private const val FIND_AGAIN_MS = 5 * 60_000L
 
   private val main = Handler(Looper.getMainLooper())
   private var address: String? = null
   private var gatt: BluetoothGatt? = null
+  /** The monitor as Android last handed it over (paired, or heard): connecting again uses it. */
+  private var device: BluetoothDevice? = null
   private var connected = false
+  /** Whether the monitor has been asked for its heart rate on this connection. */
+  private var asked = false
+  /** When the last reading came, on the uptime clock. */
+  private var heardAt = 0L
+  /** Listening for the monitor before connecting (C4); null when not. */
+  private var finding: ScanCallback? = null
+  private var radioListener: BroadcastReceiver? = null
+  private var appContext: Context? = null
   /** Connections that read the monitor's services and found no heart rate: after NO_HEART_MOST the phone stops
    *  calling it until it is watched again (round one's re-check, L5). */
   private var noHeart = 0
   private const val NO_HEART_MOST = 3
   private val waiting = ArrayDeque<Map<String, Any>>()
 
+  private val quietCheck = Runnable { checkQuiet() }
+  private val findAgain = Runnable { restartFind() }
+
+  /** Watch this address; `heard` is the device Android handed over while the person looked, if it was. True
+   *  while it is watched (Bluetooth off included: it connects when Bluetooth is on); false when the app may
+   *  not (Nearby devices refused), so the app asks again later. */
   @Synchronized
-  fun watch(ctx: Context, to: String): Boolean {
+  fun watch(ctx: Context, to: String, heard: BluetoothDevice?): Boolean {
     if (!BluetoothAdapter.checkBluetoothAddress(to)) return false
-    if (address == to && gatt != null) return true
+    if (address == to && (gatt != null || finding != null || HeartRateModule.radio(ctx) != "on")) return true
     unwatch()
     if (!HeartRateModule.allowed(ctx)) return false
-    val device = deviceAt(ctx, to) ?: return false
+    val app = ctx.applicationContext
+    appContext = app
+    listenForRadio(app)
     address = to
     noHeart = 0
-    return connect(ctx.applicationContext, device, again = false)
+    device = heard?.takeIf { it.address.equals(to, ignoreCase = true) }
+    start(app)
+    return true
   }
 
   @Synchronized
   fun unwatch() {
     address = null
+    device = null
     connected = false
-    val was = gatt ?: return
-    gatt = null
-    try {
-      was.disconnect()
-      was.close()
-    } catch (e: SecurityException) {
-      // Permission taken away: Android has let it go itself.
-    }
+    asked = false
+    main.removeCallbacks(quietCheck)
+    stopFind()
+    letGo()
   }
 
   @Synchronized
@@ -359,25 +404,171 @@ object Strap {
   @Synchronized
   fun status(): Map<String, Any?> = mapOf("device" to address, "connected" to connected)
 
-  /** The device at this address: the paired one Android keeps where it is paired (it knows its kind of
-   *  address and finds it whatever address it shows), else one made from the address. */
-  private fun deviceAt(ctx: Context, to: String): BluetoothDevice? {
+  /** Connect to the watched monitor now: the paired one, or the one heard; otherwise listen for it first.
+   *  With Bluetooth off nothing is done: Bluetooth coming on starts it. */
+  private fun start(ctx: Context) {
+    val to = address ?: return
+    if (HeartRateModule.radio(ctx) != "on") return
+    val known = paired(ctx, to) ?: device
+    if (known != null) {
+      device = known
+      connect(ctx, known, again = false)
+    } else {
+      find(ctx)
+    }
+  }
+
+  private fun paired(ctx: Context, to: String): BluetoothDevice? {
     val adapter = HeartRateModule.adapter(ctx) ?: return null
-    val paired = try {
+    return try {
       adapter.bondedDevices?.firstOrNull { it.address.equals(to, ignoreCase = true) }
     } catch (e: SecurityException) {
       null
     }
-    return paired ?: adapter.getRemoteDevice(to)
+  }
+
+  /** Listen for heart rate monitors until the watched one is heard; every other one heard is passed by. */
+  private fun find(ctx: Context) {
+    stopFind()
+    val scanner = HeartRateModule.adapter(ctx)?.bluetoothLeScanner ?: return
+    val callback = object : ScanCallback() {
+      override fun onScanResult(callbackType: Int, result: ScanResult) = heard(ctx, this, result.device)
+      override fun onBatchScanResults(results: MutableList<ScanResult>) = results.forEach { heard(ctx, this, it.device) }
+    }
+    val filters = listOf(ScanFilter.Builder().setServiceUuid(ParcelUuid(HeartRateModule.HEART_SERVICE)).build())
+    val settings = ScanSettings.Builder().setScanMode(ScanSettings.SCAN_MODE_BALANCED).build()
+    try {
+      scanner.startScan(filters, settings, callback)
+      finding = callback
+      main.postDelayed(findAgain, FIND_AGAIN_MS)
+    } catch (e: SecurityException) {
+      // Nearby devices taken away: nothing listens; the app asks again when it is allowed.
+    } catch (e: IllegalStateException) {
+      // Bluetooth switched off as it began: Bluetooth coming on starts it again.
+    }
+  }
+
+  private fun heard(ctx: Context, from: ScanCallback, heard: BluetoothDevice) {
+    synchronized(this) {
+      // Only the address picked is ever connected: a stranger's strap near by is passed by.
+      if (finding !== from || !heard.address.equals(address, ignoreCase = true)) return
+      stopFind()
+      device = heard
+      connect(ctx, heard, again = false)
+    }
+  }
+
+  @Synchronized
+  private fun restartFind() {
+    val ctx = appContext ?: return
+    if (finding == null || address == null) return
+    find(ctx)
+  }
+
+  private fun stopFind() {
+    main.removeCallbacks(findAgain)
+    val callback = finding ?: return
+    finding = null
+    val ctx = appContext ?: return
+    try {
+      HeartRateModule.adapter(ctx)?.bluetoothLeScanner?.stopScan(callback)
+    } catch (e: SecurityException) {
+      // Permission taken away: nothing is listening now.
+    } catch (e: IllegalStateException) {
+      // Bluetooth switched off: the same.
+    }
+  }
+
+  /** The connection let go, if there is one. */
+  private fun letGo() {
+    val was = gatt ?: return
+    gatt = null
+    try {
+      was.disconnect()
+      was.close()
+    } catch (e: SecurityException) {
+      // Permission taken away: Android has let it go itself.
+    }
+  }
+
+  /** Bluetooth switched on connects the watched monitor afresh; switched off, the connection is let go (C1).
+   *  Listened for once, for as long as the app runs. */
+  private fun listenForRadio(ctx: Context) {
+    if (radioListener != null) return
+    val listener = object : BroadcastReceiver() {
+      override fun onReceive(c: Context, intent: Intent) {
+        when (intent.getIntExtra(BluetoothAdapter.EXTRA_STATE, BluetoothAdapter.ERROR)) {
+          BluetoothAdapter.STATE_ON -> radioOn(ctx)
+          BluetoothAdapter.STATE_TURNING_OFF, BluetoothAdapter.STATE_OFF -> radioOff()
+        }
+      }
+    }
+    try {
+      // Exported, as the pairing listener is: the message comes from Android's Bluetooth service, and no other
+      // app can send it.
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        ctx.registerReceiver(listener, IntentFilter(BluetoothAdapter.ACTION_STATE_CHANGED), Context.RECEIVER_EXPORTED)
+      } else {
+        ctx.registerReceiver(listener, IntentFilter(BluetoothAdapter.ACTION_STATE_CHANGED))
+      }
+      radioListener = listener
+    } catch (e: Exception) {
+      // Not listening: the monitor connects when it is next watched.
+    }
+  }
+
+  @Synchronized
+  private fun radioOn(ctx: Context) {
+    if (address == null) return
+    connected = false
+    asked = false
+    main.removeCallbacks(quietCheck)
+    stopFind()
+    letGo()
+    start(ctx)
+  }
+
+  @Synchronized
+  private fun radioOff() {
+    connected = false
+    asked = false
+    main.removeCallbacks(quietCheck)
+    stopFind()
+    letGo()
   }
 
   /** The first time straight away; after a drop, Android's own reconnect, whenever it is in reach. */
-  private fun connect(ctx: Context, device: BluetoothDevice, again: Boolean): Boolean {
+  private fun connect(ctx: Context, to: BluetoothDevice, again: Boolean): Boolean {
     return try {
-      gatt = device.connectGatt(ctx, again, callback(ctx), BluetoothDevice.TRANSPORT_LE)
+      gatt = to.connectGatt(ctx, again, callback(ctx), BluetoothDevice.TRANSPORT_LE)
       gatt != null
     } catch (e: SecurityException) {
       false
+    }
+  }
+
+  /** Connected, asked, and nothing sent for QUIET_MS: let go, and the drop connects it again (C3). */
+  @Synchronized
+  private fun checkQuiet() {
+    val g = gatt ?: return
+    if (!connected || !asked) return
+    if (SystemClock.uptimeMillis() - heardAt < QUIET_MS) {
+      main.postDelayed(quietCheck, QUIET_MS)
+      return
+    }
+    asked = false
+    try {
+      g.disconnect()
+    } catch (e: SecurityException) {
+      // Permission taken away: no readings.
+    }
+  }
+
+  private fun dropIt(g: BluetoothGatt) {
+    try {
+      g.disconnect()
+    } catch (e: SecurityException) {
+      // Already let go.
     }
   }
 
@@ -387,11 +578,7 @@ object Strap {
         if (g !== gatt) return
         // Connected with a fault: let it drop, and the drop below connects again (round one, L2).
         if (newState == BluetoothProfile.STATE_CONNECTED && status != BluetoothGatt.GATT_SUCCESS) {
-          try {
-            g.disconnect()
-          } catch (e: SecurityException) {
-            // Already let go.
-          }
+          dropIt(g)
           return
         }
         if (newState == BluetoothProfile.STATE_CONNECTED) {
@@ -406,6 +593,8 @@ object Strap {
           return
         }
         connected = false
+        asked = false
+        main.removeCallbacks(quietCheck)
         // Dropped (out of reach, switched off): let this one go, and connect again whenever it comes back.
         val to = address ?: return
         val givenUp = noHeart >= NO_HEART_MOST
@@ -415,9 +604,11 @@ object Strap {
           // Already let go.
         }
         gatt = null
-        if (givenUp) return
-        val device = deviceAt(ctx, to) ?: return
-        connect(ctx, device, again = true)
+        // Bluetooth off: Bluetooth coming on connects it afresh (C1).
+        if (givenUp || HeartRateModule.radio(ctx) != "on") return
+        val back = paired(ctx, to) ?: device ?: return
+        device = back
+        connect(ctx, back, again = true)
       }
     }
 
@@ -431,26 +622,43 @@ object Strap {
       // connected with no readings (round one, L2).
       if (measurement == null) {
         if (status == BluetoothGatt.GATT_SUCCESS) synchronized(Strap) { noHeart += 1 }
-        try {
-          g.disconnect()
-        } catch (e: SecurityException) {
-          // Already let go.
-        }
+        dropIt(g)
         return
       }
-      try {
-        g.setCharacteristicNotification(measurement, true)
-        val switch = measurement.getDescriptor(HeartRateModule.NOTIFY_SWITCH) ?: return
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-          g.writeDescriptor(switch, BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE)
-        } else {
-          @Suppress("DEPRECATION")
-          switch.value = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
-          @Suppress("DEPRECATION")
-          g.writeDescriptor(switch)
+      // Asking for the heart rate refused: let it drop and connect again, never sit connected with none (C3).
+      val askedNow = try {
+        val switch = measurement.getDescriptor(HeartRateModule.NOTIFY_SWITCH)
+        when {
+          !g.setCharacteristicNotification(measurement, true) || switch == null -> false
+          Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU ->
+            g.writeDescriptor(switch, BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE) == BluetoothStatusCodes.SUCCESS
+          else -> {
+            @Suppress("DEPRECATION")
+            switch.value = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
+            @Suppress("DEPRECATION")
+            g.writeDescriptor(switch)
+          }
         }
       } catch (e: SecurityException) {
-        // Permission taken away: no readings.
+        false
+      }
+      if (!askedNow) dropIt(g)
+    }
+
+    // The monitor's answer to being asked for its heart rate: refused is let go and connected again (C3); taken,
+    // the quiet check begins.
+    override fun onDescriptorWrite(g: BluetoothGatt, descriptor: BluetoothGattDescriptor, status: Int) {
+      if (descriptor.uuid != HeartRateModule.NOTIFY_SWITCH) return
+      synchronized(Strap) {
+        if (g !== gatt) return
+        if (status != BluetoothGatt.GATT_SUCCESS) {
+          dropIt(g)
+          return
+        }
+        asked = true
+        heardAt = SystemClock.uptimeMillis()
+        main.removeCallbacks(quietCheck)
+        main.postDelayed(quietCheck, QUIET_MS)
       }
     }
 
@@ -489,6 +697,7 @@ object Strap {
       val from = address ?: return
       // A monitor sending its heart rate has its heart rate service: earlier misses no longer count (round one, L3).
       noHeart = 0
+      heardAt = SystemClock.uptimeMillis()
       waiting.addLast(mapOf("device" to from, "at" to at.toDouble(), "bytes" to value.map { it.toInt() and 0xff }))
       while (waiting.size > MOST_WAITING) waiting.removeFirst()
     }

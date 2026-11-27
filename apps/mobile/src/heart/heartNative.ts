@@ -8,10 +8,13 @@ export interface HeartNative {
   radio(): string;
   /** Whether Android's "Nearby devices" is allowed. */
   allowed(): boolean;
+  /** True on Android 11 and older with Location off, where no monitor is heard (37n). A copy built before has none. */
+  locationOff?(): boolean;
   /** Look for heart rate monitors for 30 s; each heard is sent as "found". False when it cannot. */
   scan(): boolean;
   stopScan(): void;
-  /** Connect to this monitor by its Bluetooth address, and again whenever it comes back in reach. */
+  /** Connect to this monitor by its Bluetooth address, and again whenever it comes back in reach or Bluetooth comes
+   *  on again. False when it may not (Nearby devices not allowed): the app asks again later. */
   watch(address: string): boolean;
   unwatch(): void;
   /** The readings since the last take (read through phoneHeartSamplesSchema). */

@@ -369,7 +369,8 @@ jest.mock("../../src/screens/running/runVoiceNative", () => {
   const actual = jest.requireActual("../../src/screens/running/runVoiceNative");
   // `ahead`: the lines last handed over to be said later (37d-ii), each with its ms from then.
   // `handed`: the lines of the last sayAt itself, which quiet does not clear.
-  const voice = { said: [], quieted: 0, canSpeak: "ok", missing: false, ahead: [], warmed: 0, handed: [] };
+  // `hushed`: how many lines had been said at each hush (37n), so a test reads that it came before the pause's words.
+  const voice = { said: [], quieted: 0, canSpeak: "ok", missing: false, ahead: [], warmed: 0, handed: [], hushed: [] };
   const native = {
     say: (text) => {
       voice.said.push(text);
@@ -387,6 +388,10 @@ jest.mock("../../src/screens/running/runVoiceNative", () => {
     },
     warm: () => {
       voice.warmed += 1;
+      return Promise.resolve();
+    },
+    hush: () => {
+      voice.hushed.push(voice.said.length);
       return Promise.resolve();
     },
     check: () => Promise.resolve(voice.canSpeak),
@@ -511,12 +516,14 @@ jest.mock("../../src/sound/soundNative", () => {
 // The heart rate monitor's Bluetooth (37f-i), modules/heart-rate's Android code. `strap.near`: the monitors in
 // reach, each with the bytes it sends (`send(id, bytes, at)` hands one notification over as the Android code
 // would, whether it is watched or not: the app's own code must leave out what is not its monitor's).
-// `radio`, `allowed` and `missing` stand for Bluetooth off, Nearby devices refused, and a copy built before it.
+// `radio`, `allowed` and `missing` stand for Bluetooth off, Nearby devices refused, and a copy built before it;
+// `locationOff` for Android 11 and older with Location off (37n). Watching is refused while Nearby devices is, as the
+// Android code refuses it: `watches` lists only the watches it took.
 // Pairing (37f-ii-b): `bonded` is the phone's list of paired devices, `pairs` the addresses asked to pair,
 // `pairAnswer` what asking says, and `bond(device, state)` hands over one of Android's paired-or-not messages and
 // is what asking a device's state says after it (`silent` keeps the message from the app, as a lost one).
 jest.mock("../../src/heart/heartNative", () => {
-  const fresh = () => ({ radio: "on", allowed: true, missing: false, near: [], watched: null, watches: [], waiting: [], scans: 0, bonded: [], pairs: [], pairAnswer: "started", states: {}, asked: 0 });
+  const fresh = () => ({ radio: "on", allowed: true, locationOff: false, missing: false, near: [], watched: null, watches: [], waiting: [], scans: 0, bonded: [], pairs: [], pairAnswer: "started", states: {}, asked: 0 });
   const strap = { ...fresh(), found: new Set(), bonds: new Set() };
   strap.send = (id, bytes, at = Date.now()) => {
     strap.waiting.push({ device: id, at, bytes });
@@ -533,14 +540,16 @@ jest.mock("../../src/heart/heartNative", () => {
   const native = {
     radio: () => strap.radio,
     allowed: () => strap.allowed,
+    locationOff: () => strap.locationOff,
     scan: () => {
-      if (strap.radio !== "on" || !strap.allowed) return false;
+      if (strap.radio !== "on" || !strap.allowed || strap.locationOff) return false;
       strap.scans += 1;
       for (const one of strap.near) for (const listener of strap.found) listener({ id: one.id, name: one.name, rssi: one.rssi, type: one.type ?? "unknown" });
       return true;
     },
     stopScan: () => undefined,
     watch: (id) => {
+      if (!strap.allowed) return false;
       strap.watched = id;
       strap.watches.push(id);
       return true;

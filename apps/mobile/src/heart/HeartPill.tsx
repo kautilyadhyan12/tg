@@ -4,18 +4,28 @@ import { colours, sizes } from "../look/colours";
 import { Icon } from "../look/Icon";
 import { Txt } from "../look/Txt";
 import { zoneColour } from "./HeartZones";
+import type { BluetoothState } from "./monitor";
+
+/** What stands for the heart rate when there is none: why, where the phone knows (37n, the bug hunt's C1, C2, C5). */
+export function noSignalWords(bluetooth: BluetoothState = "on"): string {
+  if (bluetooth === "off") return "Bluetooth off";
+  if (bluetooth === "denied") return "Nearby devices off";
+  if (bluetooth === "location") return "Location off";
+  return "No signal";
+}
 
 /** The heart rate now (37f-i), on a run beside the GPS light and over a workout's picture (64a-vi): No signal, never 0
  *  and never an old number. With a maximum heart rate (37f-ii-a), its zone too, in the zone's colour. `big` on a
  *  workout, read from a step back. */
-export function HeartPill({ bpm, max, big = false }: { bpm: number | null; max: number | null; big?: boolean }) {
+export function HeartPill({ bpm, max, big = false, bluetooth = "on" }: { bpm: number | null; max: number | null; big?: boolean; bluetooth?: BluetoothState }) {
   const zone = bpm === null || max === null ? null : heartZoneOf(bpm, max);
-  const said = bpm === null ? "Heart rate: no signal" : `Heart rate ${String(bpm)} beats a minute${zone === null ? "" : `, zone ${String(zone)}`}`;
+  const none = noSignalWords(bluetooth);
+  const said = bpm === null ? `Heart rate: ${none.toLowerCase()}` : `Heart rate ${String(bpm)} beats a minute${zone === null ? "" : `, zone ${String(zone)}`}`;
   return (
     <View accessibilityLabel={said} style={[styles.pill, big ? styles.big : null, zone === null ? null : { borderColor: colours[zoneColour(zone)] }]} testID="heart-pill">
       <Icon name="heart" size={big ? 17 : 14} colour={bpm === null ? "textFaint" : zone === null ? "orange" : zoneColour(zone)} filled={big && bpm !== null} />
       <Txt kind={big ? "strong" : "small"} colour={bpm === null ? "textSoft" : "text"} numberOfLines={1} fit={big} style={big ? styles.bigWords : null}>
-        {bpm === null ? "No signal" : `${String(bpm)} bpm${zone === null ? "" : ` · Zone ${String(zone)}`}`}
+        {bpm === null ? none : `${String(bpm)} bpm${zone === null ? "" : ` · Zone ${String(zone)}`}`}
       </Txt>
     </View>
   );

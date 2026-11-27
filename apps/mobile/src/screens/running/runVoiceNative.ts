@@ -22,6 +22,9 @@ export interface RunVoiceNative {
   sayAt(texts: string[], inMs: number[]): Promise<void>;
   /** The phone's voice made ready, so the next line is said at once. */
   warm(): Promise<void>;
+  /** The run paused: a line handed over ahead that began a moment ago, and is the only one being said, stops (37n).
+   *  A copy of the app built before it has none. */
+  hush?(): Promise<void>;
   /** Whether this phone can speak English (read through speakState). */
   check(): Promise<unknown>;
 }

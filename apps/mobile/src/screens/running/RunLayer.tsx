@@ -451,7 +451,7 @@ function Live({ run, units, kg, onHide }: { run: LiveRun; units: Units; kg: numb
       ) : (
         <View style={styles.pills}>
           <GpsPill gps={gpsLight(run.lastFix, now)} />
-          {heartNowShown.monitor === null ? null : <HeartPill bpm={heartNowShown.bpm} max={heartMaxNow} />}
+          {heartNowShown.monitor === null ? null : <HeartPill bpm={heartNowShown.bpm} max={heartMaxNow} bluetooth={heartNowShown.bluetooth} />}
         </View>
       )}
       <Pressable accessibilityRole="button" accessibilityLabel="Back to the app" onPress={onHide} hitSlop={10} style={[styles.hide, onMap ? styles.hideOnMap : null]}>

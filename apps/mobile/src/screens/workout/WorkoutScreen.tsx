@@ -23,7 +23,7 @@ import { useNamed } from "../library/useLibrary";
 import { PlateFace } from "../library/WeightPlate";
 import { HeartPill } from "../../heart/HeartPill";
 import { useHeartMax } from "../../heart/heartMax";
-import { useHeartNow, type Monitor } from "../../heart/monitor";
+import { useHeartNow, type BluetoothState, type Monitor } from "../../heart/monitor";
 import { Summary } from "./Summary";
 import type { EffortHand, SoundSwitch } from "./WorkoutLayer";
 import { clock, countdown, eyebrowWords, mainWords, nextWords, ringShare, setLine } from "./words";
@@ -64,9 +64,9 @@ const LED_GREEN: ColourName = "ledGreen";
 
 /** The heart rate now from the person's own monitor, in the zone of their maximum (64a-vi); read only once a monitor
  *  is saved, so a person with none costs the server nothing. */
-function WorkoutHeart({ bpm }: { bpm: number | null }) {
+function WorkoutHeart({ bpm, bluetooth }: { bpm: number | null; bluetooth: BluetoothState }) {
   const read = useHeartMax().read;
-  return <HeartPill bpm={bpm} max={read.kind === "ok" ? read.data.max : null} big />;
+  return <HeartPill bpm={bpm} max={read.kind === "ok" ? read.data.max : null} big bluetooth={bluetooth} />;
 }
 
 /** Sound on or off, said as it is now; a press turns it the other way, and the phone keeps it for the next workouts. */
@@ -90,7 +90,7 @@ function SoundPill({ sound }: { sound: SoundSwitch }) {
 
 function Doing({ run, units, sound, press, onPutAway, onDiscard }: { run: WorkoutRun; units: Units; sound: SoundSwitch; press: (p: Press) => void; onPutAway: () => void; onDiscard: () => void }) {
   const insets = useSafeAreaInsets();
-  const heart: { monitor: Monitor | null; bpm: number | null } = useHeartNow(true);
+  const heart: { monitor: Monitor | null; bpm: number | null; bluetooth: BluetoothState } = useHeartNow(true);
   const [asking, setAsking] = useState(false);
   const { exercise, target, weightGrams } = setOf(run);
   const timed = exercise.measuredIn === "time";
@@ -158,7 +158,7 @@ function Doing({ run, units, sound, press, onPutAway, onDiscard }: { run: Workou
     <View style={styles.pills}>
       {heart.monitor === null ? <View style={styles.grow} /> : (
         <View style={styles.heartRoom}>
-          <WorkoutHeart bpm={heart.bpm} />
+          <WorkoutHeart bpm={heart.bpm} bluetooth={heart.bluetooth} />
         </View>
       )}
       <SoundPill sound={sound} />
