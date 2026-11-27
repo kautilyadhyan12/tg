@@ -194,6 +194,10 @@ describe("the set's own steps (Try the camera)", () => {
     expect(shownReps(ended(done, 4))).toBe(4);
     const paused = run(reps, { kind: "camera", reps: 4, heldMs: 0 }, { kind: "pause" }, { kind: "done" });
     expect(shownReps(ended(paused, 5))).toBe(4);
+    // Counted by hand once the camera stopped, or once the person took it over: what the box said is what the set is.
+    const byHand = run(reps, { kind: "camera", reps: 4, heldMs: 0 }, { kind: "stopped" }, { kind: "count", by: 1 }, { kind: "done" });
+    expect(shownReps(ended(byHand, 5))).toBe(5);
+    expect(shownReps(ended(byHand, 6))).toBe(5);
   });
 
   it("a hold ends at its target time held, and its count cannot be pressed", () => {

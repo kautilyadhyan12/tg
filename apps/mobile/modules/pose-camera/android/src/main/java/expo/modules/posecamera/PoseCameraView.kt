@@ -367,7 +367,9 @@ class PoseCameraView(context: Context, appContext: AppContext) : ExpoView(contex
     private val showing = arrayOfNulls<Bitmap>(2)
     private var nextShown = 0
     /** How the screen is turned from the phone's own axes, in degrees: Android reads gravity in those axes, and the picture
-     *  is turned upright for the screen (on a tablet held upright, 90 or 270). Read on the screen's thread. */
+     *  is turned upright for the screen (on a tablet held upright, 90 or 270). Read once, as the camera is set up, and the
+     *  camera turns its pictures by that same reading (`bind`), so the two never disagree; a folding phone opened makes the
+     *  screen anew, and the camera with it. */
     @Volatile private var screenTurn = 0
 
     private fun rawOf(proxy: ImageProxy): Bitmap {
@@ -390,7 +392,6 @@ class PoseCameraView(context: Context, appContext: AppContext) : ExpoView(contex
         val sensor = s.getDefaultSensor(Sensor.TYPE_GRAVITY) ?: s.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
         if (sensor != null) s.registerListener(this, sensor, SensorManager.SENSOR_DELAY_GAME, Handler(sensorThread.looper))
       }
-      screenTurn = turnOfScreen()
       worker.execute {
         try {
           landmarker = PoseLandmarker.createFromOptions(context, options())
@@ -452,7 +453,10 @@ class PoseCameraView(context: Context, appContext: AppContext) : ExpoView(contex
           // One stream, the model's: the screen shows the pictures it read. And no faster than the model reads: at 30
           // pictures a second, beside a second stream for the screen, the camera's own work was nearly a core, and with it
           // the phone grew hot enough after 9 minutes to slow its chip to a third (53a, the 20-minute runs).
+          val rotation = display?.rotation ?: Surface.ROTATION_0
+          screenTurn = rotation * 90
           val builder = ImageAnalysis.Builder()
+            .setTargetRotation(rotation)
             .setResolutionSelector(
               ResolutionSelector.Builder()
                 .setAspectRatioStrategy(AspectRatioStrategy.RATIO_4_3_FALLBACK_AUTO_STRATEGY)
@@ -596,8 +600,6 @@ class PoseCameraView(context: Context, appContext: AppContext) : ExpoView(contex
           fail("camera", null)
           return
         }
-        // A folding phone opened, or closed, turns its screen.
-        screenTurn = turnOfScreen()
         if (debuggable) {
           val (a, f) = synchronized(lock) { (answered to found).also { answered = 0; found = 0 } }
           Log.i(TAG, "answers=$a found=$f")
@@ -605,9 +607,6 @@ class PoseCameraView(context: Context, appContext: AppContext) : ExpoView(contex
         main.postDelayed(this, 1_000L)
       }
     }
-
-    /** The screen's turn from the phone's own axes, in degrees; 0 where Android does not say. */
-    private fun turnOfScreen(): Int = (display?.rotation ?: Surface.ROTATION_0) * 90
 
     override fun onSensorChanged(event: SensorEvent) {
       if (event.values.size < 3) return

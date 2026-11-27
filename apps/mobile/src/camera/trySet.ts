@@ -19,7 +19,7 @@ export interface TrySet {
   /** The person's own changes to the count: what is shown is the camera's count with them. */
   readonly byHand: number;
   readonly paused: boolean;
-  /** The camera stopped: the set goes on by hand. */
+  /** The camera stopped, or the person took the count over: the set goes on by hand, and nothing of the camera's counts. */
   readonly stopped: boolean;
   readonly done: boolean;
 }
@@ -59,6 +59,8 @@ export function pressTry(s: TrySet, p: TryPress): TrySet {
   const next = ((): TrySet => {
     switch (p.kind) {
       case "camera": {
+        // Once the set is counted by hand, the camera's count is not the set's, even a rep judged as the set ends.
+        if (s.stopped) return s;
         // What the camera counted since it last said; while paused nothing it sees is the set's.
         const reps = Math.max(0, p.reps - s.cameraLast.reps);
         const held = Math.max(0, p.heldMs - s.cameraLast.heldMs);

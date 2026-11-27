@@ -107,10 +107,13 @@ describe("the body drawn by the phone, on the very picture it was read from (Kd 
 });
 
 describe("which way is down: gravity, and how the screen is turned from the phone's own axes (round one)", () => {
-  it("each answer says how the screen is turned, read on the screen's thread when the camera opens and each second", () => {
+  it("each answer says how the screen is turned, the very turn the camera turns its pictures by (re-check N2)", () => {
     expect(view).toContain('"turn" to screenTurn.toDouble(),');
-    expect(view).toContain("private fun turnOfScreen(): Int = (display?.rotation ?: Surface.ROTATION_0) * 90");
-    expect(view.match(/screenTurn = turnOfScreen\(\)/g)).toHaveLength(2);
+    expect(view).toContain(
+      "val rotation = display?.rotation ?: Surface.ROTATION_0\n          screenTurn = rotation * 90\n          val builder = ImageAnalysis.Builder()\n            .setTargetRotation(rotation)",
+    );
+    // Set in that one place, never read again on its own while the camera runs.
+    expect(view.match(/^\s+screenTurn = /gm)).toHaveLength(1);
   });
 
   it("a gravity reading is timed on the clock it is judged by", () => {

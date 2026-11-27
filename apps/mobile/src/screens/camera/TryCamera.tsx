@@ -148,7 +148,7 @@ function TrySetScreen({ me, exercise, onClose }: { me: string; exercise: CameraE
           press={press}
           byHand={stopped !== null}
           onClose={() => { setBox(false); }}
-          onByHand={() => { setStopped("byHand"); }}
+          onByHand={() => { setStopped("byHand"); press({ kind: "stopped" }); }}
           onEnd={onClose}
           onSkip={onClose}
         />
