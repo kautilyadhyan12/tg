@@ -158,7 +158,7 @@ export function CameraSet({ live, title, digits, of, paused, sound, now, stopped
                 {reference}
               </Pressable>
               {follow === undefined ? null : (
-                <Pressable accessibilityRole="button" accessibilityLabel={FOLLOW_WORDS} onPress={follow} style={[styles.follow, { width: sizes.tile.width }]}>
+                <Pressable accessibilityRole="button" accessibilityLabel={FOLLOW_WORDS} onPress={follow} style={[styles.follow, { minWidth: sizes.tile.width }]}>
                   <Icon name="expand" size={15} colour="orangeLight" />
                   <Txt kind="small" colour="text" style={styles.followWords}>
                     {FOLLOW_WORDS}
@@ -239,9 +239,10 @@ const styles = StyleSheet.create({
   of: { color: colours.text, textShadowColor: colours.wordShadow, textShadowRadius: 6, textShadowOffset: { width: 0, height: 1 } },
   tile: { borderRadius: 18, overflow: "hidden", borderWidth: 1, borderColor: colours.lineStrong, backgroundColor: colours.raised, boxShadow: shadows.cameraTile },
   tileSetUp: { borderWidth: 2, borderColor: colours.orange },
-  side: { alignItems: "center", gap: 8 },
+  // The button lines up with the clip on the right and grows to its left with its words, kept on one line.
+  side: { alignItems: "flex-end", gap: 8 },
   follow: { minHeight: 44, borderRadius: 22, borderWidth: 1, borderColor: colours.orange, backgroundColor: colours.raised, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7, paddingHorizontal: 8, paddingVertical: 6 },
-  followWords: { fontFamily: fonts.semibold, textAlign: "center", flexShrink: 1 },
+  followWords: { fontFamily: fonts.semibold, textAlign: "center" },
   busy: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 4, paddingTop: 10, borderTopWidth: 1, borderTopColor: colours.lineStrong },
   grow: { flex: 1 },
   foot: { position: "absolute", left: 0, right: 0, bottom: 0, height: "22%" },

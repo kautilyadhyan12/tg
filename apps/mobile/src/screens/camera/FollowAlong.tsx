@@ -54,17 +54,20 @@ export function FollowAlong({ follow, name, setWords, reference, press, onTap, o
             </Txt>
             <Led text={digits} colour={colour} height={followDigits(screen.height)} bare />
           </View>
-          <Pressable testID="follow-camera" accessibilityRole="button" accessibilityLabel={`${CAMERA_OFF_WORDS}. ${CAMERA_ON_WORDS}`} onPress={onCamera} style={styles.camera}>
-            <Icon name="cameraOff" size={18} colour="text" />
-            <View style={styles.cameraWords}>
-              <Txt kind="small" colour="text" style={styles.bold}>
-                {CAMERA_OFF_WORDS}
-              </Txt>
-              <Txt kind="small" colour="textSoft">
-                {CAMERA_ON_WORDS}
-              </Txt>
-            </View>
-          </Pressable>
+          {/* Once the set has ended there is nothing left for the camera to count: only the person's own answer. */}
+          {follow.phase === "done" ? null : (
+            <Pressable testID="follow-camera" accessibilityRole="button" accessibilityLabel={`${CAMERA_OFF_WORDS}. ${CAMERA_ON_WORDS}`} onPress={onCamera} style={styles.camera}>
+              <Icon name="cameraOff" size={18} colour="text" />
+              <View style={styles.cameraWords}>
+                <Txt kind="small" colour="text" style={styles.bold}>
+                  {CAMERA_OFF_WORDS}
+                </Txt>
+                <Txt kind="small" colour="textSoft">
+                  {CAMERA_ON_WORDS}
+                </Txt>
+              </View>
+            </Pressable>
+          )}
         </View>
         <View style={styles.clip} pointerEvents="none">
           {reference}

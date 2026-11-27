@@ -614,6 +614,8 @@ describe("Follow along (53b-ii): the gym is busy, so I tap the clip, follow it o
     // The end: how long it was followed, and my own count, started from it at 3 s a rep.
     const done = await screen.findByTestId("follow-done");
     expect(within(done).getByText(`35 s · ${ASK_REPS_WORDS}`)).toBeTruthy();
+    // Ended, the only thing left is my own answer: no way back to the camera that would throw it away.
+    expect(screen.queryByRole("button", { name: CAMERA_BACK })).toBeNull();
     expect(sounds.spoken[sounds.spoken.length - 1]).toEqual({ id: "set_complete", index: 0 });
     await fireEvent.press(within(done).getByRole("button", { name: "One rep less" }));
     await fireEvent.press(within(done).getByRole("button", { name: "One rep less" }));
