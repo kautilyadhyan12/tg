@@ -1973,7 +1973,7 @@ describe("heart rate and sounds in a workout (64a-vi)", () => {
   const MINE = "F8:A6:6F:94:AA:27";
   const STRANGER = "C0:FF:EE:12:34:56";
   const polar = (bpm: number): number[] => [16, bpm, 25, 3, 15, 3, 0];
-  const strap = jest.requireMock<{ strap: { send: (id: string, bytes: number[], at?: number) => void; reset: () => void } }>("../../src/heart/heartNative").strap;
+  const strap = jest.requireMock<{ strap: { send: (id: string, bytes: number[], at?: number) => void; reset: () => void; radio: string } }>("../../src/heart/heartNative").strap;
   const sounds = jest.requireMock<{ sounds: { played: string[] } }>("../../src/sound/soundNative").sounds;
   const SQUAT = { id: "squat", plan: { measuredIn: "reps", sets: [{ target: 2, weightGrams: null, restSeconds: null }] } };
   const write = (name: string, text: string) => {
