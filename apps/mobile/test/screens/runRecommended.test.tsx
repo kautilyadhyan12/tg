@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react-native";
 import { AppState } from "react-native";
-import { OPENFREEMAP, planWeekdayOf, runPlanOf, type PlanDay, type RunPlanAnswers, type RunPlanResponse } from "@app/shared";
+import { OPENFREEMAP, planWeekdayOf, runPlanAnswersSchema, runPlanOf, type PlanDay, type RunPlanAnswers, type RunPlanResponse } from "@app/shared";
 import { App } from "../../src/App";
 import { phoneRunFiles, resetRecorder, runNow } from "../../src/screens/running/recorder";
 import { dayName, nextRun, phoneToday } from "../../src/screens/running/RunPlanBox";
@@ -25,7 +25,8 @@ const days = (from: number): number[] => {
 const BEGINNER = (from = 0): RunPlanAnswers => ({ doesRun: "start", jog: "none", days: days(from), goal: "5k", weeklyM: null, longestM: null, race: null });
 
 function planServer(start: { answers: RunPlanAnswers | null; safe?: boolean }) {
-  const state = { answers: start.answers, safe: start.safe === true };
+  // `readsFail`: every read of the plan fails (no signal), while a save still goes through.
+  const state = { answers: start.answers, safe: start.safe === true, readsFail: false };
   const reply = (): RunPlanResponse => {
     const today = phoneToday();
     if (state.safe) return { answers: state.answers, plan: { kind: "none", why: "safe_mode" }, today, choice: "suggested", own: null, capM: null };
@@ -35,7 +36,11 @@ function planServer(start: { answers: RunPlanAnswers | null; safe?: boolean }) {
   const server = fakeServer({
     "/v1/auth/refresh": () => ({ status: 200, body: { tokens: tokens(2) } }),
     "/v1/users/me": () => ({ status: 200, body: profile(true, RAVI) }),
-    "/v1/geo/run-plan": () => ({ status: 200, body: reply() }),
+    "/v1/geo/run-plan": (body): Reply => {
+      if (body === undefined && state.readsFail) return { status: 503, body: { error: "unavailable", message: "Try again later." } };
+      if (body !== undefined) state.answers = runPlanAnswersSchema.parse(body);
+      return { status: 200, body: reply() };
+    },
     "/v1/users/me/health-screening": (body): Reply => {
       if (body !== undefined) state.safe = false;
       return {
@@ -58,6 +63,13 @@ beforeEach(async () => {
   Object.assign(voice, { said: [], quieted: 0, canSpeak: "ok", missing: false, ahead: [], warmed: 0, handed: [] });
   await Promise.resolve();
 });
+
+/** The newest of several on screen: a page opened over another holds its own. */
+function newest<T>(all: T[]): T {
+  const one = all.at(-1);
+  if (one === undefined) throw new Error("none on screen");
+  return one;
+}
 
 /** The Dashboard, its Recommended box on Running. */
 async function openRunningBox(s: ReturnType<typeof planServer>) {
@@ -207,6 +219,25 @@ describe("Running in Recommended For You", () => {
     expect(within(box).getByText("A weekly plan built from your current running.")).toBeTruthy();
     await fireEvent.press(within(box).getByRole("button", { name: "Create plan" }));
     expect(await screen.findByText("New to running")).toBeTruthy();
+  });
+
+  it("a plan made from the Dashboard shows at once, and stays when the read after it fails (37m; the hunt's D8)", async () => {
+    const s = planServer({ answers: null });
+    const box = await openRunningBox(s);
+    await fireEvent.press(within(box).getByRole("button", { name: "Create plan" }));
+    await fireEvent.press(await screen.findByText("New to running"));
+    await fireEvent.press(await screen.findByText("I can’t run yet"));
+    // The questions' own days and goal, over the Dashboard's week under them.
+    const last = (words: string) => newest(screen.getAllByText(words));
+    for (const day of ["Mon", "Wed", "Fri"]) await fireEvent.press(last(day));
+    await fireEvent.press(last("5K"));
+    s.state.readsFail = true;
+    await fireEvent.press(screen.getAllByRole("button", { name: "Create plan" }).at(-1) ?? screen.getByRole("button", { name: "none" }));
+    await waitFor(() => {
+      expect(within(screen.getByTestId("recommended-box")).queryByText("No training plan yet.")).toBeNull();
+    });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(within(screen.getByTestId("recommended-box")).queryByText("No training plan yet.")).toBeNull();
   });
 
   it("Go to Running opens the Running page on today's run and starts nothing by itself (Kd, 2026-11-11)", async () => {

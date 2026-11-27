@@ -82,8 +82,8 @@ export const START_PROBLEM_WORDS: Record<StartProblem, string> = {
   battery: "Your phone's battery setting stops run recording when the screen is off.",
 };
 
-/** What a run tells the Running tab once it is saved, or waiting to be sent. */
-export type RunDone = { name: string; waiting: boolean } | null;
+/** The run just saved, for the Running tab to say whether it is on the server yet or waiting to be sent. */
+export type RunDone = { name: string; runId: string } | null;
 
 interface RunLayerValue {
   /** Start: asks for the location if it must, then counts down. null when the count has begun. With
@@ -256,8 +256,8 @@ export function RunLayerProvider({ children }: { children: ReactNode }) {
             run={run}
             units={units}
             kg={kg}
-            onSaved={(name, waiting) => {
-              setDone({ name, waiting });
+            onSaved={(name, runId) => {
+              setDone({ name, runId });
             }}
           />
         ) : (
@@ -621,7 +621,7 @@ function RoundButton({ label, kind, onPress, busy }: { label: "Pause" | "Resume"
 
 // ── After Finish ──────────────────────────────────────────────────────────────────────────────
 
-function Summary({ run, units, kg, onSaved }: { run: LiveRun; units: Units; kg: number; onSaved: (name: string, waiting: boolean) => void }) {
+function Summary({ run, units, kg, onSaved }: { run: LiveRun; units: Units; kg: number; onSaved: (name: string, runId: string) => void }) {
   const { outbox, view } = useRunOutbox();
   const insets = useSafeAreaInsets();
   const finished = run.finishedMs ?? 0;
@@ -699,13 +699,14 @@ function Summary({ run, units, kg, onSaved }: { run: LiveRun; units: Units; kg: 
       return;
     }
     await forgetRun();
-    await outbox.send();
-    onSaved(kept, outbox.view().waiting.some((r) => r.runId === body.runId));
+    // Said at once; the send goes on behind, and the Running page says when the server has it.
+    onSaved(kept, body.runId);
+    void outbox.send();
   };
 
   return (
     <View style={styles.summaryPage}>
-      <ScrollView contentContainerStyle={[styles.summaryBody, { paddingBottom: insets.bottom + 24 }]} keyboardShouldPersistTaps="handled">
+      <ScrollView contentContainerStyle={[styles.summaryBody, { paddingBottom: 24 }]} keyboardShouldPersistTaps="handled">
         <View style={styles.bleed}>
           <PictureTop
             picture="greekrun"
@@ -781,21 +782,26 @@ function Summary({ run, units, kg, onSaved }: { run: LiveRun; units: Units; kg: 
         <SplitsCard splits={units === "imperial" ? sums.splitsMi : sums.splitsKm} units={units} />
         <FeelCard effort={effort} onPick={setEffort} />
         <NoteCard note={note} onChange={setNote} />
-        <Button label="Save run" onPress={() => void save()} busy={busy} wide style={styles.save} />
+      </ScrollView>
+      {/* Save and Discard always on screen, under the run however long its page: a finished run is
+          never left unsaved because its buttons were out of sight (Kd, 2026-11-26). */}
+      <View style={[styles.summaryFoot, { paddingBottom: insets.bottom + 12 }]}>
         {notKept ? (
           <Txt kind="small" colour="badText" style={styles.centredWords}>
             Your run couldn't be kept on this phone. Press Save run again.
           </Txt>
         ) : null}
-        <Button
-          kind="dangerLink"
-          label="Discard run"
-          style={styles.centred}
-          onPress={() => {
-            setAsking(true);
-          }}
-        />
-      </ScrollView>
+        <View style={styles.summaryActions}>
+          <Button
+            kind="dangerLink"
+            label="Discard run"
+            onPress={() => {
+              setAsking(true);
+            }}
+          />
+          <Button label="Save run" onPress={() => void save()} busy={busy} style={styles.grow} />
+        </View>
+      </View>
       <Sheet
         open={asking}
         title="Discard this run?"
@@ -972,7 +978,8 @@ const styles = StyleSheet.create({
   feelNumber: { fontFamily: fonts.bold },
   ends: { flexDirection: "row", justifyContent: "space-between" },
   note: { minHeight: 74, borderRadius: 14, backgroundColor: colours.field, borderWidth: 1, borderColor: colours.fieldLine, padding: 14, fontFamily: fonts.regular, fontSize: 15, color: colours.text, textAlignVertical: "top" },
-  save: { marginTop: 10 },
+  summaryFoot: { gap: 8, paddingTop: 12, paddingHorizontal: sizes.edge, borderTopWidth: 1, borderTopColor: colours.line, backgroundColor: colours.page },
+  summaryActions: { flexDirection: "row", alignItems: "center", gap: 16 },
   centred: { alignSelf: "center" },
   centredWords: { textAlign: "center" },
 });

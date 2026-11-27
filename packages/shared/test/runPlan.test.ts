@@ -193,6 +193,45 @@ describe("Couch to 5K: the NHS printable plan", () => {
     expect(next?.session?.kind === "walk_run" ? next.session.run : 0).toBe(2);
   });
 
+  it("the day Couch to 5K is finished, that week keeps its runs, ticked (the hunt's D2)", () => {
+    const answers = beginnerAnswers({ jog: "20to30" });
+    // Weeks 6 to 9 run Monday, Wednesday and Friday; the last is today, Friday of the fourth week.
+    const runs: RunDay[] = [];
+    for (let wk = 0; wk < 4; wk += 1) for (const d of [0, 2, 4]) runs.push(run(planDayPlus(MONDAY, wk * 7 + d), 4500, 2400));
+    const today = planDayPlus(MONDAY, 25);
+    const plan = runPlanOf(input(answers, { today, runs }));
+    expect(plan.kind).toBe("runner");
+    const ran = daysOf(plan).filter((d) => d.day <= today && d.session !== null);
+    expect(ran.map((d) => [d.weekday, d.done, d.session?.kind === "walk_run" ? `${String(d.session.week)}.${String(d.session.run)}` : d.session?.kind])).toEqual([
+      [1, true, "9.1"],
+      [3, true, "9.2"],
+      [5, true, "9.3"],
+    ]);
+    // The new plan begins tomorrow, and nothing it plans is before then.
+    expect(daysOf(plan).filter((d) => d.day > today && d.session !== null).every((d) => d.session?.kind !== "walk_run")).toBe(true);
+    // A week finished before this one leaves this week to the new plan alone.
+    const later = runPlanOf(input(answers, { today: planDayPlus(MONDAY, 30), runs }));
+    expect(daysOf(later).some((d) => d.session?.kind === "walk_run")).toBe(false);
+  });
+
+  it("Upcoming weeks never list again a week this week's runs have begun (the hunt's D4)", () => {
+    const answers = beginnerAnswers();
+    // Week 1's first two runs done last week; this week holds week 1 run 3, then week 2's first two.
+    const runs = [run(MONDAY, 2000, 1500), run(planDayPlus(MONDAY, 2), 2000, 1500)];
+    const plan = runPlanOf(input(answers, { today: planDayPlus(MONDAY, 7), runs }));
+    if (plan.kind !== "c25k") throw new Error(plan.kind);
+    const listed = plan.days.flatMap((d) => (d.session?.kind === "walk_run" ? [`${String(d.session.week)}.${String(d.session.run)}`] : []));
+    expect(listed).toEqual(["1.3", "2.1", "2.2"]);
+    expect(plan.week).toBe(1);
+    expect(plan.ahead.map((a) => a.week)).toEqual([3, 4, 5]);
+    // A week whose runs all lie ahead: the weeks after this one, as before.
+    const fresh = runPlanOf(input(answers));
+    expect(fresh.kind === "c25k" ? fresh.ahead.map((a) => a.week) : []).toEqual([2, 3, 4]);
+    // Near the end, never past week 9.
+    const nearEnd = runPlanOf(input(beginnerAnswers({ jog: "20to30" }), { today: planDayPlus(MONDAY, 21), runs: [0, 2, 4, 7, 9, 11, 14, 16, 18].map((d) => run(planDayPlus(MONDAY, d), 4500, 2400)) }));
+    expect(nearEnd.kind === "c25k" ? nearEnd.ahead : null).toEqual([]);
+  });
+
   it("after the ninth week the plan grows from the runs recorded, towards the distance picked", () => {
     const answers = beginnerAnswers({ jog: "20to30" });
     // Weeks 6 to 9: twelve runs, Monday, Wednesday and Friday.
