@@ -21,6 +21,7 @@ import { useKeepMedia, useOwnPicture, type OwnClip, type OwnPicture } from "../l
 import { Led } from "../library/Records";
 import { useNamed } from "../library/useLibrary";
 import { PlateFace } from "../library/WeightPlate";
+import { HeartMonitorSheet } from "../../heart/HeartMonitor";
 import { HeartPill } from "../../heart/HeartPill";
 import { useHeartMax } from "../../heart/heartMax";
 import { useHeartNow, type BluetoothState, type Monitor } from "../../heart/monitor";
@@ -64,9 +65,34 @@ const LED_GREEN: ColourName = "ledGreen";
 
 /** The heart rate now from the person's own monitor, in the zone of their maximum (64a-vi); read only once a monitor
  *  is saved, so a person with none costs the server nothing. */
-function WorkoutHeart({ bpm, bluetooth }: { bpm: number | null; bluetooth: BluetoothState }) {
+function WorkoutHeart({ bpm, bluetooth, monitor }: { bpm: number | null; bluetooth: BluetoothState; monitor: Monitor }) {
   const read = useHeartMax().read;
-  return <HeartPill bpm={bpm} max={read.kind === "ok" ? read.data.max : null} big bluetooth={bluetooth} />;
+  // With no heart rate the pill opens the monitor box, where what stands in the way has its button (37n's re-check, N2).
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <HeartPill
+        bpm={bpm}
+        max={read.kind === "ok" ? read.data.max : null}
+        big
+        bluetooth={bluetooth}
+        {...(bpm === null
+          ? {
+              onPress: () => {
+                setOpen(true);
+              },
+            }
+          : {})}
+      />
+      <HeartMonitorSheet
+        open={open}
+        monitor={monitor}
+        onClose={() => {
+          setOpen(false);
+        }}
+      />
+    </>
+  );
 }
 
 /** Sound on or off, said as it is now; a press turns it the other way, and the phone keeps it for the next workouts. */
@@ -158,7 +184,7 @@ function Doing({ run, units, sound, press, onPutAway, onDiscard }: { run: Workou
     <View style={styles.pills}>
       {heart.monitor === null ? <View style={styles.grow} /> : (
         <View style={styles.heartRoom}>
-          <WorkoutHeart bpm={heart.bpm} bluetooth={heart.bluetooth} />
+          <WorkoutHeart bpm={heart.bpm} bluetooth={heart.bluetooth} monitor={heart.monitor} />
         </View>
       )}
       <SoundPill sound={sound} />

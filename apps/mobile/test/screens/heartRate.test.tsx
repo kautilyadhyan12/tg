@@ -204,11 +204,16 @@ describe("the worst thing (37n): a monitor connected again by itself is only eve
       pullHeart();
       expect(strap.watches).toEqual([MINE]);
       release();
-      // Nothing holds it: nothing is asked again, Nearby devices allowed or not (round one, tests).
+      // Refused again, then let go while a retry waits: once allowed, nothing is asked, since nothing holds it (re-check, N3).
+      strap.allowed = false;
+      const before = strap.asks;
+      const again = holdHeart();
+      expect(strap.asks).toBe(before + 1);
+      again();
       const asked = strap.asks;
+      strap.allowed = true;
       now += 3000;
       pullHeart();
-      strap.allowed = false;
       now += 3000;
       pullHeart();
       expect(strap.asks).toBe(asked);

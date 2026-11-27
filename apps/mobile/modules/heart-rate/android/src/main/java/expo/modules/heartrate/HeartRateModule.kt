@@ -641,11 +641,19 @@ object Strap {
         dropIt(g)
         return
       }
-      // Asking for the heart rate refused: let it drop and connect again, never sit connected with none (C3).
+      // No switch to ask with: a monitor with no heart rate to send, which counts towards giving up (round one, L1).
+      val switch = measurement.getDescriptor(HeartRateModule.NOTIFY_SWITCH)
+      if (switch == null) {
+        synchronized(Strap) { noHeart += 1 }
+        dropIt(g)
+        return
+      }
+      // Asking for the heart rate refused by this phone (its Bluetooth busy): let it drop and connect again, never sit
+      // connected with none (C3). Not counted: the monitor never said no (re-check, N1); its own no comes in
+      // onDescriptorWrite.
       val askedNow = try {
-        val switch = measurement.getDescriptor(HeartRateModule.NOTIFY_SWITCH)
         when {
-          !g.setCharacteristicNotification(measurement, true) || switch == null -> false
+          !g.setCharacteristicNotification(measurement, true) -> false
           Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU ->
             g.writeDescriptor(switch, BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE) == BluetoothStatusCodes.SUCCESS
           else -> {
@@ -658,12 +666,7 @@ object Strap {
       } catch (e: SecurityException) {
         false
       }
-      // Refused: it counts as a monitor with no heart rate, so one that always refuses is given up after NO_HEART_MOST
-      // and never dropped and connected again for the whole run (round one, L1).
-      if (!askedNow) {
-        synchronized(Strap) { noHeart += 1 }
-        dropIt(g)
-      }
+      if (!askedNow) dropIt(g)
     }
 
     // The monitor's answer to being asked for its heart rate: refused is let go and connected again (C3); taken,
@@ -672,6 +675,8 @@ object Strap {
       if (descriptor.uuid != HeartRateModule.NOTIFY_SWITCH) return
       synchronized(Strap) {
         if (g !== gatt) return
+        // The monitor said no: it counts as one with no heart rate, so one that always refuses is given up after
+        // NO_HEART_MOST and never dropped and connected again for the whole run (round one, L1).
         if (status != BluetoothGatt.GATT_SUCCESS) {
           noHeart += 1
           dropIt(g)
