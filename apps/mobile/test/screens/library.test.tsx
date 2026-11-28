@@ -670,7 +670,8 @@ describe("Filters and Find by muscle (63b)", () => {
     expect(screen.getByRole("checkbox", { name: "Intermediate, 2 exercises" })).toBeTruthy();
     expect(screen.getByRole("checkbox", { name: "No equipment, 2 exercises" })).toBeTruthy();
     expect(screen.getByRole("checkbox", { name: "Barbell, 1 exercise" })).toBeTruthy();
-    expect(screen.getByRole("checkbox", { name: "Manual tracking, 3 exercises" })).toBeTruthy();
+    expect(screen.getByRole("checkbox", { name: "Live form check, 1 exercise" })).toBeTruthy();
+    expect(screen.getByRole("checkbox", { name: "Manual tracking, 2 exercises" })).toBeTruthy();
     expect(screen.getByRole("checkbox", { name: "Strength, 3 exercises" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Show 3 exercises" })).toBeTruthy();
 
@@ -842,7 +843,8 @@ describe("an exercise's page", () => {
     expect(screen.getByText("Hamstrings (biceps femoris, semitendinosus and semimembranosus) · Adductors · Adductor magnus")).toBeTruthy();
     expect(screen.getByText("Glutes (gluteus medius) · Abs (rectus abdominis) · Transverse abdominis · Obliques · Lower back (erector spinae)")).toBeTruthy();
     for (const row of ["Primary", "Secondary", "Stabilisers"]) expect(screen.getByText(row)).toBeTruthy();
-    expect(screen.getByText("Manual tracking")).toBeTruthy();
+    // The workout's own word for what the camera does for it (64b-ii).
+    expect(screen.getByText("Live form check")).toBeTruthy();
     expect(screen.getByLabelText("To start, 3 sets of 12 reps")).toBeTruthy();
     expect(screen.getByLabelText("No equipment")).toBeTruthy();
 

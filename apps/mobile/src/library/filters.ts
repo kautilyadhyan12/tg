@@ -2,8 +2,9 @@
 // and kind, each choice with its count. Pure, and tested as a table: a choice's count is always exactly what the
 // list then shows.
 import { EXERCISE_EQUIPMENT, EXERCISE_KINDS, EXERCISE_LEVELS, type PhoneLibraryEntry } from "@app/shared";
+import { cameraFor } from "../camera/cameraExercises";
 import { DEEP_UNDER, type Lit } from "./figure";
-import { COUNTED_TODAY, type CountedBy } from "./words";
+import type { CountedBy } from "./words";
 
 /** The five groups of choices. Two choices in one group mean either; choices in different groups mean both. */
 export type FilterGroup = "muscle" | "equipment" | "level" | "counted" | "kind";
@@ -32,10 +33,13 @@ export function roleOf(entry: PhoneLibraryEntry, muscle: string): "Primary" | "S
   return entry.muscles.main.some((m) => drawnMuscle(m) === muscle) ? "Primary" : "Secondary";
 }
 
-/** How an exercise is counted (§13.3). Until exercise folder 1's 52a publishes camera data, every one by hand. */
+/** How an exercise is counted (§13.3): read from the one list the workout reads (`cameraFor`, 64b-ii), so its page, the
+ *  filter and the workout's question give one answer. Until the Library's download carries the camera files, that list
+ *  rides in the app. */
 export function countedBy(entry: PhoneLibraryEntry): CountedBy {
-  void entry;
-  return COUNTED_TODAY;
+  const camera = cameraFor(entry.id, entry.set.measuredIn);
+  if (camera === null) return "hand";
+  return camera.camera === null ? "camera_counts" : "camera_coaches";
 }
 
 /** The values an exercise has in one group. Muscles are those it works (main and also), never the steadying row,

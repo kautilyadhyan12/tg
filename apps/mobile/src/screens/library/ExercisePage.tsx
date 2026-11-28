@@ -11,13 +11,13 @@ import { WholePictureTop } from "../../look/WholePictureTop";
 import { Sheet } from "../../look/Sheet";
 import { fonts, Txt } from "../../look/Txt";
 import { DEEP_UNDER, litMuscles, sideFor, type Sex, type Side } from "../../library/figure";
+import { countedBy } from "../../library/filters";
 import { exercisePicture } from "../../library/pictures";
 import { weightWords, type Units } from "../../library/records";
 import {
   COUNTED_WORDS,
   EFFORT_FLAMES,
   EFFORT_WORDS,
-  COUNTED_TODAY,
   effortOf,
   equipmentLine,
   kindWord,
@@ -71,7 +71,8 @@ export function ExercisePage({
   const [weighing, setWeighing] = useState(false);
   const mine = useMyWorkout();
   const en = entry.text.en;
-  const counted = COUNTED_WORDS[COUNTED_TODAY];
+  const countedWay = countedBy(entry);
+  const counted = COUNTED_WORDS[countedWay];
 
   // Its own picture (62a), once it has come: shown whole, the name under it. Until then, and for an exercise with none,
   // the app's picture of its kind with the name over its foot, as before.
@@ -87,7 +88,7 @@ export function ExercisePage({
   const tag = (
     <View style={styles.tagRow}>
       <View style={styles.tag}>
-        <Icon name="timer" size={13} colour="textSoft" />
+        <Icon name={countedWay === "hand" ? "timer" : "camera"} size={13} colour="textSoft" />
         <Txt kind="tiny" colour="textSoft">
           {counted}
         </Txt>

@@ -121,7 +121,7 @@ export function CameraAsk({ run, press }: { run: WorkoutRun; press: (p: Press) =
             label={start.off ? OPEN_SETTINGS : START_WITH_CAMERA}
             raised
             onPress={start.off ? () => void Linking.openSettings() : start.go}
-            style={styles.grow}
+            style={styles.askMain}
           />
           <Button
             label={COUNT_MANUALLY}
@@ -561,7 +561,10 @@ const styles = StyleSheet.create({
   grab: { alignSelf: "center", width: 40, height: 4, borderRadius: sizes.round, backgroundColor: colours.grab },
   askHead: { flexDirection: "row", alignItems: "center", gap: 12, paddingTop: 8 },
   askIcon: { width: 48, height: 48, borderRadius: 24, alignItems: "center", justifyContent: "center", backgroundColor: colours.orangeFill, borderWidth: 1, borderColor: colours.orangeLine },
-  askRow: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 12 },
+  // The main button as wide as its words on one line, growing into the room left; on a small phone or at the largest text,
+  // Count manually goes under it, centred (the 64b-ii walk: "Start with camera" broke in two at 720 by 1520).
+  askRow: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", justifyContent: "center", columnGap: 8, rowGap: 4, marginTop: 12 },
+  askMain: { flexGrow: 1 },
   label: { fontFamily: fonts.bold, letterSpacing: 1.54 },
   restTop: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", alignItems: "flex-start", gap: 10, paddingHorizontal: 16, paddingBottom: 8 },
   restTimer: { gap: 8 },

@@ -97,17 +97,15 @@ export function equipmentLine(entry: PhoneLibraryEntry): string {
   return rest.length === 0 ? equipmentWord(first) : `${equipmentWord(first)} +${String(rest.length)}`;
 }
 
-/** How the exercise is counted (§13.3): read from exercise folder 1's camera data for it. Until its job 52a
- *  publishes that data (and settles its shape) no exercise has any, so every one is counted by hand or timer;
- *  the old three definitions never make an exercise camera-counted on the phone. The job that reads that data
- *  replaces COUNTED_TODAY with the reading. */
+/** How the exercise is counted (§13.3; `countedBy`): by the camera with its form checked, by the camera alone (no form rules
+ *  of its own yet), or by hand or timer. The same words as the workout's question for it (64b-ii, Kd's "Live form check"):
+ *  one name for one thing. */
 export type CountedBy = "camera_coaches" | "camera_counts" | "hand";
 export const COUNTED_WORDS: Readonly<Record<CountedBy, string>> = {
-  camera_coaches: "Camera counts and coaches",
-  camera_counts: "Camera counts",
+  camera_coaches: "Live form check",
+  camera_counts: "Live rep count",
   hand: "Manual tracking",
 };
-export const COUNTED_TODAY: CountedBy = "hand";
 export const countedWord = (counted: string): string => (has(COUNTED_WORDS, counted) ? COUNTED_WORDS[counted] : plainWord(counted));
 
 /** A mistake's words as what goes wrong (its first sentence) and how to put it right (the rest). A sentence ends

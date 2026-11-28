@@ -3794,6 +3794,11 @@ The camera in the workout (§11.8 steps 3 to 6):
   while the workout is put away (`createCameraKeep`); the camera is off while it is. A set counted by hand offers Start with
   camera between Reset set and Skip exercise; after the camera stopped it says "The camera stopped. Count this set yourself."
   The coach says "Set complete." as a camera set ends, "Workout complete." at the workout's last.
+- **One answer on every page** (found on Kd's phone, 64b-ii's walk): an exercise's page and the Library's filter said "Manual
+  tracking" for every exercise while the workout offered the camera. Both now read the same list (`countedBy` from
+  `cameraFor`): "Live form check" (the Squat), "Live rep count" (the Kettlebell Goblet Squat), "Manual tracking" for the rest,
+  the question's own titles. The question's main button keeps its words on one line; on a small phone or at the largest text
+  Count manually goes under it.
 - **The worst thing first:** a form score kept for a set no camera watched, or the camera on while the screen says it is off.
   `test/workoutCamera.test.ts`'s first block (seven ways to do a set without the camera, the camera saying all along that it
   counted) and `test/screens/workoutCamera.test.tsx`'s first block (Count manually turns no camera on; a real set of squats
