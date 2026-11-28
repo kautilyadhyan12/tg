@@ -62,6 +62,13 @@ export const runs = pgTable(
     // 0247 (ROADMAP 37o): the person's time zone when the run was saved, a name Postgres knows, so a past run's day
     // never moves with a later zone; null where none was known (the zone they have now is used).
     timeZone: text("time_zone"),
+    // 0248 (ROADMAP 37q): a run indoors, with no GPS: the steps the phone counted, the distance they made from the
+    // person's height alone (what a treadmill's distance teaches their step from), and a treadmill's distance typed
+    // after Finish, kept only when it was taken (`indoorRun.ts`). All three empty outdoors.
+    kind: text("kind").notNull().default("outdoor"),
+    steps: integer("steps"),
+    stepsM: integer("steps_m"),
+    treadmillM: integer("treadmill_m"),
   },
   (t) => [
     index("runs_user_started_idx").on(t.userId, t.startedAt.desc()),
@@ -81,6 +88,12 @@ export const runs = pgTable(
     index("runs_climb_waiting_idx").on(t.createdAt).where(sql`${t.climbState} = 'waiting'`),
     check("runs_shape_check", sql`char_length(${t.shape}) BETWEEN 1 AND 4000`),
     check("runs_bests_check", sql`${t.best1kS} > 0 AND ${t.bestMileS} > 0 AND ${t.best5kS} > 0 AND ${t.best10kS} > 0`),
+    check("runs_kind_check", sql`${t.kind} IN ('outdoor', 'indoor')`),
+    check(
+      "runs_indoor_check",
+      sql`(${t.kind} = 'outdoor' AND ${t.steps} IS NULL AND ${t.stepsM} IS NULL AND ${t.treadmillM} IS NULL) OR (${t.kind} = 'indoor' AND ${t.steps} >= 0 AND ${t.stepsM} >= 0 AND (${t.treadmillM} IS NULL OR ${t.treadmillM} > 0) AND ${t.polyline} IS NULL AND ${t.shape} IS NULL AND ${t.best1kS} IS NULL AND ${t.bestMileS} IS NULL AND ${t.best5kS} IS NULL AND ${t.best10kS} IS NULL)`,
+    ),
+    index("runs_user_treadmill_idx").on(t.userId, t.startedAt.desc()).where(sql`${t.treadmillM} IS NOT NULL`),
     check(
       "runs_heart_check",
       sql`(${t.heartAvg} IS NULL AND ${t.heartMax} IS NULL) OR (${t.heartAvg} BETWEEN 30 AND 240 AND ${t.heartMax} BETWEEN 30 AND 240 AND ${t.heartAvg} <= ${t.heartMax})`,

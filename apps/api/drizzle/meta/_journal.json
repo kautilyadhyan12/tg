@@ -1730,6 +1730,13 @@
       "when": 1790985600247,
       "tag": "0247_run_time_zone",
       "breakpoints": true
+    },
+    {
+      "idx": 247,
+      "version": "7",
+      "when": 1790985600248,
+      "tag": "0248_indoor_run",
+      "breakpoints": true
     }
   ]
 }

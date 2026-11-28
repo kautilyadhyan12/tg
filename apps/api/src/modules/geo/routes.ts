@@ -278,6 +278,11 @@ export function registerGeoRoutes(
   // ── Running records (ROADMAP 37c-ii): the person's own, from their own runs ──────────────────
   app.get("/v1/geo/runs/records", { preHandler: [app.authenticate] }, async (req, reply) => reply.send(await service.runRecords(readDeps, authedUserId(req))));
 
+  // ── What an indoor run's steps are measured with (ROADMAP 37q): the person's own height and treadmill runs ──
+  app.get("/v1/geo/runs/step-length", { preHandler: [app.authenticate] }, async (req, reply) =>
+    reply.send({ stepLength: await service.stepLength(readDeps, authedUserId(req)) }),
+  );
+
   app.get<{ Params: { id: string } }>("/v1/geo/runs/:id", { preHandler: [app.authenticate] }, async (req, reply) => {
     if (!UUID.test(req.params.id)) return runNotFound(req, reply);
     const run = await service.getRun(readDeps, authedUserId(req), req.params.id);

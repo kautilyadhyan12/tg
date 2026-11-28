@@ -4,6 +4,7 @@
 import { z } from "zod";
 import { PACE_LINE_MOST, RUN_MAX_ELAPSED_MS, RUN_MAX_PAUSES, RUN_MAX_POINTS } from "./runMaths.js";
 import { RUN_SHAPE_MOST_CHARS } from "./runShape.js";
+import { INDOOR_MOST_STEPS, LEARN_RUNS, STEP_FACTOR_LEAST, STEP_FACTOR_MOST } from "./indoorRun.js";
 import { HEART_BPM_LEAST, HEART_BPM_MOST, heartLineSchema, heartMaxSchema, heartSamplesSchema, heartZonesSchema } from "./heartRate.js";
 
 // ── route generation (POST /v1/geo/routes/generate) ─────────────────────────
@@ -107,6 +108,8 @@ export const runSummarySchema = z.object({
   climbM: z.number().int().nonnegative().nullable(),
   /** The route made small for its picture (`runShape.ts`); null with no route. */
   shape: z.string().max(RUN_SHAPE_MOST_CHARS).nullable(),
+  /** Run indoors (37q): a treadmill, or inside the house, with no route. A server from before sends none: outdoors. */
+  indoor: z.boolean().default(false),
 });
 export type RunSummary = z.infer<typeof runSummarySchema>;
 
@@ -169,8 +172,17 @@ export const runRecordsSchema = z.object({
 export type RunRecords = z.infer<typeof runRecordsSchema>;
 
 /** A run's own page: everything its summary showed after Finish. */
+/** Where a run's distance is from (37q): the GPS, the steps the phone counted indoors, or a treadmill's own, typed
+ *  after Finish. A server from before sends none: the GPS. */
+export const runDistanceFromSchema = z.enum(["gps", "steps", "treadmill"]).default("gps");
+export type RunDistanceFrom = z.infer<typeof runDistanceFromSchema>;
+/** The steps counted on an indoor run (37q); null outdoors. */
+const runStepsSchema = z.number().int().nonnegative().nullable().default(null);
+
 export const runDetailSchema = runSummarySchema.extend({
   polyline: z.string().nullable(),
+  distanceFrom: runDistanceFromSchema,
+  steps: runStepsSchema,
   trackStarts: z.array(z.number().int().nonnegative()),
   splitsKm: z.array(runSplitSchema),
   splitsMi: z.array(runSplitSchema),
@@ -269,14 +281,32 @@ const saveRunObject = z
       .custom<unknown[]>((value) => !Array.isArray(value) || value.length <= RUN_MAX_PAUSES, { message: "too many still stretches" })
       .pipe(z.array(z.tuple([msIntoRun, msIntoRun])).refine(stillInOrder, { message: "still stretches out of order" }))
       .optional(),
+    /** An indoor run (37q), with no GPS: the phone's counts of the steps since Start, [ms into the run, steps], and the
+     *  distance a treadmill showed, in metres, typed after Finish (null with none). The server works the distance out
+     *  from them (`indoorSums`) and takes the treadmill's only where somebody could have run it in that time. Such a run
+     *  sends no points and no still stretches: indoors the phone may lie on a treadmill while the person runs. */
+    indoor: z
+      .object({
+        counts: z
+          .custom<unknown[]>((value) => !Array.isArray(value) || value.length <= RUN_MAX_POINTS, { message: "too many step counts" })
+          .pipe(z.array(z.tuple([msIntoRun, z.number().int().min(0).max(INDOOR_MOST_STEPS)]))),
+        // Any whole number is read: one too large is the person's slip and is not taken, never a run refused.
+        treadmillM: z.number().int().min(0).max(1_000_000_000).nullable(),
+      })
+      .strict()
+      .optional(),
   })
   .strict();
 /** Each still stretch inside the run's own time. */
 const stillWithin = (run: { elapsedMs: number; still?: readonly (readonly [number, number])[] | undefined }): boolean =>
   (run.still ?? []).every(([, to]) => to <= run.elapsedMs);
 const stillPastEnd = { message: "a still stretch past the run's end", path: ["still"] };
+/** An indoor run has no route and no still stretches (37q). */
+const indoorHasNoRoute = (run: { points: readonly unknown[]; still?: readonly unknown[] | undefined; indoor?: unknown }): boolean =>
+  run.indoor === undefined || (run.points.length === 0 && (run.still ?? []).length === 0);
+const indoorWithRoute = { message: "an indoor run has no points and no still stretches", path: ["indoor"] };
 
-export const saveRunRequestSchema = saveRunObject.refine(stillWithin, stillPastEnd);
+export const saveRunRequestSchema = saveRunObject.refine(stillWithin, stillPastEnd).refine(indoorHasNoRoute, indoorWithRoute);
 export type SaveRunRequest = z.infer<typeof saveRunRequestSchema>;
 
 
@@ -306,8 +336,26 @@ export const savedRunSchema = z.object({
   heartMax: heartBpmSchema.nullable().default(null),
   /** Its time in each heart rate zone (37f-ii-a), as the run's page shows it. */
   heartZones: heartZonesSchema.nullable().default(null),
+  /** Run indoors (37q), where its distance is from, and its steps. */
+  indoor: z.boolean().default(false),
+  distanceFrom: runDistanceFromSchema,
+  steps: runStepsSchema,
 });
 export type SavedRun = z.infer<typeof savedRunSchema>;
+
+// ── What an indoor run's steps are measured with (GET /v1/geo/runs/step-length; ROADMAP 37q) ──────
+// The phone shows an indoor run's distance as it goes with the same basis the server saves it with (`indoorSums`).
+export const stepLengthSchema = z.object({
+  /** The height measured from: the person's own, or HEIGHT_UNKNOWN_CM where they gave none. */
+  heightCm: z.number().min(50).max(300),
+  heightKnown: z.boolean(),
+  /** How far their own steps are from their height's, learned from treadmills; 1 until one has taught it. */
+  factor: z.number().min(STEP_FACTOR_LEAST).max(STEP_FACTOR_MOST),
+  /** How many treadmill runs taught it. */
+  learnedFrom: z.number().int().min(0).max(LEARN_RUNS),
+});
+export type StepLength = z.infer<typeof stepLengthSchema>;
+export const stepLengthResponseSchema = z.object({ stepLength: stepLengthSchema });
 
 // ── A run's elevation gain before it is saved (POST /v1/geo/runs/climb; ROADMAP 37b-ii) ───────────
 // The run's summary asks with the same points it will save: the server works the line out with the

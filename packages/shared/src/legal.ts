@@ -19,7 +19,7 @@ export const LEGAL_PATHS = {
 } as const;
 
 /** The day the words below last changed, `YYYY-MM-DD`. */
-export const LEGAL_UPDATED_ON = "2026-11-27";
+export const LEGAL_UPDATED_ON = "2026-11-28";
 
 /** Who runs KWAZO (Kd, 2026-11-08: his full name; a sole proprietorship, RULINGS 2026-09-15). */
 export const LEGAL_OWNER = "Kautilya Darshan Baruah";
@@ -342,6 +342,7 @@ export function privacyPolicy(facts: LegalFacts = LEGAL_FACTS): LegalDocument {
           ),
           p("Location information is accessed while a running session is being recorded and the Application is open or the active running notification is displayed, and while the Running page is open, to show the strength of the GPS signal. That reading stays on your device and is not kept."),
           p("KWAZO does not otherwise collect your location in the background outside these circumstances."),
+          p("If you record an indoor run, such as on a treadmill, KWAZO does not use your location. Your device counts your steps with its motion sensor while you run, and when you save the run, the counts are sent with it. For that run we keep the number of steps and the distance worked out from them and the height you gave us, and, if you enter it, the distance your treadmill showed. The distances your treadmills showed are used to make the distance of your next indoor runs closer to your own steps."),
           h3("3.10.1. Heart Rate From a Heart Rate Monitor"),
           p("If you connect a heart rate monitor, such as a chest strap or a watch that broadcasts its heart rate, KWAZO uses your device's Bluetooth to find the monitors near you and to connect to the one you choose. Bluetooth is not used to work out where you are."),
           p("While you record a run, the monitor's heart rate readings are kept on your device. When you save the run, they are sent with it, and for that run we keep your average and highest heart rate, your heart rate along the route (one number for each of up to 150 places along it, for the heart rate chart) and how long you spent in each of five heart rate zones. The readings themselves are not kept after the run is saved."),
@@ -874,7 +875,7 @@ export function washingtonHealthDataPolicy(facts: LegalFacts = LEGAL_FACTS): Leg
           p("We collect information relating to meals you record, including food items, caloric values, and nutritional information."),
           p("This information is used to calculate and monitor your dietary intake in relation to your personalized nutrition plan."),
           h3("1.4. Exercise and Physical Activity Information"),
-          p("We collect information relating to your workouts, exercise form scores, and recorded running activities, including the average and highest heart rate of a run recorded with a heart rate monitor, its heart rate along the route, the time it spent in each heart rate zone, the average and highest heart rate of a workout done with a heart rate monitor, and the maximum heart rate you enter for your heart rate zones."),
+          p("We collect information relating to your workouts, exercise form scores, and recorded running activities, including the steps counted on an indoor run and the distance a treadmill showed, the average and highest heart rate of a run recorded with a heart rate monitor, its heart rate along the route, the time it spent in each heart rate zone, the average and highest heart rate of a workout done with a heart rate monitor, and the maximum heart rate you enter for your heart rate zones."),
           p("This information is used to track your physical activity, calculate training-related metrics, and display your fitness progress."),
           h3("1.5. Derived Fitness and Nutrition Information"),
           p("KWAZO may generate or calculate additional fitness and nutrition information based on the data described above, including personalized calorie and protein targets."),
@@ -891,6 +892,7 @@ export function washingtonHealthDataPolicy(facts: LegalFacts = LEGAL_FACTS): Leg
           list(
             "Camera-Based Exercise Results: Exercise-related measurements generated through camera-based analysis, including repetition counts and exercise form scores. Camera processing occurs locally on your device. No video footage is recorded, and no video is transmitted from your device to KWAZO or any third party.",
             "Running and Location Information: Device location information collected while you actively record a running session through the Application.",
+            "Steps: Counted by your device's motion sensor while you record an indoor run, such as on a treadmill. For each indoor run, only its number of steps and the distance worked out from them are kept.",
             "Heart Rate: Readings from a heart rate monitor you connect through your device's Bluetooth, while you record a run or do a workout. For each run, only its average and highest heart rate, its heart rate along the route and its time in each heart rate zone are kept; for each workout, only its average and highest heart rate.",
           ),
         ],
