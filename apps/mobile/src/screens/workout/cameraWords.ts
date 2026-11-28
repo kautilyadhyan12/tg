@@ -21,12 +21,13 @@ export const RESUMES_WORDS = "Camera tracking resumes when the rest ends.";
 export const REST_BOX_WORDS = "Rest, reps, pause";
 export const REST_BOX_HOLD_WORDS = "Rest, pause";
 
-/** The question as an exercise the camera counts starts: its name, what the camera does for it (a form check only where
- *  the exercise has form rules of its own, its camera file), and Kd's line under it. */
-export function askWords(name: string, measuredIn: "reps" | "time", judged: boolean): { eyebrow: string; title: string; line: string } {
+/** The question as an exercise the camera counts starts: its name, "Live form check" under it only where the exercise has
+ *  form rules of its own (its camera file), and Kd's line. With no form rules there is no title: the name alone heads the
+ *  box, never a form check the camera does not make. */
+export function askWords(name: string, measuredIn: "reps" | "time", judged: boolean): { eyebrow: string; title: string | null; line: string } {
   const eyebrow = name.toUpperCase();
-  if (measuredIn === "time") return { eyebrow, title: judged ? "Live form check" : "Live hold timer", line: ASK_HOLD_LINE };
-  return { eyebrow, title: judged ? "Live form check" : "Live rep count", line: ASK_LINE };
+  if (measuredIn === "time") return { eyebrow, title: judged ? "Live form check" : null, line: ASK_HOLD_LINE };
+  return { eyebrow, title: judged ? "Live form check" : null, line: ASK_LINE };
 }
 
 /** The number of the set just done, within its exercise. */

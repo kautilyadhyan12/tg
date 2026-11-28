@@ -208,6 +208,21 @@ describe("leaving the camera in a set", () => {
     expect([tracking(run), run.cam?.left]).toEqual([false, "camera_stopped"]);
   });
 
+  it("a set followed: the same exercise's next sets are followed too, the camera still off, until it is turned on again", () => {
+    const followed: [number, Press][] = [[2, { kind: "way", way: "camera" }], [20, { kind: "follow" }], [50, { kind: "followed", done: 9 }]];
+    const resting = play([squat], followed);
+    expect([resting.phase, following(resting), tracking(resting), resting.cam]).toEqual(["rest", false, false, undefined]);
+    // The rest over: set 2 is followed, with no camera.
+    const next = play([squat], [...followed, [111, { kind: "tick" }], ...counts(112, 3)]);
+    expect([next.phase, next.set, following(next), tracking(next), next.cam, next.count]).toEqual(["set", 1, true, false, undefined, 0]);
+    expect(saved(play([squat], [...followed, [111, { kind: "tick" }], [140, { kind: "followed", done: 8 }]])).map((x) => [x.counted, x.done, x.camera])).toEqual([["hand", 9, undefined], ["hand", 8, undefined]]);
+    // Camera off, tap to turn on: that set and the ones after it are the camera's.
+    const back = play([squat], [...followed, [111, { kind: "tick" }], [115, { kind: "way", way: "camera" }], ...counts(120, 10), [160, { kind: "cameraDone", end: end(10) }], [221, { kind: "tick" }]]);
+    expect([back.set, tracking(back), following(back)]).toEqual([2, true, false]);
+    // The next exercise is asked about afresh, whatever the last one did.
+    const other = play([{ ...squat, sets: sets(1, 10, 0) }, squat], followed);
+    expect([asking(other), other.way, other.follow]).toEqual([true, undefined, undefined]);
+  });
   it("Follow along, then back to the camera: the set starts again, the camera's", () => {
     const run = play([squat], [[2, { kind: "way", way: "camera" }], ...counts(5, 4), [20, { kind: "follow" }], [30, { kind: "way", way: "camera" }]]);
     expect([following(run), tracking(run), run.count, run.cam?.done, run.phaseAt]).toEqual([false, true, 0, 0, 30_000]);

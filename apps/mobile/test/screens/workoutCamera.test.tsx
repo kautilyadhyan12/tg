@@ -8,7 +8,7 @@
 // stops and with the workout put away, there is no camera at all; and a real set of squats saves its numbers and nothing of
 // the body.
 import type { MovementFrame } from "@app/shared";
-import { act, fireEvent, render, screen } from "@testing-library/react-native";
+import { act, fireEvent, render, screen, within } from "@testing-library/react-native";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { File, Paths } from "expo-file-system";
@@ -237,10 +237,11 @@ describe("the question", () => {
     await fireEvent.press(screen.getByRole("button", { name: "Count manually" }));
     await fireEvent.press(screen.getByRole("button", { name: "Set done · 3 reps" }));
     // The next exercise the camera counts is asked about afresh.
-    expect(await screen.findByText("KETTLEBELL GOBLET SQUAT")).toBeTruthy();
-    expect(screen.getByText("Live rep count")).toBeTruthy();
-    expect(screen.getByText("Use your camera for automatic rep counts and feedback.")).toBeTruthy();
-    expect(screen.queryByText(/form check/)).toBeNull();
+    const box = within(await screen.findByTestId("camera-ask"));
+    // No form rules of its own: its name heads the box, with no title, and never "Live form check".
+    expect(box.getByText("Kettlebell Goblet Squat")).toBeTruthy();
+    expect(box.getByText("Use your camera for automatic rep counts and feedback.")).toBeTruthy();
+    expect(screen.queryByText(/form check|rep count$/i)).toBeNull();
   });
 
   it("the camera turned off for the app in the phone's settings: the question says so, with the settings and Count manually", async () => {
@@ -348,5 +349,25 @@ describe("leaving the camera in a set", () => {
     const set = s.saves[0]?.sets[0];
     expect(set?.counted).toBe("hand");
     expect(set?.camera).toBeUndefined();
+  });
+
+  it("Follow along stays for the exercise's next set: after its rest the clip again, never the camera", async () => {
+    keptWorkout([{ id: "squat", sets: 2, reps: 3, rest: 60 }]);
+    await start(server().ask);
+    await fireEvent.press(await screen.findByRole("button", { name: "Start with camera" }));
+    await screen.findByTestId("pose-camera");
+    await fireEvent.press(screen.getByRole("button", { name: "Follow along" }));
+    // How often the camera had been drawn by the time it was put off: never once more from here.
+    const drawn = poseCamera.actives.length;
+    await fireEvent.press(await screen.findByRole("button", { name: "Time, weight, pause" }));
+    await fireEvent.press(screen.getByRole("button", { name: /^Set done/ }));
+    await fireEvent.press(await screen.findByRole("button", { name: /^Done · \d+ reps?$/ }));
+    // Its rest is the workout's own, with no camera.
+    await fireEvent.press(await screen.findByRole("button", { name: "Skip rest" }));
+    expect(await screen.findByTestId("follow-screen")).toBeTruthy();
+    expect(screen.getByText(/Set 2 of 2/)).toBeTruthy();
+    await settle(300);
+    expect(cameraOn()).toBe(false);
+    expect(poseCamera.actives).toHaveLength(drawn);
   });
 });

@@ -98,6 +98,8 @@ export function CameraAsk({ run, press }: { run: WorkoutRun; press: (p: Press) =
   const start = useStartCamera(() => {
     press({ kind: "way", way: "camera" });
   });
+  // An exercise with no form rules of its own has no title: its name heads the box.
+  const heading = start.off ? CAMERA_OFF.title : words.title;
   return (
     <View style={StyleSheet.absoluteFill}>
       <View style={styles.scrim} />
@@ -108,8 +110,8 @@ export function CameraAsk({ run, press }: { run: WorkoutRun; press: (p: Press) =
             <Icon name={start.off ? "cameraOff" : "camera"} size={24} colour="orangeLight" />
           </View>
           <View style={styles.grow}>
-            <Txt kind="eyebrow">{words.eyebrow}</Txt>
-            <Txt kind="h2">{start.off ? CAMERA_OFF.title : words.title}</Txt>
+            {heading === null ? null : <Txt kind="eyebrow">{words.eyebrow}</Txt>}
+            <Txt kind="h2">{heading ?? exercise.name}</Txt>
           </View>
         </View>
         <Txt kind="body" colour="text">

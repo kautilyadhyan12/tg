@@ -103,7 +103,7 @@ export function equipmentLine(entry: PhoneLibraryEntry): string {
 export type CountedBy = "camera_coaches" | "camera_counts" | "hand";
 export const COUNTED_WORDS: Readonly<Record<CountedBy, string>> = {
   camera_coaches: "Live form check",
-  camera_counts: "Live rep count",
+  camera_counts: "Automatic rep counts",
   hand: "Manual tracking",
 };
 export const countedWord = (counted: string): string => (has(COUNTED_WORDS, counted) ? COUNTED_WORDS[counted] : plainWord(counted));

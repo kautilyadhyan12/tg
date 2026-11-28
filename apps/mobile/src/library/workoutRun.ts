@@ -199,6 +199,8 @@ const freshCamera = (r: WorkoutRun): RunCamera => ({ done: 0, heldMs: 0, seenRep
 /** The set at the workout's place starts now; one measured in time gets ready first unless a rest came before it. With the
  *  camera chosen, the camera counts it, and a hold needs no get-ready: the camera waits for the person to take position. */
 function begin(r: WorkoutRun, afterRest: boolean): WorkoutRun {
+  // Follow along, once chosen, is how the exercise's next sets start too, the camera still off: a busy room stays busy.
+  if (r.way === "camera" && r.follow === true) return { ...r, phase: "set", phaseAt: r.activeMs, phaseEndsAt: null, count: 0, cam: undefined };
   if (r.way === "camera") return { ...r, phase: "set", phaseAt: r.activeMs, phaseEndsAt: null, count: 0, cam: freshCamera(r), follow: undefined };
   const plain: WorkoutRun = { ...r, cam: undefined, follow: undefined };
   if (exerciseOf(r).measuredIn === "time" && !afterRest) return { ...plain, phase: "ready", phaseAt: r.activeMs, phaseEndsAt: r.activeMs + READY_MS, count: 0 };
@@ -259,7 +261,8 @@ function complete(r: WorkoutRun, done: number): WorkoutRun {
   const next = nextOf(r);
   if (next === null || ran.done.length >= L.setsMost) return { ...ran, phase: "done", phaseAt: r.activeMs, phaseEndsAt: null };
   // The next exercise is asked about afresh.
-  const moved: WorkoutRun = { ...ran, ex: next.ex, set: next.set, ...(next.ex === r.ex ? {} : { way: undefined }) };
+  // A set followed with the clip: the same exercise's next set is followed too (until the camera is turned on again).
+  const moved: WorkoutRun = { ...ran, ex: next.ex, set: next.set, ...(next.ex === r.ex ? (r.follow === true ? { follow: true as const } : {}) : { way: undefined }) };
   const rest = restSeconds ?? 0;
   if (rest > 0) return { ...moved, phase: "rest", phaseAt: r.activeMs, phaseEndsAt: r.activeMs + rest * 1000 };
   return begin(moved, false);

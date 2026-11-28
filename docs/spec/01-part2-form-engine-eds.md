@@ -3774,7 +3774,8 @@ The camera in the workout (§11.8 steps 3 to 6):
 - **The question,** as such an exercise starts, every time, nothing remembered (`asking`; the set, or a hold's get-ready, waits
   for it): a box at the foot, in Kd's words, "SQUAT", "Live form check", "Use your camera for automatic rep counts and
   feedback.", "Your phone processes the camera feed. KWAZO never saves the video or sends it to KWAZO servers or any third
-  party.", Start with camera, Count manually. An exercise with no form rules is titled "Live rep count", never a form check.
+  party.", Start with camera, Count manually. An exercise with no form rules has no title, its name alone heading the box, never a
+  form check (Kd, of a title "Live rep count": *"remove it"*).
   The camera turned off for the app: "Camera access is off", Open
   settings. The answer holds for that exercise's sets in this workout; the next exercise is asked afresh.
 - **The steps** (`workoutRun.ts`, table-tested in `test/workoutCamera.test.ts`): chosen, each set is counted by the camera
@@ -3785,7 +3786,8 @@ The camera in the workout (§11.8 steps 3 to 6):
   outside the files' rules) is kept as none. Count this set myself and the camera stopping leave the camera for the rest of
   that set (`leave`), kept as the camera's set with what it had judged by then, a hold going on as the workout's timer from the
   time the camera saw it held; the next set is the camera's again. Follow along puts the camera off; the set is then the
-  person's own count, or the timer's, never the camera's. Start with camera on a set counted by hand keeps its reps and counts
+  person's own count, or the timer's, never the camera's, and the exercise's next sets start in Follow along too, until
+  "Camera off · Tap to turn on" (Kd's click-through: the camera came back on at the next set of a busy room). Start with camera on a set counted by hand keeps its reps and counts
   on from them.
 - **The screens** (`screens/workout/WorkoutCamera.tsx`): the camera screen of 53a and its box, unchanged, inside the
   workout's own window; the rest after a camera set, read from 3 m: the countdown in big green digits, "Camera off", "Set 1
@@ -3796,8 +3798,8 @@ The camera in the workout (§11.8 steps 3 to 6):
   The coach says "Set complete." as a camera set ends, "Workout complete." at the workout's last.
 - **One answer on every page** (found on Kd's phone, 64b-ii's walk): an exercise's page and the Library's filter said "Manual
   tracking" for every exercise while the workout offered the camera. Both now read the same list (`countedBy` from
-  `cameraFor`): "Live form check" (the Squat), "Live rep count" (the Kettlebell Goblet Squat), "Manual tracking" for the rest,
-  the question's own titles. The question's main button keeps its words on one line; on a small phone or at the largest text
+  `cameraFor`): "Live form check" (the Squat), "Automatic rep counts" (the Kettlebell Goblet Squat, Kd's own words for what the camera
+  does), "Manual tracking" for the rest. The question's main button keeps its words on one line; on a small phone or at the largest text
   Count manually goes under it.
 - **The worst thing first:** a form score kept for a set no camera watched, or the camera on while the screen says it is off.
   `test/workoutCamera.test.ts`'s first block (seven ways to do a set without the camera, the camera saying all along that it
