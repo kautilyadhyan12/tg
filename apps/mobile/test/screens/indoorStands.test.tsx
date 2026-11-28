@@ -1,5 +1,5 @@
 import { HEIGHT_UNKNOWN_CM } from "@app/shared";
-import { phoneRunFiles, resetRecorder, runNow, runStepsOf, startRun, takeSteps, movingMsOf, type LiveRun } from "../../src/screens/running/recorder";
+import { finishRun, movingMsOf, pauseRun, phoneRunFiles, resetRecorder, runNow, runStepsOf, startRun, takeSteps, type LiveRun } from "../../src/screens/running/recorder";
 import { indoorSumsAt } from "../../src/screens/running/runLive";
 
 // Stands in an indoor run, as a class (the third re-check, H5: a stand in the middle of what the app could not see read
@@ -92,5 +92,39 @@ describe("every stand is a pause, wherever it falls and however late it is seen 
     expect(sums.movingS).toBeGreaterThanOrEqual(walked - stands - 2);
     // The clock reads what the summary will.
     expect(Math.abs(movingMsOf(run, t0 + endMs) / 1000 - sums.movingS)).toBeLessThanOrEqual(1);
+  });
+});
+
+describe("Pause or Finish pressed before any look after the screen was off (the fourth re-check, L5)", () => {
+  /** Walking to 360 s, standing to 960 s, walking to 1,020 s, standing to 1,300 s: all handed over with the screen off. */
+  async function screenOffWalk(t0: number): Promise<void> {
+    await startRun(ME, RUN_ID, true, t0, null, { basis: { heightCm: HEIGHT_UNKNOWN_CM, factor: 1 }, stepsOff: false });
+    motion.stepTo(t0, 8016);
+    await takeSteps(t0);
+    let total = 8016;
+    for (let s = 1; s <= 1300; s++) {
+      if (s <= 360 || (s > 960 && s <= 1020)) {
+        total += 2;
+        motion.stepTo(t0 + s * 1000, total);
+      }
+      if (s <= 300) await takeSteps(t0 + s * 1000);
+    }
+  }
+
+  it.each([
+    ["Finish", (now: number) => finishRun(now)],
+    ["Pause", (now: number) => pauseRun(now)],
+  ])("%s: the stand at the end is a pause from ten seconds after the last step, as the one in the middle is", async (_name, press) => {
+    const t0 = Date.now();
+    await screenOffWalk(t0);
+    await press(t0 + 1_300_000);
+    const run = runNow();
+    if (run === null) throw new Error("no run");
+    const sums = indoorSumsAt(run, 1_300_000, 0, null);
+    expect(sums.steps).toBe(840);
+    // 420 s walked, ten seconds of each stand: 440 s, never the 280 s standing at the end.
+    expect(sums.movingS).toBeGreaterThanOrEqual(420);
+    expect(sums.movingS).toBeLessThanOrEqual(442);
+    expect(Math.abs(movingMsOf(run, t0 + 1_300_000) / 1000 - sums.movingS)).toBeLessThanOrEqual(1);
   });
 });

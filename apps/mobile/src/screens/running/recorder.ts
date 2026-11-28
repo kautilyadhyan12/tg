@@ -707,6 +707,27 @@ function standBefore(run: LiveRun, rise: StepRise): void {
   writtenAt = 0;
 }
 
+/** Running indoors, a stand at the end of steps no look saw as they came (the screen was off): where its Auto-pause would
+ *  have begun, ten seconds after the last step, as `takeSteps` finds it; null with none, or when a look would see it now. */
+function lateStandAt(run: LiveRun, now: number): number | null {
+  const indoor = run.indoor;
+  if (indoor == null || run.phase !== "running" || run.pauses.length >= RUN_MAX_PAUSES) return null;
+  const nowMs = elapsedMs(run, now);
+  flushSteps(run, nowMs, true);
+  const change = nextStepPause({
+    phase: "running",
+    byPerson: false,
+    autoPause: run.autoPause,
+    armed: indoor.armed,
+    counts: indoor.counts,
+    pauseFrom: null,
+    lastPauseEnd: lastOpenEnd(run),
+    wake: null,
+    nowMs,
+  });
+  return change?.kind === "pause" && change.at < nowMs ? change.at : null;
+}
+
 /** The counter's readings taken into the run (`takeRises`, `keepRise`). True when the steps rose. */
 function readSteps(run: LiveRun, until: number = RUN_MAX_ELAPSED_MS): boolean {
   const rises = takeRises(run, until);
@@ -1358,10 +1379,11 @@ export async function pauseRun(now: number = Date.now()): Promise<void> {
   // From the time the screen shows, which the GPS's own clock can put a second ahead of the phone's: a
   // pause never takes the clock back.
   if (run.phase === "running") {
-    const at = Math.max(elapsedMs(run, now), lastOpenEnd(run));
-    closeStill(run, at);
-    // Indoors (37q-ii-a): the steps up to now taken in, and the pause's edge marked.
+    // Indoors (37q-ii-a): the steps up to now taken in first; a stand at their end that no look saw (the screen was off)
+    // is where the pause begins (the fourth re-check, L5).
     readSteps(run);
+    const at = lateStandAt(run, now) ?? Math.max(elapsedMs(run, now), lastOpenEnd(run));
+    closeStill(run, at);
     fenceAt(run, at);
     run.pauses.push([at, null]);
   }
@@ -1496,6 +1518,12 @@ export async function finishRun(now: number = Date.now()): Promise<LiveRun | nul
   // Indoors (37q-ii-a): the last steps taken in, none past Finish, and the counter let go.
   readSteps(run, end);
   flushSteps(run, end, true);
+  // A stand at the end of steps no look saw (the screen was off) is a pause to Finish (the fourth re-check, L5).
+  const stoodFrom = lateStandAt(run, now);
+  if (stoodFrom !== null && stoodFrom < end) {
+    fenceAt(run, stoodFrom);
+    run.pauses.push([stoodFrom, end]);
+  }
   stopIndoor();
   closePause(run, end);
   closeStill(run, end);
