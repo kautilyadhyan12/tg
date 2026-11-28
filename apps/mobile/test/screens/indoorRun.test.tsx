@@ -181,6 +181,32 @@ describe("the worst thing: the person's day before Start made into the run", () 
   });
 });
 
+describe("the steps keep up (Kd, 37q-ii-a's walk: they lagged)", () => {
+  it("each reading shows on the screen at the next look, a quarter of a second, while at most one count a second is kept", async () => {
+    const s = runServer();
+    await openRunning(s);
+    await pickIndoor();
+    await startIndoor();
+    await counterAtStart(8016);
+    const run = going();
+    // Two steps a second, each handed over as it is taken; looked at four times a second.
+    for (let q = 1; q <= 40; q++) {
+      const at = run.startedAt + q * 250;
+      if (q % 2 === 0) motion.stepTo(at, 8016 + q / 2);
+      await act(() => takeSteps(at));
+      if (q % 2 === 0) expect(going().indoor?.steps).toBe(q / 2);
+    }
+    expect(await screen.findByText("20")).toBeTruthy();
+    const counts = going().indoor?.counts ?? [];
+    for (let i = 1; i < counts.length; i++) expect((counts[i]?.[0] ?? 0) - (counts[i - 1]?.[0] ?? 0)).toBeGreaterThanOrEqual(1000);
+    expect(counts.length).toBeGreaterThanOrEqual(9);
+    expect(counts.length).toBeLessThanOrEqual(11);
+    // The steps not yet in a count are kept at Finish.
+    await finishAndOpenSummary();
+    expect(going().indoor?.counts.at(-1)?.[1]).toBe(20);
+  });
+});
+
 describe("Indoor on the Running page", () => {
   it("Indoor hides the GPS light, is kept for the next Start, and an indoor run never asks for or starts the location", async () => {
     const s = runServer();

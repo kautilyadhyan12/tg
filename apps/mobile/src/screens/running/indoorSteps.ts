@@ -93,8 +93,9 @@ export function nextStepPause(look: {
   return { kind: "resume", at: Math.max(from, next[0] - back) };
 }
 
-/** Steps a minute are counted over this long, as the maths counts them for a step's length. */
-export const CADENCE_SPAN_MS = 30_000;
+/** Steps a minute on the screen are counted over this long: ten seconds follows a change of pace as it happens (Kd,
+ *  37q-ii-a's walk: the steps lagged); the maths keeps thirty for a step's length. */
+export const CADENCE_SPAN_MS = 10_000;
 /** Under this much of it, none yet. */
 const CADENCE_LEAST_MS = 5_000;
 

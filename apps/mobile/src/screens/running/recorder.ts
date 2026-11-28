@@ -113,6 +113,9 @@ export interface LiveIndoor {
   armed: boolean;
   /** The person's height and own factor, as the server measures the run with. */
   basis: StepBasis;
+  /** When the steps last rose (ms into the run) while they are not yet in a count: the screen shows them at once, and
+   *  they are kept as a count within a second (`flushSteps`). Never kept in the run's file. */
+  pendingAt?: number | null;
 }
 
 // ── The run kept on the phone ─────────────────────────────────────────────────────────────────
@@ -466,6 +469,7 @@ export function resetRecorder(withFiles: RunFiles = phoneRunFiles): void {
   stopMotion();
   stopIndoor();
   stepsUnwritten = 0;
+  lastFullLook = 0;
   writtenAt = 0;
   tell();
 }
@@ -570,10 +574,17 @@ async function keep(run: LiveRun): Promise<void> {
 
 // ── An indoor run's steps (37q-ii-a) ─────────────────────────────────────────────────────────
 
-/** The steps are looked at once a second while the app is in front; with the screen off the phone's own counter keeps
- *  counting, and the next look takes them in (an Android service of the app's own keeps the run going then: 37q-ii-b). */
-const STEPS_LOOK_MS = 1000;
+/** The counter is looked at four times a second while the app is in front, so the screen shows a step as soon as the
+ *  phone hands it over (Kd, 37q-ii-a's walk: the steps lagged); with the screen off the phone's own counter keeps counting,
+ *  and the next look takes them in (an Android service of the app's own keeps the run going then: 37q-ii-b). */
+const STEPS_LOOK_MS = 250;
+/** What is said, the guide and the writes are looked at once a second at most, unless the steps rose or a pause began or
+ *  ended. */
+const FULL_LOOK_MS = 1000;
+/** At most one count a second is kept, as the server takes them (`RUN_MAX_POINTS` is twelve hours of them). */
+const STEP_COUNT_EVERY_MS = 1000;
 let stepsTimer: ReturnType<typeof setInterval> | null = null;
+let lastFullLook = 0;
 /** The next reading is the first since the app began listening (`tallyStep`). */
 let stepsFresh = true;
 
@@ -615,11 +626,11 @@ function stepReadings(): { at: number; steps: number }[] {
   }
 }
 
-/** The counter's readings taken into the run: the steps since Start (`tallyStep`), and one count where they rose, at
- *  the newest reading's time, never before the count before it nor past `until` (Finish). */
-function readSteps(run: LiveRun, until: number = RUN_MAX_ELAPSED_MS): void {
+/** The counter's readings taken into the run: the steps since Start (`tallyStep`), shown at once, and kept as a count at
+ *  the newest reading's time (never past `until`, Finish) within a second (`flushSteps`). True when they rose. */
+function readSteps(run: LiveRun, until: number = RUN_MAX_ELAPSED_MS): boolean {
   const indoor = run.indoor;
-  if (indoor == null || indoor.stepsOff) return;
+  if (indoor == null || indoor.stepsOff) return false;
   const readings = stepReadings();
   let tally = { raw: indoor.raw, steps: indoor.steps };
   let newest: number | null = null;
@@ -631,19 +642,38 @@ function readSteps(run: LiveRun, until: number = RUN_MAX_ELAPSED_MS): void {
   const rose = tally.steps > indoor.steps;
   indoor.raw = tally.raw;
   indoor.steps = tally.steps;
-  if (!rose || newest === null || indoor.counts.length >= RUN_MAX_POINTS) return;
-  const lastAt = indoor.counts[indoor.counts.length - 1]?.[0] ?? 0;
-  const at = Math.min(until, Math.max(lastAt, Math.round(newest - run.startedAt)));
-  indoor.counts.push([at, tally.steps]);
+  if (rose && newest !== null) {
+    indoor.pendingAt = Math.min(until, Math.max(0, Math.round(newest - run.startedAt)));
+    if (run.phase === "running") indoor.armed = true;
+  }
+  return rose;
+}
+
+/** The steps not yet in a count kept as one, at the time they last rose, never before the count before it: at most one
+ *  count a second (`nowMs` against the last count's time), or at once with `force` (a pause's edge, Finish). True when
+ *  a count was kept. */
+function flushSteps(run: LiveRun, nowMs: number, force: boolean): boolean {
+  const indoor = run.indoor;
+  const at = indoor?.pendingAt ?? null;
+  if (indoor == null || at === null) return false;
+  const last = indoor.counts[indoor.counts.length - 1];
+  const lastAt = last?.[0] ?? 0;
+  if (!force && last !== undefined && nowMs - lastAt < STEP_COUNT_EVERY_MS) return false;
+  indoor.pendingAt = null;
+  if (indoor.steps <= (last?.[1] ?? 0) || indoor.counts.length >= RUN_MAX_POINTS) return false;
+  indoor.counts.push([Math.max(lastAt, at), indoor.steps]);
   stepsUnwritten += 1;
-  if (run.phase === "running") indoor.armed = true;
+  return true;
 }
 
 /** A count at a pause's edge, `at` ms into the run, with the steps as they stood then: the steps taken while paused are
  *  none of the run's, and those after it are all of it (the maths shares a stretch's steps over its moving part). */
 function fenceAt(run: LiveRun, at: number): void {
   const indoor = run.indoor;
-  if (indoor == null || indoor.stepsOff || indoor.counts.length >= RUN_MAX_POINTS) return;
+  if (indoor == null || indoor.stepsOff) return;
+  // The steps taken up to the edge first, at their own time.
+  flushSteps(run, at, true);
+  if (indoor.counts.length >= RUN_MAX_POINTS) return;
   const counts = indoor.counts;
   let i = counts.length;
   while (i > 0 && (counts[i - 1]?.[0] ?? 0) > at) i--;
@@ -651,8 +681,9 @@ function fenceAt(run: LiveRun, at: number): void {
   stepsUnwritten = Math.max(stepsUnwritten, counts.length - i);
 }
 
-/** A look at an indoor run's steps, once a second while the app is in front and when it comes back: the steps taken in,
- *  the heart rate, Auto-pause from the steps (`nextStepPause`), and what is said. */
+/** A look at an indoor run's steps, four times a second while the app is in front and when it comes back: the steps
+ *  taken in, Auto-pause from the steps (`nextStepPause`), and, when they rose, a pause began or ended, or a second has
+ *  passed, the heart rate and what is said. */
 export async function takeSteps(now: number = Date.now()): Promise<void> {
   const mine = generation;
   const run = current;
@@ -660,8 +691,8 @@ export async function takeSteps(now: number = Date.now()): Promise<void> {
   const indoor = run.indoor;
   const was = run.phase;
   let resumedFrom: number | null = null;
-  readSteps(run);
-  takeHeart(run);
+  const rose = readSteps(run);
+  const counted = flushSteps(run, elapsedMs(run, now), false);
   const change =
     run.pauses.length < RUN_MAX_PAUSES || run.phase === "paused"
       ? nextStepPause({ phase: run.phase, byPerson: run.pausedByPerson, autoPause: run.autoPause, armed: indoor.armed, counts: indoor.counts, pauseFrom: openPauseFrom(run), nowMs: elapsedMs(run, now) })
@@ -681,6 +712,10 @@ export async function takeSteps(now: number = Date.now()): Promise<void> {
     run.phase = "running";
     writtenAt = 0;
   }
+  // Nothing new, and under a second since the last full look: nothing to tell.
+  if (!rose && !counted && change === null && now >= lastFullLook && now - lastFullLook < FULL_LOOK_MS) return;
+  lastFullLook = now;
+  takeHeart(run);
   if (mine !== generation || current?.runId !== run.runId) return;
   const next = { ...run };
   if (runIsFull(next, now)) {
@@ -1163,6 +1198,7 @@ export async function startRun(
   heartUnwritten = 0;
   motionUnwritten = 0;
   stepsUnwritten = 0;
+  lastFullLook = 0;
   writtenAt = now;
   // Readings from before Go are not the run's.
   takeHeartReadings();
@@ -1336,6 +1372,7 @@ export async function finishRun(now: number = Date.now()): Promise<LiveRun | nul
   stopMotion();
   // Indoors (37q-ii-a): the last steps taken in, none past Finish, and the counter let go.
   readSteps(run, end);
+  flushSteps(run, end, true);
   stopIndoor();
   closePause(run, end);
   closeStill(run, end);

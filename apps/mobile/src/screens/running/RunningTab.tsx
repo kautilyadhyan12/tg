@@ -7,11 +7,10 @@ import * as Location from "expo-location";
 import { useIsFocused } from "@react-navigation/native";
 import { runPageSchema, runRecordsSchema, type KeptRunGuide, type MapColours, type Units } from "@app/shared";
 import { Button } from "../../look/Button";
-import { ChoiceSwitch } from "../../look/ChoiceSwitch";
 import { Options } from "../../look/Choice";
 import { Sheet } from "../../look/Sheet";
 import { colours, dockShade, orangeGradient, shadows, sizes } from "../../look/colours";
-import { Icon } from "../../look/Icon";
+import { Icon, type IconName } from "../../look/Icon";
 import { Page } from "../../look/Page";
 import { PictureTop } from "../../look/PictureTop";
 import { fonts, Txt } from "../../look/Txt";
@@ -238,9 +237,23 @@ export function RunningTab({ units, parts }: { units: Units; parts: ReactNode })
             // Run a little nearer the runner, clear of him (Kd, 2026-11-11).
             band={0.76}
             foot={
-              <View style={styles.runTitle}>
-                <Icon name="footprints" size={26} colour="orange" />
-                <Txt kind="h1">Run</Txt>
+              <View style={styles.titleRow}>
+                <View style={styles.runTitle}>
+                  <Icon name="footprints" size={26} colour="orange" />
+                  <Txt kind="h1">Run</Txt>
+                </View>
+                {/* Picked before Start (37q-ii-a): two words beside Run, the picked one underlined, never a box under the
+                    Workout tab's own switch (Kd, the walk: "everything is looking like filled with boxes"). A run going
+                    on is what it is, so they wait for the next. */}
+                {going ? null : (
+                  <WhereTabs
+                    indoor={indoor}
+                    onPick={(on) => {
+                      setProblem(null);
+                      void chooseIndoor(on);
+                    }}
+                  />
+                )}
               </View>
             }
           />
@@ -248,35 +261,6 @@ export function RunningTab({ units, parts }: { units: Units; parts: ReactNode })
       >
         {parts}
         <View style={styles.page}>
-          {/* Picked before Start (37q-ii-a); a run going on is what it is, so the switch waits for the next. */}
-          {going ? null : (
-            <ChoiceSwitch
-              said="Where you run"
-              trouble={null}
-              choices={[
-                {
-                  key: "outdoor",
-                  label: "Outdoor",
-                  icon: "pin",
-                  on: !indoor,
-                  onPress: () => {
-                    setProblem(null);
-                    void chooseIndoor(false);
-                  },
-                },
-                {
-                  key: "indoor",
-                  label: "Indoor",
-                  icon: "house",
-                  on: indoor,
-                  onPress: () => {
-                    setProblem(null);
-                    void chooseIndoor(true);
-                  },
-                },
-              ]}
-            />
-          )}
           {gps === null || going || indoor ? null : (
             <View style={styles.pill} accessible accessibilityLabel={gps.word === "GPS" ? "GPS ready" : gps.word}>
               <View style={[styles.dot, gps.tone === "good" ? styles.dotGood : gps.tone === "weak" ? styles.dotWeak : styles.dotNone]} />
@@ -543,6 +527,40 @@ export function RunningTab({ units, parts }: { units: Units; parts: ReactNode })
   );
 }
 
+/** Outdoor or Indoor (37q-ii-a): two words on the page's picture, each with its picture, the picked one white and
+ *  underlined, the other soft; read aloud as a choice of two. */
+function WhereTabs({ indoor, onPick }: { indoor: boolean; onPick: (indoor: boolean) => void }) {
+  const tabs: { key: string; label: string; icon: IconName; on: boolean; pick: boolean }[] = [
+    { key: "outdoor", label: "Outdoor", icon: "pin", on: !indoor, pick: false },
+    { key: "indoor", label: "Indoor", icon: "house", on: indoor, pick: true },
+  ];
+  return (
+    <View style={styles.where} accessibilityRole="radiogroup" accessibilityLabel="Where you run">
+      {tabs.map((t) => (
+        <Pressable
+          key={t.key}
+          accessibilityRole="radio"
+          accessibilityLabel={t.label}
+          accessibilityState={{ selected: t.on }}
+          hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
+          onPress={() => {
+            if (!t.on) onPick(t.pick);
+          }}
+          style={({ pressed }) => [styles.whereTab, pressed ? styles.pressed : null]}
+        >
+          <View style={styles.whereWord}>
+            <Icon name={t.icon} size={16} colour={t.on ? "text" : "textSoft"} />
+            <Txt kind="strong" colour={t.on ? "text" : "textSoft"}>
+              {t.label}
+            </Txt>
+          </View>
+          <View style={[styles.whereBar, t.on ? styles.whereBarOn : null]} />
+        </Pressable>
+      ))}
+    </View>
+  );
+}
+
 /** Whether the phone can speak, asked while the Voice switch is on and the page shown, and again
  *  when the person comes back from the phone's settings. A phone with no voice code of this app's
  *  (none on an iPhone yet) is not told its text-to-speech is off. */
@@ -581,6 +599,13 @@ const openSpeechSettings = (): void => {
 const styles = StyleSheet.create({
   page: { gap: 16 },
   runTitle: { flexDirection: "row", alignItems: "center", gap: 10 },
+  // Run, and Outdoor · Indoor beside it; on a narrow phone or the largest text the two words go under it.
+  titleRow: { flexDirection: "row", alignItems: "flex-end", justifyContent: "space-between", flexWrap: "wrap", columnGap: 16, rowGap: 6 },
+  where: { flexDirection: "row", alignItems: "flex-end", gap: 22, paddingBottom: 2 },
+  whereTab: { alignItems: "stretch", gap: 6, minHeight: 32, justifyContent: "flex-end" },
+  whereWord: { flexDirection: "row", alignItems: "center", gap: 6 },
+  whereBar: { height: 3, borderRadius: 2 },
+  whereBarOn: { backgroundColor: colours.orange },
   // START over the page's foot, the page fading out under it.
   dock: { position: "absolute", left: 0, right: 0, bottom: 0, flexDirection: "row", justifyContent: "center", alignItems: "center", gap: 16, paddingTop: 18, experimental_backgroundImage: dockShade },
   grow: { flex: 1 },

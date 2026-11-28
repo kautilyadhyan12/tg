@@ -389,7 +389,8 @@ function useLiveNumbers(run: LiveRun, kg: number): { now: number; sums: RunSums 
   /** The stop of the count going on; null when none is. */
   const working = useRef<(() => void) | null>(null);
   useEffect(() => {
-    const every = 2000 + count * 0.1;
+    // Indoors the steps' distance is little work: worked out again each second, so it keeps up with the steps (37q-ii-a).
+    const every = run.indoor != null ? 500 + count * 0.05 : 2000 + count * 0.1;
     if (sums !== null && now - lastWork.current < every) return;
     const open = run.pauses[run.pauses.length - 1];
     const from = run.phase === "paused" ? `${String(count)} ${String(run.pauses.length)} ${String(open?.[0])} ${String(run.still.length)} ${String(run.datedBack.length)} ${String(kg)}` : null;
@@ -582,8 +583,9 @@ function Live({ run, units, kg, onHide }: { run: LiveRun; units: Units; kg: numb
   const controls = (
     <View style={styles.controls}>
       {indoor !== null ? (
-        // No map to change to indoors: the width of the side button, so Pause stays in the middle.
-        <View style={styles.sideSpace} />
+        // No map to change to indoors: while running, the width of the side button, so Pause stays in the middle; paused,
+        // nothing, so Finish and Resume stand in the middle together (as the drawing).
+        isPaused ? null : <View style={styles.sideSpace} />
       ) : (
         <SideButton
           icon={onMap ? "timer" : "map"}
@@ -680,15 +682,16 @@ function Live({ run, units, kg, onHide }: { run: LiveRun; units: Units; kg: numb
           {/* No average until there is ground to average: a standing start reads as no pace. */}
           <Figure label="Average pace" value={pace(moving, metres < 50 ? 0 : metres, units)} unit={paceWord(units)} dim={isPaused} />
         </View>
-        {heartNowShown.monitor === null ? null : (
-          <View style={styles.pairs}>
-            <Figure label="Heart rate" value={heartNowShown.bpm === null ? noSignalWords(heartNowShown.bluetooth) : String(heartNowShown.bpm)} {...(heartNowShown.bpm === null ? {} : { unit: "bpm" })} dim={isPaused} />
-          </View>
-        )}
+        {/* Indoors the steps are the run's own number: under the pace, before the heart rate (seen without a scroll). */}
         {indoor === null ? null : (
           <View style={styles.pairs}>
             <Figure label="Steps" value={indoor.stepsOff ? "Off" : indoor.steps.toLocaleString("en-US")} dim={isPaused} />
             <Figure label="Steps a minute" value={indoor.stepsOff || perMinute === null ? "--" : String(perMinute)} dim={isPaused} />
+          </View>
+        )}
+        {heartNowShown.monitor === null ? null : (
+          <View style={styles.pairs}>
+            <Figure label="Heart rate" value={heartNowShown.bpm === null ? noSignalWords(heartNowShown.bluetooth) : String(heartNowShown.bpm)} {...(heartNowShown.bpm === null ? {} : { unit: "bpm" })} dim={isPaused} />
           </View>
         )}
         <View style={styles.pairs}>

@@ -163,7 +163,7 @@ describe("the counts' own reading", () => {
 });
 
 describe("steps a minute and current pace on the run's screen", () => {
-  it("a steady 162 a minute reads 162, from the last thirty seconds", () => {
+  it("a steady 162 a minute reads 162, from the last ten seconds", () => {
     const counts = walk(0, 120_000, 2.7);
     expect(stepsAMinute(counts, 120_000)).toBe(162);
   });

@@ -1,6 +1,5 @@
 import { Pressable, StyleSheet, View } from "react-native";
 import { colours, orangeGradient, shadows, sizes } from "./colours";
-import { Icon, type IconName } from "./Icon";
 import { fonts, Txt } from "./Txt";
 
 /** Whose plan a box shows, as one switch under its title (Recommended For You's Suggested, a gym's plan,
@@ -8,8 +7,7 @@ import { fonts, Txt } from "./Txt";
 export function ChoiceSwitch({ said, choices, trouble }: {
   /** What the switch picks, for a screen reader: "Whose meals". */
   said: string;
-  /** `icon`: a small picture before the word (Outdoor's pin and Indoor's house, 37q-ii-a). */
-  choices: readonly { key: string; label: string; on: boolean; onPress: () => void; icon?: IconName }[];
+  choices: readonly { key: string; label: string; on: boolean; onPress: () => void }[];
   trouble: string | null;
 }) {
   return (
@@ -23,9 +21,8 @@ export function ChoiceSwitch({ said, choices, trouble }: {
             accessibilityState={{ selected: c.on }}
             hitSlop={SLOP}
             onPress={c.onPress}
-            style={({ pressed }) => [styles.part, c.icon === undefined ? null : styles.withIcon, c.on ? styles.on : null, pressed ? styles.pressed : null]}
+            style={({ pressed }) => [styles.part, c.on ? styles.on : null, pressed ? styles.pressed : null]}
           >
-            {c.icon === undefined ? null : <Icon name={c.icon} size={16} colour={c.on ? "onOrange" : "textSoft"} />}
             <Txt colour={c.on ? "onOrange" : "textSoft"} style={styles.label}>
               {c.label}
             </Txt>
@@ -55,7 +52,6 @@ const styles = StyleSheet.create({
     backgroundColor: colours.fill,
   },
   part: { flexGrow: 1, flexBasis: "auto", minHeight: 34, paddingHorizontal: 10, alignItems: "center", justifyContent: "center", borderRadius: sizes.round },
-  withIcon: { flexDirection: "row", gap: 7 },
   on: { backgroundColor: colours.orange, experimental_backgroundImage: orangeGradient, boxShadow: shadows.chip },
   pressed: { opacity: 0.85 },
   label: { fontFamily: fonts.semibold, fontSize: 13, lineHeight: 17 },
