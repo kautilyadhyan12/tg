@@ -1,6 +1,6 @@
 // A run on the map (ROADMAP Stage 5 37b-i, Kd's drawings of 2026-11-06): the streets where the person
 // ran, in the app's own colours, light by day and dark at night, with the run's trail, a stone at each
-// exact kilometre or mile, and while the run goes on a light at its front beaming the way they head.
+// exact kilometre or mile, and while the run goes on a light at its front beaming the way the phone points (37p).
 // The map asks the map's own address for squares of map and letters and nothing else: the trail is
 // drawn here, on the phone, from the run it holds.
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
@@ -15,7 +15,8 @@ import { fonts, Txt } from "../../look/Txt";
 import { mapScheme } from "./daylight";
 import { baseMapStyle, type MapScheme } from "./mapStyle";
 import { mapColoursChoice, subscribeRun } from "./recorder";
-import { endShapes, frontBearing, runBounds, stoneShapes, trailShapes } from "./runMapShapes";
+import { useCompass } from "./runCompass";
+import { beamOf, endShapes, fanPath, frontBearing, runBounds, stoneShapes, trailShapes } from "./runMapShapes";
 
 /** "live": the run going on, following its front. "box": the summary's map, still, opened by a tap.
  *  "full": the summary's map on the whole screen, to pinch and move. */
@@ -77,7 +78,7 @@ export function RunMap({ track, starts, here = null, units, mode, scheme, source
   const ends = useMemo(() => endShapes(track, mode !== "live"), [track, mode]);
   const bounds = useMemo(() => runBounds(track), [track]);
   const front = here ?? track[track.length - 1];
-  const bearing = mode === "live" ? frontBearing(track, starts) : null;
+  const travelled = mode === "live" ? frontBearing(track, starts) : null;
   const [following, setFollowing] = useState(true);
   // The map's credit shows when it opens, then folds into (i) after CREDIT_SHOWN_MS or at the first
   // touch of the map, as OpenStreetMap's attribution guidelines allow; (i) shows it again (Kd, 37b-i).
@@ -184,7 +185,7 @@ export function RunMap({ track, starts, here = null, units, mode, scheme, source
         ))}
         {mode === "live" && centre !== null ? (
           <Marker lngLat={centre} anchor="center">
-            <FrontLight bearing={bearing} scheme={scheme} />
+            <FrontLight travelled={travelled} place={centre} scheme={scheme} />
           </Marker>
         ) : null}
       </MapView>
@@ -242,10 +243,15 @@ export function RunMap({ track, starts, here = null, units, mode, scheme, source
 
 const BEAM = 66;
 
-/** The light at the front: a ring that swells and fades, and a fan of light the way the person heads
- *  (Kd, 37a: "like a beam that moves like in Strava and Google Maps"). */
-function FrontLight({ bearing, scheme }: { bearing: number | null; scheme: MapScheme }) {
+/** The light at the front: a ring that swells and fades, and a fan of light the way the phone points, turning with
+ *  it (Kd, 37a: "like a beam that moves like in Strava and Google Maps"; 37p: "whenevr the mobile is pointed the torch
+ *  like circle also moves in that direction"); the way travelled on a phone with no compass. Only this light is drawn
+ *  again as the phone turns, never the map. `place`: [lng, lat]. */
+function FrontLight({ travelled, place, scheme }: { travelled: number | null; place: LngLat; scheme: MapScheme }) {
   const t = trailColours[scheme];
+  const [lng, lat] = place;
+  const here = useMemo((): [number, number] => [lat, lng], [lat, lng]);
+  const beam = beamOf(useCompass(true, here), travelled);
   const motion = useMotion();
   const loop = useLoop(1800);
   const swell = useRef(loop.interpolate({ inputRange: [0, 1], outputRange: [0.6, 1.6] })).current;
@@ -260,7 +266,7 @@ function FrontLight({ bearing, scheme }: { bearing: number | null; scheme: MapSc
             <Stop offset="1" stopColor={t.beam} stopOpacity={0} />
           </RadialGradient>
         </Defs>
-        {bearing === null ? null : <Path d={`M0 0 L-28 -${String(BEAM - 6)} A${String(BEAM)} ${String(BEAM)} 0 0 1 28 -${String(BEAM - 6)} Z`} fill="url(#beam)" transform={`rotate(${bearing.toFixed(1)})`} />}
+        {beam === null ? null : <Path testID="front-beam" d={fanPath(beam.half, BEAM)} fill="url(#beam)" transform={`rotate(${beam.deg.toFixed(1)})`} />}
         <Circle r={16} fill={t.beam} fillOpacity={0.22} />
         <Circle r={9} fill={t.front} stroke={t.edge} strokeWidth={3} />
         <Circle r={4.5} fill={t.mid} />

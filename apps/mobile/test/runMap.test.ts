@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 import { OPENFREEMAP, geodesicMetres, runSums, type MapSource, type RunPoint } from "@app/shared";
 import { baseMapStyle, MAP_TILES } from "../src/screens/running/mapStyle";
 import { unitMarks } from "../src/screens/running/routeShape";
-import { endShapes, frontBearing, runBounds, stoneShapes, trailShapes } from "../src/screens/running/runMapShapes";
+import { BEAM_HALF_BY_SURE, TRAVELLED_HALF, beamOf, endShapes, fanPath, frontBearing, runBounds, stoneShapes, trailShapes } from "../src/screens/running/runMapShapes";
 import { METRES_PER_MILE } from "../src/screens/running/runWords";
 import { realRuns } from "./realRuns";
 
@@ -153,5 +153,39 @@ describe("the map's two looks", () => {
     // Each maker's own layers: OpenMapTiles' "transportation", Protomaps' "roads".
     expect(JSON.stringify(baseMapStyle(OPENFREEMAP, "light"))).toContain('"source-layer":"transportation"');
     expect(JSON.stringify(baseMapStyle(OWN_COPY, "light"))).toContain('"source-layer":"roads"');
+  });
+});
+
+// 37p: the beam at the front points the way the phone points, from its compass; the way travelled with none.
+describe("the beam: the compass first, the way travelled with none", () => {
+  const cases: { name: string; compass: { deg: number; sure: number } | null; travelled: number | null; beam: { deg: number; half: number } | null }[] = [
+    { name: "a sure compass, the person going the other way: the phone's way", compass: { deg: 90, sure: 3 }, travelled: 270, beam: { deg: 90, half: 25 } },
+    { name: "medium", compass: { deg: 90, sure: 2 }, travelled: null, beam: { deg: 90, half: 35 } },
+    { name: "low", compass: { deg: 90, sure: 1 }, travelled: null, beam: { deg: 90, half: 45 } },
+    { name: "unreliable: still the phone's way, at its widest", compass: { deg: 90, sure: 0 }, travelled: 0, beam: { deg: 90, half: 60 } },
+    { name: "no contact (-1) reads as unreliable", compass: { deg: 90, sure: -1 }, travelled: null, beam: { deg: 90, half: 60 } },
+    { name: "a sureness past Android's list reads as high", compass: { deg: 90, sure: 7 }, travelled: null, beam: { deg: 90, half: 25 } },
+    { name: "360 is north", compass: { deg: 360, sure: 3 }, travelled: null, beam: { deg: 0, half: 25 } },
+    { name: "no compass, moved: the way travelled", compass: null, travelled: 181.5, beam: { deg: 181.5, half: TRAVELLED_HALF } },
+    { name: "no compass, not moved: no beam", compass: null, travelled: null, beam: null },
+    { name: "a compass that says nothing usable: the way travelled", compass: { deg: Number.NaN, sure: 3 }, travelled: 45, beam: { deg: 45, half: TRAVELLED_HALF } },
+  ];
+  for (const c of cases) {
+    it(c.name, () => {
+      expect(beamOf(c.compass, c.travelled)).toEqual(c.beam);
+    });
+  }
+
+  it("each fan is as wide as it says, every edge on the beam's circle, pointing up (north)", () => {
+    for (const half of [...BEAM_HALF_BY_SURE, TRAVELLED_HALF]) {
+      const numbers = (fanPath(half, 66).match(/-?\d+(\.\d+)?/g) ?? []).map(Number);
+      // M0 0 L-x -y A66 66 0 0 1 x -y Z
+      const [, , lx, ly, , , , , , rx, ry] = numbers;
+      if (lx === undefined || ly === undefined || rx === undefined || ry === undefined) throw new Error("no fan");
+      expect(Math.hypot(lx, ly)).toBeCloseTo(66, 0);
+      expect(rx).toBeCloseTo(-lx, 5);
+      expect(ry).toBeLessThan(0);
+      expect((Math.atan2(rx, -ry) * 180) / Math.PI).toBeCloseTo(half, 0);
+    }
   });
 });
