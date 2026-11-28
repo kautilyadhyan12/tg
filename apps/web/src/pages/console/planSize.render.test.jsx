@@ -333,7 +333,9 @@ describe('Change size', () => {
     expect(within(smaller).getByText(warning)).toBeTruthy();
     fireEvent.click(within(smaller).getByRole('button', { name: 'Choose' }));
     await within(dialog).findByText(`Nothing to pay now. $129 a month from ${NEXT}.`);
-    expect(within(dialog).getByText(warning)).toBeTruthy();
+    // On its row, and again in the foot beside Confirm.
+    expect(within(smaller).getByText(warning)).toBeTruthy();
+    expect(within(dialog.querySelector('.c-ask-foot')).getByText(warning)).toBeTruthy();
     fireEvent.click(within(dialog).getByRole('button', { name: 'Confirm' }));
     await within(dialog).findByText(/^Done\. Moving to 500 members/);
     expect(within(dialog).getByText(warning)).toBeTruthy();
@@ -758,5 +760,89 @@ describe('V5-c: every size button asks for its own row, and Confirm sends the on
     await waitFor(() => expect(within(row('Up to 1,000 members')).getByRole('button', { name: 'Choose' }).disabled).toBe(true));
     expect(within(dialog).getByRole('button', { name: 'Back' }).disabled).toBe(true);
     expect(within(dialog).getByRole('button', { name: 'Close' }).disabled).toBe(true);
+  });
+});
+
+// V5-c round one: what happens after a press is said beside Confirm, in the pinned foot; a press beside the box does not
+// close a money question; a refused price for an earlier row leaves the newer choice alone.
+describe('V5-c round one: Change size and the size question', () => {
+  const PRICE = { data: { planCode: 'org_b2_us_m', seatCap: 500, priceLabel: '$129', dueNow: { totalLabel: '$53.52', subtotalLabel: '$49.15', taxLabel: '$4.37' }, nextPaymentAt: NEXT_PAYMENT } };
+  const openSizes = async () => {
+    fireEvent.click(await screen.findByRole('button', { name: 'Change size' }));
+    const dialog = await screen.findByRole('dialog');
+    const list = await within(dialog).findByTestId('size-list');
+    return { dialog, row: (text) => within(list).getByText(text).closest('li') };
+  };
+
+  it('a refused Confirm says why in the foot, beside Confirm, and not under the list', async () => {
+    orgService.getMine.mockResolvedValue(mineIs({ ...OWNER, subscription: paying }));
+    orgService.previewSizeChange.mockResolvedValue(PRICE);
+    orgService.changeSize.mockRejectedValue(Object.assign(new Error('refused'), { response: { status: 409, data: { error: { code: 'x', message: 'Your card was declined.' } } } }));
+    renderOverview();
+    const { dialog, row } = await openSizes();
+    fireEvent.click(within(row('Up to 500 members')).getByRole('button', { name: 'Choose' }));
+    await within(dialog).findByText(/You pay \$53\.52 now/);
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Confirm' }));
+    const said = await within(dialog).findByRole('alert');
+    expect(dialog.querySelector('.c-ask-foot').contains(said)).toBe(true);
+    expect(within(dialog).getAllByRole('alert')).toHaveLength(1);
+  });
+
+  it('the foot names the size chosen and, for a smaller size the members do not fit, its warning', async () => {
+    const on1000 = { ...paying, seatCap: 1000, priceLabel: '$199' };
+    orgService.getMine.mockResolvedValue(mineIs({ ...OWNER, seatsUsed: 620, subscription: on1000 }));
+    orgService.previewSizeChange.mockResolvedValue({ data: { planCode: 'org_b2_us_m', seatCap: 500, priceLabel: '$129', dueNow: null, nextPaymentAt: NEXT_PAYMENT } });
+    renderOverview();
+    const { dialog, row } = await openSizes();
+    fireEvent.click(within(row('Up to 500 members')).getByRole('button', { name: 'Choose' }));
+    await within(dialog).findByText(/Nothing to pay now/);
+    const foot = dialog.querySelector('.c-ask-foot');
+    expect(within(foot).getByText('Up to 500 members · $129 a month')).toBeTruthy();
+    expect(within(foot).getByText(/^You have 620 members\. Remove 120 by /)).toBeTruthy();
+  });
+
+  it('a refused price for a row chosen earlier leaves the newer choice and says nothing', async () => {
+    orgService.getMine.mockResolvedValue(mineIs({ ...OWNER, subscription: paying }));
+    const answers = {};
+    orgService.previewSizeChange.mockImplementation(
+      (_gym, code) =>
+        new Promise((resolve, reject) => {
+          answers[code] = { resolve, reject };
+        }),
+    );
+    renderOverview();
+    const { dialog, row } = await openSizes();
+    fireEvent.click(within(row('Up to 500 members')).getByRole('button', { name: 'Choose' }));
+    fireEvent.click(within(row('Up to 1,000 members')).getByRole('button', { name: 'Choose' }));
+    answers.org_b2_us_m.reject(new Error('refused'));
+    await waitFor(() => expect(within(row('Up to 1,000 members')).getByText('Chosen')).toBeTruthy());
+    await new Promise((r) => setTimeout(r, 50));
+    expect(within(row('Up to 1,000 members')).getByText('Chosen')).toBeTruthy();
+    expect(within(dialog).queryByText(/couldn't work out the price/)).toBeNull();
+    answers.org_b3_us_m.resolve({ data: { planCode: 'org_b3_us_m', seatCap: 1000, priceLabel: '$199', dueNow: { totalLabel: '$66.00', subtotalLabel: '$60.00', taxLabel: '$6.00' }, nextPaymentAt: NEXT_PAYMENT } });
+    expect(await within(dialog).findByText(/You pay \$66\.00 now/)).toBeTruthy();
+  });
+
+  it('a press beside Change size or the size question leaves it open; Escape and the X still close it', async () => {
+    orgService.getMine.mockResolvedValue(mineIs({ ...OWNER, subscription: paying }));
+    renderOverview();
+    const { dialog } = await openSizes();
+    fireEvent.click(screen.getByTestId('box-outside'));
+    expect(screen.getByRole('dialog')).toBe(dialog);
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Close' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+
+    cleanup();
+    resetConsoleOrgs();
+    window.sessionStorage.clear();
+    const DAY = 86_400_000;
+    const question = { ...paying, seatCap: 1000, priceLabel: '$199', pendingSize: { seatCap: 500, priceLabel: '$129', from: new Date(Date.now() + 3 * DAY).toISOString(), decideAt: new Date(Date.now() + 2 * DAY).toISOString(), ifTooMany: null } };
+    orgService.getMine.mockResolvedValue(mineIs({ ...OWNER, seatsUsed: 620, subscription: question }));
+    renderOverview();
+    const ask = await screen.findByTestId('size-decision');
+    fireEvent.click(screen.getByTestId('box-outside'));
+    expect(screen.getByTestId('size-decision')).toBe(ask);
+    fireEvent.keyDown(document, { key: 'Escape', code: 'Escape' });
+    await waitFor(() => expect(screen.queryByTestId('size-decision')).toBeNull());
   });
 });

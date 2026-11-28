@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { orgWords } from '@app/shared';
 import { Loader2 } from 'lucide-react';
 import { orgService, errorText } from '../../api/orgsApi';
@@ -129,13 +129,18 @@ export default function PlanChoiceDialog({ org, mode, onClose }) {
   const busy = confirming || paying?.phase === 'confirming';
   const razorpay = isPaidThroughRazorpay(org);
 
+  /** The size chosen last: an answer for any other row, price or refusal, changes nothing. */
+  const lastPick = useRef(null);
   const pick = async (row) => {
     setError(null);
+    lastPick.current = row.plan.code;
     setPicked({ row, preview: null });
     try {
       const res = await orgService.previewSizeChange(gymId, row.plan.code);
       setPicked((now) => (now?.row.plan.code === row.plan.code ? { ...now, preview: res.data } : now));
     } catch (err) {
+      if (lastPick.current !== row.plan.code) return;
+      lastPick.current = null;
       setPicked(null);
       setError(errorText(err, "We couldn't work out the price of that size. Please try again."));
     }
@@ -178,8 +183,12 @@ export default function PlanChoiceDialog({ org, mode, onClose }) {
       Close
     </button>
   ) : mode === 'size' && picked !== null ? (
-    // What the size chosen costs is said in the foot, right above Confirm, so it is in sight whenever Confirm is.
+    // The size chosen, what it costs, its warning and what happened after Confirm are said in the foot, beside Confirm,
+    // so they are in sight whenever Confirm is.
     <div className="c-plan-foot" data-testid="size-preview">
+      <p className="c-s14 c-w6 c-t2 m-0">
+        {planSeatLabel(picked.row.plan.seatCap, org?.orgType)} · {planPriceText(picked.row.plan)}
+      </p>
       {picked.preview === null ? (
         <p role="status" className="c-s14 c-t2 m-0 flex items-center gap-2">
           <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
@@ -190,6 +199,17 @@ export default function PlanChoiceDialog({ org, mode, onClose }) {
       )}
       {razorpay && picked.row.kind === 'smaller' ? (
         <p className="c-s14 c-t2 m-0">Razorpay may check your payment method with a small charge, which it refunds.</p>
+      ) : null}
+      {picked.row.warning !== null ? <p className="c-s14 c-ov-warn-t m-0">{picked.row.warning}</p> : null}
+      {paying?.phase === 'confirming' || payNote !== null ? (
+        <p role="status" className="c-s14 c-t2 m-0">
+          {paying?.phase === 'confirming' ? 'Confirming your payment…' : payNote}
+        </p>
+      ) : null}
+      {(error ?? payError) !== null ? (
+        <p role="alert" className="c-err m-0">
+          {error ?? payError}
+        </p>
       ) : null}
       <div className="c-ask-a">
         <button
@@ -217,7 +237,7 @@ export default function PlanChoiceDialog({ org, mode, onClose }) {
   ) : null;
 
   return (
-    <AskSheet title={title} testId="plan-choice-dialog" onClose={onClose} busy={busy} footer={footer}>
+    <AskSheet title={title} testId="plan-choice-dialog" onClose={onClose} busy={busy} footer={footer} outsideCloses={false}>
       {/* ── Done ─────────────────────────────────────────────────────────── */}
       {done ? (
         <div className="c-stack-s">
@@ -307,14 +327,14 @@ export default function PlanChoiceDialog({ org, mode, onClose }) {
             </ul>
           ) : null}
 
-
-          {(error ?? payError) !== null ? (
+          {/* With a size chosen these are said in the foot, beside Confirm. */}
+          {(error ?? payError) !== null && !(mode === 'size' && picked !== null) ? (
             <p role="alert" className="c-err m-0">
               {error ?? payError}
             </p>
           ) : null}
 
-          {mode === 'size' && (paying?.phase === 'confirming' || payNote !== null) ? (
+          {mode === 'size' && picked === null && (paying?.phase === 'confirming' || payNote !== null) ? (
             <p role="status" className="c-s14 c-t2 m-0">
               {paying?.phase === 'confirming' ? 'Confirming your payment…' : payNote}
             </p>

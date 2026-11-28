@@ -81,7 +81,7 @@ export default function SizeDecisionPrompt({ org }) {
   // The console's box in the middle (V5-c, the board `OverviewPlan`): the question its title, its
   // three answers one under another, and what happens if nobody chooses.
   return (
-    <AskSheet title={decision.question} testId="size-decision" onClose={close} busy={busy} footer={null}>
+    <AskSheet title={decision.question} testId="size-decision" onClose={close} busy={busy} footer={null} outsideCloses={false}>
       <div className="c-stack-s">
         {button(
           decision.remove,
