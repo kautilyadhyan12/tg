@@ -3352,3 +3352,19 @@ button.c-ov-money-who {
   .c-attend-bleed { margin: 0 -16px; }
   .c-attend-find { max-width: none; }
 }
+/* A box's title folds it: 32 px to press with a mouse, 44 to touch or on a phone. */
+.c-attend-fold { align-items: center; min-height: 32px; }
+.c-attend-fold > svg { margin-top: 0; }
+@media (pointer: coarse), (max-width: 767px) {
+  .c-attend-fold { min-height: 44px; }
+}
+/* The box itself opens the calendar (its icon and the arrow at its end say so): the browser's own small
+   calendar button is not drawn a second time. */
+.c-attend-date input::-webkit-calendar-picker-indicator { display: none; }
+.c-attend-date > svg:last-child { color: var(--t2); }
+/* A box that asks, scrolled into the window when it opens: clear of the bar at the top, and of the tabs at
+   a phone's foot. */
+.c-attend-ask { scroll-margin-top: 96px; scroll-margin-bottom: 16px; }
+@media (max-width: 767px) {
+  .c-attend-ask { scroll-margin-top: 72px; scroll-margin-bottom: 84px; }
+}

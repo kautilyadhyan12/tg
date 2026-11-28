@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { orgWords } from '@app/shared';
-import { CalendarDays, ChevronLeft, ChevronRight, Loader2, Search, X } from 'lucide-react';
+import { CalendarDays, ChevronDown, ChevronLeft, ChevronRight, Loader2, Search, X } from 'lucide-react';
 import { orgService, errorText, isRetryable } from '../../api/orgsApi';
 import { useConsoleOrg } from './useConsoleOrg';
 import { ConsoleFailed, ConsoleLoading } from '../../components/console/ConsoleStates';
@@ -645,6 +645,7 @@ function AttendanceDay({ org }) {
                 }
               }}
             />
+            <ChevronDown aria-hidden="true" className="w-4 h-4 flex-shrink-0" />
           </label>
           <button type="button" onClick={() => setDay((d) => addDays(d, 1))} aria-label="Next day" className="c-icon-btn">
             <ChevronRight aria-hidden="true" className="w-4 h-4" />

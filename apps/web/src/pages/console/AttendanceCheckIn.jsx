@@ -52,6 +52,12 @@ const openCalendar = (e) => {
   }
 };
 
+/** A box that asks opens under the row pressed and comes fully into the window, its buttons above a
+ *  phone's tabs (Kd, 2026-11-27: a button a person must press is never out of sight). */
+const intoSight = (el) => {
+  el?.scrollIntoView?.({ block: 'nearest' });
+};
+
 /** The two buttons under a box that asks before it changes a visit. */
 function BoxButtons({ label, busy, danger, onPress, onCancel }) {
   return (
@@ -270,6 +276,7 @@ export function CheckSomeoneIn({ gymId, words, keepsList, timezone, clearSignal,
               aria-label="Day they came"
               className="flex-1"
             />
+            <ChevronDown aria-hidden="true" className="w-4 h-4 flex-shrink-0" />
           </label>
           <span className="c-s14 c-t2">
             {earlier
@@ -342,7 +349,7 @@ export function CheckSomeoneIn({ gymId, words, keepsList, timezone, clearSignal,
                 </div>
                 {/* Add visit opens under the row that was pressed (Boxes, way 1). */}
                 {asking ? (
-                  <div role="group" aria-label={`Add a visit for ${adding.name}`} className="c-inbox flex flex-col gap-2 mb-3">
+                  <div role="group" aria-label={`Add a visit for ${adding.name}`} className="c-inbox c-attend-ask flex flex-col gap-2 mb-3" ref={intoSight}>
                     <p className="c-s15 c-w6 c-t1">
                       Add a visit for {adding.name} on {dayLabel(day)}?
                     </p>
@@ -603,7 +610,7 @@ export function CheckedInToday({ gymId, words, refreshSignal, canFix, onRemoved 
                 </div>
                 {/* Remove opens under the row that was pressed (Boxes, way 1). */}
                 {asking ? (
-                  <div role="group" aria-label={`Remove ${name}'s check-in`} className="c-inbox flex flex-col gap-2 mb-3">
+                  <div role="group" aria-label={`Remove ${name}'s check-in`} className="c-inbox c-attend-ask flex flex-col gap-2 mb-3" ref={intoSight}>
                     <p className="c-s15 c-w6 c-t1">
                       Remove {name}&apos;s {time} check-in?
                     </p>
