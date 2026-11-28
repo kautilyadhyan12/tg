@@ -5,10 +5,11 @@
 // none, never refused); an exercise the Library never had
 // refuses the whole save; then the workout and all its sets are written
 // together, and only by the request that made the workout. The server works out the calories, the
-// heart rate's average and highest, and (after the commit) the streak and XP from history, which is
-// what makes a second send give nothing twice.
+// heart rate's average and highest, each camera set's form score and the workout's (job 64b-i), and
+// (after the commit) the streak and XP from history, which is what makes a second send give nothing
+// twice.
 import type { Sql } from "postgres";
-import { heartSums, trainedMsOf, type WorkoutSave } from "@app/shared";
+import { heartSums, setFormScore, trainedMsOf, workoutFormScore, type SavedSet, type WorkoutSave } from "@app/shared";
 import { onWorkoutSynced } from "../gamification/service.js";
 import { getUserSyncContext } from "../users/service.js";
 import { KCAL_CALC_VERSION_SAVE, kcalForSave } from "./calories.js";
@@ -52,6 +53,11 @@ export function namedTimeZone(tz: string): string | null {
     return null;
   }
   return /^[+-]/.test(name) ? null : name;
+}
+
+/** A workout's form score: its camera sets' alone (job 64b-i). A set by hand or by timer has none, whatever it carried. */
+export function workoutFormScoreOf(sets: readonly Pick<SavedSet, "counted" | "camera">[]): number | null {
+  return workoutFormScore(sets.map((s) => (s.counted === "camera" && s.camera?.summary ? setFormScore(s.camera.summary.repScores) : null)));
 }
 
 export async function saveWorkout(deps: SaveDeps, userId: string, input: WorkoutSave): Promise<{ status: "created" | "duplicate" }> {
@@ -101,6 +107,7 @@ export async function saveWorkout(deps: SaveDeps, userId: string, input: Workout
       heartAvg: heart?.avg ?? null,
       heartMax: heart?.max ?? null,
       kcalWeightGrams: ctx.weightKg !== null && ctx.weightKg > 0 ? Math.round(ctx.weightKg * 1000) : null,
+      avgFormScore: workoutFormScoreOf(sets),
     });
     if (!made) {
       // Another request made it between the first question and this insert: it is the person's own

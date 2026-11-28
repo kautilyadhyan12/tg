@@ -914,7 +914,9 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
       - 64a-iv. [x] **Saved workouts** — merged 2026-11-22 (PR #621).
       - 64a-v. [x] **History** — merged 2026-11-23 · PR #625
       - 64a-vi. [x] **Heart rate and sounds** — merged 2026-11-23 · PR #629
-    - 64b. [ ] **With the camera** (after 64a and item 53's screen): Camera or Count myself, picked every time.
+    - 64b. **With the camera** (split 2026-11-28 by its terminal in two, the server first; `handoff/2026-11-28-64b-i.md` keeps its line as first written):
+      - 64b-i. [x] **The server keeps a set counted by the camera** — merged 2026-11-28 (PR #671).
+      - 64b-ii. [ ] **Camera or Count myself in the workout**, picked every time, its look drawn for Kd first.
 65. [ ] **Each exercise's Library page**, towards about 200 (§13.2; alongside, from 60): written and checked, never copied across from the old text; Kd's list of names. All camera rules are exercise folder 1's job 54.
 
 **The plan of 2026-09-22 and its items, kept as first written. Where they differ from the lists above, the lists win.**

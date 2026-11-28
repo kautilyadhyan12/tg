@@ -35,12 +35,38 @@ import { ForeignWorkoutError, RefusedSaveError, UnknownExercisesError, saveWorko
 import { giveEffort, workoutSummary } from "./summary.js";
 import { ForeignSavedError, FutureEditError, SavedFullError, deleteSaved, listSaved, readSaved, writeSaved } from "./saved.js";
 
-/** Twelve hours of heart rate at one a second, as text, is about 0.6 MB. */
-const BODY_MOST_BYTES = 1024 * 1024;
-const LIST_ITEMS_FOR_SAVE = LIST_ITEMS_MOST + WORKOUT_SAVE_LIMITS.heartMost * 3;
+/** Twelve hours of heart rate at one a second, as text, is about 0.6 MB; the biggest save the schema takes, with 200
+ *  camera sets at their longest (job 64b-i), 1.2 MB, measured under it in `training.camera.unit.test.ts`. */
+export const BODY_MOST_BYTES = 1.5 * 1024 * 1024;
+export const LIST_ITEMS_FOR_SAVE = LIST_ITEMS_MOST + WORKOUT_SAVE_LIMITS.heartMost * 3 + WORKOUT_SAVE_LIMITS.repScoresMost;
+/** The most object keys in a save: the biggest the schema takes holds 12,412 (200 camera sets of 62 keys each, at their
+ *  most, and the workout's own 12), measured in `training.camera.unit.test.ts` (round one, H1). */
+export const OBJECT_MEMBERS_FOR_SAVE = 15_000;
 
 const validationError = (req: FastifyRequest, reply: FastifyReply, message: string) =>
   reply.status(400).send({ error: "validation_error", message, requestId: req.id });
+
+/** A key or a part of a field's path, cut short and marked so: a record's key is the phone's own word. */
+const cut = (word: string): string => (word.length > 40 ? `${word.slice(0, 40)}…` : word);
+const pathWords = (path: readonly PropertyKey[]): string => path.map((p) => cut(String(p))).join(".");
+
+/** A refused save's problems for the phone: where each is and what is wrong, never a value it sent; at most ten, and
+ *  unknown keys counted and named by at most five different names (round one, H1: 5,000 unknown keys made a reply of every
+ *  name; the re-check: five names cut alike read as one name five times). */
+export function saveIssueWords(e: z.ZodError, most = 10): string {
+  const words = e.issues.slice(0, most).map((i) => {
+    if (i.code !== "unrecognized_keys") return `${pathWords(i.path)}: ${i.message}`;
+    const named: string[] = [];
+    for (const k of i.keys) {
+      const word = `"${cut(k)}"`;
+      if (!named.includes(word)) named.push(word);
+      if (named.length === 5) break;
+    }
+    return `${pathWords(i.path)}: ${String(i.keys.length)} unknown ${i.keys.length === 1 ? "key" : "keys"}, such as ${named.join(", ")}`;
+  });
+  if (e.issues.length > most) words.push(`and ${String(e.issues.length - most)} more problems`);
+  return words.join("; ");
+}
 
 export function registerTrainingRoutes(
   app: FastifyInstance,
@@ -60,14 +86,14 @@ export function registerTrainingRoutes(
 
   app.post(
     "/v1/workouts",
-    { onRequest: [app.authenticate, saveLimit], bodyLimit: BODY_MOST_BYTES, config: { listItemsMost: LIST_ITEMS_FOR_SAVE } },
+    { onRequest: [app.authenticate, saveLimit], bodyLimit: BODY_MOST_BYTES, config: { listItemsMost: LIST_ITEMS_FOR_SAVE, objectMembersMost: OBJECT_MEMBERS_FOR_SAVE } },
     async (req, reply) => {
       const userId = req.authUser?.id;
       if (userId === undefined) throw new Error("authenticate did not run");
 
       const parsed = workoutSaveSchema.safeParse(req.body);
       // Issue paths and messages only, never a value the phone sent.
-      if (!parsed.success) return validationError(req, reply, parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; "));
+      if (!parsed.success) return validationError(req, reply, saveIssueWords(parsed.error));
       if (req.headers["idempotency-key"] !== parsed.data.workoutId) {
         return reply.status(400).send({ error: "idempotency_key_mismatch", message: "Idempotency-Key header must equal body workoutId", requestId: req.id });
       }
