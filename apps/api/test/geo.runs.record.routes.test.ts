@@ -330,7 +330,9 @@ d("record a run (real Postgres)", () => {
       expect(saved.run.distanceM).toBeGreaterThanOrEqual(3590);
     });
 
-    it("made up as a stand every 13 s over a 3 m/s run (round one, H1), the run is saved as the person ran it: its distance, Moving time and splits", async () => {
+    // Each stand is 37 m, inside the 40 m a phone that feels still may go, so it is honoured however fast its points go
+    // (37r: a GPS settling indoors goes as fast): it takes its metres with its time, as a made-up pause does.
+    it("made up as a stand every 13 s over a 3 m/s run (round one, H1), the run is saved at the pace the person ran, and loses no more than the same list sent as pauses", async () => {
       const me = await makeUser("still-forged-short");
       const still: [number, number][] = [];
       for (let t = 1000; t + 12_400 <= 1_200_000; t += 13_000) still.push([t, t + 12_400]);
@@ -339,8 +341,12 @@ d("record a run (real Postgres)", () => {
       expect(res.statusCode, res.body).toBe(201);
       const saved = saveRunResponseSchema.parse(JSON.parse(res.body));
       const plain = runSums(run.points, run.pauses, run.elapsedMs, 70);
-      expect(saved.run).toMatchObject({ distanceM: plain.distanceM, movingS: plain.movingS, splitsKm: plain.splitsKm });
-      expect(saved.run.movingS).toBeGreaterThanOrEqual(1190);
+      const asPauses = runSums(run.points, [...run.pauses, ...still], run.elapsedMs, 70);
+      expect(saved.run.movingS).toBeGreaterThan(0);
+      expect(saved.run.distanceM / saved.run.movingS).toBeLessThanOrEqual((plain.distanceM / plain.movingS) * 1.1);
+      for (const split of saved.run.splitsKm) if (split.m === 1000) expect(split.s).toBeGreaterThanOrEqual(300);
+      expect(saved.run.distanceM).toBeGreaterThanOrEqual(asPauses.distanceM);
+      expect(saved.run.movingS).toBeGreaterThanOrEqual(asPauses.movingS);
     });
 
     it.each<[string, unknown]>([
