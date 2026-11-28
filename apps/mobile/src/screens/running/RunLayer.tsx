@@ -216,13 +216,15 @@ export function RunLayerProvider({ children }: { children: ReactNode }) {
   }, [me, session, hasRun, finished]);
 
   // The person's step length as the server measures indoor runs with (37q-ii-a), kept for a Start with no signal: read
-  // once a signed-in person is here, and again after each run sent (a treadmill's distance may have taught it).
+  // once Indoor is picked, and again after each run finished (a treadmill's distance may have taught it); never for
+  // somebody who runs outdoors.
+  const indoorPicked = useSyncExternalStore(subscribeRun, indoorChoice);
   useEffect(() => {
-    if (me === null) return;
+    if (me === null || !indoorPicked) return;
     void session.signedIn({ method: "GET", path: "/v1/geo/runs/step-length" }, stepLengthResponseSchema).then((answer) => {
       if (answer.kind === "ok") void keepRunStepBasis(me, { heightCm: answer.data.stepLength.heightCm, factor: answer.data.stepLength.factor });
     });
-  }, [me, session, finished]);
+  }, [me, session, finished, indoorPicked]);
 
   const start = useCallback(async (autoPause: boolean, guide: KeptRunGuide | null = null, anyway = false, withoutSteps = false): Promise<StartProblem | null> => {
     setStartFailed(false);
