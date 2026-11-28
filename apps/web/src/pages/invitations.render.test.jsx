@@ -298,11 +298,20 @@ describe("the invitation email's link", () => {
 });
 
 describe("a staff invitation email's link (4a-i)", () => {
+  // A refused sign-in check sends every page not on this list to /login (V5-d's walk): the invited person never
+  // read this page, and signed in through the member door instead of the console.
+  it('is a page a signed-out person stays on', async () => {
+    const { isSignedOutPage } = await vi.importActual('../api/authApi');
+    expect(isSignedOutPage('/staff-invitation')).toBe(true);
+    expect(isSignedOutPage('/staff-invitation/')).toBe(true);
+    expect(isSignedOutPage('/staff-invitations')).toBe(false);
+  });
+
   it('signed out: sends the person to sign in through the Manage door', async () => {
     authService.getMe.mockRejectedValue(Object.assign(new Error('unauthorized'), { response: { status: 401 } }));
     rememberDoor(MEMBER_DOOR);
     draw('/staff-invitation');
-    expect(await screen.findByRole('heading', { name: "You're invited to help run a gym" })).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: "You're invited to help run a gym or studio" })).toBeTruthy();
     fireEvent.click(screen.getByRole('link', { name: /Sign in/ }));
     expect(await screen.findByText('SIGN IN PAGE')).toBeTruthy();
     expect(readDoor()).toBe(GYM_DOOR);
