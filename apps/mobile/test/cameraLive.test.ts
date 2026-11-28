@@ -306,16 +306,28 @@ describe("the phone moved in a set (53c)", () => {
     expect(said).not.toContain(LOST_WORDS);
   });
 
-  it("the count goes on after the phone stands: never less than it was, never more than she did", () => {
+  it("the count goes on after the phone stands: picked up 0.8 s right after her first squat, laid down, and back at her place 3 s, she is counted every squat she did, as with the phone never moved", () => {
     const e = exercise("squat");
     const v = video("prisoner_squat_1");
     const frames = withLeadIn(v.video).frames;
-    const first = play(e, v).views.findIndex((w) => w.reps === 1);
-    const { views } = held(e, v, (frames[first]?.t ?? 0) + 100, 800);
+    const plain = play(e, v).views;
+    const first = plain.findIndex((w) => w.reps === 1);
+    const at = frames[first];
+    if (at === undefined) throw new Error("no first squat");
+    const step = (frames[1]?.t ?? 0) - (frames[0]?.t ?? 0);
+    // Her own pictures until her first squat was counted; then the phone in a hand 0.8 s and standing 3 s while she stands
+    // where she was; then the rest of her set, its time carried on.
+    const pause = Math.round(3800 / step);
+    const shifted = (f: MovementFrame, n: number): MovementFrame => ({ ...f, t: f.t + n * step });
+    const played = [...frames.slice(0, first + 1), ...Array.from({ length: pause }, (_, n) => shifted(at, n + 1)), ...frames.slice(first + 1).map((f) => shifted(f, pause))];
+    const set = new LiveSet(e.counts, e.camera, 1);
+    const holdEnd = at.t + 800;
+    const views = played.map((f, k) => set.next(eventOf(f, 1_234_567, f.t > at.t && f.t <= holdEnd ? handSpin(k) : STILL_SPIN)));
+    expect(views.some((w) => w.still)).toBe(true);
     const counts = views.map((w) => w.reps);
     expect(counts.every((c, k) => k === 0 || c >= (counts[k - 1] ?? 0))).toBe(true);
-    expect(counts[counts.length - 1] ?? 0).toBeGreaterThanOrEqual(1);
-    expect(counts[counts.length - 1] ?? 0).toBeLessThanOrEqual(v.entry.reps ?? 0);
+    expect(counts[counts.length - 1]).toBe(plain[plain.length - 1]?.reps);
+    expect(plain[plain.length - 1]?.reps).toBe(v.entry.reps);
   });
 
   it("held in a hand from the start: once it has moved 5 s in a row the set-up says \"Keep the phone still.\", once, and nothing counts", () => {

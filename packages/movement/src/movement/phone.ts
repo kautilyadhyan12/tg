@@ -7,12 +7,13 @@
 //   - **moving**: the phone points elsewhere than a moment ago, keeps turning (a knock, a hand waving it), or trembles as
 //     a hand always does, however steadily it holds it: nothing in the picture is read, no count and no word but "Keep the
 //     phone still.";
-//   - **again**: the phone stands still again after moving, or the camera gave no picture for long enough that it may have
-//     been moved (Pause, the app away): from this picture the person is found afresh, as at the start of a set, and the
-//     count goes on from where it was (CameraSet).
+//   - **again**: the phone stands still again after moving, or, after the camera gave no picture for a while (Pause, the
+//     app away), its tilt is not what it was: from this picture the stages that measure the body start afresh, the count
+//     going on, and the person is still the one the set has counted, at their place and size (CameraSet; round one, C1 and
+//     H1: the lock thrown away with them let a stranger take the set after every Pause).
 // A reference video carries no `spin` (its camera stands still), and a phone with no gyroscope says none: neither is ever
 // moving. Pure: the frames' own times and the phone's own readings. Nothing in this is any exercise's own.
-import type { Spin } from "@app/shared";
+import type { Down, Spin } from "@app/shared";
 
 export interface PhoneLimits {
   /** The turning is read over this last stretch of the set, ms. */
@@ -31,8 +32,10 @@ export interface PhoneLimits {
    *  trembling. */
   readonly settle: number;
   readonly steady: number;
-  /** No picture for this long, ms (Pause, the app away, a camera that stalled): the phone may have been moved meanwhile. */
+  /** No picture for this long, ms (Pause, the app away, a camera that stalled): its turning meanwhile is not known, so it
+   *  counts as moved only if its tilt ("down") is further than `tilted` radians from what it was before. */
   readonly stopped: number;
+  readonly tilted: number;
 }
 
 const DEGREE = Math.PI / 180;
@@ -55,7 +58,10 @@ const DEGREE = Math.PI / 180;
  * whole second under 0.5 degrees in all and not trembling; played on those readings, the still phone is never moving, the
  * phone is moving 0.03 s after it was picked up and in every picture it was held, and stands again once, 1 s after it lay
  * still. `stopped`: a second with no picture, five or more lost at the camera's slowest 8 a second (`SLOWEST_RATE`), is the
- * camera off, not a slow picture.
+ * camera off, not a slow picture. `tilted`: his phone's gravity reading, lying still 4.5 minutes, tilted at most 1.03 degrees
+ * between any two moments (0.36 lying still after it was laid down); 2 degrees is twice that. Picked up and laid flat on the
+ * desk again it read 0.74 degrees from before: a phone put back at the same tilt is not seen, and the person, still the
+ * set's, is found again at their place.
  */
 export const PHONE_LIMITS: PhoneLimits = {
   window: 500,
@@ -67,13 +73,14 @@ export const PHONE_LIMITS: PhoneLimits = {
   settle: 1000,
   steady: 0.5 * DEGREE,
   stopped: 1000,
+  tilted: 2 * DEGREE,
 };
 
 export interface PhoneFrame {
   /** The phone is moving: nothing in this picture is read. */
   readonly moving: boolean;
-  /** From this picture the person is found afresh, the count going on: the phone stands again after moving, or the camera
-   *  was off long enough that it may have been moved. */
+  /** From this picture the stages that measure the body start afresh, the count going on: the phone stands again after
+   *  moving, or after a while with no picture it is tilted otherwise than before. */
   readonly again: boolean;
   /** How far the phone turned over the last `window`: net (where it points against where it pointed) and in all, radians;
    *  null for a reference video. */
@@ -93,6 +100,9 @@ interface Turn {
 
 const size = (s: readonly [number, number, number]): number => Math.hypot(s[0], s[1], s[2]);
 
+/** The angle between two unit "down"s, radians. */
+const angleOf = (a: Down, b: Down): number => Math.acos(Math.min(1, Math.max(-1, a[0] * b[0] + a[1] * b[1] + a[2] * b[2])));
+
 export class PhoneMotion {
   private readonly limits: PhoneLimits;
   private lastT: number | null = null;
@@ -102,25 +112,37 @@ export class PhoneMotion {
   private since: number | null = null;
   private moving = false;
   private stillSince: number | null = null;
+  /** The newest "down" read. */
+  private down: Down | null = null;
 
   constructor(limits: PhoneLimits = PHONE_LIMITS) {
     this.limits = limits;
   }
 
-  /** One picture: its time and how far the phone turned since the picture before (absent for a reference video; null when
-   *  the phone could not say, which adds nothing). */
-  next(t: number, spin: Spin | null | undefined): PhoneFrame {
+  /** One picture: its time, how far the phone turned since the picture before (absent for a reference video; null when
+   *  the phone could not say, which adds nothing), and which way is down. */
+  next(t: number, spin: Spin | null | undefined, down: Down | null = null): PhoneFrame {
     if (spin === undefined) return STILL;
     const last = this.lastT;
-    // A picture with the same time decides nothing new; a clock that went back is a new set.
+    // A clock that went back is a new set.
     if (last !== null && t < last) this.reset();
-    if (last !== null && t === last) return this.frame(t, false, this.trembling(t));
+    // A picture with the same time: its turning is added to the answer before, and decides nothing new (round one, L2).
+    if (last !== null && t === last) {
+      const before = this.turns[this.turns.length - 1];
+      if (spin !== null && before !== undefined && before.t === t) this.turns[this.turns.length - 1] = { t, spin: [before.spin[0] + spin[0], before.spin[1] + spin[1], before.spin[2] + spin[2]] };
+      else if (spin !== null) this.turns.push({ t, spin });
+      return this.frame(t, false, this.trembling(t));
+    }
     this.lastT = t;
-    // The camera gave no picture for a while: whatever the phone did meanwhile is not known.
+    const downBefore = this.down;
+    if (down !== null) this.down = down;
+    // The camera gave no picture for a while: its turning meanwhile is not known; moved only if its tilt changed.
     if (last !== null && t - last > this.limits.stopped) {
+      const tilted = down !== null && downBefore !== null && angleOf(down, downBefore) > this.limits.tilted;
       this.reset();
       this.lastT = t;
-      return this.frame(t, true, false);
+      this.down = down ?? downBefore;
+      return this.frame(t, tilted, false);
     }
     if (spin !== null) this.turns.push({ t, spin });
     this.since ??= t;
@@ -192,6 +214,7 @@ export class PhoneMotion {
   }
 
   private reset(): void {
+    this.down = null;
     this.lastT = null;
     this.turns = [];
     this.since = null;

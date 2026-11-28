@@ -209,7 +209,7 @@ describe("the phone moving (53c)", () => {
 });
 
 describe("a hold", () => {
-  const frame =(t: number, holding: boolean, heldMs: number, unseen = false): HoldFrame => ({ t, holding, heldMs, unseen, reason: unseen ? "Keep your whole body in view." : null, hold: null });
+  const frame = (t: number, holding: boolean, heldMs: number, unseen = false): HoldFrame => ({ t, holding, heldMs, unseen, reason: unseen ? "Keep your whole body in view." : null, hold: null });
   it("its reason once the position has been unread 2 s, and again only after it was held again; \"Halfway.\" at half its time, after the quiet", () => {
     const coach = new Coach(null, WORDS);
     const steps = [

@@ -59,7 +59,7 @@ type Where = { aspect: number; own: ReturnType<typeof middleOf> };
  *  aside sees them. The phone is taken as standing 1.5 s after it stops turning (the half second's reading clears, then a
  *  whole second still), and the camera then learns the person afresh before their next rep.
  *  `cut` "ended": picked up 40 ms after the first counted rep came back up, before the camera judged it. */
-function pickedUp(label: string, middle: (m: Where) => readonly MovementFrame[], movement: Movement, cut: "judged" | "ended" = "judged", down: (m: Where) => readonly MovementFrame[] = () => []): Picked {
+function pickedUp(label: string, middle: (m: Where) => readonly MovementFrame[], movement: Movement, cut: "judged" | "ended" = "judged", down: (m: Where) => readonly MovementFrame[] = () => [], aside = 0.3): Picked {
   const member = furtherBack(videoOf(label));
   const aspect = member.frames[0]?.aspect ?? 1;
   const own = middleOf(member.frames);
@@ -72,7 +72,7 @@ function pickedUp(label: string, middle: (m: Where) => readonly MovementFrame[],
   const after = lead.filter((f) => f.t - t0 >= at0);
   const still = after[0];
   if (still === undefined) throw new Error(`${label}: nothing after the cut`);
-  const dx = (0.3 * own.size) / aspect;
+  const dx = (aside * own.size) / aspect;
   let t = before[before.length - 1]?.t ?? t0;
   const at = (f: MovementFrame): MovementFrame => {
     t = Math.round((t + step) * 10) / 10;
@@ -97,6 +97,27 @@ const nobodyFor =
   (strangerLabel: string) =>
   (m: Where): MovementFrame[] =>
     strangerAt(strangerLabel)(m).map((f) => ({ ...f, people: [] }));
+/** Six seconds of a stranger's real reps beside the member's place: `across` picture heights from it, at `k` times their
+ *  size (round one's cases). On the two sumo squatters' sets, seen further back, a metre is 0.261 and 0.280 picture heights:
+ *  0.3 across is 1.07 to 1.15 m from the member's place, outside the 0.95 m the lock gives them (52d); 0.25 is 0.89 to 0.96 m,
+ *  at its edge. */
+const strangerBeside =
+  (strangerLabel: string, across: number, k: number) =>
+  ({ aspect, own }: Where): MovementFrame[] => {
+    const theirs = placed(videoOf(strangerLabel).frames, aspect, [own.middle[0] + across, own.middle[1]], own.size * k);
+    const step = (theirs[1]?.t ?? 0) - (theirs[0]?.t ?? 0);
+    return theirs.slice(0, Math.round(6000 / step));
+  };
+const emptied =
+  (frames: (m: Where) => readonly MovementFrame[]) =>
+  (m: Where): MovementFrame[] =>
+    frames(m).map((f) => ({ ...f, people: [] }));
+const BESIDE = [
+  [0.3, 1],
+  [-0.3, 1.2],
+  [0.3, 0.8],
+  [-0.3, 1.3],
+] as const;
 
 describe("the worst thing: a stranger in front of a phone in a hand counts nothing, and the member's count goes on once it is laid down", () => {
   it.each(PAIRS.map(([name, member, stranger]) => [name, member, stranger] as const))(
@@ -127,6 +148,78 @@ describe("the worst thing: a stranger in front of a phone in a hand counts nothi
   );
 });
 
+/** A member's set cut at the picture its first counted rep was judged in, then no picture for `gap` ms (Pause, the app
+ *  away), four pictures of nobody as the camera starts again, `middle`, and the rest of their set; each picture given the
+ *  phone's turning by `spin` (none: a reference video, as before 53c), and after the gap its "down" tilted by `tilt` degrees. */
+function paused(label: string, movement: Movement, gap: number, middle: (m: Where) => readonly MovementFrame[], spin: "still" | "none" | "video", tilt = 0): MovementFrame[] {
+  const member = furtherBack(videoOf(label));
+  const aspect = member.frames[0]?.aspect ?? 1;
+  const own = middleOf(member.frames);
+  const lead = withLeadIn(member).frames;
+  const t0 = lead[0]?.t ?? 0;
+  const step = (lead[1]?.t ?? 0) - t0;
+  const first = firstRep(movement, live(lead, STILL));
+  const before = lead.filter((f) => f.t - t0 <= first.judged);
+  const after = lead.filter((f) => f.t - t0 > first.judged);
+  const start = after[0];
+  if (start === undefined) throw new Error(`${label}: nothing after the cut`);
+  const r = (tilt * Math.PI) / 180;
+  const down: [number, number, number] = [Math.sin(r), Math.cos(r), 0];
+  let t = (before[before.length - 1]?.t ?? t0) + gap - step;
+  const at = (f: MovementFrame): MovementFrame => {
+    t = Math.round((t + step) * 10) / 10;
+    return { ...f, t, down };
+  };
+  const rest = [...Array.from({ length: 4 }, () => ({ ...start, people: [] })), ...middle({ aspect, own }), ...after].map(at);
+  const frames = [...before, ...rest];
+  if (spin === "video") return frames;
+  if (spin === "none") return frames.map((f) => ({ ...f, spin: null }));
+  return live(frames, STILL);
+}
+
+const ownCount = (movement: Movement, label: string): number => played(movement, withLeadIn(furtherBack(videoOf(label))).frames).run.count;
+
+describe("the worst thing, round one's C1: after a Pause, a stranger beside the member counts nothing, the phone never having moved", () => {
+  const cases = (["sumo_squat_2a", "sumo_squat_2b"] as const).flatMap((member) => BESIDE.map(([across, k]) => [member, across, k] as const));
+  it.each(cases)("%s, a 2 s Pause, then a stranger %s picture heights across (outside the lock's room) at %s times the member's size: counted and told as with nobody there, and as before 53c", (member, across, k) => {
+    const movement = readMovement("squat");
+    const stranger = member === "sumo_squat_2a" ? "prisoner_squat_2" : "prisoner_squat_1";
+    const them = strangerBeside(stranger, across, k);
+    const before53c = played(movement, paused(member, movement, 2000, them, "video")).run;
+    const alone = played(movement, paused(member, movement, 2000, emptied(them), "still")).run;
+    for (const spin of ["still", "none"] as const) {
+      const run = played(movement, paused(member, movement, 2000, them, spin)).run;
+      expect([run.count, said(run.reps)]).toEqual([before53c.count, said(before53c.reps)]);
+      expect([run.count, said(run.reps)]).toEqual([alone.count, said(alone.reps)]);
+    }
+    expect(alone.count).toBe(ownCount(movement, member));
+  });
+
+  it("a Pause after which the phone stands tilted 3 degrees otherwise (moved while paused): the body is measured afresh, the member still the set's, the stranger still nobody", () => {
+    const movement = readMovement("squat");
+    for (const [member, stranger] of [["sumo_squat_2a", "prisoner_squat_2"], ["sumo_squat_2b", "prisoner_squat_1"]] as const) {
+      const them = strangerBeside(stranger, 0.3, 1);
+      const { run, seen } = played(movement, paused(member, movement, 2000, them, "still", 3));
+      const alone = played(movement, paused(member, movement, 2000, emptied(them), "still", 3)).run;
+      expect(seen.filter((x) => x.phone.again)).toHaveLength(1);
+      expect([run.count, said(run.reps)]).toEqual([alone.count, said(alone.reps)]);
+      expect(run.count).toBe(ownCount(movement, member));
+    }
+  });
+});
+
+describe("the worst thing, round one's H1: once the phone stands again, a stranger beside the member's place counts nothing", () => {
+  const cases = PAIRS.slice(0, 2).flatMap(([name, member, stranger]) => BESIDE.map(([across, k]) => [name, member, stranger, across, k] as const));
+  it.each(cases)("%s: %s's phone picked up and laid back where it was, then %s does their reps %s picture heights across (outside the lock's room) at %s times the member's size: counted and told as with nobody there", (name, member, stranger, across, k) => {
+    const movement = readMovement(name);
+    const them = strangerBeside(stranger, across, k);
+    const a = played(movement, pickedUp(member, nobodyFor(stranger), movement, "judged", them, 0).frames).run;
+    const b = played(movement, pickedUp(member, nobodyFor(stranger), movement, "judged", emptied(them), 0).frames).run;
+    expect([a.count, said(a.reps)]).toEqual([b.count, said(b.reps)]);
+    expect(b.count).toBe(ownCount(movement, member));
+  });
+});
+
 describe("limits, in plain sight", () => {
   it("a rep the member had just finished, the phone picked up before the camera had judged it (0.3 to 0.4 s after it), is lost: sumo_squat_2a, 2 of her 3", () => {
     const movement = readMovement("squat");
@@ -135,11 +228,45 @@ describe("limits, in plain sight", () => {
     expect([own, a.run.count]).toEqual([3, 2]);
   });
 
-  it("once the phone stands again, whoever the camera finds there first is followed, as at the start of a set: a stranger doing their reps at the member's place before the member is back is counted", () => {
+  it("as since 52d, a stranger of the member's size doing their reps at the member's very place is taken for them: here once the phone stands again, before the member is back", () => {
     const movement = readMovement("squat");
     const plain = played(movement, pickedUp("sumo_squat_2a", nobodyFor("prisoner_squat_2"), movement).frames).run.count;
     const taken = played(movement, pickedUp("sumo_squat_2a", nobodyFor("prisoner_squat_2"), movement, "judged", strangerAt("prisoner_squat_2", 6)).frames).run.count;
     expect(taken).toBeGreaterThan(plain);
+  });
+
+  it("as since 52d, a stranger of about the member's size within the 0.95 m the lock gives them (0.89 to 0.96 m, at 0.8 times) is taken for them after a Pause: exactly as before 53c", () => {
+    const movement = readMovement("squat");
+    for (const [member, stranger] of [["sumo_squat_2a", "prisoner_squat_2"], ["sumo_squat_2b", "prisoner_squat_1"]] as const) {
+      const them = strangerBeside(stranger, 0.25, 0.8);
+      const before53c = played(movement, paused(member, movement, 2000, them, "video")).run;
+      const run = played(movement, paused(member, movement, 2000, them, "still")).run;
+      expect([run.count, said(run.reps)]).toEqual([before53c.count, said(before53c.reps)]);
+      expect(run.count).toBe(ownCount(movement, member) + 1);
+    }
+  });
+
+  it("once the phone has moved, the lock looks for the member where they were on the picture before: a stranger of their size within 0.95 m of that place is read as them (the phone put back 0.3 m aside: one dip the camera could not see whole, nothing counted)", () => {
+    const movement = readMovement("squat");
+    const them = strangerBeside("prisoner_squat_2", -0.3, 1.2);
+    const a = played(movement, pickedUp("sumo_squat_2a", nobodyFor("prisoner_squat_2"), movement, "judged", them).frames).run;
+    const b = played(movement, pickedUp("sumo_squat_2a", nobodyFor("prisoner_squat_2"), movement, "judged", emptied(them)).frames).run;
+    expect(a.count).toBe(b.count);
+    expect(said(a.reps).filter((x) => x.startsWith("unseen"))).toHaveLength(1);
+    expect(said(b.reps).filter((x) => x.startsWith("unseen"))).toHaveLength(0);
+  });
+
+  it("a phone laid down turned so far that the member is 1.5 m from their place on the picture: the set waits for them there and counts nothing more", () => {
+    const movement = readMovement("squat");
+    const member = furtherBack(videoOf("sumo_squat_2a"));
+    const own = middleOf(member.frames);
+    const aspect = member.frames[0]?.aspect ?? 1;
+    const moved = pickedUp("sumo_squat_2a", nobodyFor("prisoner_squat_2"), movement);
+    const [, to] = moved.held;
+    const dx = (1.5 * own.size) / aspect;
+    const shifted = (f: MovementFrame): MovementFrame => ({ ...f, people: f.people.map((p) => ({ ...p, points: p.points.map(([x, y, z, v, pr]) => [x + dx, y, z, v, pr] as SeenPerson["points"][number]) })) });
+    const frames = moved.frames.map((f, k) => (k < to ? f : shifted(f)));
+    expect(played(movement, frames).run.count).toBe(1);
   });
 });
 
@@ -210,9 +337,27 @@ describe("the rule, every kind of picture", () => {
     expect(run([[0, undefined], [50, undefined], [5000, undefined]]).some((f) => f.moving || f.again)).toBe(false);
   });
 
-  it("a phone with no gyroscope (null) is never moving; a picture after a second with none is found afresh", () => {
-    const f = run([[0, null], [50, null], [100, null], [1200, null], [1250, null]]);
-    expect(f.map((x) => [x.moving, x.again])).toEqual([[false, false], [false, false], [false, false], [false, true], [false, false]]);
+  it("a phone with no gyroscope (null) is never moving; after a second with no picture, measured afresh only if its tilt changed more than 2 degrees", () => {
+    const tilt = (degrees: number): [number, number, number] => [Math.sin((degrees * Math.PI) / 180), Math.cos((degrees * Math.PI) / 180), 0];
+    const phone = (after: [number, number, number] | null): [boolean, boolean][] => {
+      const p = new PhoneMotion();
+      return [p.next(0, null, tilt(0)), p.next(50, null, tilt(0)), p.next(1200, null, after), p.next(1250, null, after)].map((x) => [x.moving, x.again]);
+    };
+    const none: [boolean, boolean][] = [[false, false], [false, false], [false, false], [false, false]];
+    expect(phone(tilt(0))).toEqual(none);
+    expect(phone(tilt(1.9))).toEqual(none);
+    expect(phone(tilt(2.1))).toEqual([[false, false], [false, false], [false, true], [false, false]]);
+    // "Down" not known after the gap: nothing to tell a moved phone by.
+    expect(phone(null)).toEqual(none);
+  });
+
+  it("a picture with the same time adds its turning to the one before, never drops it (round one, L2)", () => {
+    const p = new PhoneMotion();
+    p.next(0, turn(0));
+    expect(p.next(50, turn(0.8)).moving).toBe(false);
+    expect(p.next(50, turn(0.8)).moving).toBe(false);
+    // 1.6 degrees in all: past the turn that is moving.
+    expect(p.next(100, turn(0)).moving).toBe(true);
   });
 
   it("a turn of 1.6 degrees in half a second is moving; 1.4 is not; 3.2 in all back and forth is; 2.8 is not", () => {
@@ -261,9 +406,9 @@ describe("the rule, every kind of picture", () => {
     }
   });
 
-  it("a picture with the same time decides nothing new; a clock that went back is a new set", () => {
+  it("a picture with the same time decides nothing itself, its turning counted at the next; a clock that went back is a new set", () => {
     const f = run([[0, turn(0)], [50, turn(0)], [50, turn(10)], [100, turn(0)]]);
-    expect(f.some((x) => x.moving)).toBe(false);
+    expect(f.map((x) => x.moving)).toEqual([false, false, false, true]);
     const g = run([...steady(0, 300, 1), [200, turn(0)]]);
     expect(g[g.length - 2]?.moving).toBe(true);
     expect(g[g.length - 1]?.moving).toBe(false);

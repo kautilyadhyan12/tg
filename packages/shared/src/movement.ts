@@ -84,6 +84,7 @@ export const poseCameraEventSchema = z.object({
   turn: finite,
   spin: z
     .array(finite)
+    .max(3)
     .refine((s) => s.length === 0 || s.length === 3, { message: "the phone's turning about its three axes, or none" })
     .default([]),
   people: z

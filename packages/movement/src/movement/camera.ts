@@ -5,9 +5,13 @@
 // held) the lock is told, so that from then on only a body at the person's place and size is counted.
 //
 // Before all of them, the phone itself (53c, `PhoneMotion`): while it is moving (knocked, picked up, held by hand) no
-// picture reaches the stages, so nothing it sees counts; once it stands again, or after the camera gave no picture long
-// enough that it may have been moved, every stage starts afresh as at the start of a set, the lock included (the person is
-// somewhere else on a moved phone's picture), and the count and the time held go on from where they were.
+// picture reaches the stages, so nothing it sees counts. Once it stands again, or after a while with no picture its tilt is
+// not what it was, the stages that measure the body start afresh (its floor, its standing, a rep under way, all read on the
+// old picture), and the count and the time held go on from where they were. Who the person is does not start afresh once
+// the set has counted: the lock keeps their place and size, so nobody else can take the set (round one, C1 and H1: started
+// afresh with the rest, it took whoever it found first, a stranger beside the member after every Pause). A phone turned so
+// far that the member is no longer near their place on the picture waits for them there; before the set has counted, the
+// lock starts afresh too.
 import type { ExerciseCamera, HoldMovement, Movement, MovementFrame } from "@app/shared";
 import { BodyMeasures, MEASURE_LIMITS, type MeasureLimits } from "../body/measures.js";
 import { OnePerson, PERSON_LIMITS, type PersonFrame, type PersonLimits } from "../body/person.js";
@@ -50,7 +54,8 @@ export interface CameraFrame {
  *  counted rep) or none; or a hold. */
 export type CameraCounts = { readonly movement: Movement; readonly exercise: ExerciseCamera | null } | { readonly hold: HoldMovement };
 
-/** The stages after the phone, made afresh at the set's start and each time the phone stands again. */
+/** The stages after the phone, made afresh at the set's start and each time the phone stands again (the lock carried over
+ *  once the set has counted). */
 class Stages {
   readonly lock: OnePerson;
   readonly body: PossibleBody;
@@ -59,8 +64,8 @@ class Stages {
   readonly matcher: MovementMatcher | null;
   readonly holder: HoldMatcher | null;
 
-  constructor(counts: CameraCounts, settings: CameraSettings) {
-    this.lock = new OnePerson(settings.person);
+  constructor(counts: CameraCounts, settings: CameraSettings, lock: OnePerson | null = null) {
+    this.lock = lock ?? new OnePerson(settings.person);
     this.body = new PossibleBody(settings.body);
     this.steady = new SteadyPoints(settings.steady);
     this.measures = new BodyMeasures(settings.measures);
@@ -103,11 +108,12 @@ export class CameraSet {
   }
 
   next(frame: MovementFrame): CameraFrame {
-    const phone = this.phone.next(frame.t, frame.spin);
+    const phone = this.phone.next(frame.t, frame.spin, frame.down);
     if (phone.moving) return { person: { t: frame.t, person: null, status: "moving", fresh: false }, match: null, hold: null, phone };
     if (phone.again) {
       this.carried = { ...this.given };
-      this.stages = new Stages(this.counts, this.settings);
+      const lock = this.stages.lock;
+      this.stages = new Stages(this.counts, this.settings, lock.confirmed ? lock : null);
     }
     const s = this.stages;
     const person = s.lock.next(frame);
