@@ -1,4 +1,18 @@
-import { HEART_BPM_LEAST, HEART_BPM_MOST, setsAndRestsMs, WORKOUT_SAVE_LIMITS, type RunExercise, type SavedSet, type WorkoutRun, type WorkoutSave } from "@app/shared";
+import { MOVEMENT_ENGINE_VERSION } from "@app/movement";
+import {
+  HEART_BPM_LEAST,
+  HEART_BPM_MOST,
+  repScoresIn,
+  setsAndRestsMs,
+  WORKOUT_SAVE_LIMITS,
+  type CameraSetFacts,
+  type CameraSummary,
+  type RunCamera,
+  type RunExercise,
+  type SavedSet,
+  type WorkoutRun,
+  type WorkoutSave,
+} from "@app/shared";
 import type { Units } from "./records";
 import { stepTime, stepWeight } from "./workoutSetup";
 
@@ -10,6 +24,12 @@ import { stepTime, stepWeight } from "./workoutSetup";
 // A set by hand counts reps and ends by itself at its target, or on Set done; a set measured in time is a timer that
 // ends by itself at its target. After a set comes its rest, then the next set by itself. A set measured in time with
 // no rest before it (the first set, after Skip exercise, after "no rest") has 10 s to get ready first.
+//
+// With the camera (64b-ii; §11.8's steps 3 to 6): an exercise the camera counts on this phone asks, as it starts, how it is
+// counted, every time; its set waits for the answer. Chosen, each of its sets is counted by the camera, and ends at its
+// target with what the camera judged of it (`cameraDone`, which the screen sends with the engine's summary): the set keeps
+// the camera's facts, the only set that does. Count this set myself, or the camera stopping, leaves the camera for the rest
+// of that set (`leave`); Follow along puts the camera off and the set is the person's own count or the timer's.
 
 /** Before a timed set with no rest before it. */
 export const READY_MS = 10_000;
@@ -40,7 +60,30 @@ export type Press =
   | { kind: "pause" }
   | { kind: "resume" }
   /** End and save. */
-  | { kind: "end" };
+  | { kind: "end" }
+  /** How the exercise is counted, as it starts (Start with camera, Count manually); "camera" also turns the camera on for a
+   *  set being counted by hand. */
+  | { kind: "way"; way: "camera" | "hand" }
+  /** The camera's own count and a hold's time held, each time either changes. */
+  | { kind: "camera"; reps: number; heldMs: number }
+  /** The camera's set ends: at its target, or on Set done. */
+  | { kind: "cameraDone"; end: CameraEnd }
+  /** The rest of the set by hand: Count this set myself, or the camera stopped. */
+  | { kind: "leave"; why: "chosen" | "camera_stopped"; end: CameraEnd }
+  /** Follow along: the camera off, the set started again, followed with the clip. */
+  | { kind: "follow" }
+  /** Follow along ended: the person's own count, or a hold's time followed, in seconds. */
+  | { kind: "followed"; done: number }
+  /** Follow along's own Count this set myself: the set started again, by hand. */
+  | { kind: "handSet" };
+
+/** What the camera made of a set as it ended or was left (`LiveSet.end`): its count in all, a hold's time held, and its
+ *  judgement in the save's own shape (`cameraSummaryOf`), null for an exercise with no form rules. */
+export interface CameraEnd {
+  readonly reps: number;
+  readonly heldMs: number;
+  readonly summary: CameraSummary | null;
+}
 
 /** What a press leaves: the workout going on (or done, to save), or nothing to keep: it ended with no set done. */
 export type Outcome = { kind: "on"; run: WorkoutRun } | { kind: "gone" };
@@ -123,24 +166,85 @@ export function nextOf(r: WorkoutRun): { ex: number; set: number } | null {
   return null;
 }
 
-/** When the phase ends by itself, on the active clock: a rest, a get-ready, a set measured in time. */
+/** The workout asks how the exercise is counted: the camera counts it on this phone and nothing is chosen yet. Its set, or
+ *  its get-ready, waits for the answer. */
+export const asking = (r: WorkoutRun): boolean => (r.phase === "set" || r.phase === "ready") && r.way === undefined && exerciseOf(r).camera === true;
+
+/** The camera is counting the set being done. */
+export const tracking = (r: WorkoutRun): boolean => r.phase === "set" && r.way === "camera" && r.cam !== undefined && r.cam.left === null;
+
+/** The set is being followed with the exercise's clip, the camera off (Follow along). */
+export const following = (r: WorkoutRun): boolean => r.phase === "set" && r.follow === true;
+
+/** The camera has counted the set to its target (reps counted, the person's own changes with them; or a hold's time held):
+ *  the screen ends it with what the camera judged (`cameraDone`). The workout never ends a camera's set without it. */
+export function cameraReached(r: WorkoutRun): boolean {
+  if (!tracking(r) || r.cam === undefined) return false;
+  const { exercise, target } = setOf(r);
+  return exercise.measuredIn === "time" ? r.cam.heldMs >= target * 1000 : r.count >= target;
+}
+
+/** When the phase ends by itself, on the active clock: a rest, a get-ready, a set measured in time. Never while the workout
+ *  asks how the exercise is counted, nor for a hold the camera times or the clip's timer runs. */
 export function endsAt(r: WorkoutRun): number | null {
+  if (asking(r)) return null;
   if (r.phase === "rest" || r.phase === "ready") return r.phaseEndsAt;
-  if (r.phase === "set" && exerciseOf(r).measuredIn === "time") return r.phaseAt + setOf(r).target * 1000;
+  if (r.phase === "set" && exerciseOf(r).measuredIn === "time" && !tracking(r) && !following(r)) return r.phaseAt + setOf(r).target * 1000;
   return null;
 }
 
-/** The set at the workout's place starts now; one measured in time gets ready first unless a rest came before it. */
+/** A camera set beginning now, on the workout's whole clock. */
+const freshCamera = (r: WorkoutRun): RunCamera => ({ done: 0, heldMs: 0, seenReps: 0, seenHeldMs: 0, left: null, summary: null, at: r.totalMs });
+
+/** The set at the workout's place starts now; one measured in time gets ready first unless a rest came before it. With the
+ *  camera chosen, the camera counts it, and a hold needs no get-ready: the camera waits for the person to take position. */
 function begin(r: WorkoutRun, afterRest: boolean): WorkoutRun {
-  if (exerciseOf(r).measuredIn === "time" && !afterRest) return { ...r, phase: "ready", phaseAt: r.activeMs, phaseEndsAt: r.activeMs + READY_MS, count: 0 };
-  return { ...r, phase: "set", phaseAt: r.activeMs, phaseEndsAt: null, count: 0 };
+  // Follow along, once chosen, is how the exercise's next sets start too, the camera still off: a busy room stays busy.
+  if (r.way === "camera" && r.follow === true) return { ...r, phase: "set", phaseAt: r.activeMs, phaseEndsAt: null, count: 0, cam: undefined };
+  if (r.way === "camera") return { ...r, phase: "set", phaseAt: r.activeMs, phaseEndsAt: null, count: 0, cam: freshCamera(r), follow: undefined };
+  const plain: WorkoutRun = { ...r, cam: undefined, follow: undefined };
+  if (exerciseOf(r).measuredIn === "time" && !afterRest) return { ...plain, phase: "ready", phaseAt: r.activeMs, phaseEndsAt: r.activeMs + READY_MS, count: 0 };
+  return { ...plain, phase: "set", phaseAt: r.activeMs, phaseEndsAt: null, count: 0 };
 }
 
-/** The set being done is done, with `done` reps or seconds; then its rest, the next set, or the end. */
+/** What the camera's count says now, taken into the set: what it counted since it last said, unless paused, when nothing it
+ *  sees is the set's. A count that went back (never, from one set's engine) takes nothing. */
+function taken(r: WorkoutRun, cam: RunCamera, reps: number, heldMs: number): { count: number; cam: RunCamera } {
+  const sure = (n: number, most: number): number => (Number.isFinite(n) ? Math.max(0, Math.min(most, Math.floor(n))) : 0);
+  const seenReps = Math.max(cam.seenReps, sure(reps, L.repsMost));
+  const seenHeldMs = Math.max(cam.seenHeldMs, sure(heldMs, L.secondsMost * 1000));
+  if (r.paused) return { count: r.count, cam: { ...cam, seenReps, seenHeldMs } };
+  const more = seenReps - cam.seenReps;
+  return {
+    count: Math.min(L.repsMost, r.count + more),
+    cam: { ...cam, seenReps, seenHeldMs, done: Math.min(L.repsMost, cam.done + more), heldMs: Math.min(L.secondsMost * 1000, cam.heldMs + seenHeldMs - cam.seenHeldMs) },
+  };
+}
+
+/** A camera set's judgement, kept only where the save takes it whole: a score for each rep the camera counted at most, none
+ *  for a hold, and no more rep scores in the workout than a save takes. Otherwise none: never a form score cut short, nor a
+ *  workout the server would refuse. */
+function keptSummary(r: WorkoutRun, summary: CameraSummary | null, scorable: number): CameraSummary | null {
+  if (summary === null) return null;
+  const n = summary.repScores.length;
+  return n > scorable || repScoresIn(r.done) + n > L.repScoresMost ? null : summary;
+}
+
+/** The camera's facts of a set it counted: its own count (or whole seconds held, no longer than the set lasted), why it was
+ *  left, the engine, and its judgement. */
+function cameraFacts(r: WorkoutRun, cam: RunCamera, measuredIn: "reps" | "time", durationMs: number): CameraSetFacts {
+  const done = measuredIn === "reps" ? cam.done : Math.min(L.secondsMost, Math.floor(cam.heldMs / 1000), Math.floor(durationMs / 1000));
+  return { done, left: cam.left, engineVersion: MOVEMENT_ENGINE_VERSION, summary: keptSummary(r, cam.summary, measuredIn === "reps" ? done : 0) };
+}
+
+/** The set being done is done, with `done` reps or seconds; then its rest, the next set, or the end. THE WORST THING HERE: a
+ *  form score kept for a set no camera watched. A set keeps the camera's facts only where the camera was chosen and counted
+ *  it (`cam`): never one counted by hand, by a timer, or followed with the clip. */
 function complete(r: WorkoutRun, done: number): WorkoutRun {
   const { exercise, target, weightGrams, restSeconds } = setOf(r);
   const durationMs = Math.min(r.activeMs - r.phaseAt, timeLeftMs(r));
   const most = exercise.measuredIn === "reps" ? L.repsMost : Math.min(L.secondsMost, Math.floor(durationMs / 1000));
+  const cam = r.way === "camera" && r.follow !== true ? r.cam : undefined;
   const set: SavedSet = {
     exercise: exercise.exercise,
     position: r.done.length,
@@ -150,12 +254,15 @@ function complete(r: WorkoutRun, done: number): WorkoutRun {
     weightGrams,
     restSeconds: null,
     durationMs,
-    counted: exercise.measuredIn === "time" ? "timer" : "hand",
+    counted: cam !== undefined ? "camera" : exercise.measuredIn === "time" ? "timer" : "hand",
+    ...(cam === undefined ? {} : { camera: cameraFacts(r, cam, exercise.measuredIn, durationMs) }),
   };
-  const ran: WorkoutRun = { ...r, done: [...r.done, set], count: 0 };
+  const ran: WorkoutRun = { ...r, done: [...r.done, set], count: 0, cam: undefined, follow: undefined };
   const next = nextOf(r);
   if (next === null || ran.done.length >= L.setsMost) return { ...ran, phase: "done", phaseAt: r.activeMs, phaseEndsAt: null };
-  const moved = { ...ran, ex: next.ex, set: next.set };
+  // The next exercise is asked about afresh.
+  // A set followed with the clip: the same exercise's next set is followed too (until the camera is turned on again).
+  const moved: WorkoutRun = { ...ran, ex: next.ex, set: next.set, ...(next.ex === r.ex ? (r.follow === true ? { follow: true as const } : {}) : { way: undefined }) };
   const rest = restSeconds ?? 0;
   if (rest > 0) return { ...moved, phase: "rest", phaseAt: r.activeMs, phaseEndsAt: r.activeMs + rest * 1000 };
   return begin(moved, false);
@@ -217,10 +324,16 @@ export function press(r: WorkoutRun, p: Press, now: number): Outcome {
   if (p.kind === "resume") return on({ ...run, paused: false });
   if (p.kind === "end") {
     const ended = run.phase === "rest" ? endRest(run) : run;
-    return ended.done.length === 0 ? { kind: "gone" } : on({ ...ended, phase: "done", phaseAt: ended.activeMs, phaseEndsAt: null, paused: false });
+    return ended.done.length === 0 ? { kind: "gone" } : on({ ...ended, phase: "done", phaseAt: ended.activeMs, phaseEndsAt: null, paused: false, cam: undefined, follow: undefined });
   }
-  // Paused, nothing moves but Resume.
-  if (run.paused) return p.kind === "main" ? on({ ...run, paused: false }) : on(run);
+  const camera = cameraPress(run, p);
+  if (camera !== null) return on(camera);
+  // While the workout asks how the exercise is counted, its set waits: only Skip exercise moves it.
+  if (asking(run) && p.kind !== "skipExercise") return on(run);
+  // Paused, nothing moves but Resume; a set the camera counts is changed in its box while paused (the box stays open).
+  if (run.paused && !(tracking(run) && (p.kind === "count" || p.kind === "target" || p.kind === "weight" || p.kind === "reset"))) {
+    return p.kind === "main" && !tracking(run) ? on({ ...run, paused: false }) : on(run);
+  }
   const withSet = (change: { target?: number; weightGrams?: number | null }): WorkoutRun => ({
     ...run,
     exercises: run.exercises.map((e, i) => (i !== run.ex ? e : { ...e, sets: e.sets.map((s, j) => (j === run.set ? { ...s, ...change } : s)) })),
@@ -229,16 +342,21 @@ export function press(r: WorkoutRun, p: Press, now: number): Outcome {
     case "main":
       if (run.phase === "rest") return on(endRest(run));
       if (run.phase === "ready") return on(begin(run, true));
+      // The camera's set ends with what the camera judged (`cameraDone`); a set followed, with the person's count.
+      if (tracking(run) || following(run)) return on(run);
       return on(setDone(run));
     case "count": {
-      if (run.phase !== "set" || timed) return on(run);
+      if (run.phase !== "set" || timed || following(run)) return on(run);
       const count = Math.max(0, Math.min(L.repsMost, run.count + p.by));
+      // The camera's set reaching its target is ended by the screen, with what the camera judged.
+      if (tracking(run)) return on({ ...run, count });
       return on(count >= target ? complete({ ...run, count }, count) : { ...run, count });
     }
     case "target": {
-      if (run.phase !== "set") return on(run);
+      if (run.phase !== "set" || following(run)) return on(run);
       const next = timed ? stepTime(target, p.by) : Math.max(1, Math.min(L.repsMost, target + p.by));
       const changed = withSet({ target: next });
+      if (tracking(run)) return on(changed);
       // Reps counted already reach the new target: the set is done with them.
       if (!timed && changed.count > 0 && changed.count >= next) return on(complete(changed, changed.count));
       // A time cut below what has been held ends the set at once, at the time held.
@@ -260,13 +378,79 @@ export function press(r: WorkoutRun, p: Press, now: number): Outcome {
       return on({ ...run, done: [...run.done.slice(0, -1), { ...last, done }] });
     }
     case "reset":
-      if (run.phase !== "set") return on(run);
-      return on({ ...run, count: 0, phaseAt: run.activeMs });
+      // Follow along's own Reset set is its timer's.
+      if (run.phase !== "set" || following(run)) return on(run);
+      // The set starts again: its count, its time, and the camera's own count, judged afresh; a set left to the person
+      // stays theirs.
+      return on({ ...run, count: 0, phaseAt: run.activeMs, ...(run.cam === undefined ? {} : { cam: { ...freshCamera(run), left: run.cam.left } }) });
     case "skipExercise": {
       if (run.phase === "rest") return on(run);
-      if (run.ex + 1 >= run.exercises.length) return run.done.length === 0 ? { kind: "gone" } : on({ ...run, phase: "done", phaseAt: run.activeMs, phaseEndsAt: null });
-      return on(begin({ ...run, ex: run.ex + 1, set: 0 }, false));
+      if (run.ex + 1 >= run.exercises.length) {
+        return run.done.length === 0 ? { kind: "gone" } : on({ ...run, phase: "done", phaseAt: run.activeMs, phaseEndsAt: null, cam: undefined, follow: undefined });
+      }
+      return on(begin({ ...run, ex: run.ex + 1, set: 0, way: undefined }, false));
     }
+    case "way":
+    case "camera":
+    case "cameraDone":
+    case "leave":
+    case "follow":
+    case "followed":
+    case "handSet":
+      return on(run);
+  }
+}
+
+/** A press of the camera's (64b-ii), at the workout moved on to now; null for every other press. Each works while paused:
+ *  the camera's count is kept as said but taken by the set only while it runs. */
+function cameraPress(run: WorkoutRun, p: Press): WorkoutRun | null {
+  const timed = exerciseOf(run).measuredIn === "time";
+  switch (p.kind) {
+    case "way": {
+      if (asking(run)) {
+        // Chosen: the camera's set starts now. Counted by hand: the set, or a hold's get-ready, starts now.
+        if (p.way === "camera") return begin({ ...run, way: "camera" }, true);
+        return begin({ ...run, way: "hand" }, run.phase === "set");
+      }
+      if (p.way !== "camera" || exerciseOf(run).camera !== true) return run;
+      // Start with camera on a set counted by hand, or back from Follow along: the camera counts from now. A set of reps keeps
+      // the reps already counted (the person's own); a hold, and a set followed, start again.
+      if (run.phase === "ready" && run.way === "hand") return begin({ ...run, way: "camera" }, true);
+      if (run.phase !== "set" || tracking(run) || (run.cam !== undefined && run.cam.left !== null)) return run;
+      const again = following(run) || timed;
+      return { ...run, way: "camera", follow: undefined, cam: freshCamera(run), ...(again ? { count: 0, phaseAt: run.activeMs } : {}) };
+    }
+    case "camera": {
+      if (!tracking(run) || run.cam === undefined) return run;
+      const t = taken(run, run.cam, p.reps, p.heldMs);
+      return { ...run, count: t.count, cam: t.cam };
+    }
+    case "cameraDone": {
+      if (!tracking(run) || run.cam === undefined) return run;
+      const t = taken(run, run.cam, p.end.reps, p.end.heldMs);
+      const ending: WorkoutRun = { ...run, count: t.count, cam: { ...t.cam, summary: p.end.summary }, paused: false };
+      return complete(ending, timed ? Math.floor(t.cam.heldMs / 1000) : t.count);
+    }
+    case "leave": {
+      if (!tracking(run) || run.cam === undefined) return run;
+      const t = taken(run, run.cam, p.end.reps, p.end.heldMs);
+      const cam: RunCamera = { ...t.cam, left: p.why, summary: p.end.summary };
+      // A hold goes on as the workout's own timer, from the time the camera saw it held.
+      return { ...run, count: t.count, cam, ...(timed ? { phaseAt: Math.max(0, run.activeMs - t.cam.heldMs) } : {}) };
+    }
+    case "follow":
+      if (!tracking(run)) return run;
+      return { ...run, follow: true, cam: undefined, count: 0, phaseAt: run.activeMs };
+    case "followed": {
+      if (!following(run)) return run;
+      const done = Number.isFinite(p.done) ? Math.max(0, Math.floor(p.done)) : 0;
+      return complete({ ...run, paused: false }, done);
+    }
+    case "handSet":
+      if (!following(run)) return run;
+      return { ...run, follow: undefined, count: 0, phaseAt: run.activeMs };
+    default:
+      return null;
   }
 }
 

@@ -135,6 +135,9 @@ beforeEach(() => {
   // The phone's files outlive a test in the stand-in: each test starts on a phone that never opened the Library.
   for (const one of Paths.document.list()) if (one.name.startsWith("library-") || one.name.startsWith("figure-") || one.name.startsWith("my-workout-") || one.name.startsWith("workout") || one.name.startsWith("saved-")) one.delete();
   forgetStores();
+  // A phone without the camera's module, as 64a's workouts were built: every set by hand. The camera in a workout is
+  // workoutCamera.test.tsx's (64b-ii).
+  jest.requireMock<{ poseCamera: { missing: boolean } }>("../../src/camera/poseCameraNative").poseCamera.missing = true;
 });
 
 describe("62a: each exercise's own picture", () => {
@@ -667,7 +670,8 @@ describe("Filters and Find by muscle (63b)", () => {
     expect(screen.getByRole("checkbox", { name: "Intermediate, 2 exercises" })).toBeTruthy();
     expect(screen.getByRole("checkbox", { name: "No equipment, 2 exercises" })).toBeTruthy();
     expect(screen.getByRole("checkbox", { name: "Barbell, 1 exercise" })).toBeTruthy();
-    expect(screen.getByRole("checkbox", { name: "Manual tracking, 3 exercises" })).toBeTruthy();
+    expect(screen.getByRole("checkbox", { name: "Live form check, 1 exercise" })).toBeTruthy();
+    expect(screen.getByRole("checkbox", { name: "Manual tracking, 2 exercises" })).toBeTruthy();
     expect(screen.getByRole("checkbox", { name: "Strength, 3 exercises" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Show 3 exercises" })).toBeTruthy();
 
@@ -839,7 +843,8 @@ describe("an exercise's page", () => {
     expect(screen.getByText("Hamstrings (biceps femoris, semitendinosus and semimembranosus) · Adductors · Adductor magnus")).toBeTruthy();
     expect(screen.getByText("Glutes (gluteus medius) · Abs (rectus abdominis) · Transverse abdominis · Obliques · Lower back (erector spinae)")).toBeTruthy();
     for (const row of ["Primary", "Secondary", "Stabilisers"]) expect(screen.getByText(row)).toBeTruthy();
-    expect(screen.getByText("Manual tracking")).toBeTruthy();
+    // The workout's own word for what the camera does for it (64b-ii).
+    expect(screen.getByText("Live form check")).toBeTruthy();
     expect(screen.getByLabelText("To start, 3 sets of 12 reps")).toBeTruthy();
     expect(screen.getByLabelText("No equipment")).toBeTruthy();
 
@@ -2089,6 +2094,8 @@ describe("heart rate and sounds in a workout (64a-vi)", () => {
     const granted = { granted: true, canAskAgain: true, status: "granted", expires: "never" };
     camera.permission = granted;
     camera.afterAsk = granted;
+    // A phone with the camera's module: Try the camera is there.
+    jest.requireMock<{ poseCamera: { missing: boolean } }>("../../src/camera/poseCameraNative").poseCamera.missing = false;
     remove(`camera-told-${RAVI.id}.json`);
     await openLibrary(saving().ask);
     // The camera: Sound off.

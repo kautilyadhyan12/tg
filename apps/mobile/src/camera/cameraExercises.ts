@@ -54,3 +54,9 @@ export const CAMERA_EXERCISES: readonly CameraExercise[] = [
   { key: "hip-thrust", name: "Hip Thrust", counts: counted(hipThrust), camera: null, libraryId: null, picture: null, measuredIn: "reps", target: 10 },
   { key: "l-sit", name: "L-sit", counts: counted(lSit), camera: null, libraryId: null, picture: null, measuredIn: "time", target: 20 },
 ];
+
+/** The camera's own reading of a Library exercise in a workout (64b-ii): the one it counts the same way (reps, or time held),
+ *  or null, counted by hand as every other. */
+export function cameraFor(libraryId: string, measuredIn: string): CameraExercise | null {
+  return CAMERA_EXERCISES.find((e) => e.libraryId === libraryId && e.measuredIn === measuredIn) ?? null;
+}

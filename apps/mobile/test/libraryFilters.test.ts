@@ -106,8 +106,10 @@ describe("the rule, case by case", () => {
     ["a deep muscle counts under the drawn one over it", { ...NO_FILTERS, muscle: ["abs"], kind: ["pilates"] }, ["dead_bug"]],
     ["a word this phone does not know is still a choice", { ...NO_FILTERS, kind: ["conditioning"] }, ["sled_push"]],
     ["a choice that leaves nothing shows nothing", { ...NO_FILTERS, kind: ["mobility"], equipment: ["barbell"] }, []],
-    ["every one is counted by hand today", { ...NO_FILTERS, counted: ["hand"] }, LIST.map((e) => e.id).sort()],
-    ["no camera choice finds anything today", { ...NO_FILTERS, counted: ["camera_counts"] }, []],
+    // The one list the workout reads (64b-ii): the squat's form is checked by the camera; a made-up "goblet_squat" is no Library id.
+    ["all but the squat are counted by hand", { ...NO_FILTERS, counted: ["hand"] }, LIST.map((e) => e.id).filter((id) => id !== "squat").sort()],
+    ["the squat is the one the camera checks", { ...NO_FILTERS, counted: ["camera_coaches"] }, ["squat"]],
+    ["none here is counted by the camera with no form rules", { ...NO_FILTERS, counted: ["camera_counts"] }, []],
   ])("%s", (_name, filters, expected) => {
     expect(ids(filters)).toEqual(expected);
   });
@@ -123,7 +125,7 @@ describe("the rule, case by case", () => {
     expect(choicesOf(LIST, "equipment")).toEqual([NO_EQUIPMENT, "barbell", "dumbbell", "kettlebell", "bench", "mat", "sled"]);
     expect(choicesOf(LIST, "level")).toEqual(["beginner", "intermediate", "advanced", "elite"]);
     expect(choicesOf(LIST, "kind")).toEqual(["strength", "mobility", "pilates", "conditioning"]);
-    expect(choicesOf(LIST, "counted")).toEqual(["hand"]);
+    expect(choicesOf(LIST, "counted")).toEqual(["camera_coaches", "hand"]);
     expect(choicesOf(REAL, "muscle")).toEqual(expect.arrayContaining(["abs", "biceps", "vastus_lateralis", "glute_max"]));
     expect(choicesOf(REAL, "muscle")).not.toContain("transverse_abdominis");
   });

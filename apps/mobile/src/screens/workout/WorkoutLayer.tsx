@@ -24,6 +24,7 @@ import { soundNative } from "../../sound/soundNative";
 import type { TextStore } from "../food/outbox";
 import { accountUnits } from "../setup/Setup";
 import { clock } from "./words";
+import { createCameraKeep } from "./WorkoutCamera";
 import { WorkoutScreen } from "./WorkoutScreen";
 
 // The workout being done (ROADMAP Stage 5 64a-ii), over every tab, as a run is: Start workout on My Workout opens its
@@ -120,6 +121,8 @@ export function WorkoutLayerProvider({ children, files = PHONE_FILES, onNewWorko
   const [made, setMade] = useState<{ store: RunStore; waiting: WorkoutWaiting; effort: EffortWaiting; saved: SavedStore } | null>(null);
   const [shown, setShown] = useState(false);
   const [now, setNow] = useState(() => Date.now());
+  // The camera's set, kept while the workout's screen is put away (64b-ii).
+  const [cameraKeep] = useState(createCameraKeep);
   // Sound on until the person's own file says off; read once they sign in.
   const [soundOn, setSoundOn] = useState(true);
   const soundRef = useRef(true);
@@ -363,6 +366,7 @@ export function WorkoutLayerProvider({ children, files = PHONE_FILES, onNewWorko
               store?.closeFinished();
               setShown(false);
             }}
+            keep={cameraKeep}
             onNewWorkout={() => {
               store?.closeFinished();
               setShown(false);
@@ -378,7 +382,7 @@ export function WorkoutLayerProvider({ children, files = PHONE_FILES, onNewWorko
 /** What the pages' copy of a workout changes with: everything but its clocks. */
 export function placeKey(r: WorkoutRun | null): string | null {
   if (r === null) return null;
-  return [r.workoutId, r.name, r.phase, r.ex, r.set, r.paused, r.count, r.done.length, r.startedFrom ?? ""].join("/");
+  return [r.workoutId, r.name, r.phase, r.ex, r.set, r.paused, r.count, r.done.length, r.startedFrom ?? "", r.way ?? "", r.follow === true, r.cam?.left ?? ""].join("/");
 }
 
 /** A workout's time trained, moving on by itself each second while it runs: for a page that shows it (My Workout's

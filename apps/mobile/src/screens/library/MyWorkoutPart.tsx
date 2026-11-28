@@ -2,6 +2,8 @@ import { useIsFocused } from "@react-navigation/native";
 import { RUN_SETS_MOST, WORKOUT_SAVE_LIMITS, type PhoneLibraryEntry, type RunExercise } from "@app/shared";
 import { useRef, useState, type ReactNode } from "react";
 import { Pressable, StyleSheet, TextInput, View } from "react-native";
+import { cameraFor } from "../../camera/cameraExercises";
+import { PoseCameraView } from "../../camera/poseCameraNative";
 import { Button } from "../../look/Button";
 import { Badge, Card } from "../../look/Card";
 import { colours, sizes } from "../../look/colours";
@@ -64,7 +66,9 @@ export function MyWorkoutPart({ parts, units, onBrowse, file }: { parts: ReactNo
     const entry = liveOf(item.id);
     const plan = planOf(item, entry);
     if (entry === null || plan === null) return [];
-    return [{ exercise: entry.id, name: entry.text.en.name, kind: entry.kind, measuredIn: plan.measuredIn, barbell: entry.equipment.includes("barbell"), sets: plan.sets.slice(0, RUN_SETS_MOST) }];
+    // The camera counts it on this phone (64b-ii): the workout asks, as it starts, how it is counted.
+    const camera = PoseCameraView !== null && cameraFor(entry.id, plan.measuredIn) !== null;
+    return [{ exercise: entry.id, name: entry.text.en.name, kind: entry.kind, measuredIn: plan.measuredIn, barbell: entry.equipment.includes("barbell"), sets: plan.sets.slice(0, RUN_SETS_MOST), ...(camera ? { camera: true as const } : {}) }];
   });
   const setCount = toDo.reduce((n, e) => n + e.sets.length, 0);
   // As a saved workout holds it (64a-iv), and whether My Workout is one of the person's saved workouts.
