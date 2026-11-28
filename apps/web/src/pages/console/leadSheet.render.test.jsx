@@ -376,10 +376,10 @@ describe('the details open beside the status (R3)', () => {
     orgService.updateLead.mockResolvedValue({ data: { lead: { ...tom, status: 'on_trial' } } });
     render(sheet(TOM));
     await screen.findByRole('heading', { name: 'Tom Reid' });
-    expect(screen.getByRole('dialog').className).toMatch(/overflow-y-auto/);
-    expect(screen.getByRole('dialog').className).not.toMatch(/overflow-hidden/);
-    const bar = () => within(screen.getByTestId('lead-save-bar'));
-    expect(screen.getByTestId('lead-save-bar').className).toMatch(/sticky bottom-0/);
+    // The console's panel from the right (spec Part 3 §17.11): it scrolls as one page, its foot pinned.
+    expect(screen.getByRole('dialog').className).toContain('c-panel');
+    const foot = screen.getByRole('dialog').querySelector('.c-panel-f');
+    const bar = () => within(foot);
     expect(bar().getByRole('button', { name: 'Save' }).disabled).toBe(true);
     expect(bar().queryByText("You have changes that aren't saved.")).toBeNull();
     // Closing the tab now asks nothing.
@@ -592,7 +592,7 @@ describe('the follow-up emails (20c-ii): the gym sends them, the app reminds', (
     // Before its day the second is only announced: nothing to email or mark yet.
     expect(screen.queryByRole('button', { name: 'Mark email 2 as sent' })).toBeNull();
     expect(screen.queryByRole('link', { name: 'Email Tom' })).toBeNull();
-    expect(screen.getByRole('status').textContent).toBe('Email 1 marked as sent.');
+    expect(screen.getAllByRole('status').map((el) => el.textContent)).toContain('Email 1 marked as sent.');
     expect(screen.getByLabelText('Phone').value).toBe('07700 900456');
     expect(orgService.updateLead).not.toHaveBeenCalled();
   });

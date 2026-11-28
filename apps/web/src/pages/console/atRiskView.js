@@ -10,6 +10,7 @@ import {
   GYM_NUDGE_PRESETS,
   gymMessageLength,
   addDays,
+  daysBetween,
   orgWords,
 } from '@app/shared';
 
@@ -93,6 +94,16 @@ export function checkinNote(list, gymName) {
     };
   }
   return null;
+}
+
+/** While check-in is new, the board's bar of days (`AtRisk`): the days of check-ins so far out of the
+ *  days the list needs, and the three days under it, by the gym's own day that the server sent. */
+export function checkinDays(list) {
+  const today = list.today;
+  if (list.checkin !== 'new' || list.firstCheckinOn === null || typeof today !== 'string') return null;
+  const of = list.settings.quietDays;
+  const done = Math.min(of, Math.max(0, daysBetween(list.firstCheckinOn, today) + 1));
+  return { done, of, from: shortDay(list.firstCheckinOn), today: `Today, ${shortDay(today)}`, ready: shortDay(addDays(list.firstCheckinOn, of)) };
 }
 
 /** One row's two lines of facts. */

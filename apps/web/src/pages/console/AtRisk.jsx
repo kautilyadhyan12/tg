@@ -12,6 +12,7 @@ import { canManageOrg } from './gymDetailsView';
 import { placeFor } from './consolePlaces';
 import MemberListPerson from './MemberListPerson';
 import { Refusal } from './MemberListTags';
+import { initialsOf } from './memberListPeople';
 import {
   AT_RISK_FOOTNOTE,
   MESSAGE_CHOICES,
@@ -25,6 +26,7 @@ import {
   atRiskMore,
   canSeeAtRisk,
   canWriteOwn,
+  checkinDays,
   checkinNote,
   messageBoxNote,
   messageLine,
@@ -67,14 +69,14 @@ function Numbers({ gymId, settings, locked, lockedNote, onSaved }) {
   };
 
   return (
-    <section className="c-card p-4 md:p-5 flex flex-col gap-4" aria-label="Who is listed">
+    <section className="c-card p-5 flex flex-col gap-4" aria-label="Who is listed">
       <h2 className="c-h3">Who is listed</h2>
-      <div className="flex flex-col gap-4 md:flex-row md:items-end">
+      <div className="flex flex-col gap-4">
         <div className="c-field">
           <label className="c-label" htmlFor={quietId}>
             Not come in for
           </label>
-          <select id={quietId} className="c-input" style={{ maxWidth: 240 }} value={draft.quietDays} disabled={locked || state.saving} onChange={pick('quietDays')}>
+          <select id={quietId} className="c-input" value={draft.quietDays} disabled={locked || state.saving} onChange={pick('quietDays')}>
             {QUIET_CHOICES.map((c) => (
               <option key={c.value} value={c.value}>
                 {c.label}
@@ -86,7 +88,7 @@ function Numbers({ gymId, settings, locked, lockedNote, onSaved }) {
           <label className="c-label" htmlFor={weeksId}>
             After coming in at least
           </label>
-          <select id={weeksId} className="c-input" style={{ maxWidth: 240 }} value={draft.weeksCame} disabled={locked || state.saving} onChange={pick('weeksCame')}>
+          <select id={weeksId} className="c-input" value={draft.weeksCame} disabled={locked || state.saving} onChange={pick('weeksCame')}>
             {WEEKS_CHOICES.map((c) => (
               <option key={c.value} value={c.value}>
                 {c.label}
@@ -94,14 +96,16 @@ function Numbers({ gymId, settings, locked, lockedNote, onSaved }) {
             ))}
           </select>
         </div>
-        <button type="button" className="c-btn c-btn-p c-btn-lg md:self-end" disabled={locked || !changed || state.saving} onClick={() => void save()}>
+      </div>
+      <div className="flex flex-wrap items-center gap-3">
+        <button type="button" className="c-btn c-btn-p" disabled={locked || !changed || state.saving} onClick={() => void save()}>
           {state.saving ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : null}
           {state.saving ? 'Saving…' : 'Save'}
         </button>
+        <p className="c-s14 c-t2" role="status">
+          {locked ? lockedNote : state.saved && !changed ? 'Saved. The list uses the new numbers.' : changed ? 'Not saved yet.' : ''}
+        </p>
       </div>
-      <p className="c-s13 c-t3" role="status">
-        {locked ? lockedNote : state.saved && !changed ? 'Saved. The list below uses the new numbers.' : changed ? 'Not saved yet.' : ''}
-      </p>
       {state.error !== null ? (
         <Refusal>{state.error}</Refusal>
       ) : null}
@@ -145,21 +149,24 @@ function Row({ person, org, readOnly, canWrite, onOpenPerson, onSent }) {
   };
 
   return (
-    <li className="flex flex-col gap-3 p-4" style={{ borderTop: '1px solid var(--line)' }} data-testid="at-risk-row">
-      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        <div className="flex flex-col gap-1 min-w-0">
+    <li className="flex flex-col gap-3 px-4 py-4 md:px-5" style={{ borderTop: '1px solid var(--line)' }} data-testid="at-risk-row">
+      <div className="flex flex-wrap items-start gap-3">
+        <span className="c-avatar c-avatar-sm c-avatar-md" aria-hidden="true">
+          {initialsOf(name.full)}
+        </span>
+        <div className="flex flex-col gap-1 min-w-[200px] flex-1">
           {person.entryId !== null ? (
-            <button type="button" className="c-btn-link c-s16 c-w6 self-start text-left inline-flex items-center" style={{ minHeight: 44, height: 'auto' }} onClick={() => onOpenPerson(person.entryId)} aria-label={`Open ${name.full}'s page`}>
+            <button type="button" className="c-btn-link c-s15 c-w6 self-start text-left inline-flex items-center" style={{ minHeight: 32, height: 'auto' }} onClick={() => onOpenPerson(person.entryId)} aria-label={`Open ${name.full}'s page`}>
               {name.full}
             </button>
           ) : (
-            <p className="c-s16 c-w6 c-t1">{name.full}</p>
+            <p className="c-s15 c-w6 c-t1">{name.full}</p>
           )}
           <p className="c-s14 c-t2">{facts.last}</p>
-          <p className="c-s13 c-t3">{facts.regular}</p>
+          <p className="c-s14 c-t2">{facts.regular}</p>
         </div>
         {action.kind === 'send' && !open ? (
-          <button type="button" className="c-btn c-btn-s c-btn-lg self-start md:self-center flex-shrink-0" disabled={action.disabled} onClick={() => setOpen(true)}>
+          <button type="button" className="c-btn c-btn-s c-btn-sm flex-shrink-0" disabled={action.disabled} onClick={() => setOpen(true)}>
             <MessageSquare aria-hidden="true" className="w-4 h-4" />
             Send a message
           </button>
@@ -167,13 +174,13 @@ function Row({ person, org, readOnly, canWrite, onOpenPerson, onSent }) {
       </div>
 
       {state.sent !== null ? (
-        <p className="c-s14 c-t1 c-w6" role="status">
+        <p className="c-strip c-strip-good c-s14 c-w6" role="status">
           {`Sent to ${name.first}: “${quoted(state.sent)}”`}
         </p>
       ) : null}
       {action.kind === 'sent' && state.sent === null ? <p className="c-s14 c-t2">{action.line}</p> : null}
-      {action.kind === 'send' && action.earlier !== null && !open && state.sent === null ? <p className="c-s13 c-t3">{action.earlier}</p> : null}
-      {action.kind === 'send' && action.disabled ? <p className="c-s13 c-t3">{readOnlyNote(org.orgType)}</p> : null}
+      {action.kind === 'send' && action.earlier !== null && !open && state.sent === null ? <p className="c-s14 c-t2">{action.earlier}</p> : null}
+      {action.kind === 'send' && action.disabled ? <p className="c-s14 c-t2">{readOnlyNote(org.orgType)}</p> : null}
       {action.kind === 'no_app' || action.kind === 'shared' ? (
         <div className="flex flex-col gap-2">
           <p className="c-s14 c-t2">{action.line}</p>
@@ -186,8 +193,8 @@ function Row({ person, org, readOnly, canWrite, onOpenPerson, onSent }) {
       ) : null}
 
       {open && action.kind === 'send' ? (
-        <fieldset className="flex flex-col gap-3 p-4" style={{ border: '1px solid var(--line)', borderRadius: 12 }}>
-          <legend className="c-label px-1">{`Message to ${name.full}`}</legend>
+        <fieldset className="c-inbox flex flex-col gap-3" style={{ border: 0, margin: 0, minWidth: 0 }}>
+          <legend className="c-s15 c-w6 c-t1 float-left w-full p-0">{`Message to ${name.full}`}</legend>
           <p className="c-s14 c-t2">{messageBoxNote(name.first, canWrite)}</p>
           <div className="flex flex-col">
             {MESSAGE_CHOICES.map((choice) => (
@@ -220,15 +227,15 @@ function Row({ person, org, readOnly, canWrite, onOpenPerson, onSent }) {
                   setState((was) => ({ ...was, error: null }));
                 }}
               />
-              <p className="c-s13 c-t3">{`${OWN_RULES} ${left.line}.`}</p>
+              <p className="c-s14 c-t2">{`${OWN_RULES} ${left.line}.`}</p>
             </div>
           ) : null}
-          <div className="flex flex-wrap gap-2">
-            <button type="button" className="c-btn c-btn-p c-btn-lg" disabled={state.sending || preset === null || (writing && !left.ok)} onClick={() => void send()}>
+          <div className="c-inbox-a">
+            <button type="button" className="c-btn c-btn-p c-btn-sm" disabled={state.sending || preset === null || (writing && !left.ok)} onClick={() => void send()}>
               {state.sending ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : null}
               {state.sending ? 'Sending…' : `Send to ${name.first}`}
             </button>
-            <button type="button" className="c-btn c-btn-s c-btn-lg" disabled={state.sending} onClick={() => setOpen(false)}>
+            <button type="button" className="c-btn c-btn-s c-btn-sm" disabled={state.sending} onClick={() => setOpen(false)}>
               Cancel
             </button>
           </div>
@@ -314,10 +321,13 @@ export default function AtRisk() {
   const attendanceTo = placeFor(orgSlug, privileges, 'attendance');
   const mayChange = canManageOrg(privileges);
   const more = list === null ? null : atRiskMore(list);
+  const days = list === null ? null : checkinDays(list);
+  const showList = list !== null && (note === null || note.showList);
 
   return (
-    <div className="c-page">
+    <div className="c-page c-atrisk">
       <header className="flex flex-col gap-1.5 min-w-0">
+        <p className="c-eyebrow">People</p>
         <h1 className="c-h1">At risk</h1>
         <p className="c-sub">{list !== null ? atRiskIntro(list.settings, org.orgType) : org.name}</p>
       </header>
@@ -337,55 +347,85 @@ export default function AtRisk() {
           {mine.error !== null ? <ConsoleFailed message={mine.error} onRetry={load} newLook /> : null}
 
           {note !== null ? (
-            <section className="c-card p-5 md:p-6 flex flex-col gap-3" data-testid="at-risk-checkin-note">
-              <p className="c-s15 c-t2">{note.line}</p>
+            <section
+              className={note.kind === 'new' ? 'c-strip c-strip-warn flex-col items-stretch' : 'c-callout c-callout-plain flex-col'}
+              data-testid="at-risk-checkin-note"
+            >
+              <p className="c-s15 c-w6 c-t1">{note.line}</p>
+              {days !== null ? (
+                <div className="flex flex-col gap-2" data-testid="at-risk-days">
+                  <div className="c-days" style={{ '--n': days.of }} role="img" aria-label={`${String(days.done)} of ${String(days.of)} days of check-ins`}>
+                    {Array.from({ length: days.of }, (_, i) => (
+                      <span key={i} className={i < days.done ? 'on' : undefined} />
+                    ))}
+                  </div>
+                  <div className="flex flex-wrap justify-between gap-x-3 c-s14 c-t2">
+                    <span>{days.from}</span>
+                    <span>{days.today}</span>
+                    <span>{days.ready}</span>
+                  </div>
+                </div>
+              ) : null}
               {attendanceTo !== null ? (
                 <PlaceLink to={attendanceTo}>Open Attendance</PlaceLink>
               ) : (
-                <p className="c-s14 c-t3">The owner can check people in from Attendance.</p>
+                <p className="c-s14 c-t2">The owner can check people in from Attendance.</p>
               )}
             </section>
           ) : null}
 
-          {mayChange ? (
-            <Numbers
-              gymId={gymId}
-              settings={list.settings}
-              locked={readOnly}
-              lockedNote={readOnlyNote(org.orgType)}
-              onSaved={() => {
-                setShown(PAGE);
-                void load();
-              }}
-            />
-          ) : (
-            <p className="c-s14 c-t3">The owner can change how many days and weeks this list uses.</p>
-          )}
+          {/* Who has stopped coming, with Who is listed beside it on a wide screen (the board `AtRisk`). */}
+          <div className={showList ? 'c-split' : 'flex flex-col'}>
+            {showList ? (
+              <section className="c-card overflow-hidden" aria-label="Who has stopped coming">
+                <h2 className="c-h3 px-4 pt-4 pb-3 md:px-5" data-testid="at-risk-headline">
+                  {atRiskHeadline(list, org.orgType)}
+                </h2>
+                {list.people.length > 0 ? (
+                  <ul className="list-none m-0 p-0">
+                    {list.people.slice(0, shown).map((person) => (
+                      <Row key={person.entryId ?? person.userId ?? person.name} person={person} org={org} readOnly={readOnly} canWrite={canWriteOwn(privileges)} onOpenPerson={openPerson} onSent={() => void load()} />
+                    ))}
+                  </ul>
+                ) : null}
+                {list.people.length > shown ? (
+                  <div className="px-4 py-3 md:px-5" style={{ borderTop: '1px solid var(--line)' }}>
+                    <button type="button" className="c-btn c-btn-s w-full md:w-auto" onClick={() => setShown((was) => was + PAGE)}>
+                      {`Show ${String(Math.min(PAGE, list.people.length - shown))} more`}
+                    </button>
+                  </div>
+                ) : null}
+                {more !== null && list.people.length <= shown ? (
+                  <p className="px-4 py-3 md:px-5 c-s14 c-t2" style={{ borderTop: '1px solid var(--line)' }}>
+                    {more}
+                  </p>
+                ) : null}
+                <p className="px-4 py-3 md:px-5 c-s14 c-t2" style={{ borderTop: '1px solid var(--line)' }}>
+                  {AT_RISK_FOOTNOTE}
+                </p>
+              </section>
+            ) : null}
 
-          {note === null || note.showList ? (
-            <section className="c-card overflow-hidden" aria-label="Who has stopped coming">
-              <p className="px-4 pt-4 pb-3 c-s15 c-w6 c-t1" data-testid="at-risk-headline">
-                {atRiskHeadline(list, org.orgType)}
-              </p>
-              {list.people.length > 0 ? (
-                <ul className="list-none m-0 p-0">
-                  {list.people.slice(0, shown).map((person) => (
-                    <Row key={person.entryId ?? person.userId ?? person.name} person={person} org={org} readOnly={readOnly} canWrite={canWriteOwn(privileges)} onOpenPerson={openPerson} onSent={() => void load()} />
-                  ))}
-                </ul>
-              ) : null}
-              {list.people.length > shown ? (
-                <div className="p-4" style={{ borderTop: '1px solid var(--line)' }}>
-                  <button type="button" className="c-btn c-btn-s c-btn-lg w-full md:w-auto" onClick={() => setShown((was) => was + PAGE)}>
-                    {`Show ${String(Math.min(PAGE, list.people.length - shown))} more`}
-                  </button>
-                </div>
-              ) : null}
-              {more !== null && list.people.length <= shown ? <p className="px-4 py-3 c-s13 c-t3" style={{ borderTop: '1px solid var(--line)' }}>{more}</p> : null}
-            </section>
-          ) : null}
+            {mayChange ? (
+              <Numbers
+                gymId={gymId}
+                settings={list.settings}
+                locked={readOnly}
+                lockedNote={readOnlyNote(org.orgType)}
+                onSaved={() => {
+                  setShown(PAGE);
+                  void load();
+                }}
+              />
+            ) : (
+              <section className="c-card p-5 flex flex-col gap-2" aria-label="Who is listed">
+                <h2 className="c-h3">Who is listed</h2>
+                <p className="c-s14 c-t2">The owner can change how many days and weeks this list uses.</p>
+              </section>
+            )}
+          </div>
 
-          <p className="c-s13 c-t3">{AT_RISK_FOOTNOTE}</p>
+          {showList ? null : <p className="c-s14 c-t2">{AT_RISK_FOOTNOTE}</p>}
         </>
       )}
 

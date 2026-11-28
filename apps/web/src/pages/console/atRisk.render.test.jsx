@@ -264,7 +264,7 @@ describe('the gym’s two numbers', () => {
 
     svc.list.mockResolvedValue(answer({ settings: { quietDays: 21, weeksCame: 2 }, total: 1, people: [person({ daysAway: 25 })] }));
     fireEvent.click(save);
-    await screen.findByText('Saved. The list below uses the new numbers.');
+    await screen.findByText('Saved. The list uses the new numbers.');
     expect(svc.saveSettings).toHaveBeenCalledWith('g1', { quietDays: 21, weeksCame: 2 });
     await waitFor(() => expect(screen.getByTestId('at-risk-headline').textContent).toBe('1 member has stopped coming.'));
     expect(screen.getByText(/they have not come in for 21 days or more/)).toBeTruthy();
@@ -341,5 +341,41 @@ describe('who is asked for', () => {
     expect(await screen.findByText("We couldn't load this list.")).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: /try again/i }));
     expect(await screen.findByTestId('at-risk-headline')).toBeTruthy();
+  });
+});
+
+describe('the third look (ROADMAP V6; the board AtRisk)', () => {
+  it('Send a message opens under the name, inside that person’s row, and sends to that person', async () => {
+    svc.sendMessage.mockResolvedValue({ preset: 'door_open', sentAt: '2026-10-12T10:00:00.000Z' });
+    open();
+    await screen.findByTestId('at-risk-headline');
+    fireEvent.click(within(row('Stan Stopped')).getByRole('button', { name: 'Send a message' }));
+    const box = within(row('Stan Stopped')).getByRole('group', { name: 'Message to Stan Stopped' });
+    expect(box.className).toContain('c-inbox');
+    expect(within(row('Pat Paper')).queryByRole('group')).toBeNull();
+    fireEvent.click(within(box).getByRole('button', { name: 'Send to Stan' }));
+    await waitFor(() => expect(svc.sendMessage).toHaveBeenCalledWith('g1', 'u-stan', expect.any(String)));
+    expect(svc.sendMessage).toHaveBeenCalledTimes(1);
+  });
+
+  it('Who is listed sits beside the list, and the list keeps its footnote inside it', async () => {
+    open();
+    const headline = await screen.findByTestId('at-risk-headline');
+    const list = headline.closest('section');
+    expect(list.parentElement.className).toContain('c-split');
+    expect(within(list.parentElement).getByRole('region', { name: 'Who is listed' })).toBeTruthy();
+    expect(within(list).getByText(/Coming in means a check-in/)).toBeTruthy();
+    expect(within(row('Stan Stopped')).getByText('SS')).toBeTruthy();
+  });
+
+  it('while check-in is new, a bar shows the days so far out of the days the list needs', async () => {
+    svc.list.mockResolvedValue(answer({ checkin: 'new', firstCheckinOn: '2026-10-06', total: 0, people: [] }));
+    open();
+    const days = await screen.findByTestId('at-risk-days');
+    expect(within(days).getByRole('img', { name: '7 of 14 days of check-ins' })).toBeTruthy();
+    expect(days.querySelectorAll('.c-days > span.on')).toHaveLength(7);
+    expect(days.querySelectorAll('.c-days > span')).toHaveLength(14);
+    expect(days.textContent).toContain('Today, 12 Oct');
+    expect(days.textContent).toContain('20 Oct');
   });
 });

@@ -12,6 +12,7 @@ import {
   messageBoxNote,
   ownWordsLeft,
   quoted,
+  checkinDays,
   checkinNote,
   dayAt,
   rowAction,
@@ -97,6 +98,24 @@ describe('what the gym’s own check-ins allow the list to say', () => {
     const note = checkinNote(list({ checkin: 'stopped', lastCheckinOn: '2026-09-22', checkinDaysLately: 0 }), 'Iron House');
     expect(note).toMatchObject({ kind: 'stopped', showList: false });
     expect(note.line).toBe('Nobody came in over the last 14 days. The last day anybody came in was 22 Sep. Anybody who stopped coming in that time is not listed, because the list cannot tell them from everybody else.');
+  });
+});
+
+describe('the bar of days while check-in is new (the board AtRisk)', () => {
+  it('counts the days from the first check-in to today, both counted, out of the gym’s own number', () => {
+    expect(checkinDays(list({ checkin: 'new', firstCheckinOn: '2026-11-14', today: '2026-11-20' }))).toEqual({ done: 7, of: 14, from: '14 Nov', today: 'Today, 20 Nov', ready: '28 Nov' });
+  });
+  it('the first day is one bar, and it never passes the number the list needs', () => {
+    expect(checkinDays(list({ checkin: 'new', firstCheckinOn: '2026-11-20', today: '2026-11-20' })).done).toBe(1);
+    expect(checkinDays(list({ checkin: 'new', firstCheckinOn: '2026-11-01', today: '2026-11-20', settings: { quietDays: 7, weeksCame: 2 } })).done).toBe(7);
+  });
+  it('a day the server got wrong (the first check-in after today) draws no bar lit, never a negative one', () => {
+    expect(checkinDays(list({ checkin: 'new', firstCheckinOn: '2026-11-22', today: '2026-11-20' })).done).toBe(0);
+  });
+  it('no bar once the list is in use, before anybody was checked in, or after check-in stopped', () => {
+    expect(checkinDays(list())).toBeNull();
+    expect(checkinDays(list({ checkin: 'none', firstCheckinOn: null }))).toBeNull();
+    expect(checkinDays(list({ checkin: 'stopped' }))).toBeNull();
   });
 });
 

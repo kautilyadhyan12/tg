@@ -3247,3 +3247,26 @@ button.c-ov-money-who {
 }
 .c-otp-input::selection { background: transparent; color: transparent; }
 .c-otp-input:focus-visible ~ .c-otp-at { border-color: var(--accent); box-shadow: 0 0 0 3px var(--soft); }
+
+/* At risk (V6; the board `AtRisk`): who has stopped coming, with Who is listed beside it once the page
+   is wide enough for both (a laptop with its menu); one under the other on a tablet or a phone. */
+.c-split { display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; align-items: start; }
+@media (min-width: 1180px) {
+  .c-split { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); }
+}
+/* While check-in is new: one bar for each day the list needs, the days so far in orange. */
+.c-days { display: grid; grid-template-columns: repeat(var(--n, 14), minmax(0, 1fr)); gap: 4px; }
+.c-days > span { height: 10px; border-radius: 999px; background: var(--ctl-line); }
+.c-days > .on { background: var(--accent); }
+/* Leads and At risk on a touch screen wider than a phone (a tablet, an opened folding phone): every button
+   and status pick is 44 px to touch, as on Members (V6). */
+@media (pointer: coarse) {
+  .c-leads .c-btn,
+  .c-atrisk .c-btn {
+    height: auto;
+    min-height: 44px;
+  }
+  .c-leads .c-chip {
+    min-height: 44px;
+  }
+}

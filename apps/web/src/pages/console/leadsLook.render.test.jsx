@@ -290,18 +290,18 @@ describe('the new look (spec Part 3 §17)', () => {
     expect(head.textContent).toBe('NameHeard of you fromAddedStatus');
   });
 
-  it('each status tag takes the drawing’s colour by name', async () => {
+  it('a status is plain words, never a tag: quiet for normal (spec Part 3 §17.11, rule 5)', async () => {
     draw();
     await screen.findAllByTestId('lead-row');
-    expect(within(row('Tom Reid')).getByText('New').className).toContain('c-tag-soft');
-    expect(within(row('Arjun Shah')).getByText('On trial').className).toContain('c-tag-warn');
+    expect(within(row('Tom Reid')).getByText('New').className).not.toContain('c-tag');
+    expect(within(row('Arjun Shah')).getByText('On trial').className).not.toContain('c-tag');
   });
 
   it('a lead opens in a side panel from the right', async () => {
     draw();
     await screen.findAllByTestId('lead-row');
     fireEvent.click(row('Tom Reid'));
-    expect(panel().className).toContain('c-sheet');
+    expect(panel().className).toContain('c-panel');
   });
 });
 

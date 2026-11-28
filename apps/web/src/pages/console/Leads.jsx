@@ -18,7 +18,6 @@ import {
   EMAIL_PROBLEM_TAG,
   FROM_PAGE_TAG,
   PROBLEM_CHIP_LABEL,
-  STATUS_TAG,
   addedDay,
   addedWords,
   candidateLine,
@@ -36,9 +35,9 @@ import {
 // A gym's leads (ROADMAP 20c-i; spec Part 3 §16.3): people who asked about the gym and
 // have not joined. Search, the status chips with the server's counts, Add lead, and
 // one lead's panel. `members.confirm`'s, like the gym's own list; the server refuses
-// anyone else whatever this screen shows. Drawn from `console.css` (R3; spec Part 3 §17):
-// a table on a computer, a row per lead on a phone. "Email due" (20c-ii) keeps the leads
-// due a follow-up email today: a chip of its own, so it and a status chip are never on together.
+// anyone else whatever this screen shows. The third look (the boards `Leads` and `PhoneLeads`;
+// spec Part 3 §17.11): a table on a computer, a row per lead on a phone, a status in plain words.
+// "Email due" (20c-ii) keeps the leads due a follow-up email today: a chip of its own, so it and a status chip are never on together.
 // Import leads (20c-iii) reads a file and adds its people after staff have seen who.
 // "Your gym page" (20c-iv-a) opens the gym's own page, whose form adds people here.
 // A long list keeps its tools on screen: search and chips pinned, Back to top and Go to the
@@ -325,9 +324,10 @@ export default function Leads() {
   };
 
   return (
-    <div className={`c-page ${picked > 0 ? 'pb-20 md:pb-0' : ''}`}>
+    <div className={`c-page c-leads ${picked > 0 ? 'pb-20 md:pb-0' : ''}`}>
       <header className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between md:gap-6">
         <div className="flex flex-col gap-1.5 min-w-0">
+          <p className="c-eyebrow">People</p>
           <h1 className="c-h1">Leads</h1>
           <p className="c-sub">People interested in joining {org.name}</p>
         </div>
@@ -471,7 +471,7 @@ export default function Leads() {
           ) : null}
 
           {notice !== null ? (
-            <p className="c-s14 c-w6" role="status" style={{ color: 'var(--good)' }}>
+            <p className="c-strip c-strip-good c-s14 c-w6" role="status">
               {notice}
             </p>
           ) : null}
@@ -530,7 +530,7 @@ export default function Leads() {
                     >
                       <span className="flex flex-col gap-0.5 min-w-0" style={{ gridArea: 'who' }}>
                         <span className="c-s15 c-w6 c-t1 c-ell">{lead.fullName}</span>
-                        <span className="c-s13 c-t2 c-ell">{candidateLine(lead)}</span>
+                        <span className="c-s14 c-t2 c-ell">{candidateLine(lead)}</span>
                       </span>
                       <span className="hidden md:block c-s14 c-t1 c-ell" style={{ gridArea: 'src' }}>
                         {leadSourceLine(lead)}
@@ -538,34 +538,37 @@ export default function Leads() {
                       <span className="hidden md:block c-s14 c-t2 c-ell" style={{ gridArea: 'added' }}>
                         {addedDay(lead.createdAt)}
                       </span>
-                      <span className="md:hidden c-s13 c-t3 c-ell" style={{ gridArea: 'meta' }}>
+                      <span className="md:hidden c-s14 c-t2 c-ell" style={{ gridArea: 'meta' }}>
                         {leadSourceLine(lead)} · {addedWords(lead.createdAt)}
                       </span>
                       <span
                         className="self-start md:self-center justify-self-end md:justify-self-start flex flex-wrap justify-end md:justify-start gap-1.5"
                         style={{ gridArea: 'tag' }}
                       >
-                        <span className={`c-tag ${STATUS_TAG[lead.status] ?? 'c-tag-plain'}`}>{statusWord(lead.status)}</span>
+                        <span className="c-s14 c-t1 whitespace-nowrap" data-testid="lead-status">{statusWord(lead.status)}</span>
                         {showsEmailDue(lead) ? <span className="c-tag c-tag-warn">{DUE_CHIP_LABEL}</span> : null}
                         {EMAIL_PROBLEM_TAG[lead.emailProblem] ? <span className="c-tag c-tag-bad">{EMAIL_PROBLEM_TAG[lead.emailProblem]}</span> : null}
-                        {lead.enquiredAt ? <span className="c-tag c-tag-soft">{FROM_PAGE_TAG}</span> : null}
+                        {lead.enquiredAt ? <span className="c-tag c-tag-plain">{FROM_PAGE_TAG}</span> : null}
                       </span>
                       <ChevronRight aria-hidden="true" className="w-[18px] h-[18px] c-t3" style={{ gridArea: 'go' }} />
                     </button>
                   </li>
                 ))}
               </ul>
+              {/* The list's last row: how many are shown, and the next 100 (the board `Leads`). */}
+              {page.cursor !== null ? (
+                <div className="flex flex-wrap items-center gap-3 px-4 py-3 md:px-5 border-t" style={{ borderColor: 'var(--line)' }} data-testid="leads-more">
+                  <span className="c-s14 c-t2 flex-grow">{`Showing ${count(page.leads.length)} of ${leadsWord(page.total)}`}</span>
+                  <button type="button" onClick={loadMore} disabled={loadingMore} className="c-btn c-btn-s c-btn-sm">
+                    {loadingMore ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : null}
+                    {loadingMore ? 'Loading…' : 'Load more'}
+                  </button>
+                </div>
+              ) : null}
             </section>
           ) : null}
 
           {!page.loading && page.error === null && page.leads.length === 0 && !noLeads ? <p className="c-s14 c-t2">No leads match.</p> : null}
-
-          {!page.loading && page.cursor !== null ? (
-            <button type="button" onClick={loadMore} disabled={loadingMore} className="c-btn c-btn-s w-full md:w-auto md:self-start">
-              {loadingMore ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : null}
-              {loadingMore ? 'Loading…' : 'Load more'}
-            </button>
-          ) : null}
         </>
       )}
 
@@ -600,7 +603,7 @@ export default function Leads() {
           readOnly={readOnly}
           onClose={() => setImporting(false)}
           onAdded={(added) => {
-            setImporting(false);
+            // The box says how many were added until Done; the page behind says it too.
             setNotice(LEAD_FILE_WORDS.added(added));
             setTick((n) => n + 1);
           }}
