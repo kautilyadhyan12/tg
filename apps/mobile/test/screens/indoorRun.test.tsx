@@ -49,14 +49,14 @@ afterEach(() => {
   resetRecorder();
 });
 
-function runServer() {
+function runServer(stepLength: () => Reply = () => ({ status: 200, body: { stepLength: { heightCm: 175, heightKnown: true, factor: 1, learnedFrom: 0 } } })) {
   const posts: unknown[] = [];
   const server = fakeServer({
     "/v1/auth/refresh": () => ({ status: 200, body: { tokens: tokens(2) } }),
     "/v1/geo/map": () => ({ status: 503, body: { error: "unavailable" } }),
     "/v1/geo/runs/records": () => ({ status: 503, body: { error: "unavailable" } }),
     "/v1/geo/runs/climb": () => ({ status: 200, body: { climb: { state: "none" } } }),
-    "/v1/geo/runs/step-length": () => ({ status: 200, body: { stepLength: { heightCm: 175, heightKnown: true, factor: 1, learnedFrom: 0 } } }),
+    "/v1/geo/runs/step-length": () => stepLength(),
     "/v1/users/me": () => ({ status: 200, body: profile(true, RAVI) }),
     "/v1/geo/heart-max": () => ({ status: 200, body: { own: null, fromAge: null, max: null } }),
     [PATH]: (body): Reply => {
@@ -320,15 +320,114 @@ describe("Physical activity, asked at an indoor Start on Android", () => {
   });
 });
 
-describe("a copy of the app built before 37q-ii-a, with no step counter code", () => {
-  it("records an indoor run's time with no steps", async () => {
+describe("a phone with no step counter code of this app's (an iPhone, a copy built before 37q-ii-a)", () => {
+  it("says so before Start, as a phone with no counter does, and Start without steps records the time (round one, L3)", async () => {
     motion.steps.old = true;
     const s = runServer();
     await openRunning(s);
     await pickIndoor();
-    await startIndoor();
-    expect(going().indoor?.stepsOff).toBe(true);
+    await fireEvent.press(screen.getByRole("button", { name: "Start run" }));
+    expect(await screen.findByText("This phone can't count steps. Type the treadmill's distance after Finish.")).toBeTruthy();
+    expect(runNow()).toBeNull();
+    await fireEvent.press(screen.getByRole("button", { name: "Start without steps" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Start now" }));
+    await waitFor(() => {
+      expect(runNow()?.indoor?.stepsOff).toBe(true);
+    });
     expect(await screen.findByText("Off")).toBeTruthy();
+  });
+});
+
+describe("a pause the person pressed (round one, H2 and L1)", () => {
+  it("steps taken while paused are never the run's Steps, on the run's screen, in its sums or on its summary", async () => {
+    const s = runServer();
+    await openRunning(s);
+    await pickIndoor();
+    await startIndoor();
+    await counterAtStart(8016);
+    const total = await walk(0, 60, 120, 8016);
+    await fireEvent.press(screen.getByRole("button", { name: "Pause" }));
+    await waitFor(() => {
+      expect(going().phase).toBe("paused");
+    });
+    // 300 steps walked while paused: to the kitchen and back.
+    const after = await walk(60, 160, 112.5, total);
+    expect(after - total).toBe(300);
+    expect(screen.queryByText("420")).toBeNull();
+    expect(screen.getAllByText("120").length).toBeGreaterThan(0);
+    await fireEvent.press(screen.getByRole("button", { name: "Resume" }));
+    await waitFor(() => {
+      expect(going().phase).toBe("running");
+    });
+    await walk(220, 10, 120, after);
+    expect(await screen.findByText("140")).toBeTruthy();
+    expect(screen.queryByText("440")).toBeNull();
+    await finishAndOpenSummary();
+    const run = going();
+    expect(indoorSumsAt(run, run.finishedMs ?? 0, 0, null).steps).toBe(140);
+    expect(screen.getByText("140")).toBeTruthy();
+  });
+
+  it("opened again while paused, the steps taken while the app was closed are not the run's", async () => {
+    const s = runServer();
+    await openRunning(s);
+    await pickIndoor();
+    await startIndoor();
+    await counterAtStart(8016);
+    await walk(0, 60, 120, 8016);
+    await fireEvent.press(screen.getByRole("button", { name: "Pause" }));
+    await waitFor(() => {
+      expect(going().phase).toBe("paused");
+    });
+    const kept = going();
+    resetRecorder();
+    await loadRun();
+    motion.stepTo(kept.startedAt + 400_000, 8016 + 120 + 300);
+    await act(() => takeSteps(kept.startedAt + 400_000));
+    const back = going();
+    expect(back.phase).toBe("paused");
+    expect(back.indoor?.steps).toBe(420);
+    expect(back.indoor?.pausedSteps).toBe(300);
+    expect(indoorSumsAt(back, 400_000, 0, null).steps).toBe(120);
+  });
+
+  it("a counter reading a little lower just after Resume adds nothing: the listener was never started again", async () => {
+    const s = runServer();
+    await openRunning(s);
+    await pickIndoor();
+    await startIndoor();
+    await counterAtStart(8016);
+    await walk(0, 60, 120, 8016);
+    await fireEvent.press(screen.getByRole("button", { name: "Pause" }));
+    await waitFor(() => {
+      expect(going().phase).toBe("paused");
+    });
+    await fireEvent.press(screen.getByRole("button", { name: "Resume" }));
+    await waitFor(() => {
+      expect(going().phase).toBe("running");
+    });
+    expect(motion.steps.starts).toBe(1);
+    motion.stepTo(going().startedAt + 70_000, 8016 + 119);
+    await lookAt(70);
+    expect(going().indoor?.steps).toBe(120);
+  });
+});
+
+describe("the step length at an indoor Start (round one, L2)", () => {
+  it("not yet read for this person, it is asked at Start, so the run is measured as the server will measure it", async () => {
+    let asked = 0;
+    const s = runServer(() => {
+      asked += 1;
+      return asked === 1 ? { status: 503, body: { error: "unavailable" } } : { status: 200, body: { stepLength: { heightCm: 155, heightKnown: true, factor: 1, learnedFrom: 0 } } };
+    });
+    await openRunning(s);
+    await pickIndoor();
+    await waitFor(() => {
+      expect(asked).toBe(1);
+    });
+    await startIndoor();
+    expect(asked).toBe(2);
+    expect(going().indoor?.basis).toEqual({ heightCm: 155, factor: 1 });
   });
 });
 
@@ -354,6 +453,12 @@ describe("Auto-pause from the steps", () => {
     // The clock reads where it stood when the steps came, 1:10, and goes on from there.
     expect(movingMsOf(going(), going().startedAt + 95_000)).toBe(70_000);
     expect(movingMsOf(going(), going().startedAt + 96_000)).toBe(71_000);
+    // The phone looks four times a second: the run stays running while the steps that woke it wait for their count
+    // (round one, H1: it Auto-paused again a quarter of a second later).
+    await lookAt(95.25);
+    await lookAt(95.5);
+    expect(going().phase).toBe("running");
+    expect(going().pauses).toEqual([[70_000, 95_000]]);
     // The four steps that started it again are the run's, kept in the second after, never inside the pause.
     await lookAt(96);
     const counts = going().indoor?.counts ?? [];
