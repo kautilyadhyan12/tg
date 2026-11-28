@@ -1,7 +1,7 @@
 // The numbers the run's screen shows while it goes on: its clock and its current pace. Pure, so the
 // rules are tested second by second (the running faults of 2026-11-20, A3 and A5: the clock that went
 // back and forth while the person stood, and a pace nobody runs from one point the phone was unsure of).
-import { GPS_WORST_ACCURACY_M, RUN_MAX_ELAPSED_MS, RUN_MAX_PAUSES, RUN_MAX_POINTS, geodesicMetres, recordSpeed, runSums, runSumsInSlices, travelMetresAt, type RunClimbRequest, type RunPause, type RunPoint, type RunSums, type SaveRunRequest, type Units } from "@app/shared";
+import { GPS_WORST_ACCURACY_M, HEIGHT_UNKNOWN_CM, RUN_MAX_ELAPSED_MS, RUN_MAX_PAUSES, RUN_MAX_POINTS, geodesicMetres, indoorSums, recordSpeed, runSums, runSumsInSlices, travelMetresAt, type IndoorSums, type RunClimbRequest, type RunPause, type RunPoint, type RunSums, type SaveRunRequest, type Units } from "@app/shared";
 import type { LiveRun } from "./recorder";
 import { pace } from "./runWords";
 
@@ -33,8 +33,32 @@ export function liveStill(run: LiveRun, nowMs: number): RunPause[] {
 }
 
 /** The run's numbers at `at` ms into it, from its points, pauses and still stretches: the screen, the voice and
- *  the guide read them so, and the server works the saved run out from the same three. */
-export const sumsAt = (run: LiveRun, at: number, kg: number): RunSums => runSums(run.points, closedPauses(run, at), at, kg, liveStill(run, at));
+ *  the guide read them so, and the server works the saved run out from the same three. An indoor run's (37q-ii-a) from
+ *  its step counts and pauses, with the person's step length, as the server saves it. */
+export const sumsAt = (run: LiveRun, at: number, kg: number): RunSums =>
+  run.indoor != null ? indoorSumsAt(run, at, kg, null) : runSums(run.points, closedPauses(run, at), at, kg, liveStill(run, at));
+
+/** An indoor run's numbers at `at` (37q-ii-a), with the treadmill's distance typed after Finish (null with none). An
+ *  outdoor run has none. */
+export function indoorSumsAt(run: LiveRun, at: number, kg: number, treadmillM: number | null): IndoorSums {
+  const indoor = run.indoor;
+  return indoorSums(indoor?.counts ?? [], closedPauses(run, at), at, kg, indoor?.basis ?? { heightCm: HEIGHT_UNKNOWN_CM, factor: 1 }, treadmillM);
+}
+
+// What the run's numbers are worked out to: its points outdoors, its step counts indoors (37q-ii-a). The voice and the
+// guide find their marks along them the same way for both.
+/** How many there are. */
+export const marksOf = (run: LiveRun): number => (run.indoor != null ? run.indoor.counts.length : run.points.length);
+/** When the `k`th came (from 1), ms into the run; 0 for none. */
+export const markAt = (run: LiveRun, k: number): number => (run.indoor != null ? (run.indoor.counts[k - 1]?.[0] ?? 0) : (run.points[k - 1]?.[0] ?? 0));
+/** The run as it was with only its first `k`. */
+export const runToMark = (run: LiveRun, k: number): LiveRun =>
+  run.indoor != null ? { ...run, indoor: { ...run.indoor, counts: run.indoor.counts.slice(0, k) } } : { ...run, points: run.points.slice(0, k) };
+/** When the last came; undefined with none. */
+export const lastMarkAt = (run: LiveRun): number | undefined => {
+  const n = marksOf(run);
+  return n === 0 ? undefined : markAt(run, n);
+};
 
 /** What the server is sent of a finished run: asked for the climb (37b-ii), and saved with the same points. */
 export function sentOf(run: LiveRun): RunClimbRequest {
@@ -45,6 +69,8 @@ export function sentOf(run: LiveRun): RunClimbRequest {
   const still = closedStill(run, finished)
     .map(([a, b]): [number, number] => [Math.round(a), Math.min(end, Math.round(b))])
     .filter(([a, b]) => b > a);
+  // Indoors (37q-ii-a) no points and no still stretches: its steps go with Save (`saveRequestOf`).
+  if (run.indoor != null) return { elapsedMs: end, points: [], pauses: closedPauses(run, finished).map(([a, b]) => [Math.round(a), Math.round(b)]) };
   return {
     elapsedMs: end,
     points: run.points.slice(0, RUN_MAX_POINTS).map(([at, lat, lng, acc]) => [Math.round(at), lat, lng, acc]),
@@ -56,12 +82,18 @@ export function sentOf(run: LiveRun): RunClimbRequest {
 /** When Go was pressed by the GPS's clock: the phone's own, less a gap the run found in it (A6). */
 export const trueStart = (run: LiveRun): Date => new Date(run.startedAt + (run.clockGapMs ?? 0));
 
-/** A finished run as Save sends it, with the name, feel and note the person gave. */
-export function saveRequestOf(run: LiveRun, sent: RunClimbRequest, name: string, effort: number | null, note: string | null): SaveRunRequest {
+/** A finished run as Save sends it, with the name, feel and note the person gave. An indoor run's (37q-ii-a) with its
+ *  step counts and the treadmill's distance typed after Finish, in metres (null with none). */
+export function saveRequestOf(run: LiveRun, sent: RunClimbRequest, name: string, effort: number | null, note: string | null, treadmillM: number | null = null): SaveRunRequest {
+  const end = Math.round(run.finishedMs ?? 0);
+  const indoor = run.indoor;
   return {
     runId: run.runId,
     startedAt: trueStart(run).toISOString(),
     ...sent,
+    ...(indoor != null
+      ? { indoor: { counts: indoor.counts.slice(0, RUN_MAX_POINTS).map(([at, steps]): [number, number] => [Math.min(end, Math.max(0, Math.round(at))), steps]), treadmillM } }
+      : {}),
     ...(run.heart.length > 0 ? { heart: run.heart.slice(0, RUN_MAX_POINTS) } : {}),
     name,
     effort,
@@ -76,6 +108,19 @@ export const SLICE_MS = 12;
  *  in one go, and the clock and every button stood still for it). The run as it is now is copied first: points keep
  *  coming while the work goes on. `done` is told the sums, the same as `sumsAt`'s; the answer is the stop. */
 export function sumsInSlices(run: LiveRun, at: number, kg: number, done: (sums: RunSums) => void, now: () => number = Date.now): () => void {
+  // An indoor run's counts (37q-ii-a) are one a second at most, worked out in one go after the screen's own work: an
+  // hour's take about 2 ms on the laptop.
+  if (run.indoor != null) {
+    const copy: LiveRun = { ...run, pauses: run.pauses.slice(), indoor: { ...run.indoor, counts: run.indoor.counts.slice() } };
+    let gone = false;
+    const timer = setTimeout(() => {
+      if (!gone) done(sumsAt(copy, at, kg));
+    }, 0);
+    return () => {
+      gone = true;
+      clearTimeout(timer);
+    };
+  }
   const points = run.points.slice();
   const still = liveStill(run, at).map(([a, b]): RunPause => [a, b]);
   const work = runSumsInSlices(points, closedPauses(run, at), at, kg, still);
@@ -143,9 +188,9 @@ export function undoDatedBack(run: LiveRun, at: number): void {
 }
 
 /** Milliseconds from Go to now, or to Finish. A point's time is the GPS's own, which can be a second
- *  ahead of the phone's clock: the run is never shorter than its last point. */
+ *  ahead of the phone's clock: the run is never shorter than its last point, nor than an indoor run's last step count. */
 export const elapsedMs = (run: LiveRun, now: number): number =>
-  run.finishedMs ?? Math.min(RUN_MAX_ELAPSED_MS, Math.max(0, now - run.startedAt, run.points[run.points.length - 1]?.[0] ?? 0));
+  run.finishedMs ?? Math.min(RUN_MAX_ELAPSED_MS, Math.max(0, now - run.startedAt, lastMarkAt(run) ?? 0));
 
 /** The run's clock: ms from Go to `now`, the pauses left out. It is the screen's Time and the guide's
  *  clock, and never goes back: standing with no pause is taken off only on the summary, as Moving time. */

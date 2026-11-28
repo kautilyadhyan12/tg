@@ -1,6 +1,6 @@
-// The Workout tab's Running page (ROADMAP Stage 5 item 37a): the GPS light, Your runs (37c-i: the last
-// run, and See all), Start, Auto-pause, the voice (37a-ii) and the units. The run itself opens over the
-// app (RunLayer).
+// The Workout tab's Running page (ROADMAP Stage 5 item 37a): Outdoor or Indoor (37q-ii-a), the GPS light, Your runs
+// (37c-i: the last run, and See all), Start, Auto-pause, the voice (37a-ii) and the units. The run itself opens over
+// the app (RunLayer).
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { AppState, Linking, Pressable, ScrollView, StyleSheet, Switch, View, useWindowDimensions } from "react-native";
 import * as Location from "expo-location";
@@ -10,13 +10,13 @@ import { Button } from "../../look/Button";
 import { Options } from "../../look/Choice";
 import { Sheet } from "../../look/Sheet";
 import { colours, dockShade, orangeGradient, shadows, sizes } from "../../look/colours";
-import { Icon } from "../../look/Icon";
+import { Icon, type IconName } from "../../look/Icon";
 import { Page } from "../../look/Page";
 import { PictureTop } from "../../look/PictureTop";
 import { fonts, Txt } from "../../look/Txt";
 import { useRead } from "../dashboard/useRead";
 import { SettingsPage } from "../Settings";
-import { autoPauseChoice, chooseAutoPause, chooseMapColours, chooseVoice, mapColoursChoice, readRunChoices, subscribeRun, voiceChoice } from "./recorder";
+import { autoPauseChoice, chooseAutoPause, chooseIndoor, chooseMapColours, chooseVoice, indoorChoice, mapColoursChoice, readRunChoices, subscribeRun, voiceChoice } from "./recorder";
 import { RefusedRuns } from "./RefusedRuns";
 import { RUN_BAR_ROOM, gpsLight, useRunLayer, type StartProblem } from "./RunLayer";
 import { StartProblemBox } from "./StartProblem";
@@ -102,6 +102,8 @@ export function RunningTab({ units, parts }: { units: Units; parts: ReactNode })
   const autoPause = useSyncExternalStore(subscribeRun, autoPauseChoice);
   const voiceOn = useSyncExternalStore(subscribeRun, voiceChoice);
   const mapColours = useSyncExternalStore(subscribeRun, mapColoursChoice);
+  // Outdoor or Indoor for the next Start (37q-ii-a), kept on the phone.
+  const indoor = useSyncExternalStore(subscribeRun, indoorChoice);
   const [pickingColours, setPickingColours] = useState(false);
   const [heartOpen, setHeartOpen] = useState(false);
   const monitor = useMonitor();
@@ -132,7 +134,8 @@ export function RunningTab({ units, parts }: { units: Units; parts: ReactNode })
   // A run going on shows its own Auto-pause, and the switch changes it at once (Kd, 37a's click-through).
   const shownAuto = layer.run !== null && layer.run.phase !== "finished" ? layer.run.autoPause : autoPause;
   const [asked, setAsked] = useState(0);
-  const gps = useGpsBefore(focused && !going, asked);
+  // Indoors there is no GPS: no light, and the location is not watched.
+  const gps = useGpsBefore(focused && !going && !indoor, asked);
   const last = useRead("/v1/geo/runs?limit=1", runPageSchema, view.sent + changed);
   const lastRun = last.read.kind === "ok" ? (last.read.data.items[0] ?? null) : null;
   const recordsRead = useRead(RECORDS_PATH, runRecordsSchema, view.sent + changed);
@@ -190,7 +193,7 @@ export function RunningTab({ units, parts }: { units: Units; parts: ReactNode })
     });
   }, [height]);
 
-  const start = async (guide: KeptRunGuide | null = null, inBox = false, anyway = false) => {
+  const start = async (guide: KeptRunGuide | null = null, inBox = false, anyway = false, withoutSteps = false) => {
     if (look !== null) {
       look();
       return;
@@ -199,13 +202,18 @@ export function RunningTab({ units, parts }: { units: Units; parts: ReactNode })
     setBatteryOn(false);
     setFrom(guide);
     setPressedBox(inBox);
-    const said = await layer.start(autoPause, guide, anyway);
+    const said = await layer.start(autoPause, guide, anyway, withoutSteps);
     setProblem(said);
     setAsked((n) => n + 1);
   };
   const problemBox =
     said !== null ? (
-      <StartProblemBox problem={said} onAgain={() => void start(from, pressedBox)} onAnyway={() => void start(from, pressedBox, true)} />
+      <StartProblemBox
+        problem={said}
+        onAgain={() => void start(from, pressedBox)}
+        onAnyway={() => void start(from, pressedBox, true)}
+        onWithoutSteps={() => void start(from, pressedBox, true, true)}
+      />
     ) : batteryOn ? (
       <View style={styles.problem}>
         <Txt kind="small" colour="goodText">
@@ -229,9 +237,23 @@ export function RunningTab({ units, parts }: { units: Units; parts: ReactNode })
             // Run a little nearer the runner, clear of him (Kd, 2026-11-11).
             band={0.76}
             foot={
-              <View style={styles.runTitle}>
-                <Icon name="footprints" size={26} colour="orange" />
-                <Txt kind="h1">Run</Txt>
+              <View style={styles.titleRow}>
+                <View style={styles.runTitle}>
+                  <Icon name="footprints" size={26} colour="orange" />
+                  <Txt kind="h1">Run</Txt>
+                </View>
+                {/* Picked before Start (37q-ii-a): two words beside Run, the picked one underlined, never a box under the
+                    Workout tab's own switch (Kd, the walk: "everything is looking like filled with boxes"). A run going
+                    on is what it is, so they wait for the next. */}
+                {going ? null : (
+                  <WhereTabs
+                    indoor={indoor}
+                    onPick={(on) => {
+                      setProblem(null);
+                      void chooseIndoor(on);
+                    }}
+                  />
+                )}
               </View>
             }
           />
@@ -239,7 +261,7 @@ export function RunningTab({ units, parts }: { units: Units; parts: ReactNode })
       >
         {parts}
         <View style={styles.page}>
-          {gps === null || going ? null : (
+          {gps === null || going || indoor ? null : (
             <View style={styles.pill} accessible accessibilityLabel={gps.word === "GPS" ? "GPS ready" : gps.word}>
               <View style={[styles.dot, gps.tone === "good" ? styles.dotGood : gps.tone === "weak" ? styles.dotWeak : styles.dotNone]} />
               <Txt kind="small">{gps.word === "GPS" ? "GPS ready" : gps.word}</Txt>
@@ -505,6 +527,40 @@ export function RunningTab({ units, parts }: { units: Units; parts: ReactNode })
   );
 }
 
+/** Outdoor or Indoor (37q-ii-a): two words on the page's picture, each with its picture, the picked one white and
+ *  underlined, the other soft; read aloud as a choice of two. */
+function WhereTabs({ indoor, onPick }: { indoor: boolean; onPick: (indoor: boolean) => void }) {
+  const tabs: { key: string; label: string; icon: IconName; on: boolean; pick: boolean }[] = [
+    { key: "outdoor", label: "Outdoor", icon: "pin", on: !indoor, pick: false },
+    { key: "indoor", label: "Indoor", icon: "house", on: indoor, pick: true },
+  ];
+  return (
+    <View style={styles.where} accessibilityRole="radiogroup" accessibilityLabel="Where you run">
+      {tabs.map((t) => (
+        <Pressable
+          key={t.key}
+          accessibilityRole="radio"
+          accessibilityLabel={t.label}
+          accessibilityState={{ selected: t.on }}
+          hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
+          onPress={() => {
+            if (!t.on) onPick(t.pick);
+          }}
+          style={({ pressed }) => [styles.whereTab, pressed ? styles.pressed : null]}
+        >
+          <View style={styles.whereWord}>
+            <Icon name={t.icon} size={16} colour={t.on ? "text" : "textSoft"} />
+            <Txt kind="strong" colour={t.on ? "text" : "textSoft"}>
+              {t.label}
+            </Txt>
+          </View>
+          <View style={[styles.whereBar, t.on ? styles.whereBarOn : null]} />
+        </Pressable>
+      ))}
+    </View>
+  );
+}
+
 /** Whether the phone can speak, asked while the Voice switch is on and the page shown, and again
  *  when the person comes back from the phone's settings. A phone with no voice code of this app's
  *  (none on an iPhone yet) is not told its text-to-speech is off. */
@@ -543,6 +599,13 @@ const openSpeechSettings = (): void => {
 const styles = StyleSheet.create({
   page: { gap: 16 },
   runTitle: { flexDirection: "row", alignItems: "center", gap: 10 },
+  // Run, and Outdoor · Indoor beside it; on a narrow phone or the largest text the two words go under it.
+  titleRow: { flexDirection: "row", alignItems: "flex-end", justifyContent: "space-between", flexWrap: "wrap", columnGap: 16, rowGap: 6 },
+  where: { flexDirection: "row", alignItems: "flex-end", gap: 22, paddingBottom: 2 },
+  whereTab: { alignItems: "stretch", gap: 6, minHeight: 32, justifyContent: "flex-end" },
+  whereWord: { flexDirection: "row", alignItems: "center", gap: 6 },
+  whereBar: { height: 3, borderRadius: 2 },
+  whereBarOn: { backgroundColor: colours.orange },
   // START over the page's foot, the page fading out under it.
   dock: { position: "absolute", left: 0, right: 0, bottom: 0, flexDirection: "row", justifyContent: "center", alignItems: "center", gap: 16, paddingTop: 18, experimental_backgroundImage: dockShade },
   grow: { flex: 1 },

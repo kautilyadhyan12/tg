@@ -4,7 +4,7 @@
 import { useState } from "react";
 import { Pressable, ScrollView, StyleSheet, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { HEIGHT_MAP_CREDITS, type RunSplit, type Units } from "@app/shared";
+import { HEIGHT_MAP_CREDITS, type RunDistanceFrom, type RunSplit, type Units } from "@app/shared";
 import { colours, orangeGradient, shadows, sizes } from "../../look/colours";
 import { Icon } from "../../look/Icon";
 import { Modal } from "../../look/Modal";
@@ -13,14 +13,16 @@ import { fonts, Txt } from "../../look/Txt";
 import { useSession } from "../../session/SessionProvider";
 import { useMapSource } from "./mapSource";
 import { climbWords, type ClimbShown } from "./runClimb";
+import { IndoorFrom } from "./IndoorParts";
 import { PaceChart } from "./PaceChart";
 import { PaceWave } from "./RunDrawings";
 import { RunMap, useMapScheme } from "./RunMap";
 import { EFFORT_ENDS, clock, distance, leftOutLine, pace, paceWord, unitWord } from "./runWords";
 
 /** The big distance, the four tiles, the heart rate where there was a monitor (37f-i), the climb, the time
- *  not moving and what was left out. */
-export function RunFigures({ distanceM, movingS, elapsedS, leftOutM, leftOutS, kcal, climb, units, heart = null }: {
+ *  not moving and what was left out. An indoor run (37q-ii-a): where its distance is from, and its steps in the climb's
+ *  place. */
+export function RunFigures({ distanceM, movingS, elapsedS, leftOutM, leftOutS, kcal, climb, units, heart = null, indoor = null }: {
   distanceM: number;
   movingS: number;
   elapsedS: number;
@@ -31,6 +33,8 @@ export function RunFigures({ distanceM, movingS, elapsedS, leftOutM, leftOutS, k
   units: Units;
   /** Average and highest, beats a minute; null for a run with no monitor. */
   heart?: { avg: number; max: number } | null;
+  /** An indoor run's steps and where its distance is from; null outdoors. */
+  indoor?: { steps: number; from: RunDistanceFrom; stepsOff: boolean } | null;
 }) {
   const [credits, setCredits] = useState(false);
   const insets = useSafeAreaInsets();
@@ -43,6 +47,7 @@ export function RunFigures({ distanceM, movingS, elapsedS, leftOutM, leftOutS, k
         {distance(distanceM, units)}
         <Txt style={styles.kmUnit}> {unitWord(units)}</Txt>
       </Txt>
+      {indoor === null ? null : <IndoorFrom from={indoor.from} steps={indoor.steps} stepsOff={indoor.stepsOff} />}
       <View style={styles.three}>
         <Tile value={clock(movingS)} label="Moving time" />
         <Tile value={clock(elapsedS)} label="Total time" />
@@ -57,6 +62,14 @@ export function RunFigures({ distanceM, movingS, elapsedS, leftOutM, leftOutS, k
           <Tile value={`${String(heart.max)} bpm`} label="Max heart rate" />
         </View>
       )}
+      {indoor !== null ? (
+        indoor.stepsOff || indoor.steps <= 0 ? null : (
+          <View style={styles.three}>
+            <Tile value={indoor.steps.toLocaleString("en-US")} label="Steps" />
+            <Tile value={movingS >= 60 ? String(Math.round(indoor.steps / (movingS / 60))) : "--"} label="Steps a minute" />
+          </View>
+        )
+      ) : (
       <View style={[styles.tile, styles.climbTile]}>
         <Txt style={styles.tileValue} fit numberOfLines={1}>
           {climbWords(climb, units)}
@@ -79,6 +92,7 @@ export function RunFigures({ distanceM, movingS, elapsedS, leftOutM, leftOutS, k
           </Pressable>
         ) : null}
       </View>
+      )}
       {stoppedS > 0 ? (
         <Txt kind="small" colour="textFaint">
           {`Stopped for ${clock(stoppedS)}`}

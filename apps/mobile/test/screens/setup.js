@@ -417,9 +417,13 @@ jest.mock("../../src/screens/running/runVoiceNative", () => {
 // lying flat with its top at `deg` (Android's rotation matrix, its error estimate for `sure`: 10°, 30°, 45° or 90°);
 // `motion.read(raw)` sends anything at all; `compass` counts its starts and stops and keeps the places it was told;
 // `compass.none` is a phone with no compass, `compass.old` a copy built before 37p (no compass functions at all).
+// The phone's own step counter for an indoor run (37q-ii-a): `motion.stepTo(at, total)` hands one reading over as the
+// Android code would (the counter's total since the phone was switched on); `steps.answer` is what starting it says ("ok",
+// "denied", "none"), `steps.can` whether the phone has one, `steps.old` a copy built before 37q-ii-a (no step functions).
 jest.mock("../../src/screens/running/runMotionNative", () => {
   const freshCompass = () => ({ none: false, old: false, reading: false, starts: 0, stops: 0, places: [], listeners: [] });
-  const fresh = () => ({ missing: false, fails: false, reading: false, starts: 0, stops: 0, waiting: [], compass: freshCompass() });
+  const freshSteps = () => ({ can: true, old: false, answer: "ok", reading: false, starts: 0, stops: 0, waiting: [] });
+  const fresh = () => ({ missing: false, fails: false, reading: false, starts: 0, stops: 0, waiting: [], compass: freshCompass(), steps: freshSteps() });
   const motion = { ...fresh() };
   motion.send = (at, sd, n = 25) => {
     motion.waiting.push({ at, sd, n });
@@ -434,7 +438,29 @@ jest.mock("../../src/screens/running/runMotionNative", () => {
     const error = [90, 45, 30, 10][sure] ?? 90;
     motion.read({ r: [c, s, 0, -s, c, 0, 0, 0, 1], rotation: 0, declination: 0, accuracy: (error * Math.PI) / 180, status: 3 });
   };
+  motion.stepTo = (at, total) => {
+    motion.steps.waiting.push({ at, steps: total });
+  };
   motion.reset = () => Object.assign(motion, fresh());
+  const stepsNative = {
+    stepsCan: () => motion.steps.can,
+    stepsStart: () => {
+      motion.steps.starts += 1;
+      if (motion.steps.answer === "ok") motion.steps.reading = true;
+      return motion.steps.answer;
+    },
+    stepsStop: () => {
+      motion.steps.stops += 1;
+      motion.steps.reading = false;
+      motion.steps.waiting = [];
+    },
+    stepsTake: () => {
+      // Android hands nothing over from a counter that is not read.
+      const out = motion.steps.reading ? motion.steps.waiting : [];
+      motion.steps.waiting = [];
+      return out;
+    },
+  };
   const compassNative = {
     compassStart: () => {
       motion.compass.starts += 1;
@@ -482,7 +508,9 @@ jest.mock("../../src/screens/running/runMotionNative", () => {
   return {
     motion,
     get runMotionNative() {
-      return motion.missing ? null : motion.compass.old ? native : { ...native, ...compassNative };
+      if (motion.missing) return null;
+      const withSteps = motion.steps.old ? native : { ...native, ...stepsNative };
+      return motion.compass.old ? withSteps : { ...withSteps, ...compassNative };
     },
   };
 });

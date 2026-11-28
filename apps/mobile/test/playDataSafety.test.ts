@@ -81,7 +81,7 @@ describe("Google's page never tells people something false about their data", ()
     "android.permission.RECORD_AUDIO",
     "android.permission.READ_MEDIA_VIDEO",
     "android.permission.READ_CALENDAR",
-    "android.permission.ACTIVITY_RECOGNITION",
+    "android.permission.health.READ_STEPS",
     "android.permission.BODY_SENSORS",
     "android.permission.health.READ_HEART_RATE",
     "com.google.android.gms.permission.AD_ID",
@@ -102,6 +102,14 @@ describe("Google's page never tells people something false about their data", ()
   ])("answering %s as not collected is refused where the app or the policy collects it", (type, where) => {
     const faults = dataSafetyFaults(today(), without(type));
     for (const w of where) expect(faults.some((f) => f.includes(w) && f.includes(`leads to ${type}, which the answers say is not collected`))).toBe(true);
+  });
+
+  it("Physical activity (37q-ii-a, an indoor run's steps) is answered as Fitness info, and refused if Fitness info is not ticked", () => {
+    const withSteps = { ...today(), permissions: [...BUILD_458835, "android.permission.ACTIVITY_RECOGNITION"] };
+    expect(dataSafetyFaults(withSteps)).toEqual([]);
+    expect(dataSafetyFaults(withSteps, without("Fitness info"))).toContain(
+      "android.permission.ACTIVITY_RECOGNITION leads to Fitness info, which the answers say is not collected.",
+    );
   });
 
   it("a new part of the privacy policy, or a new company in it, stops it until it is answered", () => {

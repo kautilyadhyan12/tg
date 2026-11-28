@@ -228,12 +228,17 @@ export function RunPage({ runId, units, onClose, onChanged, onDeleted }: {
             climb={read.run.climbM === null ? { kind: "none" } : { kind: "done", m: read.run.climbM, hills: read.run.hillLine }}
             units={units}
             heart={read.run.heartAvg === null || read.run.heartMax === null ? null : { avg: read.run.heartAvg, max: read.run.heartMax }}
+            indoor={read.run.indoor ? { steps: read.run.steps ?? 0, from: read.run.distanceFrom, stepsOff: false } : null}
           />
-          <RouteCard track={track} starts={read.run.trackStarts} units={units} name={read.run.name} distanceM={read.run.distanceM} movingS={read.run.durationS} testID="run-map" />
+          {/* An indoor run has no route (37q-ii-a): where its distance is from is said under it instead. */}
+          {read.run.indoor ? null : (
+            <RouteCard track={track} starts={read.run.trackStarts} units={units} name={read.run.name} distanceM={read.run.distanceM} movingS={read.run.durationS} testID="run-map" />
+          )}
           <PaceCard paceLine={read.run.paceLine} hillLine={read.run.hillLine} distanceM={read.run.distanceM} movingS={read.run.durationS} units={units} />
           <SavedRunHeart run={read.run} units={units} />
           <SplitsCard splits={units === "imperial" ? read.run.splitsMi : read.run.splitsKm} units={units} />
-          <BestEffortsCard bests={read.run.bests} held={read.run.records} units={units} />
+          {/* Never a record indoors (Kd, 2026-11-28, `rulings/2026-11-28-37q-i.md`). */}
+          {read.run.indoor ? null : <BestEffortsCard bests={read.run.bests} held={read.run.records} units={units} />}
           <FeelCard effort={draft.effort} onPick={(effort) => { change({ effort }); }} />
           <NoteCard note={draft.note} onChange={(note) => { change({ note }); }} />
           <Button kind="dangerLink" label="Delete run" style={styles.centredButton} onPress={() => { setTrouble(null); setDeleting(true); }} />
