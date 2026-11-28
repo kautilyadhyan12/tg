@@ -81,6 +81,9 @@ private const val FRAMES_LEAST = 15
 private const val QUIET_MS = 5_000L
 /** A gravity reading older than this says nothing about now. */
 private const val GRAVITY_STALE_NS = 1_000_000_000L
+/** Two gyroscope readings further apart than this leave a gap in which the phone's turning is not known: the next answer
+ *  says none (53c). Android gives one about every 20 ms at the game's rate. */
+private const val SPIN_GAP_NS = 200_000_000L
 private const val TAG = "PoseCamera"
 /** How many turned pictures go round (`picture`): a picture is copied for the screen once the model has answered it, at
  *  up to 20 a second and with an answer taking up to about 150 ms, so six are never drawn over while the model or the
@@ -278,7 +281,8 @@ private class BodyOverlay(context: Context) : View(context) {
  * that track body is lagging"). The model reads the picture as the camera took it, upright and NOT mirrored, as the proof
  * videos were filmed, so its left is the person's own left (51b-ii: mirrored, the model's left was the person's right). It
  * reads on the main chip's 4 cores (`CORES`). Each answer goes to the screen as `onPose`: the picture's size, the phone's
- * gravity at that moment and how the screen is turned from the phone's own axes, and the person found, if any; nothing is
+ * gravity at that moment and how the screen is turned from the phone's own axes, how far the phone turned since the answer
+ * before (the gyroscope's, 53c: a phone knocked, picked up or held by hand), and the person found, if any; nothing is
  * kept. Anything that stops the camera or the model is said once as
  * `onProblem`, and the screen turns the set into one counted by hand.
  */
@@ -386,6 +390,14 @@ class PoseCameraView(context: Context, appContext: AppContext) : ExpoView(contex
     @Volatile private var failed = false
     @Volatile private var gravity: FloatArray? = null
     @Volatile private var gravityAt = 0L
+    /** How far the phone has turned since the last answer, radians about its own three axes, from the gyroscope (53c); the
+     *  time of the gyroscope's newest reading, on its own clock; and whether a gap since the last answer leaves the turning
+     *  unknown. Read and reset at each answer (`spinSince`). */
+    private val spin = DoubleArray(3)
+    private var spinAt = 0L
+    private var spinSeenAt = 0L
+    private var spinGap = true
+    private val spinLock = Any()
     @Volatile private var lastPicture = SystemClock.elapsedRealtime()
     private var provider: ProcessCameraProvider? = null
     private var useCases: List<UseCase> = emptyList()
@@ -422,6 +434,10 @@ class PoseCameraView(context: Context, appContext: AppContext) : ExpoView(contex
       sensors?.let { s ->
         val sensor = s.getDefaultSensor(Sensor.TYPE_GRAVITY) ?: s.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
         if (sensor != null) s.registerListener(this, sensor, SensorManager.SENSOR_DELAY_GAME, Handler(sensorThread.looper))
+        // The phone's turning: Android's own calibrated gyroscope. A phone with none says none, and nothing is decided
+        // from it (53c).
+        val gyroscope = s.getDefaultSensor(Sensor.TYPE_GYROSCOPE)
+        if (gyroscope != null) s.registerListener(this, gyroscope, SensorManager.SENSOR_DELAY_GAME, Handler(sensorThread.looper))
       }
       worker.execute {
         try {
@@ -589,6 +605,7 @@ class PoseCameraView(context: Context, appContext: AppContext) : ExpoView(contex
         "height" to image.height.toDouble(),
         "gravity" to (g?.let { doubleArrayOf(it[0].toDouble(), it[1].toDouble(), it[2].toDouble()) } ?: DoubleArray(0)),
         "turn" to screenTurn.toDouble(),
+        "spin" to (spinSince() ?: DoubleArray(0)),
         "people" to people,
       )
       if (debuggable) {
@@ -641,9 +658,41 @@ class PoseCameraView(context: Context, appContext: AppContext) : ExpoView(contex
 
     override fun onSensorChanged(event: SensorEvent) {
       if (event.values.size < 3) return
+      if (event.sensor.type == Sensor.TYPE_GYROSCOPE) {
+        turned(event)
+        return
+      }
       gravity = floatArrayOf(event.values[0], event.values[1], event.values[2])
       // When it came, on the clock the answers are judged by: a phone's sensor clock may run from another start.
       gravityAt = SystemClock.elapsedRealtimeNanos()
+    }
+
+    /** One gyroscope reading, radians a second about the phone's own axes: the turn since the reading before is added. A
+     *  gap longer than `SPIN_GAP_NS` (the sensor stalled) leaves the turning in it unknown. */
+    private fun turned(event: SensorEvent) {
+      synchronized(spinLock) {
+        val dt = event.timestamp - spinAt
+        if (spinAt == 0L || dt <= 0L || dt > SPIN_GAP_NS) {
+          spinGap = true
+        } else {
+          val s = dt / 1e9
+          spin[0] += event.values[0] * s
+          spin[1] += event.values[1] * s
+          spin[2] += event.values[2] * s
+        }
+        spinAt = event.timestamp
+        spinSeenAt = SystemClock.elapsedRealtimeNanos()
+      }
+    }
+
+    /** How far the phone turned since the last answer, and from now on the next; null when that is not known (no
+     *  gyroscope, one gone quiet, or a gap in its readings). */
+    private fun spinSince(): DoubleArray? = synchronized(spinLock) {
+      val known = !spinGap && spinSeenAt != 0L && SystemClock.elapsedRealtimeNanos() - spinSeenAt <= SPIN_GAP_NS
+      val out = if (known) spin.copyOf() else null
+      spin.fill(0.0)
+      spinGap = false
+      out
     }
 
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) = Unit

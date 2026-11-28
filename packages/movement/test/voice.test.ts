@@ -135,12 +135,12 @@ describe("the lines file and the movement files agree", () => {
     expect(voiceGaps(VOICE, [...ruleWords(readFiles()), "Jump higher to count."])).toEqual(['no line says "Jump higher to count."']);
   });
 
-  it("the script: every wording once, in three parts, a pause written for Eleven v4 between two", () => {
+  it("the script: every wording once, in parts of at most 12 as even as they can be, a pause written for Eleven v4 between two", () => {
     const parts = scriptParts(VOICE);
-    expect(parts.map((p) => p.length)).toEqual([12, 12, 11]);
+    expect(parts.map((p) => p.length)).toEqual([10, 10, 10, 7]);
     expect(parts.flat().map((w) => w.words)).toEqual(wordingsOf(VOICE).map((w) => w.words));
     const text = scriptText(parts[0] ?? []);
-    expect(text.split(PAUSE).length).toBe(12);
+    expect(text.split(PAUSE).length).toBe(10);
     expect(text).not.toMatch(/<break/);
   });
 });
