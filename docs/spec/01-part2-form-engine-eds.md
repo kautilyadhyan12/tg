@@ -3412,7 +3412,15 @@ as the testers' store version (17 November) has no Start workout.
   form score of the phone's own refuses the whole save, the reply naming the field, never its value. A mistake is named by
   the camera file's own id rule and a count reading by its movement's rule-name rule, at most 32 mistakes and 8 readings, a
   reading within ±1000: 33 body points cannot ride in as readings. Each counted rep at most one score (none for a hold), at
-  most 10,000 in one workout (`repScoresMost`), which job 64b-ii's phone keeps to.
+  most 10,000 in one workout (`repScoresMost`), which job 64b-ii's phone keeps to. A hold's camera time is no longer than
+  the set lasted (a second of rounding).
+- **A body of many keys costs nothing (round one):** Zod checks every key of a record and names every unknown key of a strict
+  object, so a record of 131,594 keys held the server 522 ms and answered 500. The route counts every object's keys in the
+  body's text before parsing it (`countJsonObjectMembers`, `objectMembersMost` 15,000 for this route alone; the biggest save
+  the schema takes has 12,412) and answers 413; a record's keys are counted before any is read; a refused save's reply
+  names at most ten problems and at most five unknown keys of each (`saveIssueWords`). Measured: the reviewer's body refused
+  in 7.1 ms; the worst bodies within the count (14,950 bad record keys, or unknown keys on a set or a summary) 8.5 to 13.6 ms,
+  their replies at most 144 characters.
 - **What the server works out:** each camera set's form score, the mean of its reps' scores rounded (`setFormScore`), null with
   none, never a good one; the workout's, the mean of its camera sets' scores (`workoutFormScore`, the old route's rule), which
   XP's form bonus and the badges read; the time watched kept no longer than the set lasted.
@@ -3422,8 +3430,9 @@ as the testers' store version (17 November) has no Start workout.
   carry no score); the provenance check widened by one case only (a camera set with no camera file names its engine and
   carries no score). The privacy download carries the new columns (`SELECT s.*`), the delete removes them with the workout, and
   the policy's §3.6 names them.
-- **History** (`GET /v1/training/workouts/:id`) gives each set's `formScore` and the workout's; the web's old workout page reads a
-  camera set as the engine's, with its score.
+- **History** (`GET /v1/training/workouts/:id`) gives each set's `formScore` and the workout's, none for a stored one outside 0
+  to 100 (nothing in the database bounds the old import's numbers, and the phone would refuse the workout); the web's old
+  workout page reads a camera set as the engine's, with its score.
 - **Cost, measured** (`tools/measure-workout-save.ts`, on the charger, the other folder working): a usual save (20 sets, 7 by the
   camera, an hour of heart rate, 53 KB) holds the server 7.9 ms; the biggest the schema takes (200 camera sets at their most and
   12 hours of heart rate, 1,134 KB) 88.6 ms to check, and written alone it answered nobody for at most 80.4 ms; 199 people saving

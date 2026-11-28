@@ -61,7 +61,15 @@ const ruleNameSchema = z
   .string()
   .max(60)
   .regex(/^[A-Za-z0-9][A-Za-z0-9 ]*$/);
-const fewKeys = (most: number) => (r: Record<string, unknown>) => Object.keys(r).length <= most;
+/** A record of at most `most` keys, counted before any key or value is read: Zod checks every key of a record and keeps
+ *  one issue for each that fails, so 131,594 keys took the server half a second and then a 500 (round one, H1). Anything
+ *  that is not a plain object passes the count and is refused by the record itself. */
+function fewKeys<V extends z.ZodType>(key: z.ZodType<string>, value: V, most: number, what: string) {
+  return z
+    .unknown()
+    .refine((v) => typeof v !== "object" || v === null || Array.isArray(v) || Object.keys(v).length <= most, { message: `more than ${String(most)} ${what}` })
+    .pipe(z.record(key, value));
+}
 
 /** What the camera judged of a set, where the exercise has a camera file of its own (spec §2.4's set summary, as the
  *  movement engine makes it: `SetRecord.summary`). The set's own fields are not repeated here (its exercise, place, reps,
@@ -73,16 +81,13 @@ export const cameraSummarySchema = z
     /** Each counted rep's form score where the camera could judge it, in order. */
     repScores: z.array(z.number().int().min(0).max(100)).max(L.repsMost),
     /** For each mistake seen made, in how many reps. */
-    faultCounts: z.record(mistakeIdSchema, z.number().int().min(1).max(L.repsMost)).refine(fewKeys(L.faultsMost), { message: `more than ${String(L.faultsMost)} mistakes` }),
+    faultCounts: fewKeys(mistakeIdSchema, z.number().int().min(1).max(L.repsMost), L.faultsMost, "mistakes"),
     /** How long the camera read the person; the server keeps no more than the set lasted. */
     watchedMs: z.number().int().min(0).max(L.lengthMostMs),
     /** A counted rep's own time, the mean; null with none counted. */
     tempoMsAvg: z.number().int().min(0).max(L.lengthMostMs).nullable(),
     /** Each of the movement's count rules' readings, the mean over the counted reps; null with none counted. */
-    romStats: z
-      .record(ruleNameSchema, z.number().min(-L.romStatMost).max(L.romStatMost))
-      .refine(fewKeys(L.romStatsMost), { message: `more than ${String(L.romStatsMost)} readings` })
-      .nullable(),
+    romStats: fewKeys(ruleNameSchema, z.number().min(-L.romStatMost).max(L.romStatMost), L.romStatsMost, "readings").nullable(),
     /** Where the body stood to the phone at the bottom of the counted reps. */
     view: z.enum(["front", "side", "unknown"]),
   })
@@ -157,6 +162,11 @@ export const savedSetSchema = z
     if (s.camera !== undefined) {
       if (s.measuredIn === "reps" && s.camera.done > L.repsMost) {
         ctx.addIssue({ code: "custom", message: `reps above ${String(L.repsMost)}`, path: ["camera", "done"] });
+      }
+      // The camera's own time held is no longer than the set lasted, as the set's own (a second of rounding allowed; round
+      // one, L1).
+      if (s.measuredIn === "time" && s.camera.done * 1000 > s.durationMs + 1000) {
+        ctx.addIssue({ code: "custom", message: "the camera's time longer than the set", path: ["camera", "done"] });
       }
       const scores = s.camera.summary?.repScores.length ?? 0;
       // A score for each rep the camera counted, at most; a set measured in time has no reps to score.

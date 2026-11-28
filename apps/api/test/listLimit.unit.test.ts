@@ -8,7 +8,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { RUN_MAX_PAUSES, RUN_MAX_POINTS, runClimbRequestSchema, saveRunRequestSchema } from "@app/shared";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
-import { countJsonListItems, countListItems, LIST_ITEMS_MOST } from "../src/listLimit.js";
+import { countJsonListItems, countJsonObjectMembers, countListItems, LIST_ITEMS_MOST } from "../src/listLimit.js";
 
 type App = Awaited<ReturnType<typeof buildApp>>;
 
@@ -180,5 +180,54 @@ describe("the most list items one request may carry", () => {
       for (let i = 0; i < 200_000; i++) deep = [deep];
       expect(countListItems(deep, Number.MAX_SAFE_INTEGER)).toBe(200_000);
     });
+  });
+});
+
+describe("the object keys a body holds, for a route that names its most (job 64b-i, round one, H1)", () => {
+  /** The same count walked over the parsed value, to hold the text's count to. */
+  const membersOf = (value: unknown): number => {
+    if (Array.isArray(value)) return value.reduce((n: number, v: unknown) => n + membersOf(v), 0);
+    if (typeof value === "object" && value !== null) return Object.values(value).reduce((n: number, v: unknown) => n + 1 + membersOf(v), 0);
+    return 0;
+  };
+  it.each<[string, unknown]>([
+    ["nothing", {}],
+    ["one key", { a: 1 }],
+    ["three keys", { a: 1, b: 2, c: 3 }],
+    ["an empty object in a list", [{}]],
+    ["objects in a list", [{ a: 1 }, { b: 2, c: 3 }]],
+    ["nested objects", { a: { b: { c: {} } }, d: [{ e: 1 }] }],
+    ["keys and values that hold commas, braces, colons and quotes", { "a,b": "{c:d},", 'e"f': "[g, h]", "i\\": "\\" }],
+    ["a list of numbers holds no keys", [1, 2, 3]],
+    ["a string alone holds none", "a, b: {c}"],
+  ])("%s", (_name, value) => {
+    expect(countJsonObjectMembers(JSON.stringify(value), Number.MAX_SAFE_INTEGER)).toBe(membersOf(value));
+    expect(countJsonObjectMembers(JSON.stringify(value, null, 2), Number.MAX_SAFE_INTEGER)).toBe(membersOf(value));
+  });
+
+  it("stops as soon as the most is passed", () => {
+    const many = JSON.stringify(Object.fromEntries(Array.from({ length: 1000 }, (_, i) => [`k${String(i)}`, i])));
+    expect(countJsonObjectMembers(many, 10)).toBe(11);
+  });
+
+  // The save route that names one settles who is asking before it reads a body, so its 413 is tested signed in
+  // (`training.camera.routes.test.ts`, the reviewer's 131,594 keys).
+  it("a route that names none counts no keys: a body of 50,000 keys reaches its sign-in", async () => {
+    const app = await buildApp(
+      loadConfig({
+        NODE_ENV: "test",
+        DATABASE_URL: "postgres://x:y@localhost:5432/z",
+        WEB_ORIGIN: "http://localhost:5173",
+        JWT_SECRET: "list-limit-secret-0123456789abcdef-32", // dummy test value, gitleaks:allow
+        LOG_LEVEL: "error",
+      }),
+    );
+    const post = (url: string, payload: string) => app.inject({ method: "POST", url, remoteAddress: "10.77.1.1", headers: { "content-type": "application/json" }, payload });
+    try {
+      const keys = (n: number) => JSON.stringify(Object.fromEntries(Array.from({ length: n }, (_, i) => [`k${String(i)}`, 1])));
+      expect((await post("/v1/geo/saved-routes", keys(50_000))).statusCode).toBe(401);
+    } finally {
+      await app.close();
+    }
   });
 });

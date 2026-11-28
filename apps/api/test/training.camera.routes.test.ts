@@ -365,6 +365,44 @@ d("a set counted by the camera, saved from the phone (real Postgres)", () => {
     });
   });
 
+  describe("a body of many keys costs the server nothing (round one, H1)", () => {
+    it("the reviewer's 131,594 keys in one record are refused before the body is read: 413, never a 500, nothing kept", async () => {
+      const a = await person();
+      const faultCounts = Object.fromEntries(Array.from({ length: 131_594 }, (_, i) => [`B${String(i)}`, 1]));
+      const res = await save(a, workout([cameraSet({}, { summary: summary({ faultCounts }) })]));
+      expect(res.statusCode).toBe(413);
+      expect(res.json()).toMatchObject({ error: "too_many_items" });
+      expect(await workoutsOf(a)).toBe(0);
+    });
+
+    it("thousands of unknown keys within the count: 400, and the reply names a few of them, never all", async () => {
+      const a = await person();
+      const extra = Object.fromEntries(Array.from({ length: 5_000 }, (_, i) => [`unknown_field_${String(i)}`, 1]));
+      const res = await save(a, workout([{ ...cameraSet(), ...extra }]));
+      expect(res.statusCode).toBe(400);
+      expect(res.body.length).toBeLessThan(2_000);
+      expect(res.body).toContain("unknown_field_0");
+      expect(res.body).not.toContain("unknown_field_4999");
+      expect(res.body).toContain("and 4995 more");
+      expect(await workoutsOf(a)).toBe(0);
+    });
+  });
+
+  describe("History never sends a form score a phone would refuse (round one, L2)", () => {
+    it("a stored score outside 0 to 100, as an imported workout might hold, reads as none and the workout still opens", async () => {
+      const a = await person();
+      const body = workout();
+      expect((await save(a, body)).statusCode).toBe(201);
+      await sql`UPDATE workouts SET avg_form_score = 150 WHERE id = ${body.workoutId}`;
+      await sql`UPDATE workout_sets SET avg_form_score = -3 WHERE workout_id = ${body.workoutId} AND set_index = 0`;
+      const res = await get(a, `/v1/training/workouts/${body.workoutId}`);
+      expect(res.statusCode).toBe(200);
+      const w = historyWorkoutSchema.parse(res.json());
+      expect(w.formScore).toBeNull();
+      expect(w.sets[0]?.formScore).toBeNull();
+    });
+  });
+
   describe("the person's own data", () => {
     it("the privacy download holds the camera's facts of their sets, and nobody else's", async () => {
       const [a, b] = [await person(), await person()];

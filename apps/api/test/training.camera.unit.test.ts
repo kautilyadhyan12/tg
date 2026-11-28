@@ -6,11 +6,13 @@
 // body points or a free-form field anywhere in a camera set, each refuse the whole save; and a set by hand is written with
 // nothing of a camera whatever it carried.
 import { randomUUID } from "node:crypto";
+import { performance } from "node:perf_hooks";
 import { describe, expect, it } from "vitest";
 import { setFormScore, workoutFormScore, workoutSaveSchema, WORKOUT_SAVE_LIMITS, type CameraSetFacts, type SavedSet } from "@app/shared";
-import { countJsonListItems } from "../src/listLimit.js";
+import { countJsonListItems, countJsonObjectMembers } from "../src/listLimit.js";
 import { setColumns, type SetRow } from "../src/modules/training/repo.js";
-import { BODY_MOST_BYTES, LIST_ITEMS_FOR_SAVE } from "../src/modules/training/routes.js";
+import { BODY_MOST_BYTES, LIST_ITEMS_FOR_SAVE, OBJECT_MEMBERS_FOR_SAVE } from "../src/modules/training/routes.js";
+import { workoutFormScoreOf } from "../src/modules/training/service.js";
 
 const L = WORKOUT_SAVE_LIMITS;
 
@@ -120,10 +122,13 @@ describe("the worst thing: a form score for a set no camera watched, or anything
     });
   });
 
-  it("a workout's form score is its camera sets' alone", () => {
-    // The route passes only camera sets' scores; a hand set's camera facts, refused above, never reach it.
-    expect(workoutFormScore([null, null])).toBeNull();
-    expect(workoutFormScore([])).toBeNull();
+  it("a workout's form score is its camera sets' alone, even if a set by hand reached the server carrying camera facts", () => {
+    // The schema refuses such a set (above); this is the service's own rule, tested past it.
+    const handWithFacts = { ...handSet(), camera: camera({ summary: summary({ repScores: [100, 100] }) }) };
+    const judged = set({ position: 1, camera: camera({ done: 2, summary: summary({ repScores: [60, 70], faultCounts: {} }) }) });
+    expect(workoutFormScoreOf([handWithFacts, judged])).toBe(65);
+    expect(workoutFormScoreOf([handWithFacts])).toBeNull();
+    expect(workoutFormScoreOf([set({ camera: camera({ summary: null }) })])).toBeNull();
   });
 });
 
@@ -139,6 +144,9 @@ describe("what a phone may send about a set the camera counted", () => {
     ["a way of leaving the camera the server does not know", workout([set({ camera: camera({ left: "gave_up" }) })]), "sets.0.camera.left"],
     ["the camera saw nothing", workout([set({ done: 10, camera: camera({ done: 0, left: "chosen", summary: summary({ repScores: [], faultCounts: {}, watchedMs: 0, tempoMsAvg: null, romStats: null, view: "unknown" }) }) })]), "ok"],
     ["a hold the camera timed", workout([set({ exercise: "plank", measuredIn: "time", target: 30, done: 30, durationMs: 31_000, camera: camera({ done: 30, summary: summary({ repScores: [], faultCounts: {}, tempoMsAvg: null, romStats: null, view: "unknown" }) }) })]), "ok"],
+    ["a hold the camera timed a second longer than the set", workout([set({ exercise: "plank", measuredIn: "time", target: 30, done: 30, durationMs: 31_000, camera: camera({ done: 32, summary: null }) })]), "ok"],
+    ["a hold the camera timed longer than the set lasted", workout([set({ exercise: "plank", measuredIn: "time", target: 30, done: 30, durationMs: 31_000, camera: camera({ done: 33, summary: null }) })]), "sets.0.camera.done"],
+    ["a hold the camera timed an hour of in 31 seconds", workout([set({ exercise: "plank", measuredIn: "time", target: 30, done: 30, durationMs: 31_000, camera: camera({ done: 3600, summary: null }) })]), "sets.0.camera.done"],
     ["a hold with rep scores", workout([set({ exercise: "plank", measuredIn: "time", target: 30, done: 30, durationMs: 31_000, camera: camera({ done: 30, summary: summary({ repScores: [100] }) }) })]), "sets.0.camera.summary.repScores"],
     ["more rep scores than reps the camera counted", workout([set({ camera: camera({ done: 2, summary: summary({ repScores: [100, 100, 100] }) }) })]), "sets.0.camera.summary.repScores"],
     ["a rep score of 101", workout([set({ camera: camera({ summary: summary({ repScores: [101] }) }) })]), "sets.0.camera.summary.repScores.0"],
@@ -240,6 +248,27 @@ describe("the form scores the server works out", () => {
   });
 });
 
+describe("a body of many keys is refused at its count, before anything reads them (round one, H1)", () => {
+  /** One camera set whose record holds `n` keys the id rule refuses. */
+  const manyKeys = (field: "faultCounts" | "romStats", n: number) =>
+    workout([set({ camera: camera({ summary: summary({ [field]: Object.fromEntries(Array.from({ length: n }, (_, i) => [`B${String(i)}`, 1])) }) }) })]);
+
+  it.each(["faultCounts", "romStats"] as const)("%s of 100,000 keys: refused at its count, in a few milliseconds", (field) => {
+    const body = manyKeys(field, 100_000);
+    const t0 = performance.now();
+    expect(verdict(body)).toBe(`sets.0.camera.summary.${field}`);
+    expect(performance.now() - t0).toBeLessThan(100);
+  });
+
+  it("the route refuses the reviewer's body of 131,594 keys before parsing it, and takes the biggest save it should", () => {
+    const attack = JSON.stringify(manyKeys("faultCounts", 131_594));
+    expect(countJsonObjectMembers(attack, Number.MAX_SAFE_INTEGER)).toBeGreaterThan(OBJECT_MEMBERS_FOR_SAVE);
+    // Unknown keys on a strict object are counted the same way.
+    const strict = JSON.stringify(workout([{ ...set(), ...Object.fromEntries(Array.from({ length: 50_000 }, (_, i) => [`k${String(i)}`, 1])) }]));
+    expect(countJsonObjectMembers(strict, Number.MAX_SAFE_INTEGER)).toBeGreaterThan(OBJECT_MEMBERS_FOR_SAVE);
+  });
+});
+
 describe("the biggest save the schema takes fits the route's own limits", () => {
   it("200 camera sets, 10,000 rep scores, 12 hours of heart rate, every field at its longest", () => {
     const longest = (i: number) =>
@@ -280,5 +309,6 @@ describe("the biggest save the schema takes fits the route's own limits", () => 
     const text = JSON.stringify(body);
     expect(Buffer.byteLength(text)).toBeLessThan(BODY_MOST_BYTES);
     expect(countJsonListItems(text, Number.MAX_SAFE_INTEGER)).toBeLessThanOrEqual(LIST_ITEMS_FOR_SAVE);
+    expect(countJsonObjectMembers(text, Number.MAX_SAFE_INTEGER)).toBeLessThanOrEqual(OBJECT_MEMBERS_FOR_SAVE);
   });
 });
