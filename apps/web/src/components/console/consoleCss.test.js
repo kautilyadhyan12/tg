@@ -438,6 +438,12 @@ describe('read without leaning in (Kd, 2026-11-19, V1-f): no words under 14 px',
     './RazorpayPlanActions.jsx',
     './ListDownload.jsx',
     './PaymentsDownloadAll.jsx',
+    // V5-d: getting in — your organisations, a staff invitation, creating a business, signing in.
+    '../../pages/console/ConsoleHome.jsx',
+    './StaffInvitations.jsx',
+    '../../pages/console/NewGym.jsx',
+    '../../pages/Login.jsx',
+    '../../pages/StaffInvitationLink.jsx',
   ];
   // V3a-ii: a member's page opened from Invite to app dims the box in the middle under it too.
   it("a cover drawn after a box in the middle is over that box, and a panel after it is over the cover", () => {

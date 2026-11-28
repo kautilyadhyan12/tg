@@ -1,46 +1,48 @@
 // A staff invitation email's link, `/staff-invitation` (Part 3 §10.3; ROADMAP 4a-i). The
 // link is not a key: the invitation hangs on the address, so this page only sends the
 // person to sign in with it through the Manage door. Signed in already, they go to the
-// console's front page, where the invitation is waiting.
-import { Link, Navigate } from 'react-router-dom';
-import { ArrowRight, Dumbbell } from 'lucide-react';
+// console's front page, where the invitation is waiting. Drawn in the console's third look
+// (V5-d, board `StaffInvite`).
+import { Link, Navigate, useLocation } from 'react-router-dom';
+import { ArrowRight, Dumbbell, UserPlus } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { GYM_DOOR, rememberDoor } from './landingRoute';
+import { consoleLook } from './console/consoleMenu';
 
 export default function StaffInvitationLink() {
   const { user, loading } = useAuth();
+  const location = useLocation();
   if (loading) return null;
   if (user) return <Navigate to="/console" replace />;
   return (
-    <div className="min-h-screen flex items-center justify-center p-6 sm:p-8" style={{ background: '#0A0908' }}>
-      <div className="w-full max-w-md">
-        <div className="flex items-center gap-2.5 mb-8">
-          <div
-            className="w-9 h-9 rounded-xl flex items-center justify-center"
-            style={{ background: 'linear-gradient(135deg, #FF8A1F, #FFB347)', boxShadow: '0 0 20px rgba(255,138,31,0.35)' }}
-          >
-            <Dumbbell className="w-4 h-4 text-white" />
+    <div className={`c-console t-${consoleLook(location.search, import.meta.env.DEV)} c-door-page`}>
+      <div className="c-door-side">
+        <div className="c-door-col c-stack-m">
+          <div className="c-door-brand">
+            <span className="c-gymicon" aria-hidden="true">
+              <Dumbbell size={18} />
+            </span>
+            <span className="c-s16 c-w7 c-t1">KWAZO</span>
           </div>
-          <span className="font-bold text-lg tracking-tight" style={{ color: 'rgba(255,255,255,0.95)' }}>
-            AI Home Gym
-          </span>
+          <div className="c-card c-stack-m c-door-card">
+            <span className="c-invite-ic" aria-hidden="true">
+              <UserPlus size={22} />
+            </span>
+            <div className="c-stack-xs">
+              <h1 className="c-h1">You&apos;re invited to help run a gym or studio</h1>
+              <p className="c-sub">Sign in with the email address the invitation was sent to. Your invitation will be waiting.</p>
+            </div>
+            <Link
+              to="/login"
+              // A staff invitation opens the console, whichever door this browser used last.
+              onClick={() => rememberDoor(GYM_DOOR)}
+              className="c-btn c-btn-lg c-btn-p c-door-wide"
+            >
+              Sign in
+              <ArrowRight size={18} aria-hidden="true" />
+            </Link>
+          </div>
         </div>
-        <h1 className="text-3xl font-bold tracking-tighter mb-3" style={{ color: 'rgba(255,255,255,0.95)' }}>
-          You&apos;re invited to help run a gym
-        </h1>
-        <p className="text-sm mb-6" style={{ color: 'rgba(255,255,255,0.65)' }}>
-          Sign in with the email address the invitation was sent to. Your invitation will be waiting.
-        </p>
-        <Link
-          to="/login"
-          // A staff invitation opens the console, whichever door this browser used last.
-          onClick={() => rememberDoor(GYM_DOOR)}
-          className="w-full py-3.5 rounded-2xl font-semibold text-sm flex items-center justify-center gap-2"
-          style={{ background: 'linear-gradient(135deg, #FF8A1F, #FFB347)', color: '#fff', minHeight: 44 }}
-        >
-          Sign in
-          <ArrowRight className="w-4 h-4" />
-        </Link>
       </div>
     </div>
   );
