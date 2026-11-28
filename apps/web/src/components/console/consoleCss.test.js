@@ -65,6 +65,27 @@ describe('the banner above every page reads in both looks', () => {
   });
 });
 
+describe('the plan prompt a gym on no plan cannot skip (V5-c)', () => {
+  it('its cover is the page colour, nearly solid, and outranks the see-through cover every other box has', () => {
+    // `.c-scrim` comes later in the file: a cover named by one class alone loses to it and lets the page show through.
+    expect(declarations('.c-scrim-shut')).toEqual({});
+    expect(declarations('.c-scrim.c-scrim-shut')).toEqual({ background: 'var(--page)', opacity: '0.96' });
+  });
+});
+
+describe('what a person must press stays in sight and big enough (V5-c)', () => {
+  const TOUCH = '(pointer: coarse), (max-width: 767px)';
+  it("a box's foot is pinned to its bottom edge, so Confirm and the price beside it never scroll away", () => {
+    expect(declarations('.c-ask-foot')).toMatchObject({ position: 'sticky' });
+    expect(declarations('.c-ask-foot').bottom.startsWith('calc(-20px')).toBe(true);
+    expect(declarations('.c-ask-foot', '(min-width: 768px)').bottom).toBe('-28px');
+  });
+  it("the banner's Dismiss and Open Plan are 44 px on a touch screen or a phone", () => {
+    expect(declarations('.c-banner .c-icon-btn', TOUCH)).toMatchObject({ width: '44px', height: '44px' });
+    expect(declarations('.c-banner .c-btn', TOUCH)).toMatchObject({ 'min-height': '44px' });
+  });
+});
+
 describe('every text colour is readable on every surface, in both looks', () => {
   // WCAG 2's contrast ratio. Every word is 7:1 or more on what it sits on (WCAG's AAA bar), so
   // nobody leans in to read it (Kd, 2026-11-19, V1-f's click-through); a disabled control's
@@ -408,6 +429,15 @@ describe('read without leaning in (Kd, 2026-11-19, V1-f): no words under 14 px',
     './AppCancelsCard.jsx',
     './ChargebacksCard.jsx',
     './TrialCard.jsx',
+    // V5-c: the banner above every page, the plan prompt, Choose a plan and Change size, the size question.
+    './ConsoleBanner.jsx',
+    './PlanModal.jsx',
+    './PlanChoiceDialog.jsx',
+    './SizeDecisionPrompt.jsx',
+    './ManagePaymentButton.jsx',
+    './RazorpayPlanActions.jsx',
+    './ListDownload.jsx',
+    './PaymentsDownloadAll.jsx',
   ];
   // V3a-ii: a member's page opened from Invite to app dims the box in the middle under it too.
   it("a cover drawn after a box in the middle is over that box, and a panel after it is over the cover", () => {

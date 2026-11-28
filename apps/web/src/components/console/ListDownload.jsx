@@ -43,7 +43,7 @@ export default function ListDownload({ org }) {
   if (gymId === null || !mayRead) return null;
   if (people === 0) {
     return gone === null ? null : (
-      <p className="text-sm mt-4" data-testid="plan-gone-for-good" style={{ color: 'rgba(255,255,255,0.75)' }}>
+      <p className="c-s14 c-t1 m-0" data-testid="plan-gone-for-good">
         {gone}
       </p>
     );
@@ -67,19 +67,18 @@ export default function ListDownload({ org }) {
   };
 
   return (
-    <div className="mt-5 flex flex-col gap-2">
+    <div className="flex flex-col gap-2">
       <button
         type="button"
         onClick={download}
         disabled={busy}
-        className="w-full rounded-xl px-4 py-3 text-sm font-semibold flex items-center justify-center gap-2 disabled:opacity-50"
-        style={{ background: 'rgba(255,255,255,0.06)', color: '#fff', minHeight: 44 }}
+        className="c-btn c-btn-s c-btn-w"
       >
         {busy ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : <Download aria-hidden="true" className="w-4 h-4" />}
         Download {words.person} list
       </button>
       {note !== null ? (
-        <p className="text-sm" role="status" style={{ color: 'rgba(255,255,255,0.6)' }}>
+        <p className="c-s14 c-t2 m-0" role="status">
           {note}
         </p>
       ) : null}

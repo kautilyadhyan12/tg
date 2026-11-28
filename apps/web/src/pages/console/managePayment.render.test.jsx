@@ -452,8 +452,9 @@ describe('a plan paid through Razorpay (an Indian gym, 1d-i and 1d-ii)', () => {
     );
     const modal = screen.getByTestId('plan-modal');
     expect(within(modal).getByRole('button', { name: 'Update payment method' })).toBeTruthy();
-    // The prompt keeps its own look until V5-c: the Plan box's look is not drawn here.
-    expect(within(modal).getByRole('button', { name: 'Update payment method' }).classList.contains('c-btn')).toBe(false);
+    // The prompt is in the third look since V5-c: Pay now the full orange, the one thing to do, Update payment method outlined.
+    expect([...within(modal).getByRole('button', { name: 'Pay now' }).classList]).toEqual(['c-btn', 'c-btn-p']);
+    expect([...within(modal).getByRole('button', { name: 'Update payment method' }).classList]).toEqual(['c-btn', 'c-btn-s']);
     expect(within(modal).queryByRole('button', { name: /cancel plan|manage payment|subscribe/i })).toBeNull();
     fireEvent.click(within(modal).getByRole('button', { name: 'Pay now' }));
     await waitFor(() => expect(tab.location.replace).toHaveBeenCalledWith(LINK));

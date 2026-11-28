@@ -381,7 +381,7 @@ export default function TrialCard({ org }) {
                 invoices. One paid through Razorpay is managed here (1d-ii), below. */}
             {/* A plan handed over with the gym is the old owner's Paddle account: not opened here. */}
             {manage ? (
-              <ManagePaymentButton newLook gymId={org.id} label={sub.status === 'past_due' ? 'Update payment method' : 'Manage payment'} />
+              <ManagePaymentButton gymId={org.id} label={sub.status === 'past_due' ? 'Update payment method' : 'Manage payment'} />
             ) : null}
             {cancelNew && cancelNewBox === null ? (
               <button
@@ -421,7 +421,7 @@ export default function TrialCard({ org }) {
             {cancelNewError}
           </p>
         ) : null}
-        {razorpay ? <RazorpayPlanActions org={org} cancel newLook /> : null}
+        {razorpay ? <RazorpayPlanActions org={org} cancel /> : null}
         {keepError !== null ? (
           <p className="c-err m-0" role="alert">
             {keepError}

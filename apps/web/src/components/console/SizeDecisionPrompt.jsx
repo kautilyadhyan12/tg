@@ -1,10 +1,11 @@
-import { useEffect, useId, useRef, useState } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Loader2, X } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import { orgService, errorText } from '../../api/orgsApi';
 import { applyPaidPlan, refreshConsoleOrgsAfterChange } from '../../pages/console/consoleOrgs';
 import { sizeDecision } from '../../pages/console/billingView';
 import { usePaddleSubscribe } from './usePaddleSubscribe';
+import { AskSheet } from './ConsoleBoxes';
 
 // THE LAST DAYS' QUESTION (ROADMAP Stage 3 item 1c-iii; Kd, RULINGS 2026-09-25). In the 3 days
 // before a smaller size is decided, billing staff of a gym with more members than it holds are
@@ -37,19 +38,13 @@ function rememberDismissed(org) {
 }
 
 export default function SizeDecisionPrompt({ org }) {
-  const titleId = useId();
   const navigate = useNavigate();
   const decision = sizeDecision(org);
   const [closed, setClosed] = useState(() => wasDismissed(org));
   const [working, setWorking] = useState(null);
   const [error, setError] = useState(null);
   const { paying, payError, paid, subscribe } = usePaddleSubscribe(org?.id ?? null, org?.name ?? '');
-  const dialogRef = useRef(null);
   const open = decision !== null && !closed && paid === null;
-
-  useEffect(() => {
-    if (open) dialogRef.current?.focus();
-  }, [open]);
 
   if (!open) return null;
 
@@ -77,87 +72,45 @@ export default function SizeDecisionPrompt({ org }) {
   };
 
   const button = (label, onClick, which, primary = false) => (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={busy}
-      className="w-full rounded-xl px-4 py-3 text-sm font-semibold flex items-center justify-center gap-2 disabled:opacity-50"
-      style={
-        primary
-          ? { background: 'rgba(255,138,31,0.15)', color: '#FF8A1F', minHeight: 44 }
-          : { background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.85)', minHeight: 44 }
-      }
-    >
-      {working === which || (which === 'move' && paying !== null) ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+    <button type="button" onClick={onClick} disabled={busy} className={`c-btn c-btn-lg c-btn-w ${primary ? 'c-btn-p' : 'c-btn-s'}`}>
+      {working === which || (which === 'move' && paying !== null) ? <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" /> : null}
       {label}
     </button>
   );
 
+  // The console's box in the middle (V5-c, the board `OverviewPlan`): the question its title, its
+  // three answers one under another, and what happens if nobody chooses.
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      style={{ background: 'rgba(10,9,8,0.85)' }}
-      data-testid="size-decision"
-    >
-      <div
-        ref={dialogRef}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={titleId}
-        tabIndex={-1}
-        onKeyDown={(e) => {
-          if (e.key === 'Escape') close();
-        }}
-        className="w-full max-w-md rounded-2xl p-6"
-        style={{ background: '#121110', border: '1px solid rgba(255,255,255,0.08)' }}
-      >
-        <div className="flex items-start justify-between gap-4">
-          <h2 id={titleId} className="text-lg font-bold" style={{ color: '#fff' }}>
-            {decision.question}
-          </h2>
-          <button
-            type="button"
-            onClick={close}
-            disabled={busy}
-            aria-label="Close"
-            className="rounded-lg p-2 -m-2 disabled:opacity-50"
-            style={{ color: 'rgba(255,255,255,0.55)' }}
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-        <div className="flex flex-col gap-2 mt-5">
-          {button(
-            decision.remove,
-            () => {
-              rememberDismissed(org);
-              setClosed(true);
-              navigate(`/console/${org.slug}/members`);
-            },
-            'remove',
-            true,
-          )}
-          {decision.moveInstead !== null
-            ? button(
-                decision.moveInstead.label,
-                () =>
-                  decision.razorpay
-                    ? void subscribe(decision.moveInstead.planCode, orgService.startRazorpaySizeChange)
-                    : void act('move', () => orgService.changeSize(org.id, decision.moveInstead.planCode, crypto.randomUUID())),
-                'move',
-              )
-            : null}
-          {button(decision.stay, () => void act('stay', () => orgService.keepSize(org.id)), 'stay')}
-        </div>
-        <p className="text-sm mt-4" style={{ color: 'rgba(255,255,255,0.6)' }}>
-          {decision.ifNothing}
-        </p>
-        {(error ?? payError) !== null ? (
-          <p className="text-sm mt-3" style={{ color: '#ef4444' }}>
-            {error ?? payError}
-          </p>
-        ) : null}
+    <AskSheet title={decision.question} testId="size-decision" onClose={close} busy={busy} footer={null} outsideCloses={false}>
+      <div className="c-stack-s">
+        {button(
+          decision.remove,
+          () => {
+            rememberDismissed(org);
+            setClosed(true);
+            navigate(`/console/${org.slug}/members`);
+          },
+          'remove',
+          true,
+        )}
+        {decision.moveInstead !== null
+          ? button(
+              decision.moveInstead.label,
+              () =>
+                decision.razorpay
+                  ? void subscribe(decision.moveInstead.planCode, orgService.startRazorpaySizeChange)
+                  : void act('move', () => orgService.changeSize(org.id, decision.moveInstead.planCode, crypto.randomUUID())),
+              'move',
+            )
+          : null}
+        {button(decision.stay, () => void act('stay', () => orgService.keepSize(org.id)), 'stay')}
       </div>
-    </div>
+      <p className="c-s14 c-t2 m-0">{decision.ifNothing}</p>
+      {(error ?? payError) !== null ? (
+        <p role="alert" className="c-err m-0">
+          {error ?? payError}
+        </p>
+      ) : null}
+    </AskSheet>
   );
 }
