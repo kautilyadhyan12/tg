@@ -6,7 +6,7 @@
 // module; written here like the nutrition/coach tasks' disclosed crossings
 // (getLiveGymId duplicated from nutrition/repo.ts — a cross-module repo import
 // would violate R7.1).
-import type { OwnWeek, RunBests, RunChoice, RunClimb, RunPlanAnswers, RunRecordKind } from "@app/shared";
+import type { OwnWeek, RunBests, RunChoice, RunClimb, RunPlanAnswers, RunRecordKind, StepLesson } from "@app/shared";
 import type { Sql, TransactionSql } from "postgres";
 import { ORS_ROUTE_COST_MICRO } from "./cost.js";
 
@@ -30,6 +30,8 @@ export interface RunRow {
   shapeFrom: { polyline: string; splits: unknown } | null;
   /** Brought over from the old app (`tools/migrate-mongo`): its line is that app's JSON path, not a coded line. */
   legacy: boolean;
+  /** Run indoors (37q), with no route. */
+  indoor: boolean;
 }
 
 /** A run's own page: the summary's row and what its page shows besides. */
@@ -42,6 +44,9 @@ export interface RunDetailRow extends RunRow {
   bests: RunBests;
   /** Heart rate from a strap or watch (37f-i); null for a run with none. */
   heart: RunHeart | null;
+  /** Indoors (37q): the steps counted, and the treadmill's distance where it was taken; null outdoors. */
+  steps: number | null;
+  treadmillM: number | null;
 }
 
 /** A run's average and highest heart rate, beats a minute. */
@@ -77,6 +82,7 @@ interface RunDbRow {
   shape_polyline: string | null;
   shape_splits: unknown;
   legacy: boolean;
+  kind: string;
 }
 
 interface RunDetailDbRow extends RunDbRow {
@@ -91,6 +97,8 @@ interface RunDetailDbRow extends RunDbRow {
   best_10k_s: number | null;
   heart_avg: number | null;
   heart_max: number | null;
+  steps: number | null;
+  treadmill_m: number | null;
 }
 
 interface SavedRouteDbRow {
@@ -117,6 +125,7 @@ const toRun = (r: RunDbRow): RunRow => ({
   day: r.day,
   shapeFrom: r.shape === null && r.shape_polyline !== null ? { polyline: r.shape_polyline, splits: r.shape_splits } : null,
   legacy: r.legacy,
+  indoor: r.kind === "indoor",
 });
 
 const toRunDetail = (r: RunDetailDbRow): RunDetailRow => ({
@@ -128,6 +137,8 @@ const toRunDetail = (r: RunDetailDbRow): RunDetailRow => ({
   leftOutS: r.left_out_s,
   bests: { k1: r.best_1k_s, mile: r.best_mile_s, k5: r.best_5k_s, k10: r.best_10k_s },
   heart: heartOf(r.heart_avg, r.heart_max),
+  steps: r.steps,
+  treadmillM: r.treadmill_m,
 });
 
 const toSavedRoute = (r: SavedRouteDbRow): SavedRouteRow => ({
@@ -182,7 +193,7 @@ export async function listRuns(
            name, elapsed_s, climb_m, shape, to_char(${runLocal(sql, timeZone)}, 'YYYY-MM-DD') AS day,
            CASE WHEN shape IS NULL THEN polyline END AS shape_polyline,
            CASE WHEN shape IS NULL THEN splits END AS shape_splits,
-           legacy_mongo_id IS NOT NULL AS legacy
+           legacy_mongo_id IS NOT NULL AS legacy, kind
     FROM runs
     WHERE user_id = ${userId}
       AND (${cursor === null} OR (started_at, id) < (${cursor?.at ?? null}, ${cursor?.id ?? null}))
@@ -276,7 +287,7 @@ const runDetailColumns = (sql: Sql, timeZone: string) => sql`
   to_char(${runLocal(sql, timeZone)}, 'YYYY-MM-DD') AS day,
   CASE WHEN shape IS NULL THEN polyline END AS shape_polyline, CASE WHEN shape IS NULL THEN splits END AS shape_splits,
   splits, effort, note, left_out_m, left_out_s, legacy_mongo_id IS NOT NULL AS legacy,
-  best_1k_s, best_mile_s, best_5k_s, best_10k_s, heart_avg, heart_max`;
+  best_1k_s, best_mile_s, best_5k_s, best_10k_s, heart_avg, heart_max, kind, steps, treadmill_m`;
 
 export async function getRun(sql: Sql, userId: string, id: string, timeZone: string): Promise<RunDetailRow | null> {
   const rows = await sql<RunDetailDbRow[]>`
@@ -343,14 +354,15 @@ export interface RunRecordRow {
 }
 
 /** The person's records, from their own runs that this app recorded (`run_calc_version`, as XP
- *  counts them): each distance's fastest time, the longest run from LONGEST_RUN_FROM_M, a tie held by
- *  the run that set it first; and the best before that run, from the runs begun earlier. */
+ *  counts them) outdoors: each distance's fastest time, the longest run from LONGEST_RUN_FROM_M, a tie held by
+ *  the run that set it first; and the best before that run, from the runs begun earlier. An indoor run (37q) is the
+ *  phone's guess from steps or the person's own word, so it sets none. */
 export async function getRunRecords(sql: Sql, userId: string, timeZone: string): Promise<RunRecordRow[]> {
   const rows = await sql<{ kind: RunRecordKind; id: string; name: string | null; started_at: Date; day: string; value: number; before: number | null }[]>`
     WITH mine AS (
       SELECT id, name, started_at, distance_m, best_1k_s, best_mile_s, best_5k_s, best_10k_s,
              to_char(${runLocal(sql, timeZone)}, 'YYYY-MM-DD') AS day
-      FROM runs WHERE user_id = ${userId} AND run_calc_version IS NOT NULL
+      FROM runs WHERE user_id = ${userId} AND run_calc_version IS NOT NULL AND kind = 'outdoor'
     ), fastest AS (
       SELECT m.id, m.name, m.started_at, m.day, k.kind,
              CASE k.kind WHEN 'k1' THEN m.best_1k_s WHEN 'mile' THEN m.best_mile_s
@@ -499,7 +511,7 @@ export interface NewRun {
   leftOutS: number;
   kcal: number;
   splits: { km: { m: number; s: number }[]; mi: { m: number; s: number }[]; starts: number[]; pace: number[]; hills: number[] };
-  polyline: string;
+  polyline: string | null;
   calcVersion: number;
   climb: RunClimb;
   /** The route made small for Your runs (37c-i); null with no route. */
@@ -508,6 +520,9 @@ export interface NewRun {
   bests: RunBests;
   /** Its average and highest heart rate (37f-i); none for a run without it. */
   heart?: RunHeart | null;
+  /** Indoors (37q): the steps counted, the distance from the height alone, and the treadmill's distance where it was
+   *  taken; null outdoors. Its polyline and shape are then null. */
+  indoor?: { steps: number; plainM: number; treadmillM: number | null } | null;
 }
 
 export interface SavedRunRow {
@@ -526,6 +541,8 @@ export interface SavedRunRow {
   polyline: string | null;
   climbM: number | null;
   heart: RunHeart | null;
+  /** Indoors (37q): the steps counted, and the treadmill's distance where it was taken; null outdoors. */
+  indoor: { steps: number; treadmillM: number | null } | null;
 }
 
 interface SavedRunDbRow {
@@ -545,6 +562,9 @@ interface SavedRunDbRow {
   climb_m: number | null;
   heart_avg: number | null;
   heart_max: number | null;
+  kind: string;
+  steps: number | null;
+  treadmill_m: number | null;
 }
 
 const toSavedRun = (r: SavedRunDbRow): SavedRunRow => ({
@@ -563,6 +583,7 @@ const toSavedRun = (r: SavedRunDbRow): SavedRunRow => ({
   polyline: r.polyline,
   climbM: r.climb_m,
   heart: heartOf(r.heart_avg, r.heart_max),
+  indoor: r.kind === "indoor" ? { steps: r.steps ?? 0, treadmillM: r.treadmill_m } : null,
 });
 
 /** Saves a run once: a second send of the same id changes nothing and reads back what the first
@@ -582,18 +603,19 @@ export async function insertRun(sql: Sql, userId: string, run: NewRun): Promise<
       INSERT INTO runs (id, user_id, started_at, duration_s, distance_m, polyline, splits, kcal_point,
                         kcal_calc_version, source, name, effort, note, elapsed_s, left_out_m, left_out_s,
                         run_calc_version, climb_m, climb_state, shape, best_1k_s, best_mile_s, best_5k_s, best_10k_s,
-                        heart_avg, heart_max, time_zone)
+                        heart_avg, heart_max, time_zone, kind, steps, steps_m, treadmill_m)
       VALUES (${run.id}, ${userId}, ${run.startedAt}, ${run.movingS}, ${run.distanceM}, ${run.polyline},
               ${tx.json(run.splits)}, ${run.kcal}, ${run.calcVersion}, 'mobile', ${run.name}, ${run.effort},
               ${run.note}, ${run.elapsedS}, ${run.leftOutM}, ${run.leftOutS}, ${run.calcVersion},
               ${run.climb.state === "done" ? run.climb.m : null}, ${run.climb.state}, ${run.shape},
               ${run.bests.k1}, ${run.bests.mile}, ${run.bests.k5}, ${run.bests.k10},
               ${run.heart?.avg ?? null}, ${run.heart?.max ?? null},
-              ${run.timeZone})
+              ${run.timeZone}, ${run.indoor ? "indoor" : "outdoor"}, ${run.indoor?.steps ?? null}, ${run.indoor?.plainM ?? null},
+              ${run.indoor?.treadmillM ?? null})
       ON CONFLICT (id) DO NOTHING`;
     const rows = await tx<(SavedRunDbRow & { user_id: string })[]>`
       SELECT id, user_id, started_at, name, effort, note, distance_m, duration_s, elapsed_s, left_out_m,
-             left_out_s, kcal_point, splits, polyline, climb_m, heart_avg, heart_max
+             left_out_s, kcal_point, splits, polyline, climb_m, heart_avg, heart_max, kind, steps, treadmill_m
       FROM runs WHERE id = ${run.id}`;
     const row = rows[0];
     if (row === undefined || row.user_id !== userId) throw new ForeignRunError();
@@ -605,9 +627,29 @@ export async function insertRun(sql: Sql, userId: string, run: NewRun): Promise<
 export async function getSavedRun(sql: Sql, userId: string, id: string): Promise<SavedRunRow | null> {
   const rows = await sql<SavedRunDbRow[]>`
     SELECT id, started_at, name, effort, note, distance_m, duration_s, elapsed_s, left_out_m, left_out_s,
-           kcal_point, splits, polyline, climb_m, heart_avg, heart_max
+           kcal_point, splits, polyline, climb_m, heart_avg, heart_max, kind, steps, treadmill_m
     FROM runs WHERE id = ${id} AND user_id = ${userId}`;
   return rows[0] === undefined ? null : toSavedRun(rows[0]);
+}
+
+// ── What an indoor run's steps are measured with (ROADMAP 37q) ──────────────────────────────────
+
+/** Indoor runs whose lessons are read: more than the newest LEARN_RUNS, as some teach nothing (`learnsFrom`). */
+const LESSON_ROWS = 20;
+
+/** The person's height, from their own answers (null where they gave none), and their newest indoor runs with a
+ *  treadmill's distance, newest first. Their own rows alone. */
+export async function getStepLessons(sql: Sql, userId: string): Promise<{ heightCm: number | null; lessons: StepLesson[] }> {
+  const [height, lessons] = await Promise.all([
+    sql<{ height_cm: string | null }[]>`SELECT height_cm FROM user_fitness_profiles WHERE user_id = ${userId}`,
+    sql<{ treadmill_m: number; steps_m: number }[]>`
+      SELECT treadmill_m, steps_m FROM runs
+      WHERE user_id = ${userId} AND treadmill_m IS NOT NULL AND kind = 'indoor'
+      ORDER BY started_at DESC, id DESC
+      LIMIT ${LESSON_ROWS}`,
+  ]);
+  const cm = height[0]?.height_cm ?? null;
+  return { heightCm: cm === null ? null : Number(cm), lessons: lessons.map((r) => ({ treadmillM: r.treadmill_m, plainM: r.steps_m })) };
 }
 
 // ── A run's elevation gain, worked out again later (ROADMAP 37b-ii) ──────────────────────────────

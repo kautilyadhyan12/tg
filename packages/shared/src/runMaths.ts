@@ -209,6 +209,18 @@ export function metAtSpeed(metresPerSecond: number): number {
 const kcalFor = (metresPerSecond: number, kg: number, seconds: number): number =>
   (metAtSpeed(metresPerSecond) * kg * seconds) / 3600;
 
+/** A run's calories: each kilometre at its own speed, and any moving time no step covers (before the first point, a
+ *  gap in the signal) at the run's average speed. `stepS`: the seconds the steps cover; `kg` the person's weight, 70
+ *  where there is none. Outdoors and indoors (`indoorRun.ts`) alike. */
+export function kcalOfRun(splitsKm: readonly RunSplit[], movingS: number, distanceM: number, stepS: number, kg: number): number {
+  const average = movingS > 0 ? distanceM / movingS : 0;
+  const weight = kg > 0 ? kg : 70;
+  return (
+    splitsKm.reduce((sum, split) => sum + (split.s > 0 ? kcalFor(split.m / split.s, weight, split.s) : 0), 0) +
+    (movingS > stepS ? kcalFor(average, weight, movingS - stepS) : 0)
+  );
+}
+
 // ── The run ───────────────────────────────────────────────────────────────────────────────────
 
 export interface RunSplit {
@@ -627,7 +639,9 @@ export function paceLineOf(steps: readonly Step[]): number[] {
   return out;
 }
 
-function splitsOf(steps: readonly Step[], every: number): RunSplit[] {
+/** The run cut into whole `every` metres and what is left at the end, each with its moving seconds, over its steps
+ *  (metres and moving seconds each). */
+export function splitsOf(steps: readonly Step[], every: number): RunSplit[] {
   const out: RunSplit[] = [];
   let m = 0;
   let s = 0;
@@ -967,14 +981,7 @@ export function* runSumsInSlices(points: readonly RunPoint[], pauses: readonly R
   const splitsKm = splitsOf(steps, 1000);
   const paceLine = paceLineOf(steps);
   yield;
-  // Calories: each kilometre at its own speed, and any moving time no step covers (before the first
-  // point, a gap in the signal) at the run's average speed.
-  const stepS = steps.reduce((sum, step) => sum + step.s, 0);
-  const average = movingS > 0 ? distanceM / movingS : 0;
-  const weight = kg > 0 ? kg : 70;
-  const kcal =
-    splitsKm.reduce((sum, split) => sum + (split.s > 0 ? kcalFor(split.m / split.s, weight, split.s) : 0), 0) +
-    (movingS > stepS ? kcalFor(average, weight, movingS - stepS) : 0);
+  const kcal = kcalOfRun(splitsKm, movingS, distanceM, steps.reduce((sum, step) => sum + step.s, 0), kg);
   const splitsMi = splitsOf(steps, 1609.344);
   yield;
   const k1 = fastestStretch(segments, RECORD_DISTANCES_M.k1);
@@ -1021,7 +1028,7 @@ function clockAtDistance(marks: readonly RunMark[], d: number, from: { k: number
 
 /** `n` evenly spaced places from the start to the finish (as `paceLineOf` places them), each as the
  *  stretch of the clock from halfway back to the place before to halfway on to the next. */
-function placeSpansOf(marks: readonly RunMark[], n: number): [number, number][] {
+export function placeSpansOf(marks: readonly RunMark[], n: number): [number, number][] {
   const total = marks[marks.length - 1]?.d ?? 0;
   if (n < 2 || total <= 0) return [];
   const half = total / (n - 1) / 2;
