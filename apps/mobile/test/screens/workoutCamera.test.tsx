@@ -227,20 +227,20 @@ describe("the worst thing first", () => {
 });
 
 describe("the question", () => {
-  it("in Kd's words for the squat, and never a form check for an exercise the camera only counts", async () => {
+  it("in Kd's words, and never a form check for an exercise the camera only counts", async () => {
     keptWorkout([{ id: "squat", sets: 1, reps: 3, rest: null }, { id: "kettlebell_goblet_squat", sets: 1, reps: 3, rest: null }]);
     await start(server().ask);
     expect(await screen.findByText("SQUAT")).toBeTruthy();
     expect(screen.getByText("Live form check")).toBeTruthy();
-    expect(screen.getByText("Use your camera to count reps and get feedback on your squat form in real time.")).toBeTruthy();
+    expect(screen.getByText("Use your camera for automatic rep counts and feedback.")).toBeTruthy();
     expect(screen.getByText(ASK_PRIVACY)).toBeTruthy();
     await fireEvent.press(screen.getByRole("button", { name: "Count manually" }));
     await fireEvent.press(screen.getByRole("button", { name: "Set done · 3 reps" }));
     // The next exercise the camera counts is asked about afresh.
     expect(await screen.findByText("KETTLEBELL GOBLET SQUAT")).toBeTruthy();
     expect(screen.getByText("Live rep count")).toBeTruthy();
-    expect(screen.getByText("Use your camera to count your reps in real time.")).toBeTruthy();
-    expect(screen.queryByText(/form/)).toBeNull();
+    expect(screen.getByText("Use your camera for automatic rep counts and feedback.")).toBeTruthy();
+    expect(screen.queryByText(/form check/)).toBeNull();
   });
 
   it("the camera turned off for the app in the phone's settings: the question says so, with the settings and Count manually", async () => {

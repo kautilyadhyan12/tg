@@ -3772,10 +3772,10 @@ The camera in the workout (§11.8 steps 3 to 6):
   Squat, judged by its camera file, and the Kettlebell Goblet Squat, counted by the squat's movement with no form rules of its
   own), marked as Start workout is pressed (`RunExercise.camera`); a phone without the camera's module marks none.
 - **The question,** as such an exercise starts, every time, nothing remembered (`asking`; the set, or a hold's get-ready, waits
-  for it): a box at the foot, in Kd's words, "SQUAT", "Live form check", "Use your camera to count reps and get feedback on your
-  squat form in real time.", "Your phone processes the camera feed. KWAZO never saves the video or sends it to servers or any
-  third party.", Start with camera, Count manually. An exercise with no form rules says "Live rep count" and "Use your camera
-  to count your reps in real time.", never a form check. The camera turned off for the app: "Camera access is off", Open
+  for it): a box at the foot, in Kd's words, "SQUAT", "Live form check", "Use your camera for automatic rep counts and
+  feedback.", "Your phone processes the camera feed. KWAZO never saves the video or sends it to KWAZO servers or any third
+  party.", Start with camera, Count manually. An exercise with no form rules is titled "Live rep count", never a form check.
+  The camera turned off for the app: "Camera access is off", Open
   settings. The answer holds for that exercise's sets in this workout; the next exercise is asked afresh.
 - **The steps** (`workoutRun.ts`, table-tested in `test/workoutCamera.test.ts`): chosen, each set is counted by the camera
   (`cam`: what the set took of the camera's count, none while paused, the person's own + and − beside it), and a hold is timed

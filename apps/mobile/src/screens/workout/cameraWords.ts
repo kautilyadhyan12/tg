@@ -6,7 +6,12 @@ import { setLine } from "./words";
 // The camera's words in a workout (ROADMAP Stage 5 64b-ii; Kd's own words for the question, 2026-11-28). Pure.
 
 /** Under the question, every time: what stays on the phone (Kd's words). */
-export const ASK_PRIVACY = "Your phone processes the camera feed. KWAZO never saves the video or sends it to servers or any third party.";
+export const ASK_PRIVACY = "Your phone processes the camera feed. KWAZO never saves the video or sends it to KWAZO servers or any third party.";
+/** What the camera does, the same line for every exercise it counts (Kd's words): it gives every one feedback, a rep's
+ *  reason ("Go lower to count.") where it has no form rules of its own. */
+export const ASK_LINE = "Use your camera for automatic rep counts and feedback.";
+/** A hold's, in the same words: the camera times a hold, it never counts it. */
+export const ASK_HOLD_LINE = "Use your camera for automatic hold timing and feedback.";
 export const START_WITH_CAMERA = "Start with camera";
 export const COUNT_MANUALLY = "Count manually";
 export const OPEN_SETTINGS = "Open settings";
@@ -16,19 +21,12 @@ export const RESUMES_WORDS = "Camera tracking resumes when the rest ends.";
 export const REST_BOX_WORDS = "Rest, reps, pause";
 export const REST_BOX_HOLD_WORDS = "Rest, pause";
 
-/** The question as an exercise the camera counts starts: what the camera does for this exercise, and never more. A form
- *  check only where the exercise has form rules (its camera file); a hold is timed, never counted. */
+/** The question as an exercise the camera counts starts: its name, what the camera does for it (a form check only where
+ *  the exercise has form rules of its own, its camera file), and Kd's line under it. */
 export function askWords(name: string, measuredIn: "reps" | "time", judged: boolean): { eyebrow: string; title: string; line: string } {
-  const what = name.toLowerCase();
   const eyebrow = name.toUpperCase();
-  if (measuredIn === "time") {
-    return judged
-      ? { eyebrow, title: "Live form check", line: `Use your camera to time your hold and get feedback on your ${what} form in real time.` }
-      : { eyebrow, title: "Live hold timer", line: "Use your camera to time your hold in real time." };
-  }
-  return judged
-    ? { eyebrow, title: "Live form check", line: `Use your camera to count reps and get feedback on your ${what} form in real time.` }
-    : { eyebrow, title: "Live rep count", line: "Use your camera to count your reps in real time." };
+  if (measuredIn === "time") return { eyebrow, title: judged ? "Live form check" : "Live hold timer", line: ASK_HOLD_LINE };
+  return { eyebrow, title: judged ? "Live form check" : "Live rep count", line: ASK_LINE };
 }
 
 /** The number of the set just done, within its exercise. */
