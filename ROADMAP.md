@@ -509,7 +509,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
     - V5-c. [x] **The banner above every page, and choosing a plan or its size** · merged 2026-11-28 · PR #666
     - V5-d. [x] **Getting in** · merged 2026-11-28 · PR #669
    - V6. [x] **Leads and At risk** · merged 2026-11-28 · PR #672
-   - V7. [ ] **Attendance and the front desk** (web folder 2; `Attendance*`, `Desk*`, `PhoneAttendance`).
+   - V7. [x] **Attendance and the front desk** · merged 2026-11-28 · PR #674
    - V8. [ ] **Classes and personal training** (web folder 2): the list, the calendar, a class, adding a class and a time slot, personal training's page and boxes (`Class*`, `PT*`, `PhoneClasses`).
    - V9a. [ ] **Updates and Events** (web folder 2; `Updates*`, `Event*`).
    - V9b. [ ] **Challenges and the Leaderboard** (web folder 2; `Challenge*`, `Leaderboard*`).

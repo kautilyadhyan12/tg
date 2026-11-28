@@ -4,7 +4,7 @@
 // a name the staff member did not pick — so the green line names the person the SERVER
 // checked in, and a slow answer to an older search never replaces a newer one.
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, waitFor, cleanup, fireEvent, act } from '@testing-library/react';
+import { render, screen, waitFor, cleanup, fireEvent, act, within } from '@testing-library/react';
 import { Link, MemoryRouter, Routes, Route } from 'react-router-dom';
 
 const api = {
@@ -242,8 +242,9 @@ describe('check someone in', () => {
     resetConsoleOrgs();
     api.getMine.mockResolvedValue({ data: { orgs: [{ ...ORG, staffRole: 'trainer', privileges: ['members.read', 'attendance.read'] }], formerOrgs: [] } });
     drawScreen();
-    await screen.findByText('Checked in today');
-    expect(screen.queryByText('Check someone in')).toBeNull();
+    await screen.findByRole('heading', { name: "Today's check-ins" });
+    expect(screen.queryByRole('heading', { name: 'Check in' })).toBeNull();
+    expect(screen.queryByLabelText('Find someone to check in')).toBeNull();
     // The page's first line promises only what this person can do.
     expect(screen.getByText(/^Who came in, by day\./)).toBeTruthy();
     expect(screen.queryByText(/Check people in/)).toBeNull();
@@ -334,6 +335,56 @@ describe('fixing a visit on Attendance', () => {
     expect(dayBox.value).toBe(today);
     await typeSearch('Anil');
     expect(await screen.findByRole('button', { name: 'Check in Anil Kumar' })).toBeTruthy();
+  });
+
+  // V7's worst thing: the box now opens under a row that stays on screen, among other rows. It must be
+  // under the row pressed, name only that person, and send only that visit or that person.
+  it('Remove opens under the row pressed, the rows around it stay, and only that visit is sent', async () => {
+    api.getCheckinLog.mockResolvedValue(
+      logAnswer([
+        lv('v3', '2026-10-03T06:09:00.000Z', 'Maya Patel'),
+        lv('v2', '2026-10-03T06:05:00.000Z', 'Ravi Noapp', { method: 'staff', by: 'Iron Owner' }),
+        lv('v1', '2026-10-03T06:02:00.000Z', 'Asha App'),
+      ]),
+    );
+    api.removeVisit.mockResolvedValue({ data: { removed: true, day: '2026-10-03' } });
+    drawScreen();
+    await screen.findByText('Ravi Noapp');
+    fireEvent.click(screen.getByRole('button', { name: "Remove Ravi Noapp's 07:05 check-in" }));
+    const box = screen.getByRole('group', { name: "Remove Ravi Noapp's check-in" });
+    // Under Ravi's row, in Ravi's place in the list, and about nobody else.
+    const ravi = screen.getByText('Ravi Noapp').closest('li');
+    expect(ravi.contains(box)).toBe(true);
+    expect(ravi.previousElementSibling.textContent).toContain('Maya Patel');
+    expect(ravi.nextElementSibling.textContent).toContain('Asha App');
+    expect(box.textContent).not.toMatch(/Maya|Asha/);
+    expect(screen.getByRole('button', { name: "Remove Maya Patel's 07:09 check-in" })).toBeTruthy();
+    expect(screen.getByRole('button', { name: "Remove Asha App's 07:02 check-in" })).toBeTruthy();
+
+    fireEvent.click(within(box).getByRole('button', { name: 'Remove visit' }));
+    await waitFor(() => expect(screen.queryByText('Ravi Noapp')).toBeNull());
+    expect(api.removeVisit.mock.calls).toEqual([['g1', 'v2']]);
+    expect(screen.getByText('Maya Patel')).toBeTruthy();
+    expect(screen.getByText('Asha App')).toBeTruthy();
+  });
+
+  it('Add visit opens under the person pressed, only they are listed while it is open, and only they are sent', async () => {
+    const yesterday = addDays(gymToday('Europe/London'), -1);
+    api.findCheckinPeople.mockResolvedValue({ data: { people: [ANIL, ANITA] } });
+    api.addVisit.mockResolvedValue({ data: { result: 'added', person: { name: 'Anil Kumar' }, day: yesterday } });
+    drawScreen();
+    fireEvent.change(await screen.findByLabelText('Day they came'), { target: { value: yesterday } });
+    await typeSearch('Kumar');
+    fireEvent.click(await screen.findByRole('button', { name: 'Add a visit for Anil Kumar' }));
+    const box = screen.getByRole('group', { name: 'Add a visit for Anil Kumar' });
+    expect(screen.getByText('Anil Kumar', { selector: 'span' }).closest('li').contains(box)).toBe(true);
+    expect(box.textContent).not.toContain('Anita');
+    expect(screen.queryByText('Anita Kumar')).toBeNull();
+
+    fireEvent.click(within(box).getByRole('button', { name: 'Add visit' }));
+    await screen.findByRole('status');
+    expect(api.addVisit.mock.calls).toEqual([['g1', { entryId: 'e-anil' }, yesterday]]);
+    expect(api.staffCheckIn).not.toHaveBeenCalled();
   });
 
   it('Remove on a visit today: a box names the person and the time; the press is for THAT visit, and it leaves the list', async () => {
@@ -452,12 +503,14 @@ describe('checked in today', () => {
     const row = (payment) => logAnswer([lv('v1', '2026-10-03T06:02:00.000Z', 'Maya Patel', { method: 'key_tag', status: 'Active', payment })]);
     api.getCheckinLog.mockResolvedValueOnce(row('Payment due'));
     drawScreen();
-    expect(await screen.findByText('Active · Payment due')).toBeTruthy();
+    // Money owed is a tag of its own beside the status.
+    expect((await screen.findByText('Payment due')).className).toContain('c-tag-warn');
+    expect(screen.getByText('Active')).toBeTruthy();
     api.getCheckinLog.mockResolvedValueOnce(row('Paid'));
     tell({ what: 'memberships', entryId: '00000000-0000-4000-8000-000000000001' });
     expect(await screen.findByText('Active · Paid')).toBeTruthy();
     expect(api.getCheckinLog).toHaveBeenLastCalledWith('g1', null);
-    expect(screen.queryByText('Active · Payment due')).toBeNull();
+    expect(screen.queryByText('Payment due')).toBeNull();
   });
 
   it('news of a visit removed in another window reads the whole of today, and the row goes', async () => {
@@ -633,6 +686,63 @@ describe('checked in today', () => {
     expect(screen.getByText('Updates as people check in')).toBeTruthy();
   });
 
+  // At the server's page (50) the list is not the whole day: no count, no "all", and the line says where the rest are.
+  it('a day at the server’s page of 50 shows no count and never calls the 50 "all"', async () => {
+    const visits = Array.from({ length: 50 }, (_, i) =>
+      lv(`00000000-0000-4000-8000-${String(i).padStart(12, '0')}`, new Date(Date.UTC(2026, 9, 3, 9, 0) - i * 60_000).toISOString(), `Person ${String(i + 1)}`),
+    );
+    api.getCheckinLog.mockResolvedValueOnce(logAnswer(visits));
+    drawScreen();
+    await screen.findByText('Person 1');
+    const box = screen.getByRole('region', { name: "Today's check-ins" });
+    expect(box.querySelector('.c-tag-plain')).toBeNull();
+    expect(within(box).queryByRole('button', { name: /^View all/ })).toBeNull();
+    expect(within(box).getByRole('button', { name: 'View the latest 50' })).toBeTruthy();
+    expect(within(box).getByText('Showing the latest 50. Everyone who came today is in Check-in history for today.')).toBeTruthy();
+  });
+
+  // Kd at go: a button a person must press is never out of sight. A box that asks scrolls itself into the
+  // window when it opens (the walk measures where it lands; this proves it is asked to).
+  it('Remove and Add visit each bring their box into sight when it opens', async () => {
+    const asked = vi.fn();
+    const was = Element.prototype.scrollIntoView;
+    Element.prototype.scrollIntoView = function into(how) {
+      asked(this.getAttribute('aria-label'), how);
+    };
+    try {
+      const yesterday = addDays(gymToday('Europe/London'), -1);
+      api.getCheckinLog.mockResolvedValue(logAnswer([lv('v1', '2026-10-03T06:02:00.000Z', 'Asha App')]));
+      api.findCheckinPeople.mockResolvedValue({ data: { people: [ANIL] } });
+      drawScreen();
+      fireEvent.click(await screen.findByRole('button', { name: "Remove Asha App's 07:02 check-in" }));
+      expect(asked).toHaveBeenCalledWith("Remove Asha App's check-in", { block: 'nearest' });
+      fireEvent.change(screen.getByLabelText('Day they came'), { target: { value: yesterday } });
+      await typeSearch('Anil');
+      fireEvent.click(await screen.findByRole('button', { name: 'Add a visit for Anil Kumar' }));
+      expect(asked).toHaveBeenCalledWith('Add a visit for Anil Kumar', { block: 'nearest' });
+    } finally {
+      Element.prototype.scrollIntoView = was;
+    }
+  });
+
+  // Kd at V7's click-through: a busy day must not stretch the page. One under the other, the latest 10
+  // show and View all shows the rest (beside Check in, console.css scrolls the list inside the box).
+  it('a busy day lists the latest 10 until View all, and View fewer folds them again', async () => {
+    const visits = Array.from({ length: 12 }, (_, i) => lv(`v${String(i + 10)}`, `2026-10-03T${String(8 - Math.floor(i / 2)).padStart(2, '0')}:${i % 2 === 0 ? '30' : '10'}:00.000Z`, `Person ${String(i + 1)}`));
+    api.getCheckinLog.mockResolvedValueOnce(logAnswer(visits));
+    drawScreen();
+    await screen.findByText('Person 1');
+    const later = () => [...document.querySelectorAll('.c-attend-later')].map((li) => li.querySelector('.c-w6').textContent);
+    expect(later()).toEqual(['Person 11', 'Person 12']);
+    const button = screen.getByRole('button', { name: 'View all 12' });
+    expect(button.getAttribute('aria-expanded')).toBe('false');
+    fireEvent.click(button);
+    expect(later()).toEqual([]);
+    expect(screen.getByRole('button', { name: 'View fewer' }).getAttribute('aria-expanded')).toBe('true');
+    fireEvent.click(screen.getByRole('button', { name: 'View fewer' }));
+    expect(later()).toEqual(['Person 11', 'Person 12']);
+  });
+
   it("shows the gym's status and payment words under a person who has them, and nothing under one who has none", async () => {
     api.getCheckinLog.mockResolvedValueOnce(
       logAnswer([
@@ -643,7 +753,8 @@ describe('checked in today', () => {
     drawScreen();
     const maya = (await screen.findByText('Maya Patel')).closest('li');
     expect(maya.textContent).toContain('Key tag · Front desk');
-    expect(maya.textContent).toContain('Active · Overdue');
+    expect(maya.textContent).toContain('ActiveOverdue');
+    expect([...maya.querySelectorAll('.c-tag-warn')].map((tag) => tag.textContent)).toEqual(['Overdue']);
     const asha = screen.getByText('Asha App').closest('li');
     // Nothing under her but how she came in, then the row's Remove.
     expect(asha.textContent).toBe('07:02Asha AppPass · Front deskRemove');

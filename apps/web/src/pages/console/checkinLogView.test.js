@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { CHECKIN_LOG_LIMIT } from '@app/shared';
-import { canCheckPeopleIn, foundDetails, howLine, mergeLog, newestAt, personKey, pickKey, wordsLine } from './checkinLogView';
+import { canCheckPeopleIn, foundDetails, howLine, mergeLog, newestAt, personKey, pickKey, wordsLine, wordsParts } from './checkinLogView';
 
 const v = (id, markedAt, over = {}) => ({ id, markedAt, name: id, method: 'pass', by: 'Front desk', ...over });
 
@@ -65,6 +65,21 @@ describe("the gym's own words for a person", () => {
     [null, ''],
   ])('%j reads %j', (words, line) => {
     expect(wordsLine(words)).toBe(line);
+  });
+
+  // Money owed is a tag; everything else, the gym's own words included, stays quiet words.
+  it.each([
+    [{ status: 'Active', payment: 'Payment due' }, { quiet: 'Active', owed: 'Payment due' }],
+    [{ status: 'Active', payment: ' Overdue ' }, { quiet: 'Active', owed: 'Overdue' }],
+    [{ status: 'Active', payment: 'Paid' }, { quiet: 'Active · Paid', owed: '' }],
+    [{ status: 'Active', payment: 'Not due yet' }, { quiet: 'Active · Not due yet', owed: '' }],
+    [{ status: 'Ended', payment: 'Free' }, { quiet: 'Ended · Free', owed: '' }],
+    [{ status: null, payment: 'Unpaid' }, { quiet: 'Unpaid', owed: '' }],
+    [{ status: 'Current', payment: 'payment due' }, { quiet: 'Current · payment due', owed: '' }],
+    [{ status: '', payment: '  ' }, { quiet: '', owed: '' }],
+    [null, { quiet: '', owed: '' }],
+  ])('%j is split as %j', (words, parts) => {
+    expect(wordsParts(words)).toEqual(parts);
   });
 });
 

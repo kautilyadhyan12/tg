@@ -462,7 +462,7 @@ export function attendanceTiles(overview, orgType) {
   const week = tileCounts(tiles.week);
   const comparison = weekComparison(tiles.week);
   const out = [
-    { key: 'today', icon: 'checkin', tone: 'accent', title: 'Checked in today', figure: n(today.value), note: today.unit, direction: null },
+    { key: 'today', icon: 'checkin', tone: 'accent', title: "Today's check-ins", figure: n(today.value), note: today.unit, direction: null },
     { key: 'week', icon: 'week', tone: 'info', title: 'This week', figure: n(week.value), note: comparison.direction === null ? `${week.unit} so far. ${comparison.text}` : `${week.unit} ${comparison.text}`, direction: comparison.direction },
   ];
   const adoption = adoptionLine(tiles.month, orgType);

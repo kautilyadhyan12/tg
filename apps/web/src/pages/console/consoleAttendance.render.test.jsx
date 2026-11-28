@@ -82,7 +82,7 @@ const person = (userId, displayName, visits, email) => ({
  *  `ConsoleSection` arrives `forceOpen` here, so this is a no-op in practice and
  *  exists so a case cannot silently depend on that default. */
 const openWhoCame = async () => {
-  const heading = await screen.findByRole('button', { name: /^Who came/ });
+  const heading = await screen.findByRole('button', { name: 'Check-in history' });
   if (heading.getAttribute('aria-expanded') !== 'true') fireEvent.click(heading);
   return heading;
 };
@@ -201,7 +201,7 @@ describe('one person’s own history', () => {
     await waitFor(() =>
       expect(api.getAttendanceHistory).toHaveBeenCalledWith('g1', { userId: 'm1' }),
     );
-    await waitFor(() => expect(screen.getByText(/when they came/i)).toBeTruthy());
+    await waitFor(() => expect(screen.getByText('Priya Sharma — when they came')).toBeTruthy());
   });
 
   it('says the read failed rather than claiming they have never been', async () => {
@@ -402,11 +402,8 @@ describe('an empty day says WHICH empty', () => {
     drawScreen();
     await waitFor(() => expect(screen.getByText(/couldn't load who came in/i)).toBeTruthy());
     expect(screen.queryByText(/nobody has checked in on this day/i)).toBeNull();
-    // The people section is not drawn at all. Matched as the exact heading
-    // rather than a loose /who came/i, which the ERROR SENTENCE itself contains
-    // ("We couldn't load who came in.") — a pattern that matches the thing it is
-    // asserting the absence of can never fail for the right reason.
-    expect(screen.queryByText('Who came')).toBeNull();
+    // No list of people is drawn: the line under a list is not there either.
+    expect(screen.queryByText('Press a name to see when they came.')).toBeNull();
   });
 });
 
@@ -670,7 +667,7 @@ describe('the Who came dropdown', () => {
   // it arrives open passes under the defect perfectly — which is how it shipped.
   it('arrives open and CLOSES when you click the heading', async () => {
     drawScreen();
-    const heading = await screen.findByRole('button', { name: /^Who came/ });
+    const heading = await screen.findByRole('button', { name: 'Check-in history' });
     expect(heading.getAttribute('aria-expanded')).toBe('true');
     expect(await screen.findByText('Priya Sharma')).toBeTruthy();
 

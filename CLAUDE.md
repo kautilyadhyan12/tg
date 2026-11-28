@@ -288,6 +288,20 @@ glass to see ... it applies to all redesiggn"*. Every console page and every boa
 - `.c-s12` and `.c-s13` stay only on pages not yet redesigned: each redesign job (V0-d, V2a to V11)
   moves its page's words to 14 and adds its files to the test's list of redesigned files.
 
+**A busy day never stretches the page (Kd, 2026-11-28, `rulings/2026-11-28-v7.md`).** At V7's
+click-through Kd asked whether Today's check-ins *"keep growing deforming the whole structure of the
+page"*. It did: tested with six rows, it grew with every check-in, up to 50, beside a short Check in
+box, pushing Check-in history off the screen. Every console page and phone screen with a list that
+grows during the day (check-ins, sales, bookings, messages, a feed):
+- A list beside something else is never taller than the window: its rows scroll inside its box. Where
+  it sits alone in a column on a tablet or a phone, it shows a few rows and a View all button.
+- A list the server stops at a page says so in a line ("Showing the latest 50. Everyone who came today
+  is in Check-in history for today.") and names where the rest are; a count is never shown as the day's
+  when it is only the page's.
+- The walk fills every such list to the BIGGEST size the app allows, not six rows, and measures the
+  box's height and where the next box starts at 1366×768 and on a phone (`apps/api/.cost/v7/walk.mts`,
+  state `att-busy`).
+
 **The phone app (Kd, RULINGS 2026-10-12; spec Part 6 §16).** A member feature is built
 for the phone, never the browser. Every screen rule above holds there, with "a gym" read
 as "a member" and "the real browser" as "the real phone": the terminal walks the whole

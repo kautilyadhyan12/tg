@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { orgWords } from '@app/shared';
-import { CalendarDays, ChevronLeft, ChevronRight, Loader2, Search, X } from 'lucide-react';
+import { CalendarDays, ChevronDown, ChevronLeft, ChevronRight, Loader2, Search, X } from 'lucide-react';
 import { orgService, errorText, isRetryable } from '../../api/orgsApi';
 import { useConsoleOrg } from './useConsoleOrg';
-import { ConsoleCard, ConsoleSection, ConsoleFailed, ConsoleLoading } from '../../components/console/ConsoleStates';
+import { ConsoleFailed, ConsoleLoading } from '../../components/console/ConsoleStates';
 import { addDays, closureDateLabel, gymToday } from './hoursView';
 import {
   dayTotalsLine,
@@ -18,12 +18,12 @@ import {
 import { consoleIsReadOnly } from './billingView';
 import { viewerPrivileges } from './consoleView';
 import { canCheckPeopleIn, personKey } from './checkinLogView';
-import { CheckedInToday, CheckSomeoneIn } from './AttendanceCheckIn';
+import { CheckedInToday, CheckSomeoneIn, FoldBox } from './AttendanceCheckIn';
 import { useLiveNews } from './liveNews';
 
-/** "Who came" reads again on live news at most this often. */
+/** Check-in history reads again on live news at most this often. */
 const DAY_READ_GAP_MS = 15_000;
-/** While the live line cannot open, Who came checks for itself this often. */
+/** While the live line cannot open, Check-in history checks for itself this often. */
 const WITHOUT_LINE_MS = 30_000;
 
 // WHO CAME IN — the console's Attendance section.
@@ -73,16 +73,9 @@ function PersonRow({ person, timezone, clockFormat, onPick, picked }) {
   const chips = personTimes(person, { timezone, clockFormat });
   return (
     <>
-      <button
-        type="button"
-        onClick={() => onPick(person)}
-        className="w-full text-left rounded-xl px-3 py-2.5 flex items-baseline gap-3 flex-wrap transition-colors"
-        style={{ background: picked ? 'rgba(255,138,31,0.10)' : 'transparent' }}
-      >
-        <span className="min-w-0">
-          <span className="block text-sm font-medium truncate" style={{ color: '#fff' }}>
-            {person.displayName}
-          </span>
+      <button type="button" onClick={() => onPick(person)} aria-expanded={picked} className="c-attend-who">
+        <span className="grow">
+          <span className="c-s15 c-w6 c-t1 break-words">{person.displayName}</span>
           {/* KD RULED THE EMAIL IN on 2026-09-03 — a knowing deviation from
               Part 3 §2.4, whose join-door disclosure changed in the same
               commit. Under the name rather than beside it: it is how a gym
@@ -92,21 +85,13 @@ function PersonRow({ person, timezone, clockFormat, onPick, picked }) {
               empty string so an api older than this bundle cannot kill the
               screen (:12660, and see the field's own note) — and an empty line
               here would be a blank row under every name on such a server. */}
-          {person.email ? (
-            <span className="block text-xs truncate" style={{ color: 'rgba(255,255,255,0.45)' }}>
-              {person.email}
-            </span>
-          ) : null}
+          {person.email ? <span className="c-s14 c-t2 break-words">{person.email}</span> : null}
         </span>
         {/* KD, 2026-09-03: *"besides people say A visited 2 times"*. In WORDS,
             beside the name, and only when it is more than one — see
             `repeatVisitLabel`. The chips below still carry the times. */}
-        {repeatVisitLabel(person) === '' ? null : (
-          <span className="text-xs" style={{ color: '#FFB347' }}>
-            {repeatVisitLabel(person)}
-          </span>
-        )}
-        <span className="flex items-center gap-1.5 flex-wrap">
+        {repeatVisitLabel(person) === '' ? null : <span className="c-s14 c-t2">{repeatVisitLabel(person)}</span>}
+        <span className="c-attend-times">
           {chips.map((chip, i) => (
             // KEYED BY THE INSTANT AND ITS POSITION. Two visits cannot share a
             // minute in one session (the UNIQUE sees to that), but two sessions
@@ -115,19 +100,10 @@ function PersonRow({ person, timezone, clockFormat, onPick, picked }) {
             // (:20867, the guard in `test-setup.js`).
             <span
               key={`${personKey(person)}-${i}-${chip.markedAt}`}
-              className="text-2xs px-1.5 py-0.5 rounded-md whitespace-nowrap"
-              style={
-                isExceptionStatus(chip.hoursStatus)
-                  ? { background: 'rgba(255,255,255,0.07)', color: 'rgba(255,255,255,0.65)' }
-                  : { background: 'rgba(255,138,31,0.12)', color: '#FFB347' }
-              }
+              className={`c-tag ${isExceptionStatus(chip.hoursStatus) ? 'c-tag-line' : 'c-tag-soft'}`}
             >
               {chip.time}
-              {isExceptionStatus(chip.hoursStatus) ? (
-                <span className="ml-1" style={{ color: 'rgba(255,255,255,0.45)' }}>
-                  {chip.hoursStatus === 'closed_day' ? '· closed day' : '· outside hours'}
-                </span>
-              ) : null}
+              {isExceptionStatus(chip.hoursStatus) ? (chip.hoursStatus === 'closed_day' ? ' · closed day' : ' · outside hours') : null}
             </span>
           ))}
         </span>
@@ -201,28 +177,17 @@ function PersonHistory({ gymId, person, onClose }) {
   days.sort((a, b) => (a.day === b.day ? 0 : a.day < b.day ? 1 : -1));
 
   return (
-    <div
-      className="mt-3 rounded-xl p-3"
-      style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)' }}
-    >
+    <div className="c-inbox c-attend-hist flex flex-col gap-2">
       <div className="flex items-start justify-between gap-3">
-        <p className="text-sm font-medium" style={{ color: '#fff' }}>
-          {person.displayName} — when they came
-        </p>
-        <button
-          type="button"
-          onClick={onClose}
-          aria-label="Close"
-          className="rounded-lg p-1"
-          style={{ color: 'rgba(255,255,255,0.55)' }}
-        >
-          <X className="w-4 h-4" />
+        <p className="c-s15 c-w6 c-t1 min-w-0 break-words">{person.displayName} — when they came</p>
+        <button type="button" onClick={onClose} aria-label="Close" className="c-icon-btn flex-shrink-0">
+          <X aria-hidden="true" className="w-4 h-4" />
         </button>
       </div>
 
       {state.status === 'loading' ? (
-        <p className="text-sm mt-2 flex items-center gap-2" style={{ color: 'rgba(255,255,255,0.45)' }}>
-          <Loader2 className="w-4 h-4 animate-spin" />
+        <p className="c-s14 c-t2 flex items-center gap-2">
+          <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" />
           Loading their visits…
         </p>
       ) : null}
@@ -231,31 +196,27 @@ function PersonHistory({ gymId, person, onClose }) {
           here", which would be this screen telling an owner something false
           about a member because a request dropped (:8267/:8343). */}
       {state.status === 'failed' ? (
-        <p className="text-sm mt-2" style={{ color: '#ef4444' }}>
+        <p className="c-s14 c-w6" role="alert" style={{ color: 'var(--bad)' }}>
           {state.error}
         </p>
       ) : null}
 
       {state.status === 'ready' ? (
         days.length === 0 ? (
-          <p className="text-sm mt-2" style={{ color: 'rgba(255,255,255,0.45)' }}>
-            No visits recorded for them yet.
-          </p>
+          <p className="c-s14 c-t2">No visits recorded for them yet.</p>
         ) : (
           <>
-            <ul className="mt-2 flex flex-col gap-1">
+            <ul className="flex flex-col gap-2">
               {days.map((row) => (
-                <li key={row.day} className="flex items-baseline gap-2 flex-wrap">
-                  <span className="text-xs" style={{ color: 'rgba(255,255,255,0.55)' }}>
-                    {row.label}
-                  </span>
+                <li key={row.day} className="c-attend-hist-day">
+                  <span className="c-s14 c-t2">{row.label}</span>
                   {row.times.map((chip, i) => (
                     <span
                       key={`${row.day}-${i}-${chip.markedAt}`}
-                      className="text-2xs px-1.5 py-0.5 rounded-md"
-                      style={{ background: 'rgba(255,138,31,0.12)', color: '#FFB347' }}
+                      className={`c-tag ${isExceptionStatus(chip.hoursStatus) ? 'c-tag-line' : 'c-tag-soft'}`}
                     >
                       {chip.time}
+                      {isExceptionStatus(chip.hoursStatus) ? (chip.hoursStatus === 'closed_day' ? ' · closed day' : ' · outside hours') : null}
                     </span>
                   ))}
                 </li>
@@ -263,11 +224,7 @@ function PersonHistory({ gymId, person, onClose }) {
             </ul>
             {/* SAID RATHER THAN SILENTLY TRUNCATED — a list that simply stopped
                 would read as "this is all of it". */}
-            {state.more ? (
-              <p className="text-xs mt-1.5" style={{ color: 'rgba(255,255,255,0.35)' }}>
-                Showing their most recent visits.
-              </p>
-            ) : null}
+            {state.more ? <p className="c-s14 c-t2">Showing their most recent visits.</p> : null}
           </>
         )
       ) : null}
@@ -281,28 +238,26 @@ export default function ConsoleAttendance() {
 
   if (loading) {
     return (
-      <div className="max-w-3xl mx-auto px-4 md:px-8 py-8">
-        <ConsoleLoading label="Loading your organisation…" />
+      <div className="c-page">
+        <ConsoleLoading label="Loading your organisation…" newLook />
       </div>
     );
   }
 
   if (error !== null) {
     return (
-      <div className="max-w-3xl mx-auto px-4 md:px-8 py-8">
-        <ConsoleFailed message={error} onRetry={reload} />
+      <div className="c-page">
+        <ConsoleFailed message={error} onRetry={reload} newLook />
       </div>
     );
   }
 
   if (notFound) {
     return (
-      <div className="max-w-3xl mx-auto px-4 md:px-8 py-8">
-        <ConsoleCard>
-          <p className="text-sm" style={{ color: 'rgba(255,255,255,0.75)' }}>
-            We couldn&apos;t find that organisation.
-          </p>
-        </ConsoleCard>
+      <div className="c-page">
+        <section className="c-card p-5 md:p-6">
+          <p className="c-s15 c-t2">We couldn&apos;t find that organisation.</p>
+        </section>
       </div>
     );
   }
@@ -333,7 +288,7 @@ function AttendanceDay({ org }) {
   const [day, setDay] = useState(() => gymToday(timezone));
   const mayCheckIn = canCheckPeopleIn(viewerPrivileges(org));
   const [checkedIn, setCheckedIn] = useState(0);
-  /** Counts visits removed from "Checked in today", so the last check-in's answer is cleared. */
+  /** Counts visits removed from Today's check-ins, so the last check-in's answer is cleared. */
   const [removed, setRemoved] = useState(0);
   const [search, setSearch] = useState('');
   const [picked, setPicked] = useState(null);
@@ -360,13 +315,13 @@ function AttendanceDay({ org }) {
   const readKey = `${day}|${statusesParam ?? ''}|${attempt}`;
   /** Live updates (Stage 4 item 18): a visit added or removed anywhere, at the desk or by staff in
    *  another window, reads the day on screen again, QUIETLY: the same question, so its people stay
-   *  on screen until the answer lands, and "Who came" never disagrees with "Checked in today".
+   *  on screen until the answer lands, and Check-in history never disagrees with Today's check-ins.
    *  At most once every 15 seconds: this read and a person's history share one allowance of 600
    *  an hour, so a busy desk never uses up the history. News after a quiet spell reads at once. */
   const [heard, setHeard] = useState(0);
   const lastHeard = useRef(0);
   const heardSoon = useRef(null);
-  /** Whether the live line could not open: Who came then checks for itself until it is back. */
+  /** Whether the live line could not open: Check-in history then checks for itself until it is back. */
   const [withoutLine, setWithoutLine] = useState(false);
   /** One read again, at once after a quiet spell, else when the 15 seconds are up. */
   const readAgain = useCallback(() => {
@@ -557,19 +512,7 @@ function AttendanceDay({ org }) {
   const shown = people.filter((p) => matchesName(p, search));
   const everybodyLoaded = searchCoversEverybody(nextCursor);
 
-  return (
-    <div className="max-w-3xl mx-auto px-4 md:px-8 py-8 flex flex-col gap-5">
-      <div>
-        <h1 className="text-2xl font-bold" style={{ color: '#fff' }}>
-          Attendance
-        </h1>
-        <p className="text-sm mt-1" style={{ color: 'rgba(255,255,255,0.45)' }}>
-          {mayCheckIn ? 'Check people in, and see who came in, by day.' : 'Who came in, by day.'} Times are your{' '}
-          {words.it}&apos;s own.
-        </p>
-      </div>
-
-      {mayCheckIn ? (
+  const checkIn = mayCheckIn ? (
         <CheckSomeoneIn
           gymId={gymId}
           words={words}
@@ -586,8 +529,9 @@ function AttendanceDay({ org }) {
             if (day === added) setAttempt((a) => a + 1);
           }}
         />
-      ) : null}
+      ) : null;
 
+  const today = (
       <CheckedInToday
         gymId={gymId}
         words={words}
@@ -598,6 +542,28 @@ function AttendanceDay({ org }) {
           if (day === gymToday(timezone)) setAttempt((a) => a + 1);
         }}
       />
+  );
+
+  return (
+    <div className="c-page c-attend flex flex-col gap-5">
+      <div className="flex flex-col gap-1.5">
+        <p className="c-eyebrow">Today</p>
+        <h1 className="c-h1">Attendance</h1>
+        <p className="c-sub">
+          {mayCheckIn ? 'Check people in, and see who came in, by day.' : 'Who came in, by day.'} Times are your{' '}
+          {words.it}&apos;s own.
+        </p>
+      </div>
+
+      {/* Check in beside Today's check-ins on a laptop, one under the other on a tablet or a phone. */}
+      {checkIn !== null ? (
+        <div className="c-split">
+          {checkIn}
+          {today}
+        </div>
+      ) : (
+        today
+      )}
 
       {/* ── THE DAY, AND THE WAY BETWEEN DAYS ─────────────────────────────────
           The same control as "closed on a date" on the hours screen, down to
@@ -625,58 +591,48 @@ function AttendanceDay({ org }) {
           message: a control nobody can SEE is indistinguishable from one that
           does not exist, and the first fix a person asks for will be aimed at
           whatever they CAN see.** The arrows were never the defect. */}
-      <ConsoleCard>
-        <div className="flex items-center gap-2 flex-wrap">
-          <button
-            type="button"
-            onClick={() => setDay((d) => addDays(d, -1))}
-            aria-label="Previous day"
-            className="rounded-xl p-2"
-            style={{ background: 'rgba(255,255,255,0.05)', color: 'rgba(255,255,255,0.75)' }}
-          >
-            <ChevronLeft className="w-4 h-4" />
+      <FoldBox
+        title="Check-in history"
+        note={
+          staleDay ? (
+            <span className="c-s14 c-t2 flex items-center gap-2">
+              <span className="c-dot c-dot-warn" aria-hidden="true" />
+              Couldn&apos;t refresh — trying again
+            </span>
+          ) : fresh && state.status === 'ready' && answer !== null && dayTotalsLine(answer.totals) !== '' ? (
+            <span className="c-s14 c-t2">{dayTotalsLine(answer.totals)}</span>
+          ) : null
+        }
+        aside={
+          fresh && state.status === 'ready' && answer !== null && people.length > 0 ? (
+            <div className="c-search c-attend-find">
+              <Search aria-hidden="true" className="w-4 h-4" />
+              <input
+                type="search"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search by name"
+                aria-label="Search by name"
+                className="c-input"
+              />
+            </div>
+          ) : null
+        }
+      >
+        <div className="c-attend-day">
+          <button type="button" onClick={() => setDay((d) => addDays(d, -1))} aria-label="Previous day" className="c-icon-btn">
+            <ChevronLeft aria-hidden="true" className="w-4 h-4" />
           </button>
-          {/* A LABEL, not a div: clicking the icon or the padding is forwarded
-              to the input as a click, so the whole control opens the calendar
-              rather than only the few pixels of the native indicator. */}
-          <label
-            className="rounded-xl px-3 py-2 flex items-center gap-2 cursor-pointer"
-            style={{
-              background: 'rgba(255,255,255,0.05)',
-              border: '1px solid rgba(255,255,255,0.10)',
-            }}
-          >
-            <CalendarDays
-              className="w-4 h-4 flex-shrink-0"
-              style={{ color: '#FF8A1F' }}
-              aria-hidden="true"
-            />
+          {/* A LABEL, not a div: a click on the icon or the padding reaches the input, so the whole box
+              opens the calendar (Kd, 2026-09-02: *"make it obvious"*). */}
+          <label className="c-attend-date">
+            <CalendarDays aria-hidden="true" className="w-4 h-4 flex-shrink-0" style={{ color: 'var(--link)' }} />
             <input
               type="date"
               value={day}
-              /* **AN EMPTY BOX IS REFUSED AT THE SOURCE, AND THAT IS THE WHOLE
-                 FIX** (T3 round 1, C/H-2). A `type="date"` clears on Backspace
-                 in Chrome and has an explicit ✕ in Firefox, so `''` is one
-                 keystroke away — and every consumer of `day` breaks on it at
-                 once: `addDays('', ±1)` answers `''` unchanged (`hoursView`
-                 returns the input on an unparseable date), so BOTH arrows go
-                 dead; the read sends `?day=` which
-                 `attendanceDayQuerySchema`'s regex refuses, so the screen
-                 prints the server's `day: invalid_string` — a schema field
-                 name and a zod issue code, in front of the person this app is
-                 written for (K1). Try again re-sends the same failing request
-                 for ever, and the only way out is retyping into the box Kd had
-                 just told us he could not see (:29410).
-                 Keeping `day` a valid calendar string is what keeps the arrows,
-                 the retry and the read all working, so the guard belongs here
-                 rather than as four guards downstream. React restores the
-                 previous value into a controlled input whose onChange declined
-                 the new one, so the box shows the day it still holds.
-                 **This is deliberately NOT `OpeningHoursPanel`'s shape**
-                 (`closureDay === ''` guards at its two call sites): there an
-                 empty box is a legitimate starting state for a form nobody has
-                 filled in, and here `day` is seeded from `gymToday` and must
-                 never be empty at all. */
+              /* An empty box is refused here (T3 round 1, C/H-2): `day` must stay a calendar date, or
+                 both arrows, the read and Try again all break. React puts the held day back. No `min`
+                 or `max`: attendance is a history, and an HTML `min` refuses silently. */
               onChange={(e) => {
                 if (e.target.value !== '') setDay(e.target.value);
               }}
@@ -688,160 +644,83 @@ function AttendanceDay({ org }) {
                   /* older browser, or not user-activated — typing still works */
                 }
               }}
-              className="bg-transparent border-0 p-0 text-sm outline-none cursor-pointer"
-              style={{ color: '#fff', colorScheme: 'dark' }}
             />
+            <ChevronDown aria-hidden="true" className="w-4 h-4 flex-shrink-0" />
           </label>
-          <button
-            type="button"
-            onClick={() => setDay((d) => addDays(d, 1))}
-            aria-label="Next day"
-            className="rounded-xl p-2"
-            style={{ background: 'rgba(255,255,255,0.05)', color: 'rgba(255,255,255,0.75)' }}
-          >
-            <ChevronRight className="w-4 h-4" />
+          <button type="button" onClick={() => setDay((d) => addDays(d, 1))} aria-label="Next day" className="c-icon-btn">
+            <ChevronRight aria-hidden="true" className="w-4 h-4" />
           </button>
-          <span className="text-sm ml-1" style={{ color: 'rgba(255,255,255,0.55)' }}>
-            {closureDateLabel(day)}
-          </span>
+          <span className="c-s15 c-t2">{day === gymToday(timezone) ? 'Today' : closureDateLabel(day)}</span>
         </div>
-      </ConsoleCard>
 
-      {/* THE THREE ARMS ALL ASK `fresh` FIRST. A held answer that belongs to
-          the previous day or the previous filter is not an answer to what is on
-          screen now, so it is drawn as loading rather than as itself. */}
-      {!fresh || state.status === 'loading' ? (
-        <ConsoleLoading label="Loading who came in…" />
-      ) : null}
+        {/* THE THREE ARMS ALL ASK `fresh` FIRST. A held answer that belongs to
+            the previous day is not an answer to what is on screen now, so it is
+            drawn as loading rather than as itself. */}
+        {!fresh || state.status === 'loading' ? <ConsoleLoading label="Loading who came in…" newLook /> : null}
 
-      {/* THE SERVER'S OWN SENTENCE WHERE IT HAS ONE — a refusal here is
-          `attendance.read` having been unticked, and inventing a friendlier
-          reason would be guessing at which. */}
-      {fresh && state.status === 'failed' ? (
-        <ConsoleFailed
-          message={state.error}
-          onRetry={state.retryable ? () => setAttempt((a) => a + 1) : undefined}
-        />
-      ) : null}
+        {/* THE SERVER'S OWN SENTENCE WHERE IT HAS ONE — a refusal here is
+            `attendance.read` having been unticked. */}
+        {fresh && state.status === 'failed' ? (
+          <ConsoleFailed newLook message={state.error} onRetry={state.retryable ? () => setAttempt((a) => a + 1) : undefined} />
+        ) : null}
 
-      {fresh && state.status === 'ready' && answer !== null ? (
-        <>
-          {/* ── THE SHAPE OF THE DAY, BEFORE ANY NAMES ────────────────────────
-              Ruling 14's first requirement and the thing that stops the pile-up:
-              a gym with three sessions reads its whole day in three lines.
-              EVERY NUMBER HERE IS THE SERVER'S, counted over the whole day in
-              SQL — never over the page below, which is the specific breakage
-              the ruling names. */}
-          {/* ── THE PEOPLE, ONE ROW EACH ─────────────────────────────────────
-              KD, 2026-09-03: *"remove these things not needed and doing nothing:
-              The day, 2 visits outside opening hours … Show only these, add the
-              drop down in Who came"*. **So this screen is now ONE section**, and
-              the dropdown he asked for is on it.
-
-              ~~**IT IS `forceOpen`, WHICH MEANS OPEN AND STILL FOLDABLE.**~~
-              **FALSE, AND KD FOUND IT BY CLICKING** (*"the drop down is not
-              working i clcik here bu it does not open close"*). `forceOpen`
-              PINS a section open — `isOpen` is `open || forceOpen`, so the tap
-              flipped `open` and the `||` put it straight back. It exists for
-              the anti-silence rule and is the wrong tool for "start open".
-              **`defaultOpen` seeds the state instead**, so this arrives open
-              and the heading toggles like any other. */}
-          <ConsoleSection title="Who came" aside={staleDay ? "Couldn't refresh — trying again" : dayTotalsLine(answer.totals)} defaultOpen>
-            <div className="flex items-center justify-end gap-3 flex-wrap">
-              <label className="flex items-center gap-2 rounded-xl px-3 py-1.5"
-                style={{ background: 'rgba(255,255,255,0.05)' }}>
-                <Search className="w-3.5 h-3.5" style={{ color: 'rgba(255,255,255,0.45)' }} />
-                <input
-                  type="search"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Search by name"
-                  aria-label="Search by name"
-                  className="bg-transparent text-sm outline-none"
-                  style={{ color: '#fff' }}
-                />
-              </label>
-            </div>
-
-            {people.length === 0 ? (
-              /* THE THREE EMPTY CASES ARE THREE DIFFERENT SENTENCES, and only
-                 one of them is a problem (:8267/:8343). A FAILED read never
-                 reaches here — it is drawn above. */
-              <EmptyDay
-                reason={emptyDayReason({
-                  totals: answer.totals,
-                  // THE EXCEPTIONS FILTER IS GONE (Kd, 2026-09-03), so no list
-                  // on this screen can be emptied by one. The parameter stays in
-                  // `emptyDayReason` because the reason it exists — two of these
-                  // can be true at once and the ORDER decides which sentence an
-                  // owner reads — is the finding, not the filter.
-                  filtered: false,
-                })}
-              />
-            ) : (
-              <>
-                <ul className="mt-1 flex flex-col">
-                  {shown.map((person) => (
-                    <li key={personKey(person)}>
-                      <PersonRow
+        {fresh && state.status === 'ready' && answer !== null ? (
+          people.length === 0 ? (
+            /* THE EMPTY CASES ARE DIFFERENT SENTENCES, and only one of them is a
+               problem (:8267/:8343). A FAILED read never reaches here. The
+               exceptions filter is gone (Kd, 2026-09-03), so `filtered` is false. */
+            <EmptyDay reason={emptyDayReason({ totals: answer.totals, filtered: false })} />
+          ) : (
+            <>
+              {/* ONE ROW PER PERSON (ruling 12); a name opens their visits under it. */}
+              <ul className="c-attend-bleed flex flex-col">
+                {shown.map((person) => (
+                  <li key={personKey(person)}>
+                    <PersonRow
+                      person={person}
+                      timezone={zone}
+                      clockFormat={clockFormat}
+                      picked={picked !== null && personKey(picked) === personKey(person)}
+                      onPick={(p) => setPicked((held) => (held !== null && personKey(held) === personKey(p) ? null : p))}
+                    />
+                    {/* KEYED on the person, so switching from one member to another
+                        never shows the previous member's visits under the new name. */}
+                    {picked !== null && personKey(picked) === personKey(person) ? (
+                      <PersonHistory
+                        key={`history-${personKey(person)}`}
+                        gymId={gymId}
                         person={person}
-                        timezone={zone}
-                        clockFormat={clockFormat}
-                        picked={picked !== null && personKey(picked) === personKey(person)}
-                        onPick={(p) =>
-                          setPicked((held) => (held !== null && personKey(held) === personKey(p) ? null : p))
-                        }
+                        onClose={() => setPicked(null)}
                       />
-                      {/* THE HISTORY OPENS UNDER THE PERSON IT IS ABOUT, and it
-                          is KEYED on them so switching from one member to
-                          another rebuilds it rather than showing the previous
-                          member's visits under the new name while the read is in
-                          flight — the sibling of the screen-level key above. */}
-                      {picked !== null && personKey(picked) === personKey(person) ? (
-                        <PersonHistory
-                          key={`history-${personKey(person)}`}
-                          gymId={gymId}
-                          person={person}
-                          onClose={() => setPicked(null)}
-                        />
-                      ) : null}
-                    </li>
-                  ))}
-                </ul>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
 
-                {/* A SEARCH THAT FOUND NOBODY SAYS WHAT IT ACTUALLY SEARCHED.
-                    The server has no name filter, so this covers the people
-                    LOADED — and a "nobody by that name" for a member sitting on
-                    page three would be the same lie as counting a page and
-                    calling it the day. The Show more button is right below. */}
-                {shown.length === 0 ? (
-                  <p className="text-sm mt-2" style={{ color: 'rgba(255,255,255,0.55)' }}>
-                    {everybodyLoaded
-                      ? 'Nobody by that name came in on this day.'
-                      : 'Nobody by that name in the people loaded so far — load the rest to search them too.'}
-                  </p>
-                ) : null}
+              {/* A SEARCH THAT FOUND NOBODY SAYS WHAT IT ACTUALLY SEARCHED: the
+                  people loaded, never the whole day, while there are more. */}
+              {shown.length === 0 ? (
+                <p className="c-inbox c-s15 c-t1">
+                  {everybodyLoaded
+                    ? 'Nobody by that name came in on this day.'
+                    : 'Nobody by that name in the people loaded so far — load the rest to search them too.'}
+                </p>
+              ) : null}
 
-                {/* PAGED, NEVER INFINITE-SCROLLED (ruling 14). A deliberate
-                    press: a scroll listener that paged itself would also be a
-                    loop against a shared 600/hour bucket. */}
+              {/* PAGED, NEVER INFINITE-SCROLLED (ruling 14): a deliberate press. */}
+              <div className="flex flex-wrap items-center gap-3">
                 {nextCursor !== null ? (
-                  <button
-                    type="button"
-                    onClick={showMore}
-                    disabled={loadingMore}
-                    className="mt-3 rounded-xl px-3.5 py-2 text-sm font-semibold inline-flex items-center gap-2 disabled:opacity-40"
-                    style={{ background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.75)' }}
-                  >
-                    {loadingMore ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                  <button type="button" onClick={showMore} disabled={loadingMore} className="c-btn c-btn-s c-btn-sm">
+                    {loadingMore ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : null}
                     Show more people
                   </button>
                 ) : null}
-              </>
-            )}
-          </ConsoleSection>
-        </>
-      ) : null}
+                <span className="c-s14 c-t2">Press a name to see when they came.</span>
+              </div>
+            </>
+          )
+        ) : null}
+      </FoldBox>
     </div>
   );
 }
@@ -849,15 +728,7 @@ function AttendanceDay({ org }) {
 /** THE EMPTY DAY, IN TWO SENTENCES. They look identical in the data. */
 function EmptyDay({ reason }) {
   if (reason === 'filtered') {
-    return (
-      <p className="text-sm mt-2" style={{ color: 'rgba(255,255,255,0.55)' }}>
-        Nobody arrived outside opening hours on this day.
-      </p>
-    );
+    return <p className="c-inbox c-s15 c-t1">Nobody arrived outside opening hours on this day.</p>;
   }
-  return (
-    <p className="text-sm mt-2" style={{ color: 'rgba(255,255,255,0.55)' }}>
-      Nobody has checked in on this day yet.
-    </p>
-  );
+  return <p className="c-inbox c-s15 c-t1">Nobody has checked in on this day yet.</p>;
 }
