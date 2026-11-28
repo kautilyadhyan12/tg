@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Check, Loader2, Mail, UserCheck, X } from 'lucide-react';
+import { Check, Loader2, Mail, UserCheck } from 'lucide-react';
 import { LEAD_JOIN_CHOOSE_ERROR, LEAD_JOIN_STALE_ERROR, LEAD_MAX_NOTES_CHARS, friendGiftLine, memberGiftLine } from '@app/shared';
 import { orgService, errorCode, errorText } from '../../api/orgsApi';
-import { ConfirmInline } from '../../components/console/ConsoleStates';
+import { SidePanel } from '../../components/console/ConsoleBoxes';
 import PlaceLink from '../../components/console/PlaceLink';
 import { viewerPrivileges } from './consoleView';
 import { placeFor } from './consolePlaces';
+import { initialsOf } from './memberListPeople';
 import {
   SOURCE_CHOICES,
   STATUS_CHOICES,
@@ -31,9 +32,9 @@ import {
 // change its status in a tap,
 // change its details, keep notes, delete, and mark them joined. `leadId` null is "Add
 // lead". Every answer is checked against the lead on screen, so a late answer for
-// somebody opened earlier is never shown here. A side panel on a computer, its top and
-// bottom fixed; on a phone the whole screen, scrolled as one page (R3; spec Part 3 §17.2
-// rule 9).
+// somebody opened earlier is never shown here. The console's panel from the right (the board
+// `LeadPanel`; spec Part 3 §17.11), scrolled as one page with Save pinned at its foot; on a
+// phone the whole screen.
 
 const UNSAVED = 'Save or cancel your changes first.';
 
@@ -125,7 +126,7 @@ function PageMessages({ gymId, lead }) {
     <section className="flex flex-col gap-3" aria-label="Messages from your page" data-testid="page-messages">
       <span className="c-label">Messages from your page</span>
       {state.loading ? (
-        <p className="c-s14 c-t3 flex items-center gap-2">
+        <p className="c-s14 c-t2 flex items-center gap-2">
           <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> Loading…
         </p>
       ) : null}
@@ -133,12 +134,12 @@ function PageMessages({ gymId, lead }) {
       {state.enquiries.map((enquiry) => {
         const lines = enquiryLines(enquiry);
         return (
-          <div key={enquiry.id} className="c-card p-4 flex flex-col gap-1.5">
-            <span className="c-s13 c-t3">{lines.when}</span>
+          <div key={enquiry.id} className="c-callout c-callout-plain flex-col gap-1.5">
+            <span className="c-s14 c-t2">{lines.when}</span>
             <span className="c-s14 c-w6 c-t1">{lines.who}</span>
             {lines.message !== '' ? <p className="c-s15 c-t1 whitespace-pre-line">{lines.message}</p> : null}
             {lines.said.map((line) => (
-              <span key={line} className="c-s13 c-t2">
+              <span key={line} className="c-s14 c-t2">
                 {line}
               </span>
             ))}
@@ -177,7 +178,7 @@ function FollowUpBox({ lead, gym, readOnly, busy, working, unsaved, onMark }) {
   const email = state.next === null ? null : followUpEmail(state.next, lead, gym);
   const first = lead.fullName.trim().split(/\s+/)[0] ?? lead.fullName;
   return (
-    <section className={state.due ? 'c-callout flex-col' : 'c-card p-4 flex flex-col gap-3'} data-testid="follow-up">
+    <section className="c-callout c-callout-plain flex-col" aria-label="Follow-up emails" data-testid="follow-up">
       <div className="flex flex-col gap-0.5">
         <p className="c-s15 c-w6 c-t1">{state.headline}</p>
         {state.sentLine !== null ? <p className="c-s14 c-t2">{state.sentLine}</p> : null}
@@ -218,29 +219,29 @@ function FollowUpBox({ lead, gym, readOnly, busy, working, unsaved, onMark }) {
 /** The records that share the lead's email or phone, to say which is this person. */
 function ChooseRecord({ name, choice, busy, onPick, onNew, onCancel, words }) {
   return (
-    <div className="c-callout flex-col max-h-[50vh] overflow-y-auto" data-testid="join-choose">
+    <div className="c-inbox flex flex-col gap-3" data-testid="join-choose">
       <p className="c-s14 c-t1">{choice.message}</p>
-      <ul className="c-card overflow-hidden">
-        {choice.candidates.map((c) => (
-          <li key={c.entryId} className="c-row flex-wrap">
-            <div className="flex-1 min-w-0">
+      <ul className="flex flex-col">
+        {choice.candidates.map((c, i) => (
+          <li key={c.entryId} className={`flex flex-wrap items-center gap-3 py-3 ${i > 0 ? 'border-t' : ''}`} style={{ borderColor: 'var(--line)' }}>
+            <div className="flex-1 min-w-[160px]">
               <div className="c-s15 c-w6 c-t1 c-ell">{c.fullName || 'No name'}</div>
-              <div className="c-s13 c-t2 c-ell">
+              <div className="c-s14 c-t2 c-ell">
                 {candidateLine(c)}
                 {c.former ? ` · Past ${words.person}` : ''}
               </div>
             </div>
-            <button type="button" disabled={busy} onClick={() => onPick(c.entryId)} className="c-btn c-btn-sm c-btn-p">
+            <button type="button" disabled={busy} onClick={() => onPick(c.entryId)} className="c-btn c-btn-sm c-btn-s">
               {c.former ? 'This is them · put back' : 'This is them'}
             </button>
           </li>
         ))}
       </ul>
       <div className="flex flex-wrap gap-2">
-        <button type="button" disabled={busy} onClick={onNew} className="c-btn c-btn-s">
+        <button type="button" disabled={busy} onClick={onNew} className="c-btn c-btn-sm c-btn-soft">
           {`Add ${name} as someone new`}
         </button>
-        <button type="button" disabled={busy} onClick={onCancel} aria-label="Cancel choosing a record" className="c-btn c-btn-ghost">
+        <button type="button" disabled={busy} onClick={onCancel} aria-label="Cancel choosing a record" className="c-btn c-btn-sm c-btn-quiet">
           Cancel
         </button>
       </div>
@@ -282,8 +283,6 @@ export default function LeadSheet({ gymId, gym, leadId, orgSlug, words, readOnly
   /** The Joined status asks before it puts the person on the list ('ask'), or says
    *  unsaved changes come first ('unsaved'), under the status buttons. */
   const [askJoin, setAskJoin] = useState(false);
-  /** Leaving with changes not saved asks first: 'close' or 'members'. */
-  const [leaving, setLeaving] = useState(null);
   /** What the busy request is, so only its own button spins. */
   const [working, setWorking] = useState(null);
   const navigate = useNavigate();
@@ -435,14 +434,9 @@ export default function LeadSheet({ gymId, gym, leadId, orgSlug, words, readOnly
   const changed = lead !== null && Object.keys(detailsRequest(lead, draft)).length > 0;
   const unsaved = adding ? lead === null && draftStarted(draft) : changed || (lead !== null && notes.trim() !== lead.notes);
 
-  const leave = (where) => {
-    if (where === 'close') onClose();
-    else navigate(`/console/${orgSlug}/members`);
-  };
-  const tryLeave = (where) => {
-    if (unsaved) setLeaving(where);
-    else leave(where);
-  };
+  /** Leaving for Members asks first while something is not saved, with the panel's own question. */
+  const panelRef = useRef(null);
+  const toMembers = () => navigate(`/console/${orgSlug}/members`);
   // Closing or reloading the tab with changes not saved asks first, as the browser does.
   useEffect(() => {
     if (!unsaved) return undefined;
@@ -453,118 +447,148 @@ export default function LeadSheet({ gymId, gym, leadId, orgSlug, words, readOnly
     window.addEventListener('beforeunload', ask);
     return () => window.removeEventListener('beforeunload', ask);
   }, [unsaved]);
-  const title = adding && lead === null ? 'Add lead' : (lead?.fullName ?? '');
+  const title = adding && lead === null ? 'Add lead' : (lead?.fullName ?? 'Lead');
   const off = busy || readOnly;
+  const first = lead === null ? '' : (lead.fullName.trim().split(/\s+/)[0] ?? lead.fullName);
 
   const messages = (
     <>
       {error !== null ? (
-        <p className="c-s14 c-w5" role="alert" style={{ color: 'var(--bad)' }}>
+        <p className="c-s14 c-w5 w-full order-first" role="alert" style={{ color: 'var(--bad)' }}>
           {error}
         </p>
       ) : null}
       {done !== null ? (
-        <p className="c-s14 c-w5" role="status" style={{ color: 'var(--good)' }}>
+        <p className="c-s14 c-w5 w-full order-first" role="status" style={{ color: 'var(--good)' }}>
           {done}
         </p>
       ) : null}
     </>
   );
 
-  return (
-    <div className="fixed inset-0 z-50" style={{ background: 'var(--scrim)' }}>
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-label={adding && lead === null ? 'Add lead' : 'Lead'}
-        className="c-sheet absolute inset-0 md:left-auto md:w-[540px] md:border-l flex flex-col overflow-y-auto"
-        style={{ borderColor: 'var(--card-line)' }}
-      >
-        {/* ONE PAGE that scrolls as a whole (Kd at 20e-ii-b-ii-b's click-through: a fixed top and
-            bottom left the middle "stuck inside a box"); its Save stays in view at the foot. */}
-        <div className="flex flex-col gap-4 px-4 pt-5 md:px-7 md:pt-7">
-          <div className="flex items-start gap-3">
-            <div className="flex flex-col gap-1 flex-grow min-w-0">
-              <h2 className="c-h1 c-ell" style={{ fontSize: 28, lineHeight: '34px' }}>
-                {title}
-              </h2>
-              {lead !== null ? (
-                <span className="c-s14 c-t2">
-                  {addedWords(lead.createdAt)} · {leadSourceLine(lead)}
-                </span>
-              ) : null}
-              {lead !== null && gift !== null ? (
-                <span className="c-s14 c-t2" data-testid="friend-gift-line">
-                  {friendGiftLine(gift, lead.fullName.trim().split(/\s+/)[0] ?? lead.fullName)}
-                </span>
-              ) : null}
-              {lead !== null && memberGift !== null ? (
-                <span className="c-s14 c-t2" data-testid="member-gift-line">
-                  {memberGiftLine(memberGift.gift, memberGift.memberName ?? 'The inviting member', lead.fullName.trim().split(/\s+/)[0] ?? lead.fullName, memberGift.on ?? 'membership')}
-                </span>
-              ) : null}
-              {lead !== null && memberGift !== null && memberGift.gift.state === 'waiting_no_record' ? (
-                <Link to={`/console/${orgSlug}/members?view=app`} className="c-lk c-w6 c-s14" data-testid="member-gift-find">
-                  {`Find ${memberGift.memberName ?? 'them'} in the app`}
-                </Link>
-              ) : null}
-            </div>
-            <button type="button" aria-label="Close" onClick={() => tryLeave('close')} className="c-icon-btn">
-              <X aria-hidden="true" className="w-5 h-5" />
+  // SAVE STAYS IN VIEW at the foot of the panel, with what is not saved and what happened,
+  // however far down the lead runs; on Add lead, Add lead is there.
+  const foot = (
+    <>
+      {messages}
+      {adding && lead === null ? (
+        <button type="button" onClick={add} disabled={off} className="c-btn c-btn-p c-btn-lg">
+          {busy ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : null}
+          Add lead
+        </button>
+      ) : null}
+      {lead !== null ? (
+        <>
+          <button type="button" onClick={saveDetails} disabled={off || !changed} className="c-btn c-btn-p c-btn-lg">
+            {working === 'details' ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : null}
+            Save
+          </button>
+          {changed ? (
+            <button
+              type="button"
+              onClick={() => {
+                setDraft(leadDraft(lead));
+                setError(null);
+                setAskJoin(false);
+              }}
+              disabled={busy}
+              className="c-btn c-btn-s c-btn-lg"
+            >
+              Cancel
             </button>
-          </div>
-
-          {leaving !== null ? (
-            <ConfirmInline
-              question={adding ? 'This lead is not added yet.' : `Your changes to ${lead?.fullName ?? ''} are not saved.`}
-              confirmLabel="Discard changes"
-              cancelLabel="Keep editing"
-              onConfirm={() => leave(leaving)}
-              onCancel={() => setLeaving(null)}
-              newLook
-            />
           ) : null}
+        </>
+      ) : null}
+    </>
+  );
 
-          {lead !== null ? (
-            <div className="flex flex-wrap gap-2" role="group" aria-label="Status">
-              {STATUS_CHOICES.map((s) => (
-                <Choice
-                  key={s.key}
-                  pressed={draft.status === s.key}
-                  disabled={off}
-                  onClick={() => {
-                    setAskJoin(false);
-                    setDraft((d) => ({ ...d, status: s.key }));
-                  }}
-                >
-                  {s.label}
-                </Choice>
-              ))}
+  return (
+    <SidePanel
+      title={title}
+      sub={lead !== null ? `${addedWords(lead.createdAt)} · ${leadSourceLine(lead)}` : null}
+      avatar={lead !== null ? initialsOf(lead.fullName) : null}
+      ask={{
+        question: adding && lead === null ? 'This lead is not added yet.' : `Your changes to ${lead?.fullName ?? ''} are not saved.`,
+        confirm: 'Discard changes',
+        cancel: 'Keep editing',
+      }}
+      unsaved={unsaved}
+      unsavedNote={lead !== null && changed}
+      saveLabel={null}
+      busy={busy}
+      foot={foot}
+      onClose={onClose}
+      closeRef={panelRef}
+      testId="lead-panel"
+    >
+      {loadError !== null ? <p className="c-s15 c-t2">{loadError}</p> : null}
+
+      {!adding && lead === null && loadError === null ? (
+        <p className="c-s14 c-t2 flex items-center gap-2">
+          <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> Loading…
+        </p>
+      ) : null}
+
+      {lead !== null && (gift !== null || memberGift !== null) ? (
+        <section className="c-callout c-callout-plain flex-col gap-1.5" aria-label="Refer a friend">
+          {gift !== null ? (
+            <span className="c-s14 c-t1" data-testid="friend-gift-line">
+              {friendGiftLine(gift, first)}
+            </span>
+          ) : null}
+          {memberGift !== null ? (
+            <span className="c-s14 c-t1" data-testid="member-gift-line">
+              {memberGiftLine(memberGift.gift, memberGift.memberName ?? 'The inviting member', first, memberGift.on ?? 'membership')}
+            </span>
+          ) : null}
+          {memberGift !== null && memberGift.gift.state === 'waiting_no_record' ? (
+            <Link to={`/console/${orgSlug}/members?view=app`} className="c-lk c-w6 c-s14 self-start" data-testid="member-gift-find">
+              {`Find ${memberGift.memberName ?? 'them'} in the app`}
+            </Link>
+          ) : null}
+        </section>
+      ) : null}
+
+      {lead !== null ? (
+        <div className="c-field">
+          <span className="c-label">Status</span>
+          <div className="flex flex-wrap gap-2" role="group" aria-label="Status">
+            {STATUS_CHOICES.map((s) => (
               <Choice
-                pressed={draft.status === 'joined'}
+                key={s.key}
+                pressed={draft.status === s.key}
                 disabled={off}
                 onClick={() => {
-                  if (joined) setDraft((d) => ({ ...d, status: 'joined' }));
-                  else if (changed) setAskJoin('unsaved');
-                  else if (choice === null) setAskJoin('ask');
+                  setAskJoin(false);
+                  setDraft((d) => ({ ...d, status: s.key }));
                 }}
               >
-                Joined
+                {s.label}
               </Choice>
-            </div>
-          ) : null}
-
+            ))}
+            <Choice
+              pressed={draft.status === 'joined'}
+              disabled={off}
+              onClick={() => {
+                if (joined) setDraft((d) => ({ ...d, status: 'joined' }));
+                else if (changed) setAskJoin('unsaved');
+                else if (choice === null) setAskJoin('ask');
+              }}
+            >
+              Joined
+            </Choice>
+          </div>
 
           {askJoin === 'unsaved' && !joined ? (
-            <p className="c-s14 c-w5" role="alert" style={{ color: 'var(--bad)' }}>
+            <p className="c-strip c-strip-warn c-s14" role="alert">
               {UNSAVED}
             </p>
           ) : null}
 
-          {askJoin === 'ask' && lead !== null && !joined ? (
-            <div className="flex flex-col gap-3" data-testid="ask-join">
-              <p className="c-s14 c-t1">{`Add ${lead.fullName} to your ${words.people}?`}</p>
-              <div className="flex flex-wrap gap-2">
+          {askJoin === 'ask' && !joined ? (
+            <div className="c-inbox flex flex-col gap-3" data-testid="ask-join">
+              <p className="c-s14 c-w6 c-t1">{`Add ${lead.fullName} to your ${words.people}?`}</p>
+              <div className="c-inbox-a">
                 <button
                   type="button"
                   disabled={off}
@@ -584,18 +608,20 @@ export default function LeadSheet({ gymId, gym, leadId, orgSlug, words, readOnly
           ) : null}
 
           {joined ? (
-            <p className="c-s14 c-t2">
-              {lead.onList
-                ? `On your list of ${words.people}. `
-                : lead.entryId !== null
-                  ? `Their record was taken off your list of ${words.people}. `
-                  : `Their record has since been deleted from your list. `}
+            <p className="c-callout c-callout-plain c-s14 c-t1 flex-wrap">
+              <span>
+                {lead.onList
+                  ? `On your list of ${words.people}.`
+                  : lead.entryId !== null
+                    ? `Their record was taken off your list of ${words.people}.`
+                    : `Their record has since been deleted from your list.`}
+              </span>
               <Link
                 to={`/console/${orgSlug}/members`}
                 onClick={(e) => {
                   if (!unsaved) return;
                   e.preventDefault();
-                  setLeaving('members');
+                  panelRef.current?.leave(toMembers);
                 }}
                 className="c-w6 c-lk"
               >
@@ -604,63 +630,42 @@ export default function LeadSheet({ gymId, gym, leadId, orgSlug, words, readOnly
             </p>
           ) : null}
         </div>
+      ) : null}
 
-        <div className="flex flex-col gap-4 px-4 py-5 md:px-7">
-          {loadError !== null ? <p className="c-s15 c-t2">{loadError}</p> : null}
+      {adding && lead === null ? (
+        <>
+          <DetailsForm draft={draft} setDraft={setDraft} disabled={off} />
+          <MayEmailTick
+            checked={draft.mayEmail && draft.email.trim() !== ''}
+            hasEmail={draft.email.trim() !== ''}
+            disabled={off}
+            onChange={(v) => setDraft((d) => ({ ...d, mayEmail: v }))}
+          />
+          <NotesBox value={draft.notes} onChange={(v) => setDraft((d) => ({ ...d, notes: v }))} disabled={off} />
+        </>
+      ) : null}
 
-          {!adding && lead === null && loadError === null ? (
-            <p className="c-s14 c-t3 flex items-center gap-2">
-              <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> Loading…
-            </p>
-          ) : null}
+      {lead !== null ? (
+        <>
+          {lead.enquiredAt ? <PageMessages gymId={gymId} lead={lead} /> : null}
+          <FollowUpBox lead={lead} gym={gym} readOnly={readOnly} busy={busy} working={working} unsaved={unsaved} onMark={markSent} />
+          <DetailsForm draft={draft} setDraft={setLeadDraft} disabled={off} />
+          <MayEmailTick
+            checked={draft.mayEmail && draft.email.trim() !== ''}
+            hasEmail={draft.email.trim() !== ''}
+            disabled={off}
+            onChange={(v) => setDraft((d) => ({ ...d, mayEmail: v }))}
+          />
+          <div className="flex flex-col gap-2">
+            <NotesBox value={notes} onChange={setNotes} disabled={off} />
+            {notes.trim() !== lead.notes ? (
+              <button type="button" onClick={() => save({ notes: notes.trim() }, 'Notes saved.', 'notes')} disabled={off} className="c-btn c-btn-s c-btn-sm self-start">
+                Save notes
+              </button>
+            ) : null}
+          </div>
 
-          {adding && lead === null ? (
-            <>
-              <DetailsForm draft={draft} setDraft={setDraft} disabled={off} />
-              <MayEmailTick
-                checked={draft.mayEmail && draft.email.trim() !== ''}
-                hasEmail={draft.email.trim() !== ''}
-                disabled={off}
-                onChange={(v) => setDraft((d) => ({ ...d, mayEmail: v }))}
-              />
-              <NotesBox value={draft.notes} onChange={(v) => setDraft((d) => ({ ...d, notes: v }))} disabled={off} />
-            </>
-          ) : null}
-
-          {lead !== null ? (
-            <>
-              {lead.enquiredAt ? <PageMessages gymId={gymId} lead={lead} /> : null}
-              <FollowUpBox lead={lead} gym={gym} readOnly={readOnly} busy={busy} working={working} unsaved={unsaved} onMark={markSent} />
-              <DetailsForm draft={draft} setDraft={setLeadDraft} disabled={off} />
-              <MayEmailTick
-                checked={draft.mayEmail && draft.email.trim() !== ''}
-                hasEmail={draft.email.trim() !== ''}
-                disabled={off}
-                onChange={(v) => setDraft((d) => ({ ...d, mayEmail: v }))}
-              />
-              <div className="flex flex-col gap-2 pt-4">
-                <NotesBox value={notes} onChange={setNotes} disabled={off} />
-                {notes.trim() !== lead.notes ? (
-                  <button type="button" onClick={() => save({ notes: notes.trim() }, 'Notes saved.', 'notes')} disabled={off} className="c-btn c-btn-s self-start">
-                    Save notes
-                  </button>
-                ) : null}
-              </div>
-            </>
-          ) : null}
-        </div>
-
-        <div className="flex flex-col gap-3 px-4 pb-6 md:px-7">
-          {lead === null ? messages : null}
-
-          {adding && lead === null ? (
-            <button type="button" onClick={add} disabled={off} className="c-btn c-btn-p c-btn-lg w-full md:w-auto md:self-start">
-              {busy ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : null}
-              Add lead
-            </button>
-          ) : null}
-
-          {lead !== null && choice !== null ? (
+          {choice !== null ? (
             <ChooseRecord
               name={lead.fullName}
               choice={choice}
@@ -672,18 +677,8 @@ export default function LeadSheet({ gymId, gym, leadId, orgSlug, words, readOnly
             />
           ) : null}
 
-          {lead !== null && deleting ? (
-            <ConfirmInline
-              question={`Delete ${lead.fullName} from your leads? Their name, contact and notes are removed. Your list of ${words.people} is not changed.`}
-              confirmLabel="Delete lead"
-              onConfirm={remove}
-              onCancel={() => setDeleting(false)}
-              busy={busy}
-              newLook
-            />
-          ) : null}
-
-          {lead !== null && !deleting ? (
+          {/* Delete lead asks under its own button (the board `Boxes`, way 1). */}
+          <div className="flex flex-col gap-3">
             <div className="flex flex-wrap items-center gap-3">
               {mayJoin && choice === null ? (
                 <button type="button" onClick={() => join({})} disabled={off} className="c-btn c-btn-soft">
@@ -691,47 +686,29 @@ export default function LeadSheet({ gymId, gym, leadId, orgSlug, words, readOnly
                   {joined && lead.entryId !== null ? `Put back on your list of ${words.people}` : `Joined · add to your ${words.people}`}
                 </button>
               ) : null}
-              <div className="flex-grow" />
-              <button type="button" onClick={() => setDeleting(true)} disabled={readOnly} className="c-btn" style={{ color: 'var(--bad)' }}>
-                Delete lead
-              </button>
-            </div>
-          ) : null}
-        </div>
-
-        {/* SAVE STAYS IN VIEW at the foot of the panel, with what is not saved and what
-            happened, however far down the lead runs (as Settings' boxes do). */}
-        {lead !== null ? (
-          <div
-            className="sticky bottom-0 mt-auto flex flex-col gap-2 px-4 py-3 md:px-7"
-            style={{ background: 'var(--sheet)', borderTop: changed ? '1px solid var(--line)' : '1px solid transparent' }}
-            data-testid="lead-save-bar"
-          >
-            {messages}
-            <div className="flex flex-wrap items-center gap-2">
-              <button type="button" onClick={saveDetails} disabled={off || !changed} className="c-btn c-btn-p">
-                {working === 'details' ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : null}
-                Save
-              </button>
-              {changed ? (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setDraft(leadDraft(lead));
-                    setError(null);
-                    setAskJoin(false);
-                  }}
-                  disabled={busy}
-                  className="c-btn c-btn-s"
-                >
-                  Cancel
+              <span className="flex-grow" />
+              {!deleting ? (
+                <button type="button" onClick={() => setDeleting(true)} disabled={readOnly} className="c-btn c-btn-danger c-btn-sm">
+                  Delete lead
                 </button>
               ) : null}
-              {changed ? <span className="c-s14 c-t2">You have changes that aren&apos;t saved.</span> : null}
             </div>
+            {deleting ? (
+              <div className="c-strip c-strip-warn" data-testid="ask-delete">
+                <span className="c-strip-words c-s14 c-t1">{`Delete ${lead.fullName} from your leads? Their name, contact and notes are removed. Your list of ${words.people} is not changed.`}</span>
+                <span className="flex flex-wrap gap-2">
+                  <button type="button" onClick={remove} disabled={busy} className="c-btn c-btn-sm c-btn-ds">
+                    Delete lead
+                  </button>
+                  <button type="button" onClick={() => setDeleting(false)} disabled={busy} className="c-btn c-btn-sm c-btn-s">
+                    Cancel
+                  </button>
+                </span>
+              </div>
+            ) : null}
           </div>
-        ) : null}
-      </div>
-    </div>
+        </>
+      ) : null}
+    </SidePanel>
   );
 }

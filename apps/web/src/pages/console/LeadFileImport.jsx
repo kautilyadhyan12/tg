@@ -1,7 +1,8 @@
 import { useRef, useState } from 'react';
-import { Check, FileSpreadsheet, Loader2, X } from 'lucide-react';
+import { Check, FileSpreadsheet, Loader2 } from 'lucide-react';
 import { LEAD_FILE_CHANGED_ERROR, LEAD_FILE_PERMISSION_WORDS, LEAD_FILE_WORDS, MEMBER_FILE_MAX_BYTES, leadFileRefusalWords } from '@app/shared';
 import { orgService, errorCode, errorText } from '../../api/orgsApi';
+import { AskSheet } from '../../components/console/ConsoleBoxes';
 import SentencePlace from '../../components/console/SentencePlace';
 import { bytesToBase64 } from './memberListView';
 import {
@@ -27,10 +28,11 @@ import {
 // asked about joining, read by the server and shown back before anything is saved —
 // who will be added, and everybody who won't with the reason beside their name. Add
 // adds exactly what was shown, or nothing. Nobody is emailed and nobody arrives ticked
-// "Happy to hear from us".
+// "Happy to hear from us". In the middle, as it adds people (the board `LeadImport`), and how
+// many were added is said in the same box.
 
 const count = (n) => n.toLocaleString('en');
-/** Names shown before See all, and a page of them after. */
+/** Names shown before View all, and a page of them after. */
 const FIRST = 5;
 const PAGE = 100;
 
@@ -47,8 +49,8 @@ function ShortList({ items, render, testId }) {
       ))}
       {more > 0 ? (
         <li className="pt-2">
-          <button type="button" onClick={() => setShown((n) => (n === FIRST ? PAGE : n + PAGE))} className="c-btn c-btn-link c-s14">
-            {shown === FIRST ? `See all ${count(items.length)}` : `Show ${count(Math.min(PAGE, more))} more`}
+          <button type="button" onClick={() => setShown((n) => (n === FIRST ? PAGE : n + PAGE))} className="c-btn c-btn-sm c-btn-link">
+            {shown === FIRST ? `View all ${count(items.length)}` : `Show ${count(Math.min(PAGE, more))} more`}
           </button>
         </li>
       ) : null}
@@ -60,7 +62,7 @@ function ShortList({ items, render, testId }) {
  *  holds, and what it is saved as. */
 function Columns({ preview, mapping, onChange, disabled }) {
   return (
-    <div className="c-card overflow-hidden" data-testid="lead-file-columns">
+    <div className="c-card overflow-hidden" style={{ background: 'var(--sheet)' }} data-testid="lead-file-columns">
       <p className="c-s14 c-t2 px-4 pt-3 md:px-5">Choose what each column in your file is. Nothing is saved until you add the leads.</p>
       <div className="c-th hidden md:grid grid-cols-[1fr_1fr_200px] gap-4 px-5 pt-3 pb-2">
         <span>Column in your file</span>
@@ -77,7 +79,7 @@ function Columns({ preview, mapping, onChange, disabled }) {
             style={{ borderColor: 'var(--line)' }}
           >
             <span className="c-s14 c-w6 c-t1 c-ell">{columnName(column)}</span>
-            <span className="c-s13 c-t2 c-ell">{exampleLine(column)}</span>
+            <span className="c-s14 c-t2 c-ell">{exampleLine(column)}</span>
             <select
               aria-label={`What ${columnName(column)} holds`}
               value={roleOf(mapping, column.index)}
@@ -112,6 +114,8 @@ export default function LeadFileImport({ gymId, gym, readOnly, onClose, onAdded 
   const [error, setError] = useState(null);
   const [changed, setChanged] = useState(false);
   const [showColumns, setShowColumns] = useState(false);
+  /** How many were added, once Add has worked: said in this box until Done. */
+  const [done, setDone] = useState(null);
 
   const check = async (chosen, next = file) => {
     setBusy('check');
@@ -159,6 +163,8 @@ export default function LeadFileImport({ gymId, gym, readOnly, onClose, onAdded 
         expected: preview.expected,
         permissionConfirmed: true,
       });
+      setDone(res.data.added);
+      setBusy(null);
       onAdded(res.data.added);
     } catch (err) {
       setChanged(errorCode(err) === LEAD_FILE_CHANGED_ERROR);
@@ -182,184 +188,179 @@ export default function LeadFileImport({ gymId, gym, readOnly, onClose, onAdded 
   const unlisted = preview !== null ? unlistedNotAdded(preview) : 0;
   const off = busy !== null;
 
-  return (
-    <div className="fixed inset-0 z-50" style={{ background: 'var(--scrim)' }}>
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-label="Import leads"
-        className="c-sheet absolute inset-0 md:left-auto md:w-[600px] md:border-l flex flex-col overflow-y-auto md:overflow-hidden"
-        style={{ borderColor: 'var(--card-line)' }}
-      >
-        <div className="flex items-start gap-3 px-4 pt-5 pb-4 md:px-7 md:pt-7 md:pb-5 border-b" style={{ borderColor: 'var(--line)' }}>
-          <div className="flex flex-col gap-1 flex-grow min-w-0">
-            <h2 className="c-h1 c-ell" style={{ fontSize: 28, lineHeight: '34px' }}>
-              Import leads
-            </h2>
-            {file !== null && preview !== null ? (
-              <span className="c-s14 c-t2 c-ell" data-testid="lead-file-name">
-                {file.label}
-              </span>
-            ) : null}
-          </div>
-          <button type="button" aria-label="Close" onClick={onClose} className="c-icon-btn">
-            <X aria-hidden="true" className="w-5 h-5" />
+  let footer = null;
+  if (done !== null) {
+    footer = (
+      <button type="button" onClick={onClose} data-autofocus className="c-btn c-btn-p c-btn-lg">
+        Done
+      </button>
+    );
+  } else if (preview !== null) {
+    footer = (
+      <div className="flex flex-col gap-3 w-full">
+        {button.why !== null ? (
+          <p className="c-s14 c-w5 c-t1" data-testid="lead-file-why">
+            {button.why}
+          </p>
+        ) : null}
+        <div className="c-ask-a">
+          {preview.counts.add > 0 ? (
+            <button type="button" onClick={add} disabled={!button.enabled || off} className="c-btn c-btn-p c-btn-lg md:order-2">
+              {busy === 'add' ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : null}
+              {button.label}
+            </button>
+          ) : null}
+          <button type="button" onClick={startAgain} disabled={off} className="c-btn c-btn-s c-btn-lg md:order-1">
+            Choose another file
           </button>
         </div>
+      </div>
+    );
+  }
 
-        <div className="flex flex-col gap-5 px-4 py-5 md:px-7 md:flex-1 md:overflow-y-auto">
-          <input ref={input} type="file" accept=".csv,.xlsx,text/csv" onChange={choose} className="hidden" data-testid="lead-file-input" />
+  return (
+    <AskSheet title="Import leads" testId="lead-file-box" onClose={onClose} busy={off} wide outsideCloses={file === null || done !== null} footer={footer}>
+      <input ref={input} type="file" accept=".csv,.xlsx,text/csv" onChange={choose} className="hidden" data-testid="lead-file-input" />
 
-          {preview === null ? (
-            <section className="c-card p-5 md:p-6 flex flex-col gap-3 items-start">
-              <FileSpreadsheet aria-hidden="true" className="w-6 h-6 c-t2" />
-              <p className="c-s15 c-w6 c-t1">A CSV or Excel (.xlsx) file of people who asked about joining</p>
-              <p className="c-s14 c-t2">
-                For example the leads export from your old software, or your own spreadsheet. Each person needs a name and an email or phone number.
-                You&apos;ll see who will be added before anything is saved.
-              </p>
-              <button type="button" onClick={() => input.current?.click()} disabled={readOnly || off} className="c-btn c-btn-p">
-                {busy === 'check' ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : null}
-                {busy === 'check' ? 'Reading your file…' : 'Choose a file'}
-              </button>
+      {file !== null && preview !== null && done === null ? (
+        <p className="c-s14 c-t2 c-ell -mt-2" data-testid="lead-file-name">
+          {file.label}
+        </p>
+      ) : null}
+
+      {/* What happened, said in the same box (spec Part 3 §17.11, way 3). */}
+      {done !== null ? (
+        <p className="c-strip c-strip-good c-s15 c-w6" role="status" data-testid="lead-file-done">
+          <Check aria-hidden="true" className="w-5 h-5 flex-shrink-0" style={{ color: 'var(--good)' }} />
+          {LEAD_FILE_WORDS.added(done)}
+        </p>
+      ) : null}
+
+      {preview === null && done === null ? (
+        <section className="flex flex-col gap-3 items-start">
+          <FileSpreadsheet aria-hidden="true" className="w-6 h-6 c-t2" />
+          <p className="c-s15 c-w6 c-t1">A CSV or Excel (.xlsx) file of people who asked about joining</p>
+          <p className="c-s14 c-t2">
+            For example the leads export from your old software, or your own spreadsheet. Each person needs a name and an email or phone number.
+            You&apos;ll see who will be added before anything is saved.
+          </p>
+          <button type="button" onClick={() => input.current?.click()} disabled={readOnly || off} className="c-btn c-btn-p">
+            {busy === 'check' ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : null}
+            {busy === 'check' ? 'Reading your file…' : 'Choose a file'}
+          </button>
+        </section>
+      ) : null}
+
+      {error !== null ? (
+        <div className="c-strip c-strip-bad" role="alert">
+          <span className="c-strip-words c-s14 c-t1">{error}</span>
+          {changed ? (
+            <button type="button" onClick={() => check(preview.mapping)} disabled={off} className="c-btn c-btn-sm c-btn-s">
+              Check again
+            </button>
+          ) : null}
+        </div>
+      ) : null}
+
+      {preview !== null && done === null ? (
+        <>
+          <section className="flex flex-col gap-1" data-testid="lead-file-added">
+            <h3 className="c-h3">{addedTitle(preview)}</h3>
+            {preview.add.length > 0 ? (
+              <ShortList
+                items={preview.add}
+                testId="lead-file-added-list"
+                render={(person) => (
+                  <>
+                    <span className="flex flex-col min-w-0">
+                      <span className="c-s15 c-w6 c-t1 c-ell">{person.fullName}</span>
+                      <span className="c-s14 c-t2 c-ell">{contactLine(person)}</span>
+                    </span>
+                    <span className="c-s14 c-t2 text-right">{heardLine(person)}</span>
+                  </>
+                )}
+              />
+            ) : null}
+          </section>
+
+          {preview.counts.notAdded > 0 ? (
+            <section className="flex flex-col gap-1 pt-4 border-t" style={{ borderColor: 'var(--line)' }} data-testid="lead-file-not-added">
+              <h3 className="c-h3">{LEAD_FILE_WORDS.not_added_title(preview.counts.notAdded)}</h3>
+              <ShortList
+                items={preview.notAdded}
+                testId="lead-file-not-added-list"
+                render={(entry) => {
+                  const shown = notAddedRow(entry);
+                  return (
+                    <span className="flex flex-col min-w-0">
+                      <span className="c-s15 c-w6 c-t1 c-ell">{shown.name}</span>
+                      <span className="c-s14 c-t2">{shown.why}</span>
+                    </span>
+                  );
+                }}
+              />
+              {unlisted > 0 ? <p className="c-s14 c-t2 pt-1">{LEAD_FILE_WORDS.more_skipped(unlisted)}</p> : null}
             </section>
           ) : null}
 
-          {error !== null ? (
-            <div className="flex flex-col gap-2 items-start" role="alert">
-              <p className="c-s14 c-w5" style={{ color: 'var(--bad)' }}>
-                {error}
-              </p>
-              {changed ? (
-                <button type="button" onClick={() => check(preview.mapping)} disabled={off} className="c-btn c-btn-sm c-btn-s">
-                  Check again
-                </button>
-              ) : null}
-            </div>
+          {preview.warnings.length > 0 ? (
+            <ul className="flex flex-col gap-1.5" data-testid="lead-file-notes">
+              {warningLines(preview).map((line) => (
+                <li key={line.text} className="c-s14 c-t2 flex flex-col gap-1.5">
+                  {line.text}
+                  {/* It leaves the file being checked, so it asks first. */}
+                  <SentencePlace kind={line.place} gym={gym} guard />
+                </li>
+              ))}
+            </ul>
           ) : null}
 
-          {preview !== null ? (
-            <>
-              <section className="c-card px-4 py-4 md:px-5 flex flex-col gap-1" data-testid="lead-file-added">
-                <h3 className="c-s16 c-w7 c-t1">{addedTitle(preview)}</h3>
-                {preview.add.length > 0 ? (
-                  <ShortList
-                    items={preview.add}
-                    testId="lead-file-added-list"
-                    render={(person) => (
-                      <>
-                        <span className="flex flex-col min-w-0">
-                          <span className="c-s15 c-w6 c-t1 c-ell">{person.fullName}</span>
-                          <span className="c-s13 c-t2 c-ell">{contactLine(person)}</span>
-                        </span>
-                        <span className="c-s13 c-t2 text-right">{heardLine(person)}</span>
-                      </>
-                    )}
-                  />
-                ) : null}
-              </section>
-
-              {preview.counts.notAdded > 0 ? (
-                <section className="c-card px-4 py-4 md:px-5 flex flex-col gap-1" data-testid="lead-file-not-added">
-                  <h3 className="c-s16 c-w7 c-t1">{LEAD_FILE_WORDS.not_added_title(preview.counts.notAdded)}</h3>
-                  <ShortList
-                    items={preview.notAdded}
-                    testId="lead-file-not-added-list"
-                    render={(entry) => {
-                      const shown = notAddedRow(entry);
-                      return (
-                        <span className="flex flex-col min-w-0">
-                          <span className="c-s15 c-w6 c-t1 c-ell">{shown.name}</span>
-                          <span className="c-s13 c-t2">{shown.why}</span>
-                        </span>
-                      );
-                    }}
-                  />
-                  {unlisted > 0 ? <p className="c-s13 c-t2 pt-1">{LEAD_FILE_WORDS.more_skipped(unlisted)}</p> : null}
-                </section>
-              ) : null}
-
-              {preview.warnings.length > 0 ? (
-                <ul className="flex flex-col gap-1.5" data-testid="lead-file-notes">
-                  {warningLines(preview).map((line) => (
-                    <li key={line.text} className="c-s14 c-t2 flex flex-col gap-1.5">
-                      {line.text}
-                      {/* It leaves the file being checked, so it asks first. */}
-                      <SentencePlace kind={line.place} gym={gym} guard />
-                    </li>
-                  ))}
-                </ul>
-              ) : null}
-
-              <section className="flex flex-col gap-2" data-testid="lead-file-column-lines">
-                <div className="flex items-center justify-between gap-3">
-                  <h3 className="c-s15 c-w6 c-t1">Your columns</h3>
-                  <button type="button" onClick={() => setShowColumns((v) => !v)} aria-expanded={showColumns} className="c-btn c-btn-link c-s14">
-                    {showColumns ? 'Done' : 'Change'}
-                  </button>
-                </div>
-                {columnLines(preview).map((line) => (
-                  <p key={line.key} className="c-s14 c-t2">
-                    <span className="c-w6 c-t1">{line.label}:</span> {line.text}
-                  </p>
-                ))}
-                {showColumns ? (
-                  <>
-                    <Columns preview={preview} mapping={mapping} disabled={off || readOnly} onChange={(index, role) => setMapping((m) => withRole(m, index, role))} />
-                    {columnsChanged ? (
-                      <button type="button" onClick={() => check(mapping)} disabled={off} className="c-btn c-btn-s self-start">
-                        {busy === 'check' ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : null}
-                        Check the file again
-                      </button>
-                    ) : null}
-                  </>
-                ) : null}
-              </section>
-
-              <p className="c-callout c-s14" data-testid="lead-file-tick-note">
-                {LEAD_FILE_WORDS.tick}
-              </p>
-
-              {preview.counts.add > 0 ? (
-                <button
-                  type="button"
-                  role="checkbox"
-                  aria-checked={ticked}
-                  onClick={() => setTicked((v) => !v)}
-                  disabled={readOnly || off}
-                  className="self-start flex items-start gap-3 min-h-11 text-left disabled:opacity-50"
-                >
-                  <span className={ticked ? 'c-check c-check-on mt-px' : 'c-check mt-px'}>
-                    {ticked ? <Check aria-hidden="true" className="w-3.5 h-3.5" strokeWidth={3} /> : null}
-                  </span>
-                  <span className="c-s15 c-w5 c-t1">{LEAD_FILE_PERMISSION_WORDS.replace('{gym}', gym?.name ?? 'you')}</span>
-                </button>
-              ) : null}
-            </>
-          ) : null}
-        </div>
-
-        {preview !== null ? (
-          <div className="flex flex-col gap-2 px-4 py-4 md:px-7 border-t" style={{ borderColor: 'var(--line)' }}>
-            {button.why !== null ? (
-              <p className="c-s13 c-w5 c-t1" data-testid="lead-file-why">
-                {button.why}
-              </p>
-            ) : null}
-            <div className="flex gap-2 md:justify-end">
-              <button type="button" onClick={startAgain} disabled={off} className="c-btn c-btn-s flex-1 md:flex-none">
-                Choose another file
+          <section className="c-callout c-callout-plain flex-col gap-2" data-testid="lead-file-column-lines">
+            <div className="flex items-center justify-between gap-3">
+              <h3 className="c-s15 c-w6 c-t1">Your columns</h3>
+              <button type="button" onClick={() => setShowColumns((v) => !v)} aria-expanded={showColumns} className="c-btn c-btn-sm c-btn-link">
+                {showColumns ? 'Done' : 'Change'}
               </button>
-              {preview.counts.add > 0 ? (
-                <button type="button" onClick={add} disabled={!button.enabled || off} className="c-btn c-btn-p flex-1 md:flex-none">
-                  {busy === 'add' ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : null}
-                  {button.label}
-                </button>
-              ) : null}
             </div>
-          </div>
-        ) : null}
-      </div>
-    </div>
+            {columnLines(preview).map((line) => (
+              <p key={line.key} className="c-s14 c-t2">
+                <span className="c-w6 c-t1">{line.label}:</span> {line.text}
+              </p>
+            ))}
+            {showColumns ? (
+              <>
+                <Columns preview={preview} mapping={mapping} disabled={off || readOnly} onChange={(index, role) => setMapping((m) => withRole(m, index, role))} />
+                {columnsChanged ? (
+                  <button type="button" onClick={() => check(mapping)} disabled={off} className="c-btn c-btn-s self-start">
+                    {busy === 'check' ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : null}
+                    Check the file again
+                  </button>
+                ) : null}
+              </>
+            ) : null}
+          </section>
+
+          <p className="c-callout c-s14" data-testid="lead-file-tick-note">
+            {LEAD_FILE_WORDS.tick}
+          </p>
+
+          {preview.counts.add > 0 ? (
+            <button
+              type="button"
+              role="checkbox"
+              aria-checked={ticked}
+              onClick={() => setTicked((v) => !v)}
+              disabled={readOnly || off}
+              className="self-start flex items-start gap-3 min-h-11 text-left disabled:opacity-50"
+            >
+              <span className={ticked ? 'c-check c-check-on mt-px' : 'c-check mt-px'}>
+                {ticked ? <Check aria-hidden="true" className="w-3.5 h-3.5" strokeWidth={3} /> : null}
+              </span>
+              <span className="c-s15 c-w5 c-t1">{LEAD_FILE_PERMISSION_WORDS.replace('{gym}', gym?.name ?? 'you')}</span>
+            </button>
+          ) : null}
+        </>
+      ) : null}
+    </AskSheet>
   );
 }

@@ -312,7 +312,8 @@ describe('photos (20c-iv-b)', () => {
 
   it('every photo is shown whole, and a tap opens it full size, a new one before Save too (Kd, click-through)', async () => {
     api.getGymPage.mockResolvedValue({ data: { page: withPhotos([A, B]) } });
-    drawSheet();
+    const closed = vi.fn();
+    drawSheet({ onClose: closed });
     await screen.findByRole('img', { name: 'Photo 1 of 2, the main photo' });
     pick('front-desk.jpg');
     await screen.findByText('Not saved');
@@ -325,8 +326,13 @@ describe('photos (20c-iv-b)', () => {
     expect(within(viewer).getByRole('img').getAttribute('src')).toBe('blob:front-desk.jpg');
     fireEvent.click(within(viewer).getByRole('button', { name: 'Next photo' }));
     expect(within(screen.getByRole('dialog', { name: 'Photo 1 of 3' })).getByRole('img').getAttribute('src')).toContain(`/page/photos/${A}`);
-    fireEvent.keyDown(window, { key: 'Escape' });
+    // Where a real key lands: the photo's own button has the keys, and the panel listens on the document.
+    expect(document.activeElement.getAttribute('aria-label')).toBe('Close');
+    expect(viewer.contains(document.activeElement)).toBe(true);
+    fireEvent.keyDown(document.activeElement, { key: 'Escape' });
     expect(screen.queryByRole('dialog', { name: /Photo/ })).toBeNull();
+    expect(closed).not.toHaveBeenCalled();
+    expect(screen.queryByText('Your changes to your page are not saved.')).toBeNull();
     // The panel is still open, and nothing was sent.
     expect(screen.getByRole('dialog', { name: 'Your gym page' })).toBeTruthy();
     expect(api.addGymPagePhoto).not.toHaveBeenCalled();

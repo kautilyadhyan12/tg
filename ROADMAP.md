@@ -508,7 +508,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
     - V5-b. [x] **Overview's money boxes and the plan box** · merged 2026-11-28 · PR #664
     - V5-c. [x] **The banner above every page, and choosing a plan or its size** · merged 2026-11-28 · PR #666
     - V5-d. [x] **Getting in** · merged 2026-11-28 · PR #669
-   - V6. [ ] **Leads and At risk** (web folder 1): a lead, adding and importing leads, your gym page, At risk (`Lead*`, `GymPage`, `AtRisk*`).
+   - V6. [x] **Leads and At risk** · merged 2026-11-28 · PR #672
    - V7. [ ] **Attendance and the front desk** (web folder 2; `Attendance*`, `Desk*`, `PhoneAttendance`).
    - V8. [ ] **Classes and personal training** (web folder 2): the list, the calendar, a class, adding a class and a time slot, personal training's page and boxes (`Class*`, `PT*`, `PhoneClasses`).
    - V9a. [ ] **Updates and Events** (web folder 2; `Updates*`, `Event*`).
@@ -916,7 +916,9 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
       - 64a-iv. [x] **Saved workouts** — merged 2026-11-22 (PR #621).
       - 64a-v. [x] **History** — merged 2026-11-23 · PR #625
       - 64a-vi. [x] **Heart rate and sounds** — merged 2026-11-23 · PR #629
-    - 64b. [ ] **With the camera** (after 64a and item 53's screen): Camera or Count myself, picked every time.
+    - 64b. **With the camera** (split 2026-11-28 by its terminal in two, the server first; `handoff/2026-11-28-64b-i.md` keeps its line as first written):
+      - 64b-i. [x] **The server keeps a set counted by the camera** — merged 2026-11-28 (PR #671).
+      - 64b-ii. [ ] **Camera or Count myself in the workout**, picked every time, its look drawn for Kd first.
 65. [ ] **Each exercise's Library page**, towards about 200 (§13.2; alongside, from 60): written and checked, never copied across from the old text; Kd's list of names. All camera rules are exercise folder 1's job 54.
 
 **The plan of 2026-09-22 and its items, kept as first written. Where they differ from the lists above, the lists win.**

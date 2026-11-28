@@ -95,6 +95,11 @@ function countedOf(r: repo.SetRow): HistorySet["counted"] {
   return r.mode === "engine" ? "camera" : r.mode === "log_only" ? "hand" : null;
 }
 
+/** A stored form score as History sends it: none for one outside 0 to 100, which nothing in the database bounds (the old
+ *  import kept the old app's own number unclamped) and which the phone would refuse, leaving the workout unopened (round
+ *  one, L2). */
+const formScoreOf = (v: number | null): number | null => (v !== null && Number.isInteger(v) && v >= 0 && v <= 100 ? v : null);
+
 // Parse, don't cast: the columns' CHECKs hold these, and this proves it on the way out.
 const platformSchema = z.enum(["web", "android", "ios"]);
 const startedFromSchema = z.enum(["saved", "app_plan", "gym_plan", "none"]).nullable();
@@ -121,6 +126,7 @@ export async function historyWorkout(deps: HistoryDeps, userId: string, workoutI
     kcalCalcVersion: w.kcal_calc_version,
     kcalWeightKg: w.kcal_weight_grams === null ? null : w.kcal_weight_grams / 1000,
     platform: platformSchema.parse(w.platform),
+    formScore: formScoreOf(w.avg_form_score),
     sets: sets.map((s) => {
       const f = fact(s);
       return {
@@ -134,6 +140,8 @@ export async function historyWorkout(deps: HistoryDeps, userId: string, workoutI
         restSeconds: s.rest_seconds,
         durationMs: s.duration_ms,
         counted: countedOf(s),
+        // A set by hand or by timer never has one: the database refuses it (0249's checks).
+        formScore: formScoreOf(s.avg_form_score),
       };
     }),
     newRecords: newRecordsIn(sets.map(fact), before.sets, before.lifted),

@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
-import { Check, Copy, ExternalLink, ImagePlus, Loader2, Plus, Star, Trash2, X } from 'lucide-react';
+import { Check, Copy, ExternalLink, ImagePlus, Loader2, Plus, Star, Trash2 } from 'lucide-react';
 import { GYM_PAGE_MAX_ABOUT_CHARS, GYM_PAGE_MAX_OWN_FACILITY_CHARS, GYM_PAGE_MAX_PHOTOS } from '@app/shared';
 import { orgService, errorStatus, errorText, gymPhotoUrl } from '../../api/orgsApi';
 import PhotoViewer from '../../components/common/PhotoViewer';
-import { ConfirmInline } from '../../components/console/ConsoleStates';
+import { SidePanel } from '../../components/console/ConsoleBoxes';
 import PlaceLink from '../../components/console/PlaceLink';
 import { viewerPrivileges } from './consoleView';
 import { placeFor } from './consolePlaces';
@@ -32,7 +32,8 @@ import {
 // gym's own website. Anybody with the link sees the page and its form; a person who
 // sends the form is added to Leads. Only the owner changes it (the server's
 // `org.manage`); other staff who keep leads see it and copy the link. A gym adds its own
-// facilities to the same tick list. One Save for everything in the panel. Drawn as the lead's panel is (R3; spec Part 3 §17).
+// facilities to the same tick list. One Save for everything in the panel, pinned at its foot: the
+// console's panel from the right (the board GymPage; spec Part 3 §17.11).
 
 function Tick({ checked, label, hint = null, disabled, onChange }) {
   return (
@@ -82,7 +83,6 @@ export default function GymPageSheet({ gymId, gym, words, readOnly, onClose }) {
   const [error, setError] = useState(null);
   const [done, setDone] = useState(null);
   const [busy, setBusy] = useState(false);
-  const [leaving, setLeaving] = useState(false);
   /** What is typed in "Add a facility", and why it could not be added. */
   const [typedOwn, setTypedOwn] = useState('');
   const [ownProblem, setOwnProblem] = useState(null);
@@ -197,47 +197,43 @@ export default function GymPageSheet({ gymId, gym, words, readOnly, onClose }) {
     }
   };
 
-  const tryClose = () => (changed ? setLeaving(true) : onClose());
+  const foot = (
+    <>
+      {error !== null ? (
+        <p className="c-s14 c-w5 w-full order-first" role="alert" style={{ color: 'var(--bad)' }}>
+          {error}
+        </p>
+      ) : null}
+      {done !== null ? (
+        <p className="c-s14 c-w5 w-full order-first" role="status" style={{ color: 'var(--good)' }}>
+          {done}
+        </p>
+      ) : null}
+      {page !== null && page.mayChange && changed ? (
+        <button type="button" onClick={() => edit(pageDraft(page))} disabled={busy || preparing} className="c-btn c-btn-s c-btn-lg">
+          Cancel
+        </button>
+      ) : null}
+    </>
+  );
 
   return (
-    <div className="fixed inset-0 z-50" style={{ background: 'var(--scrim)' }}>
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-label={title}
-        className="c-sheet absolute inset-0 md:left-auto md:w-[540px] md:border-l flex flex-col overflow-y-auto md:overflow-hidden"
-        style={{ borderColor: 'var(--card-line)' }}
-      >
-        <div className="flex flex-col gap-4 px-4 pt-5 pb-4 md:px-7 md:pt-7 md:pb-5 border-b" style={{ borderColor: 'var(--line)' }}>
-          <div className="flex items-start gap-3">
-            <div className="flex flex-col gap-1 flex-grow min-w-0">
-              <h2 className="c-h1 c-ell" style={{ fontSize: 28, lineHeight: '34px' }}>
-                {title}
-              </h2>
-              <span className="c-s14 c-t2">
-                A page anyone can open from your link. People who send its form are added to your leads.
-              </span>
-            </div>
-            <button type="button" aria-label="Close" onClick={tryClose} className="c-icon-btn">
-              <X aria-hidden="true" className="w-5 h-5" />
-            </button>
-          </div>
-          {leaving ? (
-            <ConfirmInline
-              question="Your changes to your page are not saved."
-              confirmLabel="Discard changes"
-              cancelLabel="Keep editing"
-              onConfirm={onClose}
-              onCancel={() => setLeaving(false)}
-              newLook
-            />
-          ) : null}
-        </div>
-
-        <div className="md:flex-grow md:overflow-y-auto flex flex-col gap-5 px-4 py-5 md:px-7">
+    <SidePanel
+      title={title}
+      sub="A page anyone can open from your link. People who send its form are added to your leads."
+      ask={{ question: 'Your changes to your page are not saved.', confirm: 'Discard changes', cancel: 'Keep editing' }}
+      unsaved={changed}
+      saveLabel={page !== null && page.mayChange ? 'Save' : null}
+      onSave={() => void save()}
+      saveDisabled={off || !changed}
+      busy={busy}
+      foot={foot}
+      onClose={onClose}
+      testId="gym-page-panel"
+    >
           {loadError !== null ? <p className="c-s15 c-t2">{loadError}</p> : null}
           {page === null && loadError === null ? (
-            <p className="c-s14 c-t3 flex items-center gap-2">
+            <p className="c-s14 c-t2 flex items-center gap-2">
               <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> Loading…
             </p>
           ) : null}
@@ -336,7 +332,7 @@ export default function GymPageSheet({ gymId, gym, words, readOnly, onClose }) {
                     })}
                   </ul>
                 ) : (
-                  <p className="c-s14 c-t3">No photos yet.</p>
+                  <p className="c-s14 c-t2">No photos yet.</p>
                 )}
                 {mayChange ? (
                   <div className="flex flex-wrap items-center gap-3 pt-1">
@@ -439,7 +435,7 @@ export default function GymPageSheet({ gymId, gym, words, readOnly, onClose }) {
 
               <div className="c-field pt-4 border-t" style={{ borderColor: 'var(--line)' }}>
                 <span className="c-label">Show the form on your own website</span>
-                <textarea aria-label="Code for your website" readOnly rows={4} value={code} className="c-area" onFocus={(e) => e.target.select()} style={{ fontFamily: 'monospace', fontSize: 13 }} />
+                <textarea aria-label="Code for your website" readOnly rows={4} value={code} className="c-area" onFocus={(e) => e.target.select()} style={{ fontFamily: 'monospace', fontSize: 14 }} />
                 <div className="flex flex-wrap items-center gap-2">
                   <CopyButton text={code} label="Copy code" />
                 </div>
@@ -450,37 +446,9 @@ export default function GymPageSheet({ gymId, gym, words, readOnly, onClose }) {
               </div>
             </>
           ) : null}
-        </div>
-
-        <div className="flex flex-col gap-3 px-4 py-4 md:px-7 border-t" style={{ borderColor: 'var(--line)' }}>
-          {error !== null ? (
-            <p className="c-s14 c-w5" role="alert" style={{ color: 'var(--bad)' }}>
-              {error}
-            </p>
-          ) : null}
-          {done !== null ? (
-            <p className="c-s14 c-w5" role="status" style={{ color: 'var(--good)' }}>
-              {done}
-            </p>
-          ) : null}
-          {page !== null && page.mayChange ? (
-            <div className="flex flex-wrap gap-2">
-              <button type="button" onClick={save} disabled={off || !changed} className="c-btn c-btn-p">
-                {busy ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : null}
-                Save
-              </button>
-              {changed ? (
-                <button type="button" onClick={() => edit(pageDraft(page))} disabled={busy || preparing} className="c-btn c-btn-s">
-                  Cancel
-                </button>
-              ) : null}
-            </div>
-          ) : null}
-        </div>
-      </div>
       {viewing !== null ? (
         <PhotoViewer photos={shownPhotos} index={viewing} onIndex={setViewing} onClose={() => setViewing(null)} />
       ) : null}
-    </div>
+    </SidePanel>
   );
 }

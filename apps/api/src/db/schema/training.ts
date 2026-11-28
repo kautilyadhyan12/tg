@@ -119,10 +119,24 @@ export const workoutSets = pgTable(
     target: integer("target"),
     weightGrams: integer("weight_grams"),
     restSeconds: integer("rest_seconds"),
+    // 0249 (job 64b-i): a set counted by the camera keeps the camera's own count beside the set's (in the set's own
+    // unit, as `target`), and whether the person left it to count the rest themselves or the camera stopped.
+    cameraDone: integer("camera_done"),
+    leftCamera: text("left_camera"),
     createdAt: createdAt(),
   },
   (t) => [
     check("workout_sets_counted_check", sql`${t.counted} IN ('camera','hand','timer')`),
+    check("workout_sets_camera_done_check", sql`${t.cameraDone} >= 0`),
+    check("workout_sets_left_camera_check", sql`${t.leftCamera} IN ('chosen','camera_stopped')`),
+    // 0249: the camera's facts go with a camera set alone, and a camera set is always the engine's, with its own count.
+    check(
+      "workout_sets_camera_facts_check",
+      sql`(${t.counted} IS DISTINCT FROM 'camera' AND ${t.cameraDone} IS NULL AND ${t.leftCamera} IS NULL)
+          OR (${t.counted} = 'camera' AND ${t.cameraDone} IS NOT NULL AND ${t.mode} = 'engine' AND ${t.engineVersion} IS NOT NULL)`,
+    ),
+    // 0249: a set counted by hand or by timer is nobody's analysis.
+    check("workout_sets_hand_is_log_only_check", sql`${t.counted} NOT IN ('hand','timer') OR ${t.mode} = 'log_only'`),
     check("workout_sets_measured_in_check", sql`${t.measuredIn} IN ('reps','time')`),
     check("workout_sets_target_check", sql`${t.target} > 0`),
     check("workout_sets_weight_grams_check", sql`${t.weightGrams} BETWEEN 1 AND 1000000`),
@@ -154,10 +168,14 @@ export const workoutSets = pgTable(
     // (the Zod union blocks it on both branches), but this CHECK exists exactly
     // because Zod is not the only writer: migrate-mongo inserts directly, and
     // P4.y's audit worker will.
+    //
+    // 0249 (job 64b-i) widens the first arm by one case and narrows nothing: a set the camera COUNTED for an exercise
+    // with no camera file of its own carries no score evidence and no definition, and names the engine that counted it.
+    // Anything carrying score evidence still names its engine AND its definition.
     check(
       "workout_sets_engine_provenance_check",
-      sql`(${t.mode} IS DISTINCT FROM 'engine' AND ${t.avgFormScore} IS NULL
-           AND ${t.repScores} IS NULL AND ${t.faultCounts} = '{}'::jsonb)
+      sql`(${t.avgFormScore} IS NULL AND ${t.repScores} IS NULL AND ${t.faultCounts} = '{}'::jsonb
+           AND (${t.mode} IS DISTINCT FROM 'engine' OR (${t.counted} = 'camera' AND ${t.engineVersion} IS NOT NULL)))
           OR (${t.engineVersion} IS NOT NULL AND ${t.definitionVersion} IS NOT NULL)`,
     ),
     // A log-only set is user-typed: nothing analysed it, so it can carry no form

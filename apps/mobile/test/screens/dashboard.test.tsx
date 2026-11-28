@@ -342,8 +342,8 @@ describe("the Dashboard, with the person's own numbers", () => {
       "/v1/workouts": ok(page([{ ...workoutRow(id, at), name: "Push day" }], true)),
       [`/v1/training/workouts/${id}`]: ok({
         workoutId: id, name: "Push day", startedAt: at, endedAt: null, timeZone: null, startedFrom: "none", effort: null, heartAvg: 128, heartMax: 161,
-        durationMs: 42 * 60_000, kcalPoint: 348, kcalCalcVersion: 4, kcalWeightKg: null, platform: "android",
-        sets: [{ position: 0, exercise: "squat", exerciseName: "Squat", measuredIn: "reps", target: 12, done: 12, weightGrams: 60_000, restSeconds: 60, durationMs: 40_000, counted: "hand" }],
+        durationMs: 42 * 60_000, kcalPoint: 348, kcalCalcVersion: 4, kcalWeightKg: null, platform: "android", formScore: null,
+        sets: [{ position: 0, exercise: "squat", exerciseName: "Squat", measuredIn: "reps", target: 12, done: 12, weightGrams: 60_000, restSeconds: 60, durationMs: 40_000, counted: "hand", formScore: null }],
         newRecords: [],
       }),
     });

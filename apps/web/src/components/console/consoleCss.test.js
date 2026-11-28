@@ -444,6 +444,13 @@ describe('read without leaning in (Kd, 2026-11-19, V1-f): no words under 14 px',
     '../../pages/console/NewGym.jsx',
     '../../pages/Login.jsx',
     '../../pages/StaffInvitationLink.jsx',
+    // V6: Leads, a lead's panel, Delete leads, Import leads, Your gym page, At risk.
+    '../../pages/console/Leads.jsx',
+    '../../pages/console/LeadSheet.jsx',
+    '../../pages/console/LeadsDelete.jsx',
+    '../../pages/console/LeadFileImport.jsx',
+    '../../pages/console/GymPageSheet.jsx',
+    '../../pages/console/AtRisk.jsx',
   ];
   // V3a-ii: a member's page opened from Invite to app dims the box in the middle under it too.
   it("a cover drawn after a box in the middle is over that box, and a panel after it is over the cover", () => {

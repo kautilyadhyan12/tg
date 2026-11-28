@@ -152,6 +152,19 @@ describe('the list keeps every control', () => {
     expect(row('Arjun Shah').textContent).toContain('arjun@example.com · +447700900004');
   });
 
+  it('beside Load more, how many of how many are shown; with no next page, neither', async () => {
+    api.getLeads.mockResolvedValue({ data: { ...PAGE.data, total: 342 } });
+    draw();
+    await screen.findAllByTestId('lead-row');
+    expect(screen.getByTestId('leads-more').textContent).toContain('Showing 2 of 342 leads');
+    cleanup();
+    api.getLeads.mockResolvedValue({ data: { ...PAGE.data, cursor: null } });
+    draw();
+    await screen.findAllByTestId('lead-row');
+    expect(screen.queryByTestId('leads-more')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Load more' })).toBeNull();
+  });
+
   it('"?open=add" opens Add lead once: it leaves the address, and closing the form does not open it again', async () => {
     draw('/console/iron-house/leads?open=add');
     await within(await screen.findByRole('dialog')).findByRole('heading', { name: 'Add lead' });
@@ -290,18 +303,18 @@ describe('the new look (spec Part 3 §17)', () => {
     expect(head.textContent).toBe('NameHeard of you fromAddedStatus');
   });
 
-  it('each status tag takes the drawing’s colour by name', async () => {
+  it('a status is plain words, never a tag: quiet for normal (spec Part 3 §17.11, rule 5)', async () => {
     draw();
     await screen.findAllByTestId('lead-row');
-    expect(within(row('Tom Reid')).getByText('New').className).toContain('c-tag-soft');
-    expect(within(row('Arjun Shah')).getByText('On trial').className).toContain('c-tag-warn');
+    expect(within(row('Tom Reid')).getByText('New').className).not.toContain('c-tag');
+    expect(within(row('Arjun Shah')).getByText('On trial').className).not.toContain('c-tag');
   });
 
   it('a lead opens in a side panel from the right', async () => {
     draw();
     await screen.findAllByTestId('lead-row');
     fireEvent.click(row('Tom Reid'));
-    expect(panel().className).toContain('c-sheet');
+    expect(panel().className).toContain('c-panel');
   });
 });
 

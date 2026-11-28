@@ -100,6 +100,9 @@ export const historySetSchema = z.object({
   durationMs: z.number().int(),
   /** Null for a set saved before this was kept. */
   counted: z.enum(["camera", "hand", "timer"]).nullable(),
+  /** The camera's form score for the set, 0 to 100 (job 64b-i); null for a set the camera did not judge: counted by hand
+   *  or by timer, or by the camera for an exercise with no camera file, or with no rep it could judge. */
+  formScore: z.number().int().min(0).max(100).nullable(),
 });
 export type HistorySet = z.infer<typeof historySetSchema>;
 
@@ -129,6 +132,8 @@ export const historyWorkoutSchema = z.object({
   /** The body weight its calories were worked out at when it was saved; null where none was given (70 kg). */
   kcalWeightKg: z.number().nullable(),
   platform: z.enum(["web", "android", "ios"]),
+  /** The workout's form score: the mean of its camera sets' form scores (job 64b-i); null with none. */
+  formScore: z.number().int().min(0).max(100).nullable(),
   sets: z.array(historySetSchema),
   newRecords: z.array(newRecordSchema),
 });

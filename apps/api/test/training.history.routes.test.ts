@@ -346,8 +346,8 @@ d("history and records for each exercise (real Postgres)", () => {
       expect(seen).toMatchObject({ workoutId: id, name: "Leg day", timeZone: "Asia/Calcutta", startedFrom: "none", effort: 3, platform: "android" });
       const [curl, plank] = [await libraryName("barbell_curl"), await libraryName("plank")];
       expect(seen.sets).toEqual([
-        { position: 0, exercise: "barbell_curl", exerciseName: curl, measuredIn: "reps", target: 8, done: 6, weightGrams: 20_000, restSeconds: 90, durationMs: 30_000, counted: "hand" },
-        { position: 1, exercise: "plank", exerciseName: plank, measuredIn: "time", target: 30, done: 30, weightGrams: null, restSeconds: null, durationMs: 30_500, counted: "timer" },
+        { position: 0, exercise: "barbell_curl", exerciseName: curl, measuredIn: "reps", target: 8, done: 6, weightGrams: 20_000, restSeconds: 90, durationMs: 30_000, counted: "hand", formScore: null },
+        { position: 1, exercise: "plank", exerciseName: plank, measuredIn: "time", target: 30, done: 30, weightGrams: null, restSeconds: null, durationMs: 30_500, counted: "timer", formScore: null },
       ]);
       expect(seen.newRecords).toEqual([]);
     });
@@ -358,7 +358,7 @@ d("history and records for each exercise (real Postgres)", () => {
       const seen = historyWorkoutSchema.parse((await get(a, `/v1/training/workouts/${old}`)).json());
       expect(seen).toMatchObject({ name: null, timeZone: null, startedFrom: null, effort: null, platform: "web" });
       expect(seen.sets).toEqual([
-        { position: 0, exercise: "plank", exerciseName: await libraryName("plank"), measuredIn: "time", target: null, done: 95, weightGrams: null, restSeconds: null, durationMs: 95_500, counted: "hand" },
+        { position: 0, exercise: "plank", exerciseName: await libraryName("plank"), measuredIn: "time", target: null, done: 95, weightGrams: null, restSeconds: null, durationMs: 95_500, counted: "hand", formScore: null },
       ]);
       // A newer, longer plank beats the old one; a shorter one would not.
       const longer = await save(a, workout(daysAgo(5), [set({ exercise: "plank", measuredIn: "time", target: 96, done: 96, weightGrams: null, durationMs: 96_000, counted: "timer" })]));
