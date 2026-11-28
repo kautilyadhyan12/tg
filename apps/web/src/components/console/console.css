@@ -1407,7 +1407,7 @@
 /* The plan prompt a gym on no plan cannot skip: the box in the middle over a cover nearly the page's
    own colour, so nothing behind it can be read; its parts split by a line; its two ways out pinned
    at the foot. */
-.c-scrim-shut { background: var(--page); opacity: 0.96; }
+.c-scrim.c-scrim-shut { background: var(--page); opacity: 0.96; }
 .c-plan-gate-part { padding-top: 16px; border-top: 1px solid var(--line); }
 .c-plan-gate-part:empty { display: none; }
 .c-plan-gate-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; }
@@ -1418,6 +1418,8 @@
    narrowest folding phone and with the largest text, never past the box. */
 .c-btn-w { height: auto; min-height: 44px; padding-top: 8px; padding-bottom: 8px; white-space: normal; text-align: center; }
 .c-btn-lg.c-btn-w { min-height: 48px; }
+/* Change size, a size chosen: what it costs and its Confirm and Back, together in the pinned foot. */
+.c-plan-foot { flex: 1 1 100%; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
 /* A box in the middle with nothing to put at its foot (a list of sizes before one is chosen). */
 .c-ask-foot:empty { display: none; }
 

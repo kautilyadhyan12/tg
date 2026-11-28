@@ -178,28 +178,42 @@ export default function PlanChoiceDialog({ org, mode, onClose }) {
       Close
     </button>
   ) : mode === 'size' && picked !== null ? (
-    <>
-      <button
-        type="button"
-        onClick={() => void confirm()}
-        disabled={picked.preview === null || confirming || paying !== null}
-        className="c-btn c-btn-lg c-btn-p"
-      >
-        {confirming || paying !== null ? <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" /> : null}
-        {razorpay ? (picked.row.kind === 'smaller' ? 'Continue to Razorpay' : 'Continue to payment') : 'Confirm'}
-      </button>
-      <button
-        type="button"
-        onClick={() => {
-          setPicked(null);
-          setError(null);
-        }}
-        disabled={confirming || paying !== null}
-        className="c-btn c-btn-lg c-btn-s"
-      >
-        Back
-      </button>
-    </>
+    // What the size chosen costs is said in the foot, right above Confirm, so it is in sight whenever Confirm is.
+    <div className="c-plan-foot" data-testid="size-preview">
+      {picked.preview === null ? (
+        <p role="status" className="c-s14 c-t2 m-0 flex items-center gap-2">
+          <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
+          Working out the price…
+        </p>
+      ) : (
+        <p className="c-s15 c-w6 c-t1 m-0">{sizeChargeText(picked.preview)}</p>
+      )}
+      {razorpay && picked.row.kind === 'smaller' ? (
+        <p className="c-s14 c-t2 m-0">Razorpay may check your payment method with a small charge, which it refunds.</p>
+      ) : null}
+      <div className="c-ask-a">
+        <button
+          type="button"
+          onClick={() => void confirm()}
+          disabled={picked.preview === null || confirming || paying !== null}
+          className="c-btn c-btn-lg c-btn-p"
+        >
+          {confirming || paying !== null ? <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" /> : null}
+          {razorpay ? (picked.row.kind === 'smaller' ? 'Continue to Razorpay' : 'Continue to payment') : 'Confirm'}
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            setPicked(null);
+            setError(null);
+          }}
+          disabled={confirming || paying !== null}
+          className="c-btn c-btn-lg c-btn-s"
+        >
+          Back
+        </button>
+      </div>
+    </div>
   ) : null;
 
   return (
@@ -293,22 +307,6 @@ export default function PlanChoiceDialog({ org, mode, onClose }) {
             </ul>
           ) : null}
 
-          {mode === 'size' && picked !== null ? (
-            <div className="c-callout c-callout-plain flex-col" data-testid="size-preview">
-              {picked.preview === null ? (
-                <p role="status" className="c-s14 c-t2 m-0 flex items-center gap-2">
-                  <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
-                  Working out the price…
-                </p>
-              ) : (
-                <p className="c-s15 c-w6 c-t1 m-0">{sizeChargeText(picked.preview)}</p>
-              )}
-              {razorpay && picked.row.kind === 'smaller' ? (
-                <p className="c-s14 c-t2 m-0">Razorpay may check your payment method with a small charge, which it refunds.</p>
-              ) : null}
-              {/* A smaller size the members do not fit: its warning is on its row, just above, marked Chosen. */}
-            </div>
-          ) : null}
 
           {(error ?? payError) !== null ? (
             <p role="alert" className="c-err m-0">

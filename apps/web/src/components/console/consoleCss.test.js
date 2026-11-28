@@ -65,6 +65,14 @@ describe('the banner above every page reads in both looks', () => {
   });
 });
 
+describe('the plan prompt a gym on no plan cannot skip (V5-c)', () => {
+  it('its cover is the page colour, nearly solid, and outranks the see-through cover every other box has', () => {
+    // `.c-scrim` comes later in the file: a cover named by one class alone loses to it and lets the page show through.
+    expect(declarations('.c-scrim-shut')).toEqual({});
+    expect(declarations('.c-scrim.c-scrim-shut')).toEqual({ background: 'var(--page)', opacity: '0.96' });
+  });
+});
+
 describe('every text colour is readable on every surface, in both looks', () => {
   // WCAG 2's contrast ratio. Every word is 7:1 or more on what it sits on (WCAG's AAA bar), so
   // nobody leans in to read it (Kd, 2026-11-19, V1-f's click-through); a disabled control's

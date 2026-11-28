@@ -727,6 +727,10 @@ describe('V5-c: every size button asks for its own row, and Confirm sends the on
 
     answers.org_b3_us_m({ data: { planCode: 'org_b3_us_m', seatCap: 1000, priceLabel: '$199', dueNow: { totalLabel: '$66.00', subtotalLabel: '$60.00', taxLabel: '$6.00' }, nextPaymentAt: NEXT_PAYMENT } });
     expect(await within(dialog).findByText(/You pay \$66\.00 now/)).toBeTruthy();
+    // What it costs is in the pinned foot with Confirm, so nobody presses Confirm with the price scrolled away.
+    const foot = dialog.querySelector('.c-ask-foot');
+    expect(within(foot).getByText(/You pay \$66\.00 now/)).toBeTruthy();
+    expect(within(foot).getByRole('button', { name: 'Confirm' })).toBeTruthy();
     fireEvent.click(within(dialog).getByRole('button', { name: 'Confirm' }));
     await waitFor(() => expect(orgService.changeSize).toHaveBeenCalledTimes(1));
     expect(orgService.changeSize.mock.calls[0].slice(0, 2)).toEqual([GYM_ID, 'org_b3_us_m']);
