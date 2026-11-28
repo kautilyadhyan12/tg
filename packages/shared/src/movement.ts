@@ -58,6 +58,30 @@ export const movementFrameSchema = z
   })
   .strict();
 
+// zod 4: z.number() refuses Infinity and NaN by itself.
+const finite = z.number();
+
+/** One answer of the phone's camera module (`apps/mobile/modules/pose-camera`, job 53a) as it crosses into the app, checked
+ *  before anything of it is read (the camera's security pass, L1): a broken one is no frame at all, never a thrown error.
+ *  `t`: the phone's own clock, ms. `gravity`: Android's reading in the phone's own axes, or none. `turn`: the screen's turn
+ *  from those axes, degrees. Each person: 33 points of 5 numbers laid end to end, and 33 3D points of 3, or none. */
+export const poseCameraEventSchema = z.object({
+  t: finite,
+  width: finite,
+  height: finite,
+  gravity: z.array(finite).max(3),
+  turn: finite,
+  people: z
+    .array(
+      z.object({
+        points: z.array(finite).length(KEYPOINT_COUNT * 5),
+        world: z.array(finite).refine((w) => w.length === 0 || w.length === KEYPOINT_COUNT * 3, { message: "33 3D points or none" }),
+      }),
+    )
+    .max(MAX_PEOPLE),
+});
+export type PoseCameraEvent = z.infer<typeof poseCameraEventSchema>;
+
 // A body-points file's header (`packages/movement/scripts/bodyPoints.ts`): what a
 // measurement was made from and how. Only plain characters, so the file can never
 // carry a path or a name typed by somebody else.

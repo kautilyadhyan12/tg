@@ -52,6 +52,9 @@ export interface WorkoutLayerValue {
   dismissRefused: (id: string) => void;
   /** The person's saved workouts (64a-iv): what the list shows, and the store that saves, loads and deletes. */
   saved: { view: SavedView; store: SavedStore } | null;
+  /** Sound on or off: the one answer every screen with sound shows and changes, the workout and the camera alike (the
+   *  camera's integrity pass, H1: the camera kept a copy of its own, and the workout went on with the old choice). */
+  sound: SoundSwitch;
 }
 
 const NONE_WAITING: WaitingView<WorkoutSave, RefusedWorkout> = { waiting: [], refused: [], sent: [], held: false, unsaved: false };
@@ -302,8 +305,9 @@ export function WorkoutLayerProvider({ children, files = PHONE_FILES, onNewWorko
         made?.waiting.dismiss(id);
       },
       saved: made === null ? null : { view: savedView, store: made.saved },
+      sound,
     }),
-    [placed, finished, waiting, store, made, savedView],
+    [placed, finished, waiting, store, made, savedView, sound],
   );
 
   const press = useCallback(

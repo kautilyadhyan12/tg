@@ -1,4 +1,4 @@
-import { KEYPOINT_COUNT, movementFrameSchema, type Down, type MovementFrame } from "@app/shared";
+import { KEYPOINT_COUNT, movementFrameSchema, poseCameraEventSchema, type Down, type MovementFrame } from "@app/shared";
 
 // The camera screen (ROADMAP Stage 5 53a; spec Part 2 §12.2): each answer of the phone's pose model, as the camera module
 // sends it (modules/pose-camera), made into the movement engine's frame and checked by its schema before the engine
@@ -60,7 +60,15 @@ function turned(x: number, y: number, turn: number): [number, number] | null {
 
 const share = (v: number): number => Math.min(1, Math.max(0, v));
 
-/** The engine's frame of one answer, `t` ms after the set's first; null when anything in it is broken. */
+/** An answer as the camera module sent it, checked whole before anything of it is read (`poseCameraEventSchema`; the
+ *  camera's security pass, L1): null when its shape is broken, never a thrown error. */
+export function answerOf(answer: unknown): PoseEvent | null {
+  const checked = poseCameraEventSchema.safeParse(answer);
+  return checked.success ? checked.data : null;
+}
+
+/** The engine's frame of one checked answer (`answerOf`), `t` ms after the set's first; null when anything in it is
+ *  broken. */
 export function frameOf(e: PoseEvent, t: number): MovementFrame | null {
   if (!(e.width > 0) || !(e.height > 0)) return null;
   const people = [];

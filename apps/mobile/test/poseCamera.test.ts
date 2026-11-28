@@ -78,6 +78,34 @@ describe("the worst thing first: the camera keeps and sends nothing of a person 
   });
 });
 
+describe("the camera let go when the screen says so, and no still of it kept (the camera's security pass, T1 and H1)", () => {
+  it("taken off the screen (Follow along, Count this set myself, End) or resting (Pause), the view lets the phone's camera go", () => {
+    // Taken off the screen: the session is stopped before the view goes.
+    expect(view).toContain("override fun onDetachedFromWindow() {\n    stop()\n");
+    // Paused: the session is stopped.
+    expect(view).toContain("if (active && isAttachedToWindow) start() else if (!active) stop()");
+    // Stopped: the session is closed and forgotten.
+    expect(view).toContain("private fun stop() {\n    session?.close()\n    session = null\n");
+    // Closed: the camera's uses are unbound from the phone's camera, once.
+    expect(view).toMatch(/fun close\(\) \{\n\s+if \(closed\) return\n\s+closed = true\n[^]*?provider\?\.unbind\(\*useCases\.toTypedArray\(\)\)/);
+  });
+
+  it("while the camera is on the screen, Android keeps no still of it for the app switcher (Android 13 and later)", () => {
+    expect(view).toContain("override fun onAttachedToWindow() {\n    super.onAttachedToWindow()\n    keepOutOfRecents(true)\n");
+    expect(view).toContain("    stop()\n    keepOutOfRecents(false)\n    super.onDetachedFromWindow()");
+    expect(view).toContain("if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {\n      appContext.currentActivity?.setRecentsScreenshotEnabled(!out)\n      return\n    }");
+  });
+
+  it("on Android 12 and older, which have no such switch, the camera's window is marked secure while it is on it (Kd, 2026-11-28)", () => {
+    // Marked on the window the view is in as it comes on the screen, and that same window unmarked as it goes.
+    expect(view).toContain("val root = (if (out) rootView else secured) ?: return\n    secured = if (out) root else null\n");
+    expect(view).toContain(
+      "params.flags = if (out) params.flags or WindowManager.LayoutParams.FLAG_SECURE else params.flags and WindowManager.LayoutParams.FLAG_SECURE.inv()",
+    );
+    expect(view).toContain(".updateViewLayout(root, params)");
+  });
+});
+
 describe("the body drawn by the phone, on the very picture it was read from (Kd at 53a's run: the lines lagging)", () => {
   it("drawn in the same moment as its picture, and on nothing once the camera rests", () => {
     // One message on the screen's thread sets both: they reach the screen in the same frame.
