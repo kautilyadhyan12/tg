@@ -1,6 +1,6 @@
 import { CameraSet, Coach, HoldRecord, SetRecord, type CameraCounts, type Say } from "@app/movement";
 import type { EngineSetSummary, ExerciseCamera, SeenPerson } from "@app/shared";
-import { frameOf, type PoseEvent } from "./poseFrame";
+import { answerOf, frameOf } from "./poseFrame";
 import { COACH_WORDS } from "./voice";
 
 // The camera screen (ROADMAP Stage 5 53a, 53b-i; spec Part 2 §12.1, §12.6; Kd's drawing of 2026-11-26): what the screen
@@ -83,10 +83,13 @@ export class LiveSet {
     this.record = exercise === null ? null : "hold" in counts ? new HoldRecord(exercise, counts.hold, set) : new SetRecord(exercise, counts.movement, set);
   }
 
-  /** The screen after one answer. An answer that is broken, or whose clock went back, changes nothing and says nothing. */
-  next(e: PoseEvent, now: SetNow = NO_SET): LiveView {
+  /** The screen after one answer. An answer that is broken, or whose clock went back, changes nothing and says nothing:
+   *  it is checked whole before even its clock is read. */
+  next(answer: unknown, now: SetNow = NO_SET): LiveView {
     // After the end nothing more is said: pictures the phone had already sent still arrive (round one, H1).
     if (this.ended !== null) return { ...this.view, say: null };
+    const e = answerOf(answer);
+    if (e === null) return { ...this.view, say: null };
     if (this.firstAt === null) this.firstAt = e.t;
     const t = e.t - this.firstAt;
     if (t < this.lastT) return { ...this.view, say: null };

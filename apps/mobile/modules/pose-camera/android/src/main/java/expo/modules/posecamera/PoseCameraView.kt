@@ -15,6 +15,7 @@ import android.hardware.camera2.CaptureRequest
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
+import android.os.Build
 import android.os.Handler
 import android.os.HandlerThread
 import android.os.Looper
@@ -316,12 +317,25 @@ class PoseCameraView(context: Context, appContext: AppContext) : ExpoView(contex
 
   override fun onAttachedToWindow() {
     super.onAttachedToWindow()
+    keepOutOfRecents(true)
     if (wanted) start()
   }
 
   override fun onDetachedFromWindow() {
     stop()
+    keepOutOfRecents(false)
     super.onDetachedFromWindow()
+  }
+
+  /**
+   * While the camera's picture of the person is on the screen, Android keeps no still of the app for its app switcher (the
+   * camera's security pass, H1: Home pressed in a set, or the switcher opened to change the music, saved that picture in the
+   * phone's own storage and showed it there and on the way back). Android 13 and later; the person's own screenshots still
+   * work.
+   */
+  private fun keepOutOfRecents(out: Boolean) {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
+    appContext.currentActivity?.setRecentsScreenshotEnabled(!out)
   }
 
   private fun start() {
