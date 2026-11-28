@@ -4,7 +4,7 @@
 import { describe, expect, it } from "vitest";
 import type { RunPoint } from "@app/shared";
 import type { LiveRun } from "../src/screens/running/recorder";
-import { currentPace, movingMsOf } from "../src/screens/running/runLive";
+import { closedStill, currentPace, liveStill, movingMsOf, pacing, sentOf, sumsAt } from "../src/screens/running/runLive";
 
 const GO = 1_763_600_000_000;
 const LAT = 26.1445;
@@ -106,5 +106,47 @@ describe("current pace", () => {
     expect(currentPace(run3(), true, "metric", 68_000)).toBe("5:33");
     expect(currentPace(run3(), true, "metric", 68_001)).toBe("--:--");
     expect(currentPace(run3(), true, "metric", 300_000)).toBe("--:--");
+  });
+});
+
+describe("a phone that feels the person stand (37r)", () => {
+  /** A run with one change made to it. */
+  const runWith = (change: Partial<LiveRun>): LiveRun => ({ ...liveRun(pointsAt(steady(60, 3))), ...change });
+
+  it.each<[string, Partial<LiveRun>, boolean]>([
+    ["running, nothing felt", {}, true],
+    ["running, a still stretch closed", { still: [[10_000, 20_000]] }, true],
+    // The points go north at 3 m/s: from 50 s the phone has gone 30 m, within the 40 m the maths holds as a stand.
+    ["running, Auto-pause off holding a still stretch open", { still: [[10_000, 20_000], [50_000, null]] }, false],
+    ["running, the phone feeling still before Auto-pause has decided", { feltStillFrom: 55_000 }, false],
+    // From 40 s it has gone 60 m: wheels the phone felt still, too fast for Auto-pause to find.
+    ["running, a still stretch open while the phone went 60 m on", { still: [[40_000, null]] }, true],
+    ["running, felt still while the phone went 60 m on", { feltStillFrom: 40_000 }, true],
+    ["running, nothing felt (missing, as in a run read back)", { feltStillFrom: null }, true],
+    ["paused", { phase: "paused" }, false],
+    ["finished", { phase: "finished", finishedMs: 60_000 }, false],
+  ])("Current pace %s: shown %s", (_case, change, shows) => {
+    expect(pacing(runWith(change))).toBe(shows);
+    // The screen passes it on: a pace of 3 m/s shows, and no pace at all where the phone feels the person stand.
+    expect(currentPace(runWith(change).points, pacing(runWith(change)), "metric", 60_000) === "--:--").toBe(!shows);
+  });
+
+  it("the seconds felt still are standing on the screen from where they began: never inside a pause or a stretch kept, and gone once paused or finished", () => {
+    expect(liveStill(runWith({ feltStillFrom: 40_000 }), 60_000)).toEqual([[40_000, 60_000]]);
+    expect(liveStill(runWith({ feltStillFrom: 40_000, still: [[10_000, 45_000]] }), 60_000)).toEqual([[10_000, 45_000], [45_000, 60_000]]);
+    expect(liveStill(runWith({ feltStillFrom: 40_000, pauses: [[30_000, 50_000]] }), 60_000)).toEqual([[50_000, 60_000]]);
+    expect(liveStill(runWith({ feltStillFrom: 40_000, datedBack: [[35_000, 42_000]] }), 60_000)).toEqual([[35_000, 42_000], [42_000, 60_000]]);
+    expect(liveStill(runWith({ feltStillFrom: 60_000 }), 60_000)).toEqual([]);
+    expect(liveStill(runWith({ feltStillFrom: 40_000, phase: "paused" }), 60_000)).toEqual([]);
+    expect(liveStill(runWith({ feltStillFrom: 40_000, phase: "finished", finishedMs: 60_000 }), 60_000)).toEqual([]);
+    expect(liveStill(runWith({}), 60_000)).toEqual(closedStill(runWith({}), 60_000));
+  });
+
+  it("a walk the phone felt still for its last 10 s (30 m, inside the 40 m a still phone may go) shows none of those metres while it lasts, and they are never sent", () => {
+    const felt = runWith({ feltStillFrom: 50_000 });
+    expect(sumsAt(runWith({}), 60_000, 70).distanceM).toBeGreaterThanOrEqual(170);
+    expect(sumsAt(felt, 60_000, 70).distanceM).toBeLessThanOrEqual(sumsAt(runWith({}), 60_000, 70).distanceM - 25);
+    expect(sentOf({ ...felt, phase: "finished", finishedMs: 60_000 })).not.toHaveProperty("still");
+    expect(sentOf({ ...felt, finishedMs: 60_000 })).not.toHaveProperty("still");
   });
 });

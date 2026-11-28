@@ -330,6 +330,26 @@ describe("I stand my phone up, step back, do my squats, and the phone counts the
     await waitFor(() => { expect(sounds.hushed - from).toBe(4); });
   });
 
+  it("after Count this set myself, answers still on their way are neither counted nor heard (the integrity pass, L1)", async () => {
+    await openTry();
+    await turnOn();
+    await fireEvent.press(screen.getByTestId("camera-tap"));
+    const off = screen.queryByRole("button", { name: "Sound off" });
+    if (off !== null) await fireEvent.press(off);
+    const late = poseCamera.props as unknown as { onPose: (e: { nativeEvent: PoseEvent }) => void };
+    await fireEvent.press(screen.getByRole("button", { name: "Count this set myself" }));
+    sounds.played.length = 0;
+    sounds.spoken.length = 0;
+    for (const e of SQUATS) {
+      await act(() => {
+        late.onPose({ nativeEvent: e });
+      });
+    }
+    expect(countSays()).toBe("00 / 10");
+    expect(sounds.played).toEqual([]);
+    expect(sounds.spoken).toEqual([]);
+  });
+
   it("the set ends by itself at its target", async () => {
     await openTry();
     await turnOn();
@@ -346,10 +366,18 @@ describe("I stand my phone up, step back, do my squats, and the phone counts the
     await openTry();
     await turnOn();
     await fireEvent.press(screen.getByTestId("camera-tap"));
+    // Sound on, so that anything heard would be heard; the person's own choice is kept on the phone between tests.
+    const off = screen.queryByRole("button", { name: "Sound off" });
+    if (off !== null) await fireEvent.press(off);
     await fireEvent.press(screen.getByRole("button", { name: "Pause" }));
     expect(poseCamera.actives[poseCamera.actives.length - 1]).toBe(false);
+    sounds.played.length = 0;
+    sounds.spoken.length = 0;
+    // A whole set of answers still on their way after Pause: none counted, and none heard (the integrity pass, L1).
     await play(SQUATS);
     expect(countSays()).toBe("00 / 10");
+    expect(sounds.played).toEqual([]);
+    expect(sounds.spoken).toEqual([]);
     await fireEvent.press(screen.getByRole("button", { name: "Resume" }));
     expect(poseCamera.actives[poseCamera.actives.length - 1]).toBe(true);
     // The same three squats a minute later: counted now.

@@ -100,6 +100,10 @@ export function CameraSet({ live, title, digits, of, paused, sound, now, stopped
   // Gone, the screen does nothing with an answer still on its way from the camera: no count, no sound, no word (53b-ii:
   // Follow along takes this screen and the camera away, and nothing the camera saw is the set's).
   const gone = useRef(false);
+  // Paused, the set over or counted by hand: an answer already on its way when the press was made is nobody's, and is not
+  // heard (the camera's integrity pass, L1: it beeped "rep" for a rep the set did not take).
+  const resting = useRef(paused || stopped !== null);
+  resting.current = paused || stopped !== null;
   useEffect(() => {
     gone.current = false;
     return () => {
@@ -111,7 +115,7 @@ export function CameraSet({ live, title, digits, of, paused, sound, now, stopped
   // changes. Drawing the whole screen for every picture took the phone's chip from the model (53a's 20-minute run).
   const pose = useCallback(
     (e: NativeSyntheticEvent<PoseEvent>) => {
-      if (gone.current) return;
+      if (gone.current || resting.current) return;
       const next = live.next(e.nativeEvent, set.current);
       const last = shown.current;
       // The coach speaks what the camera has just seen (53b-i), whether or not the screen changes with it.

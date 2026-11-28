@@ -2082,6 +2082,43 @@ describe("heart rate and sounds in a workout (64a-vi)", () => {
     expect(sounds.played).toEqual(["rep"]);
   });
 
+  // The camera's integrity pass, H1: the camera kept a Sound choice of its own, and the workout went on with the old one
+  // until the app was opened again.
+  it("Sound off in Try the camera is the workout's Sound off too, in the same session, and the other way round", async () => {
+    const camera = jest.requireMock<{ camera: { permission: unknown; afterAsk: unknown } }>("expo-camera").camera;
+    const granted = { granted: true, canAskAgain: true, status: "granted", expires: "never" };
+    camera.permission = granted;
+    camera.afterAsk = granted;
+    remove(`camera-told-${RAVI.id}.json`);
+    await openLibrary(saving().ask);
+    // The camera: Sound off.
+    await fireEvent.press(await screen.findByRole("tab", { name: "Me" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Try the camera" }));
+    await fireEvent.press(await screen.findByText("Squat"));
+    await fireEvent.press(await screen.findByRole("button", { name: "Turn on the camera" }));
+    await fireEvent.press(await screen.findByTestId("camera-tap"));
+    await fireEvent.press(screen.getByRole("button", { name: "Sound on" }));
+    expect(screen.getByRole("button", { name: "Sound off" })).toBeTruthy();
+    await fireEvent.press(screen.getByRole("button", { name: "End" }));
+    // The workout, the app never closed: off, and silent.
+    await fireEvent.press(await screen.findByRole("tab", { name: "Workout" }));
+    await openMine();
+    await fireEvent.press(await screen.findByRole("button", { name: "Start workout" }));
+    const sound = await screen.findByRole("switch", { name: "Sound" });
+    expect(sound.props.accessibilityState).toEqual({ checked: false });
+    await fireEvent.press(screen.getByRole("button", { name: "One rep more" }));
+    expect(sounds.played).toEqual([]);
+    // Turned on in the workout: the camera shows it on.
+    await fireEvent.press(sound);
+    expect(screen.getByRole("switch", { name: "Sound" }).props.accessibilityState).toEqual({ checked: true });
+    await fireEvent.press(screen.getByRole("button", { name: "Put workout away" }));
+    await fireEvent.press(await screen.findByRole("tab", { name: "Me" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Try the camera" }));
+    await fireEvent.press(await screen.findByText("Squat"));
+    await fireEvent.press(await screen.findByTestId("camera-tap"));
+    expect(screen.getByRole("button", { name: "Sound on" })).toBeTruthy();
+  });
+
   // Round one, T4: the set's end reaches the player, not only the rule's table.
   it("with Sound on, the set's end plays its two beeps", async () => {
     await openLibrary(saving().ask);
