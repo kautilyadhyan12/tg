@@ -686,6 +686,24 @@ describe('checked in today', () => {
     expect(screen.getByText('Updates as people check in')).toBeTruthy();
   });
 
+  // Kd at V7's click-through: a busy day must not stretch the page. One under the other, the latest 10
+  // show and View all shows the rest (beside Check in, console.css scrolls the list inside the box).
+  it('a busy day lists the latest 10 until View all, and View fewer folds them again', async () => {
+    const visits = Array.from({ length: 12 }, (_, i) => lv(`v${String(i + 10)}`, `2026-10-03T${String(8 - Math.floor(i / 2)).padStart(2, '0')}:${i % 2 === 0 ? '30' : '10'}:00.000Z`, `Person ${String(i + 1)}`));
+    api.getCheckinLog.mockResolvedValueOnce(logAnswer(visits));
+    drawScreen();
+    await screen.findByText('Person 1');
+    const later = () => [...document.querySelectorAll('.c-attend-later')].map((li) => li.querySelector('.c-w6').textContent);
+    expect(later()).toEqual(['Person 11', 'Person 12']);
+    const button = screen.getByRole('button', { name: 'View all 12' });
+    expect(button.getAttribute('aria-expanded')).toBe('false');
+    fireEvent.click(button);
+    expect(later()).toEqual([]);
+    expect(screen.getByRole('button', { name: 'View fewer' }).getAttribute('aria-expanded')).toBe('true');
+    fireEvent.click(screen.getByRole('button', { name: 'View fewer' }));
+    expect(later()).toEqual(['Person 11', 'Person 12']);
+  });
+
   it("shows the gym's status and payment words under a person who has them, and nothing under one who has none", async () => {
     api.getCheckinLog.mockResolvedValueOnce(
       logAnswer([

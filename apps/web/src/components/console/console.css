@@ -3368,3 +3368,12 @@ button.c-ov-money-who {
 @media (max-width: 767px) {
   .c-attend-ask { scroll-margin-top: 72px; scroll-margin-bottom: 84px; }
 }
+/* Today's check-ins on a busy day (up to 50): beside Check in on a laptop the box is never taller than the
+   window and its list scrolls inside it; one under the other, the latest 10 show and View all shows the rest. */
+@media (min-width: 1180px) {
+  .c-attend-today { max-height: max(360px, calc(100vh - 320px)); overflow-y: auto; overscroll-behavior: contain; margin-right: -8px; padding-right: 8px; }
+  .c-attend-all { display: none; }
+}
+@media (max-width: 1179px) {
+  .c-attend-later { display: none; }
+}

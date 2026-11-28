@@ -27,6 +27,8 @@ import { initialsOf } from './memberListPeople';
 import { msToGymMidnight, useLiveNews } from './liveNews';
 
 const SEARCH_WAIT_MS = 250;
+/** Today's check-ins listed on a tablet or a phone before View all. */
+const TODAY_SHOWN = 10;
 /** A read that failed and may clear is tried again after this, while the log is on screen. */
 const RETRY_MS = 15_000;
 /** While the live line cannot open, the log checks for itself this often. */
@@ -372,6 +374,8 @@ export function CheckSomeoneIn({ gymId, words, keepsList, timezone, clearSignal,
 export function CheckedInToday({ gymId, words, refreshSignal, canFix, onRemoved }) {
   /** The visit whose Remove box is open, and how its removal is going. */
   const [removing, setRemoving] = useState(null);
+  /** On a tablet or a phone the latest few are listed until View all is pressed. */
+  const [all, setAll] = useState(false);
   const [removeBusy, setRemoveBusy] = useState(false);
   const [removeError, setRemoveError] = useState(null);
   const [log, setLog] = useState({ status: 'loading', visits: [], day: null, timezone: null, clockFormat: '24h', error: null, retryable: true, stale: false });
@@ -580,13 +584,13 @@ export function CheckedInToday({ gymId, words, refreshSignal, canFix, onRemoved 
           Nobody has checked in yet today. Scans at your front desk and check-ins by staff show here as they happen.
         </p>
       ) : (
-        <ul className="flex flex-col">
-          {log.visits.map((visit) => {
+        <ul className="flex flex-col c-attend-today">
+          {log.visits.map((visit, index) => {
             const name = visit.name === '' ? `A ${words.person}` : visit.name;
             const time = visitTimeLabel(visit.markedAt, log.timezone, log.clockFormat);
             const asking = removing === visit.id;
             return (
-              <li key={visit.id} className="min-w-0">
+              <li key={visit.id} className={`min-w-0 ${index >= TODAY_SHOWN && !all && !asking ? 'c-attend-later' : ''}`}>
                 <div className="c-attend-row">
                   <span className="c-attend-tm c-s15 c-t1">{time}</span>
                   <span className="grow">
@@ -644,6 +648,13 @@ export function CheckedInToday({ gymId, words, refreshSignal, canFix, onRemoved 
           })}
         </ul>
       )}
+      {/* A busy day never stretches the page: on a laptop the list scrolls inside the box (console.css); on a
+          tablet or a phone the latest few are shown, and this button shows the rest. */}
+      {count > TODAY_SHOWN ? (
+        <button type="button" className="c-btn c-btn-s c-btn-sm self-start c-attend-all" aria-expanded={all} onClick={() => setAll((was) => !was)}>
+          {all ? 'View fewer' : `View all ${String(count)}`}
+        </button>
+      ) : null}
       {count >= CHECKIN_LOG_LIMIT ? (
         <p className="c-s14 c-t2">Showing the latest {CHECKIN_LOG_LIMIT}. Everyone who came today is in Check-in history for today.</p>
       ) : null}
