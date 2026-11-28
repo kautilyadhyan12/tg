@@ -157,7 +157,7 @@ function Answer({ shown, pending, stopped }) {
         <p className="c-desk-say">{shown.title}</p>
         {shown.name ? <p className="c-desk-who">{shown.name}</p> : null}
         {shown.notice ? (
-          <p data-notice="" className="c-tag c-tag-warn c-s14 max-w-full" style={{ height: 'auto', padding: '6px 14px', whiteSpace: 'normal' }}>
+          <p data-notice="" className="c-tag c-tag-warn max-w-full" style={{ height: 'auto', padding: '6px 14px', whiteSpace: 'normal', fontSize: 16, lineHeight: '22px' }}>
             {shown.notice}
           </p>
         ) : null}

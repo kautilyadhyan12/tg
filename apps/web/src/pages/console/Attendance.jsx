@@ -100,7 +100,7 @@ function PersonRow({ person, timezone, clockFormat, onPick, picked }) {
             // (:20867, the guard in `test-setup.js`).
             <span
               key={`${personKey(person)}-${i}-${chip.markedAt}`}
-              className={`c-tag ${isExceptionStatus(chip.hoursStatus) ? 'c-tag-plain' : 'c-tag-soft'}`}
+              className={`c-tag ${isExceptionStatus(chip.hoursStatus) ? 'c-tag-line' : 'c-tag-soft'}`}
             >
               {chip.time}
               {isExceptionStatus(chip.hoursStatus) ? (chip.hoursStatus === 'closed_day' ? ' · closed day' : ' · outside hours') : null}
@@ -213,7 +213,7 @@ function PersonHistory({ gymId, person, onClose }) {
                   {row.times.map((chip, i) => (
                     <span
                       key={`${row.day}-${i}-${chip.markedAt}`}
-                      className={`c-tag ${isExceptionStatus(chip.hoursStatus) ? 'c-tag-plain' : 'c-tag-soft'}`}
+                      className={`c-tag ${isExceptionStatus(chip.hoursStatus) ? 'c-tag-line' : 'c-tag-soft'}`}
                     >
                       {chip.time}
                       {isExceptionStatus(chip.hoursStatus) ? (chip.hoursStatus === 'closed_day' ? ' · closed day' : ' · outside hours') : null}
@@ -650,7 +650,7 @@ function AttendanceDay({ org }) {
           <button type="button" onClick={() => setDay((d) => addDays(d, 1))} aria-label="Next day" className="c-icon-btn">
             <ChevronRight aria-hidden="true" className="w-4 h-4" />
           </button>
-          <span className="c-s15 c-t2">{closureDateLabel(day)}</span>
+          <span className="c-s15 c-t2">{day === gymToday(timezone) ? 'Today' : closureDateLabel(day)}</span>
         </div>
 
         {/* THE THREE ARMS ALL ASK `fresh` FIRST. A held answer that belongs to
