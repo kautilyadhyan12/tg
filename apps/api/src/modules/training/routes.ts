@@ -46,17 +46,23 @@ export const OBJECT_MEMBERS_FOR_SAVE = 15_000;
 const validationError = (req: FastifyRequest, reply: FastifyReply, message: string) =>
   reply.status(400).send({ error: "validation_error", message, requestId: req.id });
 
-/** A part of a field's path, cut short: a record's key is the phone's own word. */
-const pathWords = (path: readonly PropertyKey[]): string => path.map((p) => String(p).slice(0, 40)).join(".");
+/** A key or a part of a field's path, cut short and marked so: a record's key is the phone's own word. */
+const cut = (word: string): string => (word.length > 40 ? `${word.slice(0, 40)}…` : word);
+const pathWords = (path: readonly PropertyKey[]): string => path.map((p) => cut(String(p))).join(".");
 
 /** A refused save's problems for the phone: where each is and what is wrong, never a value it sent; at most ten, and
- *  unknown keys named by at most five of their names (round one, H1: 5,000 unknown keys made a reply of every name). */
+ *  unknown keys counted and named by at most five different names (round one, H1: 5,000 unknown keys made a reply of every
+ *  name; the re-check: five names cut alike read as one name five times). */
 export function saveIssueWords(e: z.ZodError, most = 10): string {
   const words = e.issues.slice(0, most).map((i) => {
     if (i.code !== "unrecognized_keys") return `${pathWords(i.path)}: ${i.message}`;
-    const named = i.keys.slice(0, 5).map((k) => `"${k.slice(0, 40)}"`).join(", ");
-    const more = i.keys.length > 5 ? ` and ${String(i.keys.length - 5)} more` : "";
-    return `${pathWords(i.path)}: unknown keys ${named}${more}`;
+    const named: string[] = [];
+    for (const k of i.keys) {
+      const word = `"${cut(k)}"`;
+      if (!named.includes(word)) named.push(word);
+      if (named.length === 5) break;
+    }
+    return `${pathWords(i.path)}: ${String(i.keys.length)} unknown ${i.keys.length === 1 ? "key" : "keys"}, such as ${named.join(", ")}`;
   });
   if (e.issues.length > most) words.push(`and ${String(e.issues.length - most)} more problems`);
   return words.join("; ");

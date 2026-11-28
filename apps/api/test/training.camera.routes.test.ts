@@ -375,6 +375,14 @@ d("a set counted by the camera, saved from the phone (real Postgres)", () => {
       expect(await workoutsOf(a)).toBe(0);
     });
 
+    it("unknown keys alike in their first 40 letters are named once each, cut and marked", async () => {
+      const a = await person();
+      const long = "x".repeat(45);
+      const res = await save(a, workout([{ ...cameraSet(), [`${long}1`]: 1, [`${long}2`]: 1, short: 1 }]));
+      expect(res.statusCode).toBe(400);
+      expect(res.json<{ message: string }>().message).toContain(`3 unknown keys, such as "${"x".repeat(40)}…", "short"`);
+    });
+
     it("thousands of unknown keys within the count: 400, and the reply names a few of them, never all", async () => {
       const a = await person();
       const extra = Object.fromEntries(Array.from({ length: 5_000 }, (_, i) => [`unknown_field_${String(i)}`, 1]));
@@ -383,7 +391,7 @@ d("a set counted by the camera, saved from the phone (real Postgres)", () => {
       expect(res.body.length).toBeLessThan(2_000);
       expect(res.body).toContain("unknown_field_0");
       expect(res.body).not.toContain("unknown_field_4999");
-      expect(res.body).toContain("and 4995 more");
+      expect(res.body).toContain("5000 unknown keys");
       expect(await workoutsOf(a)).toBe(0);
     });
   });
