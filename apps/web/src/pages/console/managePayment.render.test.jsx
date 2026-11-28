@@ -144,6 +144,11 @@ describe("the plan card's way to Paddle's page", () => {
     renderOverview();
 
     expect(await screen.findByText(/^Next payment /)).toBeTruthy();
+    // The Plan box in the third look (V5-b): its own box, the plan's state in its head, Manage payment a c-btn.
+    const box = screen.getByTestId('plan-box');
+    expect(box.classList.contains('c-card')).toBe(true);
+    expect(within(box).getByText('Active').classList.contains('c-tag-good')).toBe(true);
+    expect(within(box).getByRole('button', { name: 'Manage payment' }).classList.contains('c-btn')).toBe(true);
     fireEvent.click(screen.getByRole('button', { name: 'Manage payment' }));
     // The tab opens on the press itself, before the link is asked for.
     expect(openSpy).toHaveBeenCalledWith('', '_blank');
@@ -314,6 +319,8 @@ describe('a plan paid through Razorpay (an Indian gym, 1d-i and 1d-ii)', () => {
     expect((await screen.findByTestId('paid-through-razorpay')).textContent).toBe('Paid through Razorpay, which emails you about each payment.');
     expect(screen.getByRole('button', { name: 'Update payment method' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Cancel plan' })).toBeTruthy();
+    // Drawn in the third look on the Plan box (V5-b).
+    for (const name of ['Update payment method', 'Cancel plan']) expect(within(screen.getByTestId('plan-box')).getByRole('button', { name }).classList.contains('c-btn')).toBe(true);
     // A bigger size is paid in Razorpay's window (1d-iii-a).
     expect(screen.getByRole('button', { name: 'Change size' })).toBeTruthy();
     expect(screen.queryByRole('button', { name: /manage payment|pay now|keep my plan/i })).toBeNull();
@@ -445,6 +452,8 @@ describe('a plan paid through Razorpay (an Indian gym, 1d-i and 1d-ii)', () => {
     );
     const modal = screen.getByTestId('plan-modal');
     expect(within(modal).getByRole('button', { name: 'Update payment method' })).toBeTruthy();
+    // The prompt keeps its own look until V5-c: the Plan box's look is not drawn here.
+    expect(within(modal).getByRole('button', { name: 'Update payment method' }).classList.contains('c-btn')).toBe(false);
     expect(within(modal).queryByRole('button', { name: /cancel plan|manage payment|subscribe/i })).toBeNull();
     fireEvent.click(within(modal).getByRole('button', { name: 'Pay now' }));
     await waitFor(() => expect(tab.location.replace).toHaveBeenCalledWith(LINK));

@@ -23,7 +23,16 @@ const WATCH_GAP_MS = 5_000;
 
 const buttonStyle = { background: 'rgba(255,138,31,0.15)', color: '#FF8A1F', minHeight: 44 };
 
-function ActionButton({ onClick, disabled, busy, icon = null, children, style = buttonStyle }) {
+function ActionButton({ onClick, disabled, busy, icon = null, children, style = buttonStyle, cls = null }) {
+  // The third look (V5-b) names its building block; the plan prompt keeps the old look until V5-c.
+  if (cls !== null) {
+    return (
+      <button type="button" onClick={onClick} disabled={disabled} className={`c-btn ${cls}`}>
+        {busy ? <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" /> : icon}
+        {children}
+      </button>
+    );
+  }
   return (
     <button
       type="button"
@@ -41,7 +50,7 @@ function ActionButton({ onClick, disabled, busy, icon = null, children, style = 
 /** The two payment buttons, for the plan card and for the overdue prompt: Pay now while a bill
  *  is owed, and Update payment method. `cancel`: the plan card also draws Cancel plan or Keep my
  *  plan. Nothing for a viewer who does not manage billing, or a plan not paid through Razorpay. */
-export default function RazorpayPlanActions({ org, cancel = false, openTab = () => window.open('', '_blank') }) {
+export default function RazorpayPlanActions({ org, cancel = false, openTab = () => window.open('', '_blank'), newLook = false }) {
   const gymId = org?.id ?? null;
   const [busy, setBusy] = useState(null);
   const [note, setNote] = useState(null);
@@ -167,21 +176,24 @@ export default function RazorpayPlanActions({ org, cancel = false, openTab = () 
   };
 
   const canCancel = cancel && canCancelRazorpayPlan(org);
+  /** The building block in the third look, or null for the old look. */
+  const look = (cls) => (newLook ? cls : null);
   const canKeep = cancel && canKeepRazorpayPlan(org);
 
   return (
     <div className="flex flex-col gap-2" data-testid="razorpay-plan-actions">
-      <div className="flex flex-col sm:flex-row gap-2">
+      <div className={newLook ? 'c-ov-plan-acts' : 'flex flex-col sm:flex-row gap-2'}>
         {owed ? (
-          <ActionButton onClick={() => void payNow()} disabled={busy !== null} busy={busy === 'pay'} icon={<ExternalLink className="w-4 h-4" />}>
+          <ActionButton cls={look('c-btn-soft')} onClick={() => void payNow()} disabled={busy !== null} busy={busy === 'pay'} icon={<ExternalLink className="w-4 h-4" />}>
             Pay now
           </ActionButton>
         ) : null}
-        <ActionButton onClick={() => void changeMethod()} disabled={busy !== null} busy={busy === 'method'}>
+        <ActionButton cls={look('c-btn-s')} onClick={() => void changeMethod()} disabled={busy !== null} busy={busy === 'method'}>
           Update payment method
         </ActionButton>
         {canCancel && !confirming ? (
           <ActionButton
+            cls={look('c-btn-s')}
             onClick={() => {
               setError(null);
               setConfirming(true);
@@ -194,29 +206,30 @@ export default function RazorpayPlanActions({ org, cancel = false, openTab = () 
           </ActionButton>
         ) : null}
         {canKeep ? (
-          <ActionButton onClick={() => void keep()} disabled={busy !== null} busy={busy === 'keep'}>
+          <ActionButton cls={look('c-btn-soft')} onClick={() => void keep()} disabled={busy !== null} busy={busy === 'keep'}>
             Keep my plan
           </ActionButton>
         ) : null}
       </div>
       {box !== null ? (
         <div
-          className="mt-1 rounded-xl px-4 py-3 flex flex-col gap-2"
-          style={{ background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.25)' }}
+          className={newLook ? 'c-ov-money-ask c-ov-money-ask-bad' : 'mt-1 rounded-xl px-4 py-3 flex flex-col gap-2'}
+          style={newLook ? undefined : { background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.25)' }}
           role="group"
           aria-label={box.title}
           data-testid="cancel-box"
         >
-          <div className="font-semibold text-sm" style={{ color: '#fff' }}>
+          <div className={newLook ? 'c-s15 c-w6 c-t1' : 'font-semibold text-sm'} style={newLook ? undefined : { color: '#fff' }}>
             {box.title}
           </div>
           {box.lines.map((line) => (
-            <p key={line} className="text-sm" style={{ color: 'rgba(255,255,255,0.75)' }}>
+            <p key={line} className={newLook ? 'c-s14 c-t1 m-0' : 'text-sm'} style={newLook ? undefined : { color: 'rgba(255,255,255,0.75)' }}>
               {line}
             </p>
           ))}
-          <div className="flex flex-col sm:flex-row gap-2 mt-1">
+          <div className={newLook ? 'c-ov-money-acts' : 'flex flex-col sm:flex-row gap-2 mt-1'}>
             <ActionButton
+              cls={look('c-btn-ds')}
               onClick={() => void confirmCancel()}
               disabled={busy !== null}
               busy={busy === 'cancel'}
@@ -225,6 +238,7 @@ export default function RazorpayPlanActions({ org, cancel = false, openTab = () 
               {box.confirm}
             </ActionButton>
             <ActionButton
+              cls={look('c-btn-s')}
               onClick={() => setConfirming(false)}
               disabled={busy !== null}
               busy={false}
@@ -236,12 +250,12 @@ export default function RazorpayPlanActions({ org, cancel = false, openTab = () 
         </div>
       ) : null}
       {note !== null ? (
-        <p className="text-sm" style={{ color: 'rgba(255,255,255,0.6)' }} role="status">
+        <p className={newLook ? 'c-s14 c-t2 m-0' : 'text-sm'} style={newLook ? undefined : { color: 'rgba(255,255,255,0.6)' }} role="status">
           {note}
         </p>
       ) : null}
       {error !== null ? (
-        <p className="text-sm" style={{ color: '#ef4444' }} role="alert">
+        <p className={newLook ? 'c-err m-0' : 'text-sm'} style={newLook ? undefined : { color: '#ef4444' }} role="alert">
           {error}
         </p>
       ) : null}

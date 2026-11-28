@@ -63,6 +63,29 @@ export function runBounds(track: readonly (readonly [number, number])[]): [numbe
   return [Math.min(...lngs), Math.min(...lats), Math.max(...lngs), Math.max(...lats)];
 }
 
+/** How wide the beam spreads either side, in degrees, by how sure the compass is (Android's 0 unreliable to 3
+ *  high): wider the less sure, as Google Maps' beam. The way travelled, with no compass, as before 37p. */
+export const BEAM_HALF_BY_SURE = [60, 45, 35, 25] as const;
+export const TRAVELLED_HALF = 25;
+
+/** The beam at the front of a run going on (37p): the way the phone points, from its compass, as Strava's and Google
+ *  Maps' beam turns with the phone; the way the person travelled on a phone with no compass; none with neither. */
+export function beamOf(compass: { deg: number; sure: number } | null, travelled: number | null): { deg: number; half: number } | null {
+  if (compass !== null && Number.isFinite(compass.deg)) {
+    const sure = Math.max(0, Math.min(3, Math.round(compass.sure)));
+    return { deg: ((compass.deg % 360) + 360) % 360, half: BEAM_HALF_BY_SURE[sure] ?? TRAVELLED_HALF };
+  }
+  return travelled === null ? null : { deg: travelled, half: TRAVELLED_HALF };
+}
+
+/** A fan of light pointing up the screen (north), `half` degrees either side, `radius` long. */
+export function fanPath(half: number, radius: number): string {
+  const r = (half * Math.PI) / 180;
+  const x = (radius * Math.sin(r)).toFixed(1);
+  const y = (radius * Math.cos(r)).toFixed(1);
+  return `M0 0 L-${x} -${y} A${String(radius)} ${String(radius)} 0 0 1 ${x} -${y} Z`;
+}
+
 /** The way the person is heading at the front, in degrees clockwise from north: from a point at least
  *  `least` metres back within the last stretch. null until they have moved that far. */
 export function frontBearing(track: readonly (readonly [number, number])[], starts: readonly number[], least = 8): number | null {

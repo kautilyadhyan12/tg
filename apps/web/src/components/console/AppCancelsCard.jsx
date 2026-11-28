@@ -9,45 +9,24 @@ import { useLiveNews } from '../../pages/console/liveNews';
 import MemberListPerson from '../../pages/console/MemberListPerson';
 import { canRemoveMembers, orgWords } from '../../pages/console/consoleView';
 import { appCancelsHeadline, canSeeAppCancels } from '../../pages/console/appCancelsView';
-import { ConsoleCard } from './ConsoleStates';
+import { MoneyBox, MoneyWho } from './OverviewMoneyBox';
 
 // Overview's Cancelled in the app (ROADMAP 18l; Kd, `rulings/2026-11-11-18l.md`): members who cancelled a membership in the app
 // in the last 30 days, newest first, each opening their page. At a gym whose front desk lets everyone on its list in, it says
-// that a member who cancelled can still check in, with the button to change it, or who can. In Overview's own look, as Refunds
-// to review is. It reads for itself, on live news and when staff come back, and draws nothing where the list is empty.
-
-const BUTTON = 'rounded-xl px-4 text-sm font-semibold inline-flex items-center justify-center gap-2 text-center min-h-[44px]';
-const PLAIN_STYLE = { background: 'rgba(255,255,255,0.08)', color: '#fff' };
-const QUIET = { color: 'rgba(255,255,255,0.45)' };
-const SOFT = { color: 'rgba(255,255,255,0.75)' };
+// that a member who cancelled can still check in, with the button to change it, or who can. In the third look (V5-b). It reads
+// for itself, on live news and when staff come back, and draws nothing where the list is empty.
 
 function Row({ row, today, onOpen }) {
   return (
-    <li className="flex flex-col gap-1 py-3" style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }} data-testid="app-cancel-row">
-      <div className="flex flex-wrap items-baseline gap-x-2">
-        {row.entryId !== null ? (
-          <button type="button" className="font-semibold text-left underline" style={{ color: '#fff', minHeight: 44 }} onClick={() => onOpen(row.entryId)} aria-label={`Open ${row.name}'s page`}>
-            {row.name}
-          </button>
-        ) : (
-          <span className="font-semibold" style={{ color: '#fff' }}>
-            {APP_CANCELS_WORDS.gone}
-          </span>
-        )}
-        {row.past ? (
-          <span className="text-xs" style={QUIET}>
-            Past member
-          </span>
-        ) : null}
-      </div>
-      <p className="text-sm m-0" style={SOFT}>
-        {appCancelRowWhat(row, today)}
-      </p>
-      {row.reason !== null ? (
-        <p className="text-sm m-0" style={QUIET}>
-          Reason: {MY_CANCEL_REASON_WORDS[row.reason]}
-        </p>
-      ) : null}
+    <li className="c-ov-money-row" data-testid="app-cancel-row">
+      <MoneyWho
+        name={row.entryId !== null ? row.name : APP_CANCELS_WORDS.gone}
+        onOpen={row.entryId !== null ? () => onOpen(row.entryId) : null}
+        openLabel={`Open ${row.name}'s page`}
+        past={row.past}
+      />
+      <p className="c-s14 c-t1 m-0">{appCancelRowWhat(row, today)}</p>
+      {row.reason !== null ? <p className="c-s14 c-t2 m-0">Reason: {MY_CANCEL_REASON_WORDS[row.reason]}</p> : null}
     </li>
   );
 }
@@ -105,44 +84,38 @@ export default function AppCancelsCard({ org, orgSlug, privileges, readOnly }) {
   const checkinTo = list.letsEveryoneIn ? placeFor(orgSlug, privileges, 'checkinRules') : null;
 
   return (
-    <ConsoleCard>
-      <section id="app-cancels" data-testid="app-cancels" aria-label={APP_CANCELS_WORDS.title} className="flex flex-col gap-1">
-        <div className="text-xs uppercase tracking-wider" style={{ color: 'rgba(255,255,255,0.35)' }}>
-          {APP_CANCELS_WORDS.title}
-        </div>
-        <p className="font-semibold mt-1 m-0" style={{ color: '#fff' }} data-testid="app-cancels-headline">
-          {appCancelsHeadline(list.count)}
-        </p>
-        <p className="text-sm m-0 mb-2" style={QUIET}>
-          {APP_CANCELS_WORDS.intro}
-        </p>
+    <>
+      <MoneyBox
+        id="app-cancels"
+        testId="app-cancels"
+        title={APP_CANCELS_WORDS.title}
+        headline={appCancelsHeadline(list.count)}
+        headlineTestId="app-cancels-headline"
+        intro={APP_CANCELS_WORDS.intro}
+      >
         <ul className="list-none m-0 p-0">
           {list.rows.map((row) => (
             <Row key={row.id} row={row} today={list.today} onOpen={openPerson} />
           ))}
         </ul>
         {more > 0 ? (
-          <p className="text-sm m-0 pt-2" style={QUIET}>
-            and {String(more)} more
-          </p>
+          <div className="c-ov-money-foot">
+            <p className="c-s14 c-t2 m-0">and {String(more)} more</p>
+          </div>
         ) : null}
         {list.letsEveryoneIn ? (
-          <div className="flex flex-col gap-2 pt-3" data-testid="app-cancels-checkin" style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
-            <p className="text-sm m-0" style={SOFT}>
-              {APP_CANCELS_WORDS.everyoneIn}
-            </p>
+          <div className="c-ov-money-foot" data-testid="app-cancels-checkin">
+            <p className="c-s14 c-t1 m-0">{APP_CANCELS_WORDS.everyoneIn}</p>
             {checkinTo !== null ? (
-              <Link to={checkinTo} className={`${BUTTON} self-start`} style={PLAIN_STYLE}>
+              <Link to={checkinTo} className="c-btn c-btn-s">
                 {APP_CANCELS_WORDS.everyoneInButton}
               </Link>
             ) : (
-              <p className="text-sm m-0" style={QUIET}>
-                {APP_CANCELS_WORDS.everyoneInAsk}
-              </p>
+              <p className="c-s14 c-t2 m-0">{APP_CANCELS_WORDS.everyoneInAsk}</p>
             )}
           </div>
         ) : null}
-      </section>
+      </MoneyBox>
       {person !== null ? (
         <MemberListPerson
           key={person}
@@ -160,6 +133,6 @@ export default function AppCancelsCard({ org, orgSlug, privileges, readOnly }) {
           onChanged={() => void load()}
         />
       ) : null}
-    </ConsoleCard>
+    </>
   );
 }

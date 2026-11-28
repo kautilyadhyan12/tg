@@ -4,7 +4,6 @@ import { orgWords } from '@app/shared';
 import { Loader2 } from 'lucide-react';
 import { orgService, errorText } from '../../api/orgsApi';
 import { applyPaidPlan, refreshConsoleOrgsAfterChange } from '../../pages/console/consoleOrgs';
-import { ConsoleCard } from './ConsoleStates';
 import ManagePaymentButton from './ManagePaymentButton';
 import PlanChoiceDialog from './PlanChoiceDialog';
 import RazorpayPlanActions from './RazorpayPlanActions';
@@ -91,31 +90,23 @@ import { viewerPrivileges } from '../../pages/console/consoleView';
 function SeatLine({ org }) {
   const meter = seatMeter(org);
   if (meter === null) return null;
-  const colour = meter.pressure ? '#FF8A1F' : 'rgba(255,255,255,0.45)';
   const share = meter.cap > 0 ? Math.min(1, meter.used / meter.cap) : 0;
   return (
-    <div className="mt-3">
-      <div className="h-1.5 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.08)' }} aria-hidden="true">
-        <div className="h-full rounded-full" style={{ width: `${Math.round(share * 100)}%`, background: meter.pressure ? '#FF8A1F' : 'rgba(255,255,255,0.35)' }} />
+    <div className="flex flex-col gap-1.5">
+      <div className="c-bar" aria-hidden="true">
+        {/* Grey while there is room; orange once it is nearly full. */}
+        <div className={`c-bar-fill${meter.pressure ? '' : ' c-bar-fill-plain'}`} style={{ width: `${Math.round(share * 100)}%` }} />
       </div>
-      <div className="text-sm mt-1" style={{ color: colour }}>
-        {seatLineText(meter, org?.orgType)}
-      </div>
+      <div className={`c-s14 ${meter.pressure ? 'c-w6 c-ov-warn-t' : 'c-t2'}`}>{seatLineText(meter, org?.orgType)}</div>
     </div>
   );
 }
 
-/** A secondary action on the card: the same look as Manage payment. */
-function CardButton({ onClick, disabled = false, busy = false, children }) {
+/** A button on the box: the first thing to do in the orange, the rest in the soft orange. */
+function CardButton({ onClick, disabled = false, busy = false, main = false, children }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      className="self-stretch sm:self-start rounded-xl px-4 py-2.5 text-sm font-semibold flex items-center justify-center gap-2 disabled:opacity-50"
-      style={{ background: 'rgba(255,138,31,0.15)', color: '#FF8A1F', minHeight: 44 }}
-    >
-      {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+    <button type="button" onClick={onClick} disabled={disabled} className={`c-btn ${main ? 'c-btn-p' : 'c-btn-soft'}`}>
+      {busy ? <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" /> : null}
       {children}
     </button>
   );
@@ -162,15 +153,15 @@ export default function TrialCard({ org }) {
   // which this card filed an owed line against three hours earlier.
   if (org?.subscription == null) {
     return typeof org?.ownerTrialUsed !== 'boolean' ? (
-      <ConsoleCard>
-        <div className="text-xs uppercase tracking-wider mb-2" style={{ color: 'rgba(255,255,255,0.35)' }}>
-          Plan
+      <section className="c-card c-ov-box c-ov-plan" aria-label="Plan">
+        <div className="c-ov-box-head">
+          <h2 className="c-h2">Plan</h2>
         </div>
-        <p className="text-sm" style={{ color: 'rgba(255,255,255,0.75)' }}>
+        <p className="c-s14 c-t1 c-ov-box-body m-0">
           We couldn&apos;t check this {orgWords(org?.orgType).it}&apos;s plan just now. Reload the
           page in a moment.
         </p>
-      </ConsoleCard>
+      </section>
     ) : null;
   }
 
@@ -196,7 +187,13 @@ export default function TrialCard({ org }) {
   const change = pendingChangeText(sub, org?.orgType);
   const fit = pendingFit(org);
   const kept = sizeKeptText(sub, org?.orgType) ?? sizeFittedText(sub, org?.orgType);
-  const muted = { color: 'rgba(255,255,255,0.6)' };
+  // One orange button: the first of these the box draws; the others in the soft orange.
+  const mainButton = payNow ? 'subscribe' : chooseNext ? 'next' : resize ? 'size' : keepPaddle ? 'keep' : null;
+  const line = 'c-s14 c-t2 m-0';
+  /** Manage payment: a plan paid through Paddle; one handed over with the gym is the old owner's account. */
+  const manage = !razorpay && handedOver === null && (subscribed || sub.status === 'active' || sub.status === 'past_due');
+  // The row of buttons is drawn only when it holds one, so it adds no gap.
+  const acts = payNow || chooseNext || resize || keepPaddle || manage || (cancelNew && cancelNewBox === null);
 
   // Cancel this change asks first (Kd at 1d-iii-b's click-through): the box names what stays.
   const changeBox = confirmingCancel ? cancelChangeBox(sub, org?.orgType) : null;
@@ -251,235 +248,188 @@ export default function TrialCard({ org }) {
   };
 
   return (
-    <ConsoleCard>
-      <div className="text-xs uppercase tracking-wider mb-2" style={{ color: 'rgba(255,255,255,0.35)' }}>
-        Plan
+    <section className="c-card c-ov-box c-ov-plan" aria-label="Plan" data-testid="plan-box">
+      <div className="c-ov-box-head">
+        <div className="flex flex-col min-w-0">
+          <span className="c-s14 c-t2">Plan</span>
+          <h2 className="c-h2">{trialing ? 'Free trial' : sub.priceLabel != null ? planHeadline(sub, org?.orgType) : 'On a plan'}</h2>
+        </div>
+        {/* The end date is stated only while the gym is actually TRIALLING.
+            `trialEndsAt` is never cleared when a subscription leaves that status,
+            so a paying gym answers with the date its old trial ran out — printing
+            it would put a stale date under a live plan. The shared schema says
+            this in as many words; gate on the status. */}
+        {trialing && endsOn !== null ? <span className="c-tag c-tag-soft">Ends {endsOn}</span> : null}
+        {/* A paid plan's state, as the board's head draws it; a plan set to end says when in its own line. */}
+        {sub.status === 'active' ? <span className="c-tag c-tag-good">Active</span> : null}
+        {sub.status === 'past_due' ? <span className="c-tag c-tag-bad">Payment due</span> : null}
       </div>
-      <div className="font-semibold" style={{ color: '#fff' }}>
-        {trialing ? 'Free trial' : sub.priceLabel != null ? planHeadline(sub, org?.orgType) : 'On a plan'}
-      </div>
-      {nextPayment !== null ? (
-        <div className="text-sm mt-1" style={muted}>
-          {nextPayment}
-        </div>
-      ) : null}
-      {/* The end date is stated only while the gym is actually TRIALLING.
-          `trialEndsAt` is never cleared when a subscription leaves that status,
-          so a paying gym answers with the date its old trial ran out — printing
-          it would put a stale date under a live plan. The shared schema says
-          this in as many words; gate on the status. */}
-      {trialing && endsOn !== null ? (
-        <div className="text-sm mt-1" style={muted}>
-          Ends {endsOn}
-        </div>
-      ) : null}
-      {firstPayment !== null ? (
-        <div className="text-sm mt-1" style={muted}>
-          {sub.cancelAtPeriodEnd ? `Your plan ends with the trial, on ${endsOn ?? 'its last day'}.` : firstPayment}
-        </div>
-      ) : null}
-      {ending !== null ? (
-        <div className="text-sm mt-1" style={muted} data-testid="plan-ending">
-          {ending}
-        </div>
-      ) : null}
-      {following !== null ? (
-        <div className="text-sm mt-1" style={muted} data-testid="plan-following">
-          {following}
-        </div>
-      ) : null}
-      {nextSize !== null && !sub.cancelAtPeriodEnd && following === null ? (
-        <div className="text-sm mt-1" style={muted}>
-          {nextSize}
-        </div>
-      ) : null}
+      <div className="c-ov-box-body flex flex-col gap-3">
+        {nextPayment !== null || firstPayment !== null || ending !== null || following !== null || (nextSize !== null && !sub.cancelAtPeriodEnd && following === null) ? (
+          <div className="flex flex-col gap-1">
+            {nextPayment !== null ? <p className={line}>{nextPayment}</p> : null}
+            {firstPayment !== null ? (
+              <p className={line}>{sub.cancelAtPeriodEnd ? `Your plan ends with the trial, on ${endsOn ?? 'its last day'}.` : firstPayment}</p>
+            ) : null}
+            {ending !== null ? (
+              <p className={line} data-testid="plan-ending">
+                {ending}
+              </p>
+            ) : null}
+            {following !== null ? (
+              <p className={line} data-testid="plan-following">
+                {following}
+              </p>
+            ) : null}
+            {nextSize !== null && !sub.cancelAtPeriodEnd && following === null ? <p className={line}>{nextSize}</p> : null}
+          </div>
+        ) : null}
 
-      {/* ── A smaller size waiting ─────────────────────────────────────────── */}
-      {change !== null ? (
-        <div
-          className="mt-3 rounded-xl px-4 py-3 flex flex-col gap-2"
-          style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)' }}
-          data-testid="pending-size"
-        >
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-            <span className="text-sm" style={{ color: 'rgba(255,255,255,0.85)' }}>
-              {change}
-            </span>
+        {/* ── A smaller size waiting ─────────────────────────────────────────── */}
+        {change !== null ? (
+          <div className="c-ov-money-ask" data-testid="pending-size">
+            <p className="c-s14 c-t1 m-0">{change}</p>
             {changeBox === null ? (
+              <div className="c-ov-money-acts">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCancelError(null);
+                    setConfirmingCancel(true);
+                  }}
+                  className="c-btn c-btn-s"
+                >
+                  Cancel this change
+                </button>
+              </div>
+            ) : null}
+            {changeBox !== null ? (
+              <div className="c-ov-money-ask c-ov-money-ask-bad" role="group" aria-label={changeBox.title} data-testid="cancel-change-box">
+                <div className="c-s15 c-w6 c-t1">{changeBox.title}</div>
+                <p className="c-s14 c-t1 m-0">{changeBox.line}</p>
+                <div className="c-ov-money-acts">
+                  <button type="button" onClick={() => void cancelChange()} disabled={cancelling} className="c-btn c-btn-ds">
+                    {cancelling ? <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" /> : null}
+                    {changeBox.confirm}
+                  </button>
+                  <button type="button" onClick={() => setConfirmingCancel(false)} disabled={cancelling} className="c-btn c-btn-s">
+                    {changeBox.back}
+                  </button>
+                </div>
+              </div>
+            ) : null}
+            {fit !== null ? (
+              <p className={`c-s14 m-0 ${fit.tooMany ? 'c-w6 c-ov-warn-t' : 'c-t2'}`} data-testid="pending-fit">
+                {fit.text}
+                {fit.tooMany && typeof org.slug === 'string' ? (
+                  <>
+                    {' '}
+                    <Link to={`/console/${org.slug}/members`} className="c-lk c-w6 underline">
+                      Go to {words.people}
+                    </Link>
+                  </>
+                ) : null}
+              </p>
+            ) : null}
+          </div>
+        ) : null}
+        {kept !== null ? (
+          <p className="c-s14 c-w6 c-ov-warn-t m-0" data-testid="size-kept">
+            {kept}
+          </p>
+        ) : null}
+
+        <SeatLine org={org} />
+        {handedOver !== null ? (
+          <p className={line} data-testid="plan-handed-over">
+            {handedOver}
+          </p>
+        ) : null}
+        {/* A plan handed over with its gym: Razorpay emails the old owner, who paid for it. */}
+        {razorpay && handedOver === null ? (
+          <p className={line} data-testid="paid-through-razorpay">
+            Paid through Razorpay, which emails you about each payment.
+            {trialing ? ' You can change your size once your first payment is taken.' : null}
+          </p>
+        ) : null}
+        {payNow ? (
+          <p className={line}>{`Your free trial carries on until it ends. To have more ${words.people} now, choose a plan: you pay today and get its full size at once.`}</p>
+        ) : null}
+        {acts ? (
+          <div className="c-ov-plan-acts">
+            {payNow ? (
+              <CardButton main={mainButton === 'subscribe'} onClick={() => setChoosing('subscribe')}>
+                Choose a plan
+              </CardButton>
+            ) : null}
+            {chooseNext ? (
+              <CardButton main={mainButton === 'next'} onClick={() => setChoosing('next')}>
+                Choose your plan
+              </CardButton>
+            ) : null}
+            {resize ? (
+              <CardButton main={mainButton === 'size'} onClick={() => setChoosing('size')}>
+                Change size
+              </CardButton>
+            ) : null}
+            {keepPaddle ? (
+              <CardButton main={mainButton === 'keep'} onClick={() => void keepPlan()} disabled={keeping} busy={keeping}>
+                Keep my plan
+              </CardButton>
+            ) : null}
+            {/* A plan paid through Paddle is managed on Paddle's own page: the card, cancelling,
+                invoices. One paid through Razorpay is managed here (1d-ii), below. */}
+            {/* A plan handed over with the gym is the old owner's Paddle account: not opened here. */}
+            {manage ? (
+              <ManagePaymentButton newLook gymId={org.id} label={sub.status === 'past_due' ? 'Update payment method' : 'Manage payment'} />
+            ) : null}
+            {cancelNew && cancelNewBox === null ? (
               <button
                 type="button"
                 onClick={() => {
-                  setCancelError(null);
-                  setConfirmingCancel(true);
+                  setCancelNewError(null);
+                  setConfirmingCancelNew(true);
                 }}
-                className="self-start rounded-lg px-3 py-2 text-sm font-semibold flex items-center gap-2"
-                style={{ background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.85)', minHeight: 40 }}
+                className="c-btn c-btn-s"
               >
-                Cancel this change
+                Cancel new plan
               </button>
             ) : null}
           </div>
-          {changeBox !== null ? (
-            <div
-              className="rounded-xl px-4 py-3 flex flex-col gap-2"
-              style={{ background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.25)' }}
-              role="group"
-              aria-label={changeBox.title}
-              data-testid="cancel-change-box"
-            >
-              <div className="font-semibold text-sm" style={{ color: '#fff' }}>
-                {changeBox.title}
-              </div>
-              <p className="text-sm" style={{ color: 'rgba(255,255,255,0.75)' }}>
-                {changeBox.line}
+        ) : null}
+        {cancelNewBox !== null ? (
+          <div className="c-ov-money-ask c-ov-money-ask-bad" role="group" aria-label={cancelNewBox.title} data-testid="cancel-new-plan-box">
+            <div className="c-s15 c-w6 c-t1">{cancelNewBox.title}</div>
+            {cancelNewBox.lines.map((l) => (
+              <p key={l} className="c-s14 c-t1 m-0">
+                {l}
               </p>
-              <div className="flex flex-col sm:flex-row gap-2 mt-1">
-                <button
-                  type="button"
-                  onClick={() => void cancelChange()}
-                  disabled={cancelling}
-                  className="rounded-lg px-3 py-2 text-sm font-semibold flex items-center justify-center gap-2 disabled:opacity-50"
-                  style={{ background: 'rgba(239,68,68,0.15)', color: '#ef4444', minHeight: 40 }}
-                >
-                  {cancelling ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-                  {changeBox.confirm}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setConfirmingCancel(false)}
-                  disabled={cancelling}
-                  className="rounded-lg px-3 py-2 text-sm font-semibold disabled:opacity-50"
-                  style={{ background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.85)', minHeight: 40 }}
-                >
-                  {changeBox.back}
-                </button>
-              </div>
+            ))}
+            <div className="c-ov-money-acts">
+              <button type="button" onClick={() => void confirmCancelNew()} disabled={cancellingNew} className="c-btn c-btn-ds">
+                {cancellingNew ? <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" /> : null}
+                {cancelNewBox.confirm}
+              </button>
+              <button type="button" onClick={() => setConfirmingCancelNew(false)} disabled={cancellingNew} className="c-btn c-btn-s">
+                Keep my new plan
+              </button>
             </div>
-          ) : null}
-          {fit !== null ? (
-            <div className="text-sm" style={{ color: fit.tooMany ? '#FF8A1F' : 'rgba(255,255,255,0.6)' }} data-testid="pending-fit">
-              {fit.text}
-              {fit.tooMany && typeof org.slug === 'string' ? (
-                <>
-                  {' '}
-                  <Link to={`/console/${org.slug}/members`} className="underline font-semibold" style={{ color: '#FF8A1F' }}>
-                    Go to {words.people}
-                  </Link>
-                </>
-              ) : null}
-            </div>
-          ) : null}
-        </div>
-      ) : null}
-      {kept !== null ? (
-        <div className="text-sm mt-3" style={{ color: '#FF8A1F' }} data-testid="size-kept">
-          {kept}
-        </div>
-      ) : null}
-
-      <SeatLine org={org} />
-      {handedOver !== null ? (
-        <div className="text-sm mt-3" style={muted} data-testid="plan-handed-over">
-          {handedOver}
-        </div>
-      ) : null}
-      {/* A plan handed over with its gym: Razorpay emails the old owner, who paid for it. */}
-      {razorpay && handedOver === null ? (
-        <div className="text-sm mt-3" style={muted} data-testid="paid-through-razorpay">
-          Paid through Razorpay, which emails you about each payment.
-          {trialing ? ' You can change your size once your first payment is taken.' : null}
-        </div>
-      ) : null}
-      {payNow ? (
-        <div className="text-sm mt-3" style={muted}>
-          {`Your free trial carries on until it ends. To have more ${words.people} now, choose a plan: you pay today and get its full size at once.`}
-        </div>
-      ) : null}
-      <div className="mt-4 flex flex-col sm:flex-row gap-2">
-        {payNow ? <CardButton onClick={() => setChoosing('subscribe')}>Choose a plan</CardButton> : null}
-        {chooseNext ? <CardButton onClick={() => setChoosing('next')}>Choose your plan</CardButton> : null}
-        {resize ? <CardButton onClick={() => setChoosing('size')}>Change size</CardButton> : null}
-        {keepPaddle ? (
-          <CardButton onClick={() => void keepPlan()} disabled={keeping} busy={keeping}>
-            Keep my plan
-          </CardButton>
+          </div>
         ) : null}
-        {/* A plan paid through Paddle is managed on Paddle's own page: the card, cancelling,
-            invoices. One paid through Razorpay is managed here (1d-ii), below. */}
-        {/* A plan handed over with the gym is the old owner's Paddle account: not opened here. */}
-        {!razorpay && handedOver === null && (subscribed || sub.status === 'active' || sub.status === 'past_due') ? (
-          <ManagePaymentButton gymId={org.id} label={sub.status === 'past_due' ? 'Update payment method' : 'Manage payment'} />
+        {cancelNewError !== null ? (
+          <p className="c-err m-0" role="alert">
+            {cancelNewError}
+          </p>
         ) : null}
-        {cancelNew && cancelNewBox === null ? (
-          <button
-            type="button"
-            onClick={() => {
-              setCancelNewError(null);
-              setConfirmingCancelNew(true);
-            }}
-            className="self-stretch sm:self-start rounded-xl px-4 py-2.5 text-sm font-semibold"
-            style={{ background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.85)', minHeight: 44 }}
-          >
-            Cancel new plan
-          </button>
+        {razorpay ? <RazorpayPlanActions org={org} cancel newLook /> : null}
+        {keepError !== null ? (
+          <p className="c-err m-0" role="alert">
+            {keepError}
+          </p>
         ) : null}
+        {cancelError !== null ? <p className="c-err m-0">{cancelError}</p> : null}
       </div>
-      {cancelNewBox !== null ? (
-        <div
-          className="mt-3 rounded-xl px-4 py-3 flex flex-col gap-2"
-          style={{ background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.25)' }}
-          role="group"
-          aria-label={cancelNewBox.title}
-          data-testid="cancel-new-plan-box"
-        >
-          <div className="font-semibold text-sm" style={{ color: '#fff' }}>
-            {cancelNewBox.title}
-          </div>
-          {cancelNewBox.lines.map((line) => (
-            <p key={line} className="text-sm" style={{ color: 'rgba(255,255,255,0.75)' }}>
-              {line}
-            </p>
-          ))}
-          <div className="flex flex-col sm:flex-row gap-2 mt-1">
-            <button
-              type="button"
-              onClick={() => void confirmCancelNew()}
-              disabled={cancellingNew}
-              className="rounded-xl px-4 py-2.5 text-sm font-semibold flex items-center justify-center gap-2 disabled:opacity-50"
-              style={{ background: 'rgba(239,68,68,0.15)', color: '#ef4444', minHeight: 44 }}
-            >
-              {cancellingNew ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-              {cancelNewBox.confirm}
-            </button>
-            <button
-              type="button"
-              onClick={() => setConfirmingCancelNew(false)}
-              disabled={cancellingNew}
-              className="rounded-xl px-4 py-2.5 text-sm font-semibold disabled:opacity-50"
-              style={{ background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.85)', minHeight: 44 }}
-            >
-              Keep my new plan
-            </button>
-          </div>
-        </div>
-      ) : null}
-      {cancelNewError !== null ? (
-        <p className="text-sm mt-3" style={{ color: '#ef4444' }} role="alert">
-          {cancelNewError}
-        </p>
-      ) : null}
-      {razorpay ? <RazorpayPlanActions org={org} cancel /> : null}
-      {keepError !== null ? (
-        <p className="text-sm mt-3" style={{ color: '#ef4444' }} role="alert">
-          {keepError}
-        </p>
-      ) : null}
-      {cancelError !== null ? (
-        <p className="text-sm mt-3" style={{ color: '#ef4444' }}>
-          {cancelError}
-        </p>
-      ) : null}
       {choosing !== null ? <PlanChoiceDialog org={org} mode={choosing} onClose={() => setChoosing(null)} /> : null}
-    </ConsoleCard>
+    </section>
   );
 }
