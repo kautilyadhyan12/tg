@@ -3766,6 +3766,41 @@ workouts are kept day by day (Part 6 §2: Progress holds history), with doors to
 - **Not in 64a-vi:** a heart rate chart or zones kept for a workout (a run's 37f-ii-a); a notification when a rest ends with the
   phone locked.
 
+**As built in 64b-ii (2026-11-28, Kd's drawing of that day and his own words for its question; `rulings/2026-11-28-64b-ii.md`).**
+The camera in the workout (§11.8 steps 3 to 6):
+- **Which exercises:** those the camera counts on this phone, the same way the Library measures them (`cameraFor`: today the
+  Squat, judged by its camera file, and the Kettlebell Goblet Squat, counted by the squat's movement with no form rules of its
+  own), marked as Start workout is pressed (`RunExercise.camera`); a phone without the camera's module marks none.
+- **The question,** as such an exercise starts, every time, nothing remembered (`asking`; the set, or a hold's get-ready, waits
+  for it): a box at the foot, in Kd's words, "SQUAT", "Live form check", "Use your camera to count reps and get feedback on your
+  squat form in real time.", "Your phone processes the camera feed. KWAZO never saves the video or sends it to servers or any
+  third party.", Start with camera, Count manually. An exercise with no form rules says "Live rep count" and "Use your camera
+  to count your reps in real time.", never a form check. The camera turned off for the app: "Camera access is off", Open
+  settings. The answer holds for that exercise's sets in this workout; the next exercise is asked afresh.
+- **The steps** (`workoutRun.ts`, table-tested in `test/workoutCamera.test.ts`): chosen, each set is counted by the camera
+  (`cam`: what the set took of the camera's count, none while paused, the person's own + and − beside it), and a hold is timed
+  by the camera with no get-ready. At its target the screen ends the set with what the camera judged (`cameraDone`, the
+  engine's summary in the save's shape, `cameraSummaryOf`): the set is saved `counted: "camera"` with its facts (64b-i), the
+  only set that is. A judgement the save would refuse (more scores than reps, past 10,000 rep scores in a workout, a name
+  outside the files' rules) is kept as none. Count this set myself and the camera stopping leave the camera for the rest of
+  that set (`leave`), kept as the camera's set with what it had judged by then, a hold going on as the workout's timer from the
+  time the camera saw it held; the next set is the camera's again. Follow along puts the camera off; the set is then the
+  person's own count, or the timer's, never the camera's. Start with camera on a set counted by hand keeps its reps and counts
+  on from them.
+- **The screens** (`screens/workout/WorkoutCamera.tsx`): the camera screen of 53a and its box, unchanged, inside the
+  workout's own window; the rest after a camera set, read from 3 m: the countdown in big green digits, "Camera off", "Set 1
+  complete", its reps and form score as lit numbers, Next up, "Camera tracking resumes when the rest ends.", Skip rest, and a
+  box with the rest's −15 and +15, the set just done put right, Pause, Sound and End. The camera's set and its engine are kept
+  while the workout is put away (`createCameraKeep`); the camera is off while it is. A set counted by hand offers Start with
+  camera between Reset set and Skip exercise; after the camera stopped it says "The camera stopped. Count this set yourself."
+  The coach says "Set complete." as a camera set ends, "Workout complete." at the workout's last.
+- **The worst thing first:** a form score kept for a set no camera watched, or the camera on while the screen says it is off.
+  `test/workoutCamera.test.ts`'s first block (seven ways to do a set without the camera, the camera saying all along that it
+  counted) and `test/screens/workoutCamera.test.tsx`'s first block (Count manually turns no camera on; a real set of squats
+  saves its numbers and nothing of the body; no camera in the rest).
+- **Not in 64b-ii:** the form score after the workout and in History (64b-ii-b); the coach's "Rest." and "Next exercise."
+  lines, recorded for 64b and not yet said.
+
 ### 13.7 The jobs (ROADMAP Stage 5, exercise folder 2; ROADMAP wins where they differ)
 
 | Job | What it builds | Waits for |
