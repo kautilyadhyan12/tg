@@ -8,7 +8,7 @@ import { LiveSet } from "../../camera/liveSet";
 import { PoseCameraView } from "../../camera/poseCameraNative";
 import { clipFor, clipOf } from "../../camera/voice";
 import { ended, pressTry, shownOffset, shownReps, startTry, type TryPress, type TrySet } from "../../camera/trySet";
-import { cameraToldFile, workoutSoundsFile } from "../../library/files";
+import { cameraToldFile } from "../../library/files";
 import { holdWords } from "../../library/records";
 import { Button } from "../../look/Button";
 import { colours, sizes } from "../../look/colours";
@@ -17,7 +17,6 @@ import { pictures } from "../../look/pictures";
 import { Sheet } from "../../look/Sheet";
 import { Txt } from "../../look/Txt";
 import { useSession } from "../../session/SessionProvider";
-import { soundOnIn, soundText } from "../../sound/soundChoice";
 import { soundNative } from "../../sound/soundNative";
 import { ClipOver } from "../library/ExerciseClip";
 import { useKeepMedia, useOwnPicture } from "../library/ExerciseImage";
@@ -26,6 +25,7 @@ import { accountUnits } from "../setup/Setup";
 import { CopyContext } from "../ThisCopy";
 import { CameraBox, repsWords } from "./CameraBox";
 import { CameraFirst } from "./CameraFirst";
+import { useWorkoutLayer } from "../workout/WorkoutLayer";
 import { CameraSet, REPS_BOX_WORDS, TIME_BOX_WORDS } from "./CameraSet";
 import { FollowAlong, FollowBox, FollowDone } from "./FollowAlong";
 
@@ -83,14 +83,14 @@ export function TryCameraLink() {
             }}
           />
         ) : step?.kind === "set" ? (
-          <TrySetScreen key={step.exercise.key} me={me} exercise={step.exercise} onClose={() => { setStep(null); }} />
+          <TrySetScreen key={step.exercise.key} exercise={step.exercise} onClose={() => { setStep(null); }} />
         ) : null}
       </Modal>
     </>
   );
 }
 
-function TrySetScreen({ me, exercise, onClose }: { me: string; exercise: CameraExercise; onClose: () => void }) {
+function TrySetScreen({ exercise, onClose }: { exercise: CameraExercise; onClose: () => void }) {
   const { state } = useSession();
   const units = (state.kind === "in" ? accountUnits(state.user.units) : null) ?? "metric";
   // A new one when the set starts again (Reset set): its count and its form score are the new set's alone.
@@ -99,17 +99,17 @@ function TrySetScreen({ me, exercise, onClose }: { me: string; exercise: CameraE
   const [box, setBox] = useState(false);
   const [stopped, setStopped] = useState<"failed" | "byHand" | null>(null);
   const [result, setResult] = useState<{ reps: number; heldMs: number; form: number | null } | null>(null);
-  const [soundOn, setSoundOn] = useState(true);
+  // Sound on or off is the workout's own choice, one for every screen (the camera's integrity pass, H1); a screen test of
+  // this page alone, outside the tabs, keeps its own.
+  const layerSound = useWorkoutLayer()?.sound ?? null;
+  const [aloneOn, setAloneOn] = useState(true);
+  const soundOn = layerSound?.on ?? aloneOn;
   const soundNow = useRef(soundOn);
   soundNow.current = soundOn;
-  const soundFile = useRef(workoutSoundsFile(me));
   // Follow along (53b-ii): while it is on, the camera is off and its screen is gone; the set is the timer's.
   const [follow, setFollow] = useState<Follow | null>(null);
   const following = useRef<Follow | null>(null);
   const [followBox, setFollowBox] = useState(false);
-  useEffect(() => {
-    void soundFile.current.read().then((text) => { setSoundOn(soundOnIn(text)); }).catch(() => undefined);
-  }, []);
   // The screen stays awake while the camera is up: the person is metres from it.
   useEffect(() => {
     void activateKeepAwakeAsync(AWAKE_TAG).catch(() => undefined);
@@ -201,7 +201,16 @@ function TrySetScreen({ me, exercise, onClose }: { me: string; exercise: CameraE
   const referenceOf = useReference(exercise);
   const timed = exercise.measuredIn === "time";
   const digits = timed ? holdWords(set.heldMs / 1000).replace(" s", "") : String(shownReps(set)).padStart(2, "0");
-  const sound = { on: soundOn, flip: () => { const next = !soundOn; setSoundOn(next); if (!next) soundNative?.hush(); void soundFile.current.write(soundText(next)).catch(() => undefined); } };
+  const sound = {
+    on: soundOn,
+    flip: () => {
+      const next = !soundNow.current;
+      soundNow.current = next;
+      if (layerSound === null) setAloneOn(next);
+      else layerSound.flip();
+      if (!next) soundNative?.hush();
+    },
+  };
   if (follow !== null) {
     return (
       <FollowAlong
