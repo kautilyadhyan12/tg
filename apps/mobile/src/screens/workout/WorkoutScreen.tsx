@@ -1,5 +1,5 @@
 import type { RefusedWorkout, WorkoutRun, WorkoutSave } from "@app/shared";
-import { useMemo, useState, type ReactNode } from "react";
+import { useCallback, useMemo, useState, type ReactNode } from "react";
 import { Image, Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Circle } from "react-native-svg";
@@ -13,8 +13,12 @@ import { Sheet } from "../../look/Sheet";
 import { fonts, Txt } from "../../look/Txt";
 import { exercisePicture } from "../../library/pictures";
 import { weightParts, type Units } from "../../library/records";
-import { leftOf, setOf, setsInAll, type Press } from "../../library/workoutRun";
+import { asking as askingWay, following, leftOf, setOf, setsInAll, tracking, type Press } from "../../library/workoutRun";
 import type { Finished } from "../../library/workoutRunStore";
+import { PoseCameraView } from "../../camera/poseCameraNative";
+import { STOPPED_WORDS } from "../camera/CameraSet";
+import { lastCameraSet, lastSetNumber } from "./cameraWords";
+import { CameraAsk, CameraRest, StartCameraLink, WorkoutCameraSet, type CameraKeep } from "./WorkoutCamera";
 import type { WaitingView } from "../../session/waitingList";
 import { ClipOver } from "../library/ExerciseClip";
 import { useKeepMedia, useOwnPicture, type OwnClip, type OwnPicture } from "../library/ExerciseImage";
@@ -50,13 +54,15 @@ interface Props {
   onFinished: () => void;
   effort: EffortHand;
   onNewWorkout: () => void;
+  /** The camera's set kept while the screen is put away (64b-ii). */
+  keep: CameraKeep;
 }
 
-export function WorkoutScreen({ run, finished, keeping, waiting, units, sound, press, onPutAway, onDiscard, onFinished, effort, onNewWorkout }: Props) {
+export function WorkoutScreen({ run, finished, keeping, waiting, units, sound, press, onPutAway, onDiscard, onFinished, effort, onNewWorkout, keep }: Props) {
   if (run === null) {
     return finished === null ? null : <Summary finished={finished} keeping={keeping} waiting={waiting} effort={effort} units={units} onDone={onFinished} onNewWorkout={onNewWorkout} />;
   }
-  return <Doing run={run} units={units} sound={sound} press={press} onPutAway={onPutAway} onDiscard={onDiscard} />;
+  return <Doing run={run} units={units} sound={sound} press={press} onPutAway={onPutAway} onDiscard={onDiscard} keep={keep} />;
 }
 
 const LED_RED: ColourName = "ledRed";
@@ -114,10 +120,13 @@ function SoundPill({ sound }: { sound: SoundSwitch }) {
   );
 }
 
-function Doing({ run, units, sound, press, onPutAway, onDiscard }: { run: WorkoutRun; units: Units; sound: SoundSwitch; press: (p: Press) => void; onPutAway: () => void; onDiscard: () => void }) {
+function Doing({ run, units, sound, press, onPutAway, onDiscard, keep }: { run: WorkoutRun; units: Units; sound: SoundSwitch; press: (p: Press) => void; onPutAway: () => void; onDiscard: () => void; keep: CameraKeep }) {
   const insets = useSafeAreaInsets();
   const heart: { monitor: Monitor | null; bpm: number | null; bluetooth: BluetoothState } = useHeartNow(true);
   const [asking, setAsking] = useState(false);
+  const askEnd = useCallback(() => {
+    setAsking(true);
+  }, []);
   const { exercise, target, weightGrams } = setOf(run);
   const timed = exercise.measuredIn === "time";
   const inSet = run.phase === "set";
@@ -190,6 +199,81 @@ function Doing({ run, units, sound, press, onPutAway, onDiscard }: { run: Workou
       <SoundPill sound={sound} />
     </View>
   );
+  const endSheet = (
+    <Sheet
+      open={asking}
+      title="End workout?"
+      onClose={() => {
+        setAsking(false);
+      }}
+    >
+      <Txt kind="body" colour="text">
+        {done === 0 ? "No sets done yet. Nothing will be saved." : `${String(done)} of ${String(setsInAll(run))} sets done. Those sets will be saved.`}
+      </Txt>
+      <View style={styles.two}>
+        <Button
+          label="Keep going"
+          kind="plain"
+          style={styles.half}
+          onPress={() => {
+            setAsking(false);
+          }}
+        />
+        {done === 0 ? (
+          <Button
+            label="End workout"
+            kind="danger"
+            style={styles.half}
+            onPress={() => {
+              setAsking(false);
+              onDiscard();
+            }}
+          />
+        ) : (
+          <Button
+            label="End and save"
+            style={styles.half}
+            onPress={() => {
+              setAsking(false);
+              press({ kind: "end" });
+            }}
+          />
+        )}
+      </View>
+      {done === 0 ? null : (
+        <Button
+          label="Discard workout"
+          kind="dangerLink"
+          style={styles.self}
+          onPress={() => {
+            setAsking(false);
+            onDiscard();
+          }}
+        />
+      )}
+    </Sheet>
+  );
+  // The camera counting the set, or the clip followed (64b-ii): its own screen, over the whole phone.
+  if (tracking(run) || following(run)) {
+    return (
+      <View style={styles.page}>
+        <WorkoutCameraSet run={run} units={units} sound={sound} press={press} keep={keep} onEnd={askEnd} />
+        {endSheet}
+      </View>
+    );
+  }
+  // The rest after a set the camera counted: read from where the person stands, the camera off.
+  const lastCamera = lastCameraSet(run);
+  if (lastCamera !== null) {
+    return (
+      <View style={styles.page}>
+        <CameraRest run={run} last={lastCamera} units={units} sound={sound} press={press} onEnd={askEnd} />
+        {endSheet}
+      </View>
+    );
+  }
+  // An exercise the camera counts, being counted by hand: the camera can count the set from now (Kd's drawing, board 5).
+  const offerCamera = inSet && !run.paused && !askingWay(run) && exercise.camera === true && PoseCameraView !== null && (run.cam === undefined || run.cam.left === null);
   return (
     <View style={styles.page}>
       <ScrollView contentContainerStyle={styles.scroll} bounces={false}>
@@ -215,6 +299,15 @@ function Doing({ run, units, sound, press, onPutAway, onDiscard }: { run: Workou
         )}
         <View style={styles.body}>
           {pills}
+          {/* The camera stopped in this set (§11.8): it goes on by hand, and says so where it is counted. */}
+          {inSet && run.cam?.left === "camera_stopped" ? (
+            <View testID="camera-stopped" style={styles.stopped} accessibilityLiveRegion="polite">
+              <Icon name="cameraOff" size={18} colour="text" />
+              <Txt kind="strong" style={styles.grow}>
+                {STOPPED_WORDS}
+              </Txt>
+            </View>
+          ) : null}
           <View style={styles.wall}>
             {inSet && !timed ? (
               <>
@@ -310,62 +403,13 @@ function Doing({ run, units, sound, press, onPutAway, onDiscard }: { run: Workou
         {inSet && !run.paused ? (
           <View style={styles.links}>
             <Button label="Reset set" kind="link" onPress={() => { press({ kind: "reset" }); }} />
+            {offerCamera ? <StartCameraLink press={press} /> : null}
             <Button label="Skip exercise" kind="link" onPress={() => { press({ kind: "skipExercise" }); }} />
           </View>
         ) : null}
       </View>
-      <Sheet
-        open={asking}
-        title="End workout?"
-        onClose={() => {
-          setAsking(false);
-        }}
-      >
-        <Txt kind="body" colour="text">
-          {done === 0 ? "No sets done yet. Nothing will be saved." : `${String(done)} of ${String(setsInAll(run))} sets done. Those sets will be saved.`}
-        </Txt>
-        <View style={styles.two}>
-          <Button
-            label="Keep going"
-            kind="plain"
-            style={styles.half}
-            onPress={() => {
-              setAsking(false);
-            }}
-          />
-          {done === 0 ? (
-            <Button
-              label="End workout"
-              kind="danger"
-              style={styles.half}
-              onPress={() => {
-                setAsking(false);
-                onDiscard();
-              }}
-            />
-          ) : (
-            <Button
-              label="End and save"
-              style={styles.half}
-              onPress={() => {
-                setAsking(false);
-                press({ kind: "end" });
-              }}
-            />
-          )}
-        </View>
-        {done === 0 ? null : (
-          <Button
-            label="Discard workout"
-            kind="dangerLink"
-            style={styles.self}
-            onPress={() => {
-              setAsking(false);
-              onDiscard();
-            }}
-          />
-        )}
-      </Sheet>
+      {askingWay(run) ? <CameraAsk run={run} press={press} /> : null}
+      {endSheet}
     </View>
   );
 }
@@ -388,15 +432,6 @@ function OwnTop({ id, uri, picture, clip, playing, above }: { id: string; uri: s
       <View style={[styles.ownAbove, { top: insets.top + 12 }]}>{above}</View>
     </View>
   );
-}
-
-/** The number of the set just done, within its exercise. */
-function lastSetNumber(r: WorkoutRun): number {
-  const last = r.done[r.done.length - 1];
-  if (last === undefined) return 1;
-  let n = 0;
-  for (let i = r.done.length - 1; i >= 0 && r.done[i]?.exercise === last.exercise; i--) n += 1;
-  return n;
 }
 
 function Label({ children }: { children: string }) {
@@ -549,7 +584,8 @@ const styles = StyleSheet.create({
   pausedCover: { position: "absolute", top: 0, right: 0, bottom: 0, left: 0, borderRadius: 22, backgroundColor: colours.timerFace, alignItems: "center", justifyContent: "center" },
   next: { flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 4 },
   foot: { paddingHorizontal: 16, paddingTop: 10, gap: 2, backgroundColor: colours.page },
-  links: { flexDirection: "row", justifyContent: "space-between", paddingHorizontal: 6 },
+  links: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", paddingHorizontal: 6 },
+  stopped: { flexDirection: "row", alignItems: "center", gap: 10, minHeight: 48, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 20, backgroundColor: colours.raised, borderWidth: 1, borderColor: colours.lineStrong },
   two: { flexDirection: "row", gap: 10 },
   half: { flex: 1 },
 });

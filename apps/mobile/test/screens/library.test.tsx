@@ -135,6 +135,9 @@ beforeEach(() => {
   // The phone's files outlive a test in the stand-in: each test starts on a phone that never opened the Library.
   for (const one of Paths.document.list()) if (one.name.startsWith("library-") || one.name.startsWith("figure-") || one.name.startsWith("my-workout-") || one.name.startsWith("workout") || one.name.startsWith("saved-")) one.delete();
   forgetStores();
+  // A phone without the camera's module, as 64a's workouts were built: every set by hand. The camera in a workout is
+  // workoutCamera.test.tsx's (64b-ii).
+  jest.requireMock<{ poseCamera: { missing: boolean } }>("../../src/camera/poseCameraNative").poseCamera.missing = true;
 });
 
 describe("62a: each exercise's own picture", () => {
@@ -2089,6 +2092,8 @@ describe("heart rate and sounds in a workout (64a-vi)", () => {
     const granted = { granted: true, canAskAgain: true, status: "granted", expires: "never" };
     camera.permission = granted;
     camera.afterAsk = granted;
+    // A phone with the camera's module: Try the camera is there.
+    jest.requireMock<{ poseCamera: { missing: boolean } }>("../../src/camera/poseCameraNative").poseCamera.missing = false;
     remove(`camera-told-${RAVI.id}.json`);
     await openLibrary(saving().ask);
     // The camera: Sound off.

@@ -7,7 +7,7 @@ import { HEART_BPM_LEAST, HEART_BPM_MOST } from "../heartRate.js";
 import { instantSchema } from "../time.js";
 import { exerciseIdSchema } from "./exerciseFile.js";
 import { plannedSetSchema } from "./plannedWorkout.js";
-import { savedSetSchema, WORKOUT_SAVE_LIMITS } from "./workoutSave.js";
+import { cameraSummarySchema, savedSetSchema, WORKOUT_SAVE_LIMITS } from "./workoutSave.js";
 
 const W = WORKOUT_SAVE_LIMITS;
 
@@ -27,11 +27,36 @@ export const runExerciseSchema = z
     /** A barbell exercise's weight starts at the empty bar. */
     barbell: z.boolean(),
     sets: z.array(plannedSetSchema).min(1).max(RUN_SETS_MOST),
+    /** The camera counts it on this phone (job 64b-ii): offered each time the exercise starts. Absent: by hand, as every
+     *  exercise of a workout kept before it. */
+    camera: z.literal(true).optional(),
   })
   .strict();
 export type RunExercise = z.infer<typeof runExerciseSchema>;
 
 const ms = z.number().int().min(0).max(W.lengthMostMs * 4);
+
+/** The set being counted by the camera (job 64b-ii): what the set took of the camera's count, the camera's own count when
+ *  it last said, and, once the person left it or it stopped, why and what it had judged by then. Numbers and the movement
+ *  files' own words only, as the save's (`cameraSummarySchema`): nothing of the body. */
+export const runCameraSchema = z
+  .object({
+    /** Reps the camera counted that the set took (none while paused). */
+    done: z.number().int().min(0).max(W.repsMost),
+    /** A hold's time the set took of the camera's, ms. */
+    heldMs: z.number().int().min(0).max(W.secondsMost * 1000),
+    /** The camera's own count and time held when it last said, whatever the set took. */
+    seenReps: z.number().int().min(0).max(W.repsMost),
+    seenHeldMs: z.number().int().min(0).max(W.secondsMost * 1000),
+    /** "chosen": Count this set myself; "camera_stopped": the camera or its model stopped; null while it counts. */
+    left: z.enum(["chosen", "camera_stopped"]).nullable(),
+    /** What the camera judged of the set, once it ended or was left; null before, and for an exercise with no form rules. */
+    summary: cameraSummarySchema.nullable(),
+    /** The workout's whole clock when this camera set began: a new one each time it begins again. */
+    at: ms,
+  })
+  .strict();
+export type RunCamera = z.infer<typeof runCameraSchema>;
 /** When a rest or a get-ready ends: up to an hour's rest past the longest clock (round one, H2). */
 const endsMs = z.number().int().min(0).max(W.lengthMostMs * 4 + W.restSecondsMost * 1000 + 10_000);
 
@@ -67,8 +92,17 @@ export const workoutRunSchema = z
       .array(z.tuple([z.number().int().min(0).max(W.lengthMostMs), z.number().int().min(HEART_BPM_LEAST).max(HEART_BPM_MOST)]))
       .max(W.heartMost)
       .optional(),
+    /** How the exercise being done is counted (job 64b-ii), asked as it starts where the camera counts it: absent until
+     *  answered, and for an exercise the camera does not count. */
+    way: z.enum(["camera", "hand"]).optional(),
+    /** The set being counted by the camera; absent for every other set. */
+    cam: runCameraSchema.optional(),
+    /** The set being followed with the exercise's clip, the camera off (Follow along); absent otherwise. */
+    follow: z.literal(true).optional(),
   })
   .strict()
+  .refine((r) => (r.cam === undefined && r.follow === undefined) || r.way === "camera", { message: "a camera set where the camera was chosen", path: ["cam"] })
+  .refine((r) => r.cam === undefined || r.follow === undefined, { message: "a set followed has the camera off", path: ["follow"] })
   .refine((r) => r.ex < r.exercises.length && r.set < (r.exercises[r.ex]?.sets.length ?? 0), { message: "where the workout is", path: ["set"] })
   .refine((r) => r.activeMs <= r.totalMs, { message: "active time within the whole", path: ["activeMs"] });
 export type WorkoutRun = z.infer<typeof workoutRunSchema>;

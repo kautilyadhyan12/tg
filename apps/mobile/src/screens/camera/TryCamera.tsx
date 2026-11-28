@@ -1,9 +1,9 @@
 import { useCameraPermissions } from "expo-camera";
 import { activateKeepAwakeAsync, deactivateKeepAwake } from "expo-keep-awake";
-import { useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
-import { AppState, Image, Pressable, StyleSheet, View } from "react-native";
+import { useCallback, useContext, useEffect, useRef, useState } from "react";
+import { AppState, Pressable, StyleSheet, View } from "react-native";
 import { CAMERA_EXERCISES, type CameraExercise } from "../../camera/cameraExercises";
-import { followPress, followSounds, startFollow, targetAfterFollow, type Follow, type FollowPress } from "../../camera/followAlong";
+import { FOLLOW_TICK_MS, followPress, followSounds, startFollow, targetAfterFollow, type Follow, type FollowPress } from "../../camera/followAlong";
 import { LiveSet } from "../../camera/liveSet";
 import { PoseCameraView } from "../../camera/poseCameraNative";
 import { clipFor, clipOf } from "../../camera/voice";
@@ -13,14 +13,10 @@ import { holdWords } from "../../library/records";
 import { Button } from "../../look/Button";
 import { colours, sizes } from "../../look/colours";
 import { Modal } from "../../look/Modal";
-import { pictures } from "../../look/pictures";
 import { Sheet } from "../../look/Sheet";
 import { Txt } from "../../look/Txt";
 import { useSession } from "../../session/SessionProvider";
 import { soundNative } from "../../sound/soundNative";
-import { ClipOver } from "../library/ExerciseClip";
-import { useKeepMedia, useOwnPicture } from "../library/ExerciseImage";
-import { useNamed } from "../library/useLibrary";
 import { accountUnits } from "../setup/Setup";
 import { CopyContext } from "../ThisCopy";
 import { CameraBox, repsWords } from "./CameraBox";
@@ -28,6 +24,9 @@ import { CameraFirst } from "./CameraFirst";
 import { useWorkoutLayer } from "../workout/WorkoutLayer";
 import { CameraSet, REPS_BOX_WORDS, TIME_BOX_WORDS } from "./CameraSet";
 import { FollowAlong, FollowBox, FollowDone } from "./FollowAlong";
+import { useReference } from "./Reference";
+
+export { FOLLOW_TICK_MS };
 
 // "Try the camera" (ROADMAP Stage 5 53a): a folder's copy's door to the camera screen, before the workout carries it
 // (job 64b: Camera or Count myself, picked every time). One set of an exercise the camera counts today, from the box
@@ -35,8 +34,6 @@ import { FollowAlong, FollowBox, FollowDone } from "./FollowAlong";
 // end. Never in the store's app, and nothing of it is saved: the set is shown and gone.
 
 const AWAKE_TAG = "camera";
-/** How often Follow along's timer is read again while it runs. */
-export const FOLLOW_TICK_MS = 250;
 
 type Step = { kind: "first"; exercise: CameraExercise } | { kind: "set"; exercise: CameraExercise };
 
@@ -292,43 +289,10 @@ function Done({ result, timed, onDone }: { result: { reps: number; heldMs: numbe
   );
 }
 
-/** The exercise's own picture, its clip playing over it, from the Library kept on the phone, once it has come; until the
- *  Library has a picture of its own, the app's own picture of it; null for an exercise with neither (no tile is drawn).
- *  In the camera's corner tile the picture fills the tile; filling the phone for Follow along (53b-ii) it is shown whole,
- *  as its clip is, so that the two lie on each other. */
-function useReference(exercise: CameraExercise): (where: "tile" | "follow", playing: boolean) => ReactNode {
-  const named = useNamed();
-  const own = exercise.libraryId === null ? null : named(exercise.libraryId);
-  useKeepMedia([own?.picture?.file, own?.clip?.file].filter((f): f is string => f !== undefined));
-  const uri = useOwnPicture(own?.picture ?? null);
-  return (where, playing) => {
-    const fit = where === "tile" ? "cover" : "contain";
-    const prefix = where === "tile" ? "camera" : "follow";
-    if (own?.picture !== null && own?.picture !== undefined && uri !== null) {
-      const ground = own.picture.ground;
-      return (
-        <View style={[styles.fill, { backgroundColor: ground }]}>
-          <Image source={{ uri }} resizeMode={fit} style={styles.whole} accessible={false} />
-          <ClipOver id={`${prefix}-${exercise.key}`} clip={own.clip} playing={playing} ground={ground} />
-        </View>
-      );
-    }
-    if (exercise.picture === null) return null;
-    return (
-      <View style={styles.fill}>
-        <Image testID={`${prefix}-picture-${exercise.key}`} source={pictures[exercise.picture]} resizeMode={fit} style={styles.whole} accessible={false} />
-      </View>
-    );
-  };
-}
-
 const styles = StyleSheet.create({
   link: { alignSelf: "center" },
   choice: { flexDirection: "row", alignItems: "center", gap: 12, minHeight: sizes.button, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: colours.line },
   grow: { flex: 1 },
   above: { flex: 1 },
   done: { backgroundColor: colours.box, borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: sizes.edge, paddingBottom: 32, gap: 8 },
-  fill: { position: "absolute", left: 0, right: 0, top: 0, bottom: 0 },
-  /** A picture filling its tile: an Image laid out by its edges alone is drawn at its own size. */
-  whole: { width: "100%", height: "100%" },
 });

@@ -10,6 +10,9 @@ import type { SoundName } from "../sound/soundNative";
 // nothing is ever counted from the clip. The set's own steps, pure: every press carries the phone's clock, and the set's
 // clock moves on by the time that passed, never back, and not while paused (as the workout's own does, 64a-ii).
 
+/** How often Follow along's timer is read again while it runs. */
+export const FOLLOW_TICK_MS = 250;
+
 /** How long one rep takes at the timer's start: a set of 10 reps is followed for 30 s. */
 export const FOLLOW_REP_MS = 3000;
 
