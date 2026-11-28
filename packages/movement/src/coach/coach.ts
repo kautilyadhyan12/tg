@@ -15,7 +15,9 @@
 //   - fixed: "Better." on the first counted rep where a corrected mistake is seen fine; "That one counts." on the first
 //     counted rep after a reason was said;
 //   - the count: "Halfway.", "Two more.", "Last one." against the set's target; "Set complete." when it ends;
-//   - the person lost: once, until they are back, and not again within 10 s.
+//   - the person lost: once, until they are back, and not again within 10 s;
+//   - the phone moving (53c): "Keep the phone still.", once, until it stands again, and not again within 10 s; it outranks
+//     every other line, since nothing the camera sees while it moves is read.
 // A correction outranks praise, praise the count. A line that only encourages (praise, the count) is left out when it
 // would come within 0.8 s of the line before, about the length of the short count lines; the app's player makes any other line wait for
 // the one speaking, so lines never talk over each other.
@@ -24,7 +26,7 @@ import { checkedOf } from "../movement/form.js";
 import type { HoldFrame } from "../movement/hold.js";
 import type { RepResult } from "../movement/matcher.js";
 
-export type SayKind = "reason" | "correction" | "better" | "counts now" | "count" | "lost" | "set complete";
+export type SayKind = "reason" | "correction" | "better" | "counts now" | "count" | "lost" | "moved" | "set complete";
 
 export interface Say {
   /** The line, by its first wording: the screen's own words where the screen says it. */
@@ -43,6 +45,7 @@ export interface CoachWords {
   readonly lastOne: string;
   readonly setComplete: string;
   readonly lost: string;
+  readonly moved: string;
   readonly countsNow: string;
   readonly better: string;
 }
@@ -52,7 +55,7 @@ export interface CoachLimits {
   readonly repsMade: number;
   /** A line that only encourages is left out within this long of the line before, ms. */
   readonly quiet: number;
-  /** The person lost is said again only this long after it was last said, ms. */
+  /** The person lost, or the phone moving, is said again only this long after it was last said, ms. */
   readonly lostAgain: number;
   /** A hold's reason is said once the camera has not read the position this long, ms. */
   readonly holdUnseen: number;
@@ -82,6 +85,7 @@ export function coachWords(voice: Voice): CoachWords {
     lastOne: first("last one"),
     setComplete: first("set complete"),
     lost: first("lost"),
+    moved: first("moved"),
     countsNow: first("counts now"),
     better: first("better"),
   };
@@ -101,6 +105,8 @@ export class Coach {
   private reason: { words: string; run: number } | null = null;
   private lost = false;
   private lostAt = Number.NEGATIVE_INFINITY;
+  private moving = false;
+  private movedAt = Number.NEGATIVE_INFINITY;
   private halfwayHeld = false;
   private unreadSince: number | null = null;
   private holdTold = false;
@@ -179,6 +185,19 @@ export class Coach {
     if (t - this.lostAt < this.limits.lostAgain) return null;
     this.lostAt = t;
     return this.say(this.words.lost, "lost", t);
+  }
+
+  /** Each answer: whether the phone itself is moving (knocked, picked up or held by hand), so that nothing it sees counts. */
+  moved(t: number, moving: boolean): Say | null {
+    if (!moving) {
+      this.moving = false;
+      return null;
+    }
+    if (this.moving) return null;
+    this.moving = true;
+    if (t - this.movedAt < this.limits.lostAgain) return null;
+    this.movedAt = t;
+    return this.say(this.words.moved, "moved", t);
   }
 
   /** A hold's frame: `target`, the seconds to hold (null with none). */

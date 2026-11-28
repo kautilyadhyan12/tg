@@ -11,8 +11,8 @@ import { COACH_WORDS } from "./voice";
 // The screen is read from 2 to 3 metres away, so it says one thing at a time: the count, a green flash and a short sound
 // for each counted rep, and at most one line at its foot, only while there is something to say: why a rep did not count
 // in its movement's own words ("Go lower to count."), what the camera cannot see ("Keep your whole body in view."), that it
-// has lost the person, or the coach's correction or praise as it says it. Every other movement gets no count and no word
-// (§12.1).
+// has lost the person, that the phone itself is moving ("Keep the phone still.", 53c), or the coach's correction or praise
+// as it says it. Every other movement gets no count and no word (§12.1).
 
 /** How long a counted rep's number stays green. */
 export const FLASH_MS = 600;
@@ -21,9 +21,11 @@ export const LINE_MS = 4_000;
 /** The person unseen this long, once the set has seen them, and the screen says so (§11.8 step 4). */
 export const LOST_MS = 2_000;
 export const LOST_WORDS = COACH_WORDS.lost;
+/** While the phone itself moves, once the set has seen the person ready (53c): nothing the camera sees counts. */
+export const STILL_WORDS = COACH_WORDS.moved;
 
-/** What the line at the foot is about: a rep that fell short or was refused (amber), what the camera could not see, or
- *  the person lost (red), or the coach's correction or praise (the page's own dark). */
+/** What the line at the foot is about: a rep that fell short or was refused (amber), what the camera could not see, the
+ *  person lost or the phone moving (red), or the coach's correction or praise (the page's own dark). */
 export type LineTone = "short" | "unseen" | "coach";
 
 export interface LiveLine {
@@ -98,11 +100,13 @@ export class LiveSet {
     this.lastT = t;
     const seen = this.camera.next(frame);
     const body = seen.person.person;
-    if (body !== null) this.seenAt = t;
+    // The phone moving is not the person lost: the screen waits for it to stand, then for them (53c).
+    const moving = seen.phone.moving;
+    if (body !== null || moving) this.seenAt = t;
     let { stage, reps, heldMs } = this.view;
     let line = this.view.line;
     let say: Say | null = null;
-    if (line !== null && line.words !== LOST_WORDS && t >= this.lineUntil) line = null;
+    if (line !== null && line.words !== LOST_WORDS && line.words !== STILL_WORDS && t >= this.lineUntil) line = null;
     const match = seen.match;
     if (match !== null) {
       if (this.record instanceof SetRecord) this.record.add(match);
@@ -137,7 +141,14 @@ export class LiveSet {
     const lost = stage === "counting" && this.seenAt !== null && t - this.seenAt >= LOST_MS;
     if (lost) line = { words: LOST_WORDS, tone: "unseen" };
     else if (line?.words === LOST_WORDS) line = null;
-    say = this.coach.seen(t, lost) ?? say;
+    // The phone moving, once the set has seen the person ready: said until it stands again. While the person sets up, the
+    // set-up's own words already say to stand the phone, and a phone being put in its place is no fault.
+    const still = moving && stage === "counting";
+    if (still) line = { words: STILL_WORDS, tone: "unseen" };
+    else if (line?.words === STILL_WORDS) line = null;
+    const movedSay = this.coach.moved(t, still);
+    const lostSay = this.coach.seen(t, lost);
+    say = movedSay ?? lostSay ?? say;
     this.view = { stage, reps, heldMs, flash: t < this.flashUntil, line, say, body, aspect: frame.aspect };
     return this.view;
   }

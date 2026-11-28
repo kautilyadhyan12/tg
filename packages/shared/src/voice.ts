@@ -18,6 +18,7 @@ export const VOICE_FORMAT = 1;
  *   - "halfway", "two more", "last one": the set's count against its target;
  *   - "set complete": the set has ended;
  *   - "lost": the camera has not seen the person for a while;
+ *   - "moved": the phone itself is moving (knocked, picked up or held by hand), so nothing it sees counts (53c);
  *   - "counts now": a rep counts after the coach said why the one before did not;
  *   - "better": a mistake the coach corrected is fine on the next rep it is seen;
  *   - "get ready", "rest", "next exercise", "workout complete": the workout's own (job 64b), recorded once with the rest;
@@ -29,6 +30,7 @@ export const VOICE_WHENS = [
   "last one",
   "set complete",
   "lost",
+  "moved",
   "counts now",
   "better",
   "get ready",

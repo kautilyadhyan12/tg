@@ -4,7 +4,7 @@ import { cameraHolds, heldIn } from "../../../packages/movement/scripts/holdChec
 import { cameraRun, proofVideos, withLeadIn, type ProofVideo } from "../../../packages/movement/scripts/movementCheck";
 import { MOVEMENT_VIDEOS } from "../../../packages/movement/scripts/movementVideos";
 import { CAMERA_EXERCISES, type CameraExercise } from "../src/camera/cameraExercises";
-import { FLASH_MS, LINE_MS, LiveSet, LOST_MS, LOST_WORDS, type LiveView, type SetNow } from "../src/camera/liveSet";
+import { FLASH_MS, LINE_MS, LiveSet, LOST_MS, LOST_WORDS, STILL_WORDS, type LiveView, type SetNow } from "../src/camera/liveSet";
 import type { PoseEvent } from "../src/camera/poseFrame";
 import { frameOf } from "../src/camera/poseFrame";
 
@@ -16,7 +16,7 @@ const EARTH = 9.81;
 
 /** A kept frame as the camera module sends it: the picture's points and 3D points laid end to end, gravity as Android reads
  *  it (`downOf` turned back), and the phone's clock started at some moment of its own. */
-function eventOf(f: MovementFrame, clock = 1_234_567): PoseEvent {
+function eventOf(f: MovementFrame, clock = 1_234_567, spin?: readonly number[]): PoseEvent {
   const down = f.down ?? [0, 1, 0];
   return {
     t: clock + f.t,
@@ -24,6 +24,7 @@ function eventOf(f: MovementFrame, clock = 1_234_567): PoseEvent {
     height: 480,
     gravity: [down[0] * EARTH, down[1] * EARTH, -down[2] * EARTH],
     turn: 0,
+    ...(spin === undefined ? {} : { spin }),
     people: f.people.map((p) => ({ points: p.points.flat(), world: p.world === null ? [] : p.world.flat() })),
   };
 }
@@ -254,6 +255,76 @@ describe("what the coach says (53b-i)", () => {
     set.next(eventOf(f));
     expect(set.next({ ...eventOf(f), t: 0 }).say).toBeNull();
     expect(set.next({ ...eventOf(f), width: -1 }).say).toBeNull();
+  });
+});
+
+// 53c: the phone itself moved in a set. Each answer carries how far the phone turned since the one before (its gyroscope);
+// a phone standing still turns a few hundred-thousandths of a radian between two answers, a hand holding it far more.
+describe("the phone moved in a set (53c)", () => {
+  const STILL_SPIN = [0.00002, -0.00001, 0.00001];
+  /** A hand's turning between two answers, back and forth: 0.02 rad each way, about a degree. */
+  const handSpin = (k: number): number[] => [k % 2 === 0 ? 0.02 : -0.02, 0.005, 0];
+
+  /** Every view over the video, the phone held by hand from `from` for `ms`, standing still otherwise. */
+  function held(e: CameraExercise, v: ProofVideo, from: number, ms: number, now: SetNow = { byHand: 0, target: null }): { frames: MovementFrame[]; views: LiveView[] } {
+    const frames = withLeadIn(v.video).frames;
+    const set = new LiveSet(e.counts, e.camera, 1);
+    const views = frames.map((f, k) => set.next(eventOf(f, 1_234_567, f.t >= from && f.t < from + ms ? handSpin(k) : STILL_SPIN), now));
+    return { frames: [...frames], views };
+  }
+
+  it("a phone that stands still all through counts and says exactly what a camera with no gyroscope does", () => {
+    const e = exercise("squat");
+    const v = video("prisoner_squat_1");
+    const set = new LiveSet(e.counts, e.camera, 1);
+    const views = withLeadIn(v.video).frames.map((f) => set.next(eventOf(f, 1_234_567, STILL_SPIN), { byHand: 0, target: 3 }));
+    const plain = new LiveSet(e.counts, e.camera, 1);
+    const plainViews = withLeadIn(v.video).frames.map((f) => plain.next(eventOf(f), { byHand: 0, target: 3 }));
+    expect(views).toEqual(plainViews);
+  });
+
+  it("picked up after the first counted rep: \"Keep the phone still.\" in red while it moves, said once; nothing counts meanwhile; it goes once the phone stands", () => {
+    const e = exercise("squat");
+    const v = video("prisoner_squat_1");
+    const plain = play(e, v);
+    const frames = withLeadIn(v.video).frames;
+    const first = plain.views.findIndex((w) => w.reps === 1);
+    const from = (frames[first]?.t ?? 0) + 100;
+    const { views } = held(e, v, from, 1500);
+    const at = (k: number): number => frames[k]?.t ?? 0;
+    const moving = views.flatMap((w, k) => (at(k) >= from + 600 && at(k) < from + 1500 ? [w] : []));
+    expect(moving.length).toBeGreaterThan(0);
+    expect(moving.every((w) => w.line?.words === STILL_WORDS && w.line.tone === "unseen")).toBe(true);
+    // Nothing the camera saw while it moved counts: the count stays where it was.
+    expect(moving.every((w) => w.reps === 1)).toBe(true);
+    // Said once, and only that while it moves.
+    const said = views.flatMap((w) => (w.say === null ? [] : [w.say.words]));
+    expect(said.filter((w) => w === STILL_WORDS)).toEqual([STILL_WORDS]);
+    // Once it has stood still a whole second after its last turning has left the half second read, the line has gone, and
+    // the person lost is never said meanwhile.
+    expect(views.filter((_, k) => at(k) >= from + 1500 + 1600).every((w) => w.line?.words !== STILL_WORDS)).toBe(true);
+    expect(said).not.toContain(LOST_WORDS);
+  });
+
+  it("the count goes on after the phone stands: never less than it was, never more than she did", () => {
+    const e = exercise("squat");
+    const v = video("prisoner_squat_1");
+    const frames = withLeadIn(v.video).frames;
+    const first = play(e, v).views.findIndex((w) => w.reps === 1);
+    const { views } = held(e, v, (frames[first]?.t ?? 0) + 100, 800);
+    const counts = views.map((w) => w.reps);
+    expect(counts.every((c, k) => k === 0 || c >= (counts[k - 1] ?? 0))).toBe(true);
+    expect(counts[counts.length - 1] ?? 0).toBeGreaterThanOrEqual(1);
+    expect(counts[counts.length - 1] ?? 0).toBeLessThanOrEqual(v.entry.reps ?? 0);
+  });
+
+  it("while the person sets up, a phone being put in its place says nothing: the set-up's own words say where it stands", () => {
+    const e = exercise("squat");
+    const v = video("prisoner_squat_1");
+    const frames = withLeadIn(v.video).frames;
+    const { views } = held(e, v, frames[0]?.t ?? 0, 600);
+    expect(views.slice(0, 10).every((w) => w.stage === "setUp")).toBe(true);
+    expect(views.every((w) => w.say?.words !== STILL_WORDS && w.line?.words !== STILL_WORDS)).toBe(true);
   });
 });
 

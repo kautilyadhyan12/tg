@@ -46,6 +46,12 @@ export const downSchema = z
     message: "down must be a unit vector",
   });
 
+/** No phone turns a hundred radians between two pictures: an answer saying so is broken. */
+export const SPIN_LIMIT = 100;
+const spinAxis = z.number().min(-SPIN_LIMIT).max(SPIN_LIMIT);
+export const spinSchema = z.tuple([spinAxis, spinAxis, spinAxis]);
+export type Spin = z.infer<typeof spinSchema>;
+
 export const movementFrameSchema = z
   .object({
     /** Milliseconds since the set began, from a clock that never goes back. */
@@ -55,6 +61,10 @@ export const movementFrameSchema = z
     /** Null when the phone cannot say: nothing that needs it is decided. */
     down: downSchema.nullable(),
     people: z.array(seenPersonSchema).max(MAX_PEOPLE),
+    /** How far the phone turned since the frame before, radians about its own three axes (its gyroscope, 53c): a phone
+     *  knocked, picked up or held by hand. Null when the live phone cannot say (no gyroscope, or a gap in its readings);
+     *  absent for a reference video, whose camera stands still. */
+    spin: spinSchema.nullable().optional(),
   })
   .strict();
 
@@ -64,13 +74,18 @@ const finite = z.number();
 /** One answer of the phone's camera module (`apps/mobile/modules/pose-camera`, job 53a) as it crosses into the app, checked
  *  before anything of it is read (the camera's security pass, L1): a broken one is no frame at all, never a thrown error.
  *  `t`: the phone's own clock, ms. `gravity`: Android's reading in the phone's own axes, or none. `turn`: the screen's turn
- *  from those axes, degrees. Each person: 33 points of 5 numbers laid end to end, and 33 3D points of 3, or none. */
+ *  from those axes, degrees. `spin`: how far the phone turned since the answer before, radians about its own axes, or none
+ *  (53c). Each person: 33 points of 5 numbers laid end to end, and 33 3D points of 3, or none. */
 export const poseCameraEventSchema = z.object({
   t: finite,
   width: finite,
   height: finite,
   gravity: z.array(finite).max(3),
   turn: finite,
+  spin: z
+    .array(finite)
+    .refine((s) => s.length === 0 || s.length === 3, { message: "the phone's turning about its three axes, or none" })
+    .default([]),
   people: z
     .array(
       z.object({

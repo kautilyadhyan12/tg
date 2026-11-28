@@ -97,8 +97,9 @@ export const PERSON_LIMITS: PersonLimits = {
 
 /** Who the body given this picture is. "person": the set's person (`person` holds them); "other": every body the model
  *  found is somebody else; "unsure": a body was found whose size cannot be read, so it decides nothing; "nobody": the
- *  model found nobody. */
-export type PersonStatus = "person" | "other" | "unsure" | "nobody";
+ *  model found nobody; "moving": the phone itself is moving, so nothing in the picture is read (`CameraSet`, 53c; this
+ *  stage never gives it). */
+export type PersonStatus = "person" | "other" | "unsure" | "nobody" | "moving";
 
 export interface PersonFrame {
   readonly t: number;

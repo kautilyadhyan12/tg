@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "voice": "Korina, Eleven v4",
   "reader": "whisper.cpp 1.9.5: ggml-base.en, then ggml-small.en where the one before did not hear the clip",
   "clips": [
@@ -202,6 +202,22 @@
       "by": "ggml-base.en",
       "sha256": "b3e40371ce559aec2f54e0fa2041b253c9ea9aee6aa007d03c2605a981b2f0b6",
       "seconds": 2
+    },
+    {
+      "file": "phone_still_1.m4a",
+      "words": "Keep the phone still.",
+      "heard": "Keep the phone still.",
+      "by": "ggml-base.en",
+      "sha256": "df3f4bf8da32384b56d9e36927ce8ba4d9824cbaec118fb8348d0a1e74fa4540",
+      "seconds": 1.64
+    },
+    {
+      "file": "phone_still_2.m4a",
+      "words": "Stand the phone and keep it still.",
+      "heard": "Stand the phone and keep it still.",
+      "by": "ggml-base.en",
+      "sha256": "3532c2ddb9e86d7fc8f0c1afbba83f374d0f01b7e48d7968f2f99ec6df609e10",
+      "seconds": 2.42
     },
     {
       "file": "counts_now_1.m4a",

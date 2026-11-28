@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { AppState, Linking, processColor } from "react-native";
 import { decodeBodyPoints } from "../../../../packages/movement/scripts/bodyPoints";
 import { App } from "../../src/App";
+import { STILL_WORDS } from "../../src/camera/liveSet";
 import type { PoseEvent } from "../../src/camera/poseFrame";
 import { FIRST_LINE, FIRST_TITLE } from "../../src/screens/camera/CameraFirst";
 import type { BodyDrawing } from "../../src/camera/poseCameraNative";
@@ -292,6 +293,29 @@ describe("I stand my phone up, step back, do my squats, and the phone counts the
     await fireEvent.press(screen.getByRole("button", { name: "Set done · 3 reps" }));
     await screen.findByTestId("camera-done");
     expect(sounds.spoken[sounds.spoken.length - 1]).toEqual({ id: "set_complete", index: 0 });
+  });
+
+  it("I pick up the phone after my first squat: the screen and the coach say \"Keep the phone still.\", once; I put it back and the line goes (53c)", async () => {
+    await openTry();
+    await turnOn();
+    // A phone standing still turns a few hundred-thousandths of a radian between two answers; a hand, about a degree.
+    const still = [0.00002, -0.00001, 0.00001];
+    let heldFrom: number | null = null;
+    let shownWhileHeld = false;
+    for (const [k, e] of SQUATS.entries()) {
+      const holding = heldFrom !== null && k >= heldFrom && k < heldFrom + 45;
+      await act(() => {
+        poseCamera.answer({ ...e, spin: holding ? [k % 2 === 0 ? 0.02 : -0.02, 0.005, 0] : still });
+      });
+      if (heldFrom === null && countSays() === "01 / 10") heldFrom = k + 1;
+      if (heldFrom !== null && k === heldFrom + 30) {
+        shownWhileHeld = screen.queryByText(STILL_WORDS) !== null;
+        expect(countSays()).toBe("01 / 10");
+      }
+    }
+    expect(shownWhileHeld).toBe(true);
+    expect(sounds.spoken.filter((s) => s.id === "phone_still")).toEqual([{ id: "phone_still", index: 0 }]);
+    expect(screen.queryByText(STILL_WORDS)).toBeNull();
   });
 
   it("with Sound off the coach says nothing, and no rep sounds", async () => {

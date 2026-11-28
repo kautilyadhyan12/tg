@@ -1,6 +1,6 @@
 {
   "format": 1,
-  "version": 1,
+  "version": 2,
   "voice": {
     "name": "Korina",
     "model": "Eleven v4",
@@ -22,6 +22,7 @@
     { "id": "last_one", "when": "last one", "wordings": ["Last one.", "Last rep."] },
     { "id": "set_complete", "when": "set complete", "wordings": ["Set complete.", "That's the set."] },
     { "id": "lost", "when": "lost", "wordings": ["The camera can't see you.", "Step back into view of the camera."] },
+    { "id": "phone_still", "when": "moved", "wordings": ["Keep the phone still.", "Stand the phone and keep it still."] },
     { "id": "counts_now", "when": "counts now", "wordings": ["That one counts.", "Better. That one counts."] },
     { "id": "better", "when": "better", "wordings": ["Better.", "That's better."] },
     { "id": "get_ready", "when": "get ready", "wordings": ["Get ready."] },
