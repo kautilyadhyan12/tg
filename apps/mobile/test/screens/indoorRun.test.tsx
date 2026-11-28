@@ -2,7 +2,7 @@ import { act, fireEvent, render, screen, waitFor } from "@testing-library/react-
 import { AppState, PermissionsAndroid, Platform } from "react-native";
 import { saveRunRequestSchema, type SaveRunRequest } from "@app/shared";
 import { App } from "../../src/App";
-import { loadRun, movingMsOf, phoneRunFiles, resetRecorder, runNow, takeSteps, type LiveRun } from "../../src/screens/running/recorder";
+import { loadRun, movingMsOf, phoneRunFiles, resetRecorder, runNow, runStepsOf, takeSteps, type LiveRun } from "../../src/screens/running/recorder";
 import { indoorSumsAt } from "../../src/screens/running/runLive";
 import { distance } from "../../src/screens/running/runWords";
 import type { Ask, AskInit } from "../../src/session/calls";
@@ -410,6 +410,74 @@ describe("a pause the person pressed (round one, H2 and L1)", () => {
     motion.stepTo(going().startedAt + 70_000, 8016 + 119);
     await lookAt(70);
     expect(going().indoor?.steps).toBe(120);
+  });
+});
+
+describe("steps the app could not see as they came, during an Auto-pause (the re-check, H3)", () => {
+  /** Ten minutes at 120 a minute from 8,016, then standing: Auto-paused at 610 s. The counter's total then. */
+  async function walkThenStand(): Promise<number> {
+    await counterAtStart(8016);
+    const total = await walk(0, 600, 120, 8016);
+    await lookAt(610);
+    expect(going().phase).toBe("paused");
+    expect(going().pausedByPerson).toBe(false);
+    return total;
+  }
+
+  it("the app closed during an Auto-pause and opened an hour later: the steps it could not time are not the run's", async () => {
+    const s = runServer();
+    await openRunning(s);
+    await pickIndoor();
+    await startIndoor();
+    const total = await walkThenStand();
+    const kept = going();
+    const before = indoorSumsAt(kept, 610_000, 0, null);
+    resetRecorder();
+    await loadRun();
+    // The counter went on by 3,000 steps while the app was closed.
+    motion.stepTo(kept.startedAt + 4_210_000, total + 3000);
+    await act(() => takeSteps(kept.startedAt + 4_210_000));
+    const back = going();
+    expect(back.phase).toBe("paused");
+    expect(runStepsOf(back.indoor ?? { steps: 0, pausedSteps: 0 } as never)).toBe(1200);
+    const sums = indoorSumsAt(back, 4_210_000, 0, null);
+    expect(sums.steps).toBe(1200);
+    expect(sums.distanceM).toBe(before.distanceM);
+    expect(sums.movingS).toBe(before.movingS);
+    // The next step it sees as it comes starts the run again, where the clock stood.
+    motion.stepTo(kept.startedAt + 4_215_000, total + 3004);
+    await act(() => takeSteps(kept.startedAt + 4_215_000));
+    await act(() => takeSteps(kept.startedAt + 4_216_000));
+    const going2 = going();
+    expect(going2.phase).toBe("running");
+    expect(going2.pauses).toEqual([[610_000, 4_215_000]]);
+    expect(runStepsOf(going2.indoor ?? ({} as never))).toBe(1204);
+    expect(indoorSumsAt(going2, 4_216_000, 0, null).steps).toBe(1204);
+  });
+
+  it("the screen off during an Auto-pause while the person walked ten minutes: the run goes on from when they set off, at a walk", async () => {
+    const s = runServer();
+    await openRunning(s);
+    await pickIndoor();
+    await startIndoor();
+    const total = await walkThenStand();
+    // From 700 s to 1,300 s, 1,200 steps, handed over as they came but not looked at until the screen is back at 1,310 s.
+    const run = going();
+    for (let t = 1; t <= 600; t++) motion.stepTo(run.startedAt + (700 + t) * 1000, total + t * 2);
+    await act(() => takeSteps(run.startedAt + 1_310_000));
+    const back = going();
+    expect(back.phase).toBe("running");
+    // Started again from just before the first steps (two steps at a brisk walk, a second), never from the screen's return.
+    expect(back.pauses).toEqual([[610_000, 700_000]]);
+    const sums = indoorSumsAt(back, 1_310_000, 0, null);
+    expect(sums.steps).toBe(2400);
+    expect(runStepsOf(back.indoor ?? ({} as never))).toBe(2400);
+    // A walk's speed, never a run's: 1.5 m/s or under over the moving time.
+    expect(sums.distanceM / sums.movingS).toBeLessThan(1.5);
+    // The counts kept at their own times through the ten minutes, at most one a second.
+    const counts = (back.indoor?.counts ?? []).filter(([at]) => at > 700_000);
+    expect(counts.length).toBeGreaterThan(550);
+    for (let i = 1; i < counts.length; i++) expect((counts[i]?.[0] ?? 0) - (counts[i - 1]?.[0] ?? 0)).toBeGreaterThanOrEqual(1000);
   });
 });
 
