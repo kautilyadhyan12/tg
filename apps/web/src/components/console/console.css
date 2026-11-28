@@ -2473,7 +2473,7 @@
   min-width: 0;
 }
 button.c-ov-money-who {
-  min-height: 44px;
+  min-height: 32px;
   padding: 0;
   border: 0;
   background: none;
@@ -2531,6 +2531,7 @@ button.c-ov-money-who {
 @media (pointer: coarse), (max-width: 767px) {
   .c-ov-money .c-btn,
   .c-ov-plan .c-btn { height: auto; min-height: 44px; }
+  button.c-ov-money-who { min-height: 44px; }
 }
 .c-ov-line {
   display: flex;
