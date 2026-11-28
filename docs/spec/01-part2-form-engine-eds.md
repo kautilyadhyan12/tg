@@ -2869,7 +2869,7 @@ afresh** once the set has counted: the lock (52d) keeps their place and size, an
 where they were (round one: started afresh with the rest, the lock took whoever it found first, a stranger beside the
 member, and did so after every Pause); before the set has counted, it starts afresh too. After a second with no picture
 (Pause, the app away, a camera that stalled) the turning meanwhile is not known: the body stages start afresh only if the
-phone's tilt ("down") is more than 2 degrees from what it was (his still phone's gravity reading moved at most 1.03 degrees in
+phone was moving when the pictures stopped, or its tilt ("down") is more than 2 degrees from what it was (his still phone's gravity reading moved at most 1.03 degrees in
 4.5 minutes, 0.36 after it was laid down; picked up and laid flat on the desk again it read 0.74 from before, so a phone put
 back at the same tilt is not seen, and the person, still the set's, is found at their place). **The numbers are Kd's phone's
 own readings** (moto g35, its lsm6dsoq gyroscope, the camera screen open; `test/phone-motion`, the turning and the times
@@ -2922,8 +2922,10 @@ squatter's 2 of 3); 52d's own limit, a stranger of the member's size within 0.95
 across a Pause as before 53c (pinned: at 0.89 to 0.96 m, 0.8 times their size, one squat counted, before 53c too) and, once the
 phone has moved, around the place where the member was on the old picture (pinned: the phone put back 0.3 m aside, a stranger
 within that room read as the member for one dip the camera could not see whole, nothing counted); a phone laid down turned so
-far that the member is no longer within that room waits for them there (pinned: 1.5 m away, nothing more counted; the screen
-says "The camera can't see you." after 2 s; "Count this set myself" goes on by hand); a phone counts as standing 1.5 s after
+far that the member is no longer within that room waits for them there (pinned: 1.5 m away, nothing more counted; after 2 s,
+while the camera sees somebody it does not take, the foot says "Turn the phone back towards you." where it would say "The
+camera can't see you.", false while they stand in view, and the coach says nothing, having no recorded line for it: the
+re-check's Low; "Count this set myself" goes on by hand); a phone counts as standing 1.5 s after
 it lies still and the body is then measured afresh, so a rep begun at once may be lost; the pick-up's first tenth of a second
 is read; a phone moved without turning (slid along a shelf) is not seen by a gyroscope; a still phone whose gyroscope drifts 3
 degrees a second or more would be called moving (his drifts 0.14); a phone with no gyroscope is checked only by its tilt

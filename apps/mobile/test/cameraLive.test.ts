@@ -4,7 +4,8 @@ import { cameraHolds, heldIn } from "../../../packages/movement/scripts/holdChec
 import { cameraRun, proofVideos, withLeadIn, type ProofVideo } from "../../../packages/movement/scripts/movementCheck";
 import { MOVEMENT_VIDEOS } from "../../../packages/movement/scripts/movementVideos";
 import { CAMERA_EXERCISES, type CameraExercise } from "../src/camera/cameraExercises";
-import { FLASH_MS, LINE_MS, LiveSet, LOST_MS, LOST_WORDS, STILL_WORDS, type LiveView, type SetNow } from "../src/camera/liveSet";
+import { FLASH_MS, LINE_MS, LiveSet, LOST_MS, LOST_WORDS, STILL_WORDS, TURN_BACK_WORDS, type LiveView, type SetNow } from "../src/camera/liveSet";
+import { furtherBack, middleOf } from "../../../packages/movement/test/helpers/people";
 import type { PoseEvent } from "../src/camera/poseFrame";
 import { frameOf } from "../src/camera/poseFrame";
 
@@ -328,6 +329,34 @@ describe("the phone moved in a set (53c)", () => {
     expect(counts.every((c, k) => k === 0 || c >= (counts[k - 1] ?? 0))).toBe(true);
     expect(counts[counts.length - 1]).toBe(plain[plain.length - 1]?.reps);
     expect(plain[plain.length - 1]?.reps).toBe(v.entry.reps);
+  });
+
+  it("put back turned so far that she is 1.3 m from her place on its picture (seen further back, so that she stays on it): the set waits for her there, the foot says \"Turn the phone back towards you.\", and the coach never says the camera cannot see her", () => {
+    const e = exercise("squat");
+    const v = video("prisoner_squat_1");
+    const back = furtherBack(v.video);
+    const frames = withLeadIn(back).frames;
+    const plain = frames.map(((set) => (f: MovementFrame) => set.next(eventOf(f)))(new LiveSet(e.counts, e.camera, 1)));
+    const first = plain.findIndex((w) => w.reps === 1);
+    const at = frames[first];
+    if (at === undefined) throw new Error("no first squat");
+    const step = (frames[1]?.t ?? 0) - (frames[0]?.t ?? 0);
+    const own = middleOf(frames);
+    const aspect = at.aspect;
+    const dx = ((own.middle[0] / aspect < 0.5 ? 1 : -1) * 1.3 * own.size) / aspect;
+    const moved = (f: MovementFrame): MovementFrame => ({ ...f, people: f.people.map((p) => ({ ...p, points: p.points.map(([x, y, z, vis, pr]) => [x + dx, y, z, vis, pr] as [number, number, number, number, number]) })) });
+    const pause = Math.round(3800 / step);
+    const shifted = (f: MovementFrame, n: number): MovementFrame => ({ ...f, t: f.t + n * step });
+    const played = [...frames.slice(0, first + 1), ...Array.from({ length: pause }, (_, n) => shifted(at, n + 1)), ...frames.slice(first + 1).map((f) => moved(shifted(f, pause)))];
+    // Her trunk, which the lock reads, stays on the picture (an elbow of her hands behind her head reaches 2 in 100 past it).
+    expect(played.every((f) => f.people.every((p) => [11, 12, 23, 24].every((k) => { const x = p.points[k]?.[0] ?? -1; return x > 0 && x < 1; })))).toBe(true);
+    const set = new LiveSet(e.counts, e.camera, 1);
+    const holdEnd = at.t + 800;
+    const views = played.map((f, k) => set.next(eventOf(f, 1_234_567, f.t > at.t && f.t <= holdEnd ? handSpin(k) : STILL_SPIN), { byHand: 0, target: null }));
+    expect(views[views.length - 1]?.reps).toBe(1);
+    expect(views.some((w) => w.line?.words === TURN_BACK_WORDS)).toBe(true);
+    expect(views.some((w) => w.line?.words === LOST_WORDS)).toBe(false);
+    expect(views.flatMap((w) => (w.say === null ? [] : [w.say.words]))).toEqual([STILL_WORDS]);
   });
 
   it("held in a hand from the start: once it has moved 5 s in a row the set-up says \"Keep the phone still.\", once, and nothing counts", () => {

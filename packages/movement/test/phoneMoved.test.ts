@@ -351,6 +351,15 @@ describe("the rule, every kind of picture", () => {
     expect(phone(null)).toEqual(none);
   });
 
+  it("a phone moving when the pictures stopped (Pause pressed with it in the hand) is measured afresh after the gap, whatever its tilt (the re-check's Low)", () => {
+    const p = new PhoneMotion();
+    const up: [number, number, number] = [0, 1, 0];
+    for (let k = 0; k < 10; k++) p.next(k * 50, turn(k % 2 === 0 ? 1 : -1), up);
+    expect(p.next(500, turn(1), up).moving).toBe(true);
+    const after = p.next(3000, turn(0), up);
+    expect([after.moving, after.again]).toEqual([false, true]);
+  });
+
   it("a picture with the same time adds its turning to the one before, never drops it (round one, L2)", () => {
     const p = new PhoneMotion();
     p.next(0, turn(0));

@@ -136,13 +136,16 @@ export class PhoneMotion {
     this.lastT = t;
     const downBefore = this.down;
     if (down !== null) this.down = down;
-    // The camera gave no picture for a while: its turning meanwhile is not known; moved only if its tilt changed.
+    // The camera gave no picture for a while: its turning meanwhile is not known; moved if it was moving when the pictures
+    // stopped (the re-check's Low: forgotten, a phone put back at its tilt carried on with the old picture's body), or if
+    // its tilt changed.
     if (last !== null && t - last > this.limits.stopped) {
       const tilted = down !== null && downBefore !== null && angleOf(down, downBefore) > this.limits.tilted;
+      const wasMoving = this.moving;
       this.reset();
       this.lastT = t;
       this.down = down ?? downBefore;
-      return this.frame(t, tilted, false);
+      return this.frame(t, tilted || wasMoving, false);
     }
     if (spin !== null) this.turns.push({ t, spin });
     this.since ??= t;
