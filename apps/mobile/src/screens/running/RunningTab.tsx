@@ -1,12 +1,13 @@
-// The Workout tab's Running page (ROADMAP Stage 5 item 37a): the GPS light, Your runs (37c-i: the last
-// run, and See all), Start, Auto-pause, the voice (37a-ii) and the units. The run itself opens over the
-// app (RunLayer).
+// The Workout tab's Running page (ROADMAP Stage 5 item 37a): Outdoor or Indoor (37q-ii-a), the GPS light, Your runs
+// (37c-i: the last run, and See all), Start, Auto-pause, the voice (37a-ii) and the units. The run itself opens over
+// the app (RunLayer).
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { AppState, Linking, Pressable, ScrollView, StyleSheet, Switch, View, useWindowDimensions } from "react-native";
 import * as Location from "expo-location";
 import { useIsFocused } from "@react-navigation/native";
 import { runPageSchema, runRecordsSchema, type KeptRunGuide, type MapColours, type Units } from "@app/shared";
 import { Button } from "../../look/Button";
+import { ChoiceSwitch } from "../../look/ChoiceSwitch";
 import { Options } from "../../look/Choice";
 import { Sheet } from "../../look/Sheet";
 import { colours, dockShade, orangeGradient, shadows, sizes } from "../../look/colours";
@@ -16,7 +17,7 @@ import { PictureTop } from "../../look/PictureTop";
 import { fonts, Txt } from "../../look/Txt";
 import { useRead } from "../dashboard/useRead";
 import { SettingsPage } from "../Settings";
-import { autoPauseChoice, chooseAutoPause, chooseMapColours, chooseVoice, mapColoursChoice, readRunChoices, subscribeRun, voiceChoice } from "./recorder";
+import { autoPauseChoice, chooseAutoPause, chooseIndoor, chooseMapColours, chooseVoice, indoorChoice, mapColoursChoice, readRunChoices, subscribeRun, voiceChoice } from "./recorder";
 import { RefusedRuns } from "./RefusedRuns";
 import { RUN_BAR_ROOM, gpsLight, useRunLayer, type StartProblem } from "./RunLayer";
 import { StartProblemBox } from "./StartProblem";
@@ -102,6 +103,8 @@ export function RunningTab({ units, parts }: { units: Units; parts: ReactNode })
   const autoPause = useSyncExternalStore(subscribeRun, autoPauseChoice);
   const voiceOn = useSyncExternalStore(subscribeRun, voiceChoice);
   const mapColours = useSyncExternalStore(subscribeRun, mapColoursChoice);
+  // Outdoor or Indoor for the next Start (37q-ii-a), kept on the phone.
+  const indoor = useSyncExternalStore(subscribeRun, indoorChoice);
   const [pickingColours, setPickingColours] = useState(false);
   const [heartOpen, setHeartOpen] = useState(false);
   const monitor = useMonitor();
@@ -132,7 +135,8 @@ export function RunningTab({ units, parts }: { units: Units; parts: ReactNode })
   // A run going on shows its own Auto-pause, and the switch changes it at once (Kd, 37a's click-through).
   const shownAuto = layer.run !== null && layer.run.phase !== "finished" ? layer.run.autoPause : autoPause;
   const [asked, setAsked] = useState(0);
-  const gps = useGpsBefore(focused && !going, asked);
+  // Indoors there is no GPS: no light, and the location is not watched.
+  const gps = useGpsBefore(focused && !going && !indoor, asked);
   const last = useRead("/v1/geo/runs?limit=1", runPageSchema, view.sent + changed);
   const lastRun = last.read.kind === "ok" ? (last.read.data.items[0] ?? null) : null;
   const recordsRead = useRead(RECORDS_PATH, runRecordsSchema, view.sent + changed);
@@ -190,7 +194,7 @@ export function RunningTab({ units, parts }: { units: Units; parts: ReactNode })
     });
   }, [height]);
 
-  const start = async (guide: KeptRunGuide | null = null, inBox = false, anyway = false) => {
+  const start = async (guide: KeptRunGuide | null = null, inBox = false, anyway = false, withoutSteps = false) => {
     if (look !== null) {
       look();
       return;
@@ -199,13 +203,18 @@ export function RunningTab({ units, parts }: { units: Units; parts: ReactNode })
     setBatteryOn(false);
     setFrom(guide);
     setPressedBox(inBox);
-    const said = await layer.start(autoPause, guide, anyway);
+    const said = await layer.start(autoPause, guide, anyway, withoutSteps);
     setProblem(said);
     setAsked((n) => n + 1);
   };
   const problemBox =
     said !== null ? (
-      <StartProblemBox problem={said} onAgain={() => void start(from, pressedBox)} onAnyway={() => void start(from, pressedBox, true)} />
+      <StartProblemBox
+        problem={said}
+        onAgain={() => void start(from, pressedBox)}
+        onAnyway={() => void start(from, pressedBox, true)}
+        onWithoutSteps={() => void start(from, pressedBox, true, true)}
+      />
     ) : batteryOn ? (
       <View style={styles.problem}>
         <Txt kind="small" colour="goodText">
@@ -239,7 +248,36 @@ export function RunningTab({ units, parts }: { units: Units; parts: ReactNode })
       >
         {parts}
         <View style={styles.page}>
-          {gps === null || going ? null : (
+          {/* Picked before Start (37q-ii-a); a run going on is what it is, so the switch waits for the next. */}
+          {going ? null : (
+            <ChoiceSwitch
+              said="Where you run"
+              trouble={null}
+              choices={[
+                {
+                  key: "outdoor",
+                  label: "Outdoor",
+                  icon: "pin",
+                  on: !indoor,
+                  onPress: () => {
+                    setProblem(null);
+                    void chooseIndoor(false);
+                  },
+                },
+                {
+                  key: "indoor",
+                  label: "Indoor",
+                  icon: "house",
+                  on: indoor,
+                  onPress: () => {
+                    setProblem(null);
+                    void chooseIndoor(true);
+                  },
+                },
+              ]}
+            />
+          )}
+          {gps === null || going || indoor ? null : (
             <View style={styles.pill} accessible accessibilityLabel={gps.word === "GPS" ? "GPS ready" : gps.word}>
               <View style={[styles.dot, gps.tone === "good" ? styles.dotGood : gps.tone === "weak" ? styles.dotWeak : styles.dotNone]} />
               <Txt kind="small">{gps.word === "GPS" ? "GPS ready" : gps.word}</Txt>

@@ -13,8 +13,9 @@ import { clock, distance, pace, paceWord, runWhen, unitWord } from "./runWords";
 
 const THUMB = 56;
 
-/** The route in a small square: the whole of it, true to its shape; the footprints for a run with none. */
-export function RouteThumb({ shape, size = THUMB }: { shape: string | null; size?: number }) {
+/** The route in a small square: the whole of it, true to its shape; the footprints for a run with none; a house for an
+ *  indoor run (37q-ii-a). */
+export function RouteThumb({ shape, size = THUMB, indoor = false }: { shape: string | null; size?: number; indoor?: boolean }) {
   const drawn = useMemo(() => {
     if (shape === null) return null;
     const { track, starts } = decodeShape(shape);
@@ -25,7 +26,9 @@ export function RouteThumb({ shape, size = THUMB }: { shape: string | null; size
   }, [shape, size]);
   return (
     <View style={[styles.thumb, { width: size, height: size }]} accessible={false}>
-      {drawn === null ? (
+      {indoor ? (
+        <Icon name="house" size={22} colour="orange" />
+      ) : drawn === null ? (
         <Icon name="footprints" size={22} colour="orange" />
       ) : (
         <Svg width={size} height={size}>
@@ -54,7 +57,8 @@ export function runNumbersSaid(run: Pick<RunSummary, "distanceM" | "durationS">,
 
 /** One run of the list. */
 export function RunRow({ run, units, onOpen, line = true }: { run: RunSummary; units: Units; onOpen: (id: string) => void; line?: boolean }) {
-  const when = runWhen(new Date(run.startedAt));
+  // Indoor beside the day (37q-ii-a), as the drawing.
+  const when = `${runWhen(new Date(run.startedAt))}${run.indoor ? " · Indoor" : ""}`;
   return (
     <Pressable
       accessibilityRole="button"
@@ -64,7 +68,7 @@ export function RunRow({ run, units, onOpen, line = true }: { run: RunSummary; u
       }}
       style={({ pressed }) => [styles.row, line ? styles.rowLine : null, pressed ? styles.pressed : null]}
     >
-      <RouteThumb shape={run.shape} />
+      <RouteThumb shape={run.shape} indoor={run.indoor} />
       <View style={styles.grow}>
         <Txt kind="strong" numberOfLines={1}>
           {run.name}

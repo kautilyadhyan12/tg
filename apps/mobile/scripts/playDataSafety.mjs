@@ -119,7 +119,7 @@ export const COLLECTED = [
     required: true,
     ephemeral: false,
     purposes: ["App functionality", "Personalization"],
-    what: "Setup's fitness answers, workouts and form scores, runs and a heart rate monitor's readings, streaks, badges, challenges.",
+    what: "Setup's fitness answers, workouts and form scores, runs (an indoor run's steps among them) and a heart rate monitor's readings, streaks, badges, challenges.",
   },
   {
     type: "Photos",
@@ -218,6 +218,8 @@ export const PERMISSIONS = {
   "android.permission.BLUETOOTH_CONNECT": ["Fitness info"],
   "android.permission.BLUETOOTH": ["Fitness info"],
   "android.permission.BLUETOOTH_ADMIN": ["Fitness info"],
+  // Physical activity (37q-ii-a): the phone's own step counter, for an indoor run's steps.
+  "android.permission.ACTIVITY_RECOGNITION": ["Fitness info"],
   "com.google.android.c2dm.permission.RECEIVE": ["Device or other IDs"],
   "android.permission.FOREGROUND_SERVICE": { none: "Keeps a run recording with the screen locked; what it records is under Precise location." },
   "android.permission.INTERNET": { none: "Reaches KWAZO's server; what is sent is answered by type." },

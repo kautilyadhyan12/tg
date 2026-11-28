@@ -17,9 +17,13 @@ import {
   keptRunMotionSchema,
   keptRunPointsSchema,
   keptRunStateSchema,
+  keptRunStepsSchema,
   phoneLocationsSchema,
   phoneMotionSchema,
+  phoneStepsSchema,
+  HEIGHT_UNKNOWN_CM,
   type PhoneLocations,
+  type StepBasis,
   type KeptRunChoices,
   type KeptRunGuide,
   type MapColours,
@@ -28,7 +32,8 @@ import {
 } from "@app/shared";
 import { colours } from "../../look/colours";
 import { AUTO_START, RUN_GAP_MS, autoPausedFrom, autoRunning, feelAt, nextAutoPause, type AutoPauseState } from "./autoPause";
-import { clockAt, closeStill, closedPauses, elapsedMs, keepDatedBack, movingMsOf, openStill, sumsAt, undoDatedBack } from "./runLive";
+import { clockAt, closeStill, closedPauses, elapsedMs, keepDatedBack, lastMarkAt, markAt, marksOf, movingMsOf, openStill, runToMark, sumsAt, undoDatedBack } from "./runLive";
+import { nextStepPause, stepsAt, tallyStep } from "./indoorSteps";
 import { beginLine, guideAdvance, guideDone, guideNextLook, guideSchedule, guideSkip, nowLine, skipLine } from "./runGuide";
 import { PAUSE_WORDS, START_HUSH_MS, VOICE_AFTER_LOAD, VOICE_START, heartLine, voiceCheck, type VoiceState } from "./runVoice";
 import { runVoiceNative } from "./runVoiceNative";
@@ -88,6 +93,26 @@ export interface LiveRun {
   /** The GPS's time less the phone's (A6, `runClock.ts`), taken off every point's time; null until two deliveries
    *  have shown it, none (0) for a phone whose clock is right. Missing in a test's run: 0. */
   clockGapMs?: number | null;
+  /** An indoor run (37q-ii-a): no GPS and no points, its steps from the phone's own step counter instead. Null outdoors,
+   *  and missing in a test's run. */
+  indoor?: LiveIndoor | null;
+}
+
+/** An indoor run's steps (37q-ii-a). */
+export interface LiveIndoor {
+  /** [ms into the run, steps since Start]: one each look at the counter that found the steps risen, at most one a second,
+   *  and one at each pause's edge with the steps as they stood, so the steps taken while paused are none of the run's. */
+  counts: [number, number][];
+  /** The phone's counter as last read (it counts from when the phone was switched on); null before its first reading. */
+  raw: number | null;
+  /** The steps since Start. */
+  steps: number;
+  /** No step is counted: Physical activity not allowed, or no step counter on the phone. */
+  stepsOff: boolean;
+  /** A step was counted since Start or since Resume was last pressed: Auto-pause may pause (`nextStepPause`). */
+  armed: boolean;
+  /** The person's height and own factor, as the server measures the run with. */
+  basis: StepBasis;
 }
 
 // ── The run kept on the phone ─────────────────────────────────────────────────────────────────
@@ -120,6 +145,7 @@ const STATE_FILE = "run-now.json";
 const pointsFile = (i: number) => `run-now-${String(i)}.json`;
 const heartFile = (i: number) => `run-now-heart-${String(i)}.json`;
 const motionFile = (i: number) => `run-now-motion-${String(i)}.json`;
+const stepsFile = (i: number) => `run-now-steps-${String(i)}.json`;
 /** At most one heart rate a second is kept: straps send about that. */
 const HEART_EVERY_MS = 900;
 
@@ -134,6 +160,7 @@ const listeners = new Set<() => void>();
 let unwritten = 0;
 let heartUnwritten = 0;
 let motionUnwritten = 0;
+let stepsUnwritten = 0;
 let writtenAt = 0;
 /** The monitor kept connected while a run is going (37f-i). */
 let heartHeld: (() => void) | null = null;
@@ -172,13 +199,15 @@ export const runNow = (): LiveRun | null => current;
 // on with the app closed.
 
 const SETTINGS_FILE = "run-settings.json";
-const DEFAULT_CHOICES: KeptRunChoices = { autoPause: true, voice: true, units: "metric", mapColours: "auto", heartMax: null };
+const DEFAULT_CHOICES: KeptRunChoices = { autoPause: true, voice: true, units: "metric", mapColours: "auto", heartMax: null, indoor: false, stepBasis: null };
 let choices: KeptRunChoices = DEFAULT_CHOICES;
 let choicesRead: Promise<void> | null = null;
 
 export const autoPauseChoice = (): boolean => choices.autoPause;
 export const voiceChoice = (): boolean => choices.voice;
 export const mapColoursChoice = (): MapColours => choices.mapColours;
+/** Outdoor or Indoor (37q-ii-a), as last picked on the Running page. */
+export const indoorChoice = (): boolean => choices.indoor;
 
 /** Read once; every change waits for it, so a change is never written over by the file. */
 export function readRunChoices(): Promise<void> {
@@ -217,6 +246,27 @@ export async function chooseVoice(on: boolean): Promise<void> {
   primeVoice(current);
   // On, the lines ahead handed over again; off, none.
   scheduleGuide(current, Date.now());
+}
+
+/** Outdoor or Indoor for the next Start (37q-ii-a). */
+export async function chooseIndoor(on: boolean): Promise<void> {
+  await keepChoices({ indoor: on });
+}
+
+/** The person's step length as the server last gave it (37q-ii-a), kept with whose it is, for an indoor run started with
+ *  no signal. */
+export async function keepRunStepBasis(who: string, basis: StepBasis): Promise<void> {
+  await readRunChoices();
+  const kept = choices.stepBasis;
+  if (kept?.who === who && kept.heightCm === basis.heightCm && kept.factor === basis.factor) return;
+  await keepChoices({ stepBasis: { who, heightCm: basis.heightCm, factor: basis.factor } });
+}
+
+/** The step length kept for this person; the shared guess for anybody else, or before one was read (the server measures
+ *  the saved run with its own). */
+export function runStepBasisFor(who: string): StepBasis {
+  const kept = choices.stepBasis;
+  return kept?.who === who ? { heightCm: kept.heightCm, factor: kept.factor } : { heightCm: HEIGHT_UNKNOWN_CM, factor: 1 };
 }
 
 /** The map's colours (37b-i): by the sun, or always light, or always dark. */
@@ -289,7 +339,7 @@ function quietVoice(): void {
  *  voice turned on mid-run. Counted now, from the points kept, so the next batch of points (several
  *  minutes of them after the screen was off) cannot carry a mark past unsaid. */
 function primeVoice(run: LiveRun | null): void {
-  const at = run?.points[run.points.length - 1]?.[0];
+  const at = run === null ? undefined : lastMarkAt(run);
   if (run === null || at === undefined) {
     voice = VOICE_START;
     return;
@@ -299,7 +349,7 @@ function primeVoice(run: LiveRun | null): void {
 
 /** The mark to say now, if any, as of the run's last point; settled at a pause. */
 function markNow(run: LiveRun, settled: boolean): string[] {
-  const at = run.points[run.points.length - 1]?.[0];
+  const at = lastMarkAt(run);
   // Couch to 5K says its walks and runs, not the kilometres, as the NHS app does.
   if (!choices.voice || at === undefined || run.guide?.walkRun === true) return [];
   const result = voiceCheck(voice, at, choices.units, () => sumsAt(run, at, 0), settled);
@@ -319,43 +369,36 @@ let guideLookAt = 0;
 /** The moving ms when the run first had `m` metres, found among the points kept by halving: a step
  *  after a distance is timed from there, not from a late batch of points. */
 function reachedAt(run: LiveRun, m: number, nowMs: number): number {
-  const points = run.points;
-  const metresTo = (k: number): number => {
-    const at = points[k - 1]?.[0] ?? 0;
-    return sumsAt({ ...run, points: points.slice(0, k) }, at, 0).distanceM;
-  };
-  if (points.length === 0 || metresTo(points.length) < m) return nowMs;
+  // Along the points, or an indoor run's step counts (37q-ii-a).
+  const n = marksOf(run);
+  const metresTo = (k: number): number => sumsAt(runToMark(run, k), markAt(run, k), 0).distanceM;
+  if (n === 0 || metresTo(n) < m) return nowMs;
   let low = 1;
-  let high = points.length;
+  let high = n;
   while (low < high) {
     const mid = Math.floor((low + high) / 2);
     if (metresTo(mid) >= m) high = mid;
     else low = mid + 1;
   }
-  return Math.min(nowMs, clockAt(run, points[low - 1]?.[0] ?? 0));
+  return Math.min(nowMs, clockAt(run, markAt(run, low)));
 }
 
 /** The metres the run had at moving ms `ms`: those to its last point on the clock by then. A step by
  *  distance after one the clock ended counts from there, not from a late batch of points. */
 function metresAt(run: LiveRun, ms: number): number {
-  const points = run.points;
   let low = 0;
-  let high = points.length;
-  // The number of points on the clock by `ms`: the clock never goes back along the points.
+  let high = marksOf(run);
+  // The number of points (or step counts) on the clock by `ms`: the clock never goes back along them.
   while (low < high) {
     const mid = Math.floor((low + high) / 2);
-    if (clockAt(run, points[mid]?.[0] ?? 0) <= ms) low = mid + 1;
+    if (clockAt(run, markAt(run, mid + 1)) <= ms) low = mid + 1;
     else high = mid;
   }
   if (low === 0) return 0;
-  const at = points[low - 1]?.[0] ?? 0;
-  return sumsAt({ ...run, points: points.slice(0, low) }, at, 0).distanceM;
+  return sumsAt(runToMark(run, low), markAt(run, low), 0).distanceM;
 }
 
-const runMetres = (run: LiveRun): number => {
-  const at = run.points[run.points.length - 1]?.[0] ?? 0;
-  return sumsAt(run, at, 0).distanceM;
-};
+const runMetres = (run: LiveRun): number => sumsAt(run, lastMarkAt(run) ?? 0, 0).distanceM;
 
 /** The lines of the steps the clock begins, handed to the phone's voice ahead; none while paused. */
 function scheduleGuide(run: LiveRun | null, now: number): void {
@@ -421,6 +464,8 @@ export function resetRecorder(withFiles: RunFiles = phoneRunFiles): void {
   heartHeld?.();
   heartHeld = null;
   stopMotion();
+  stopIndoor();
+  stepsUnwritten = 0;
   writtenAt = 0;
   tell();
 }
@@ -446,6 +491,17 @@ async function writeState(run: LiveRun): Promise<void> {
       datedBack: run.datedBack,
       // Not known yet is kept as not known (round one, H1): read back as none, a fast clock lost the run.
       clockGapMs: run.clockGapMs ?? null,
+      indoor:
+        run.indoor == null
+          ? null
+          : {
+              stepFiles: Math.ceil(run.indoor.counts.length / POINTS_PER_FILE),
+              raw: run.indoor.raw,
+              steps: run.indoor.steps,
+              stepsOff: run.indoor.stepsOff,
+              armed: run.indoor.armed,
+              basis: run.indoor.basis,
+            },
     }),
   );
 }
@@ -497,11 +553,142 @@ async function readParts<T>(count: number, name: (i: number) => string, read: (t
   return { list, lost };
 }
 
+/** An indoor run's step counts' files (37q-ii-a), as the points' are written. */
+async function writeSteps(run: LiveRun): Promise<void> {
+  if (run.indoor == null) return;
+  await writeParts(run.indoor.counts, stepsUnwritten, stepsFile);
+  stepsUnwritten = 0;
+}
+
 async function keep(run: LiveRun): Promise<void> {
   await writePoints(run);
   await writeHeart(run);
   await writeMotion(run);
+  await writeSteps(run);
   await writeState(run);
+}
+
+// ── An indoor run's steps (37q-ii-a) ─────────────────────────────────────────────────────────
+
+/** The steps are looked at once a second while the app is in front; with the screen off the phone's own counter keeps
+ *  counting, and the next look takes them in (an Android service of the app's own keeps the run going then: 37q-ii-b). */
+const STEPS_LOOK_MS = 1000;
+let stepsTimer: ReturnType<typeof setInterval> | null = null;
+/** The next reading is the first since the app began listening (`tallyStep`). */
+let stepsFresh = true;
+
+/** The phone's counter read, and the looks begun, for an indoor run going on. A phone whose counter cannot be read
+ *  (Physical activity not allowed, or none) records the run with no steps. */
+function startIndoor(run: LiveRun): void {
+  const indoor = run.indoor;
+  if (indoor == null) return;
+  if (!indoor.stepsOff) {
+    let said = "none";
+    try {
+      said = runMotionNative?.stepsStart?.() ?? "none";
+    } catch {
+      // No steps for this run; the run goes on.
+    }
+    if (said !== "ok") indoor.stepsOff = true;
+  }
+  stepsFresh = true;
+  stepsTimer ??= setInterval(() => void takeSteps(), STEPS_LOOK_MS);
+}
+
+function stopIndoor(): void {
+  if (stepsTimer !== null) clearInterval(stepsTimer);
+  stepsTimer = null;
+  try {
+    runMotionNative?.stepsStop?.();
+  } catch {
+    // Already stopped.
+  }
+}
+
+/** The counter's readings since the last look; none from a phone without it. */
+function stepReadings(): { at: number; steps: number }[] {
+  try {
+    const parsed = phoneStepsSchema.safeParse(runMotionNative?.stepsTake?.() ?? []);
+    return parsed.success ? parsed.data : [];
+  } catch {
+    return [];
+  }
+}
+
+/** The counter's readings taken into the run: the steps since Start (`tallyStep`), and one count where they rose, at
+ *  the newest reading's time, never before the count before it nor past `until` (Finish). */
+function readSteps(run: LiveRun, until: number = RUN_MAX_ELAPSED_MS): void {
+  const indoor = run.indoor;
+  if (indoor == null || indoor.stepsOff) return;
+  const readings = stepReadings();
+  let tally = { raw: indoor.raw, steps: indoor.steps };
+  let newest: number | null = null;
+  for (const reading of readings) {
+    tally = tallyStep(tally, reading.steps, stepsFresh);
+    stepsFresh = false;
+    newest = reading.at;
+  }
+  const rose = tally.steps > indoor.steps;
+  indoor.raw = tally.raw;
+  indoor.steps = tally.steps;
+  if (!rose || newest === null || indoor.counts.length >= RUN_MAX_POINTS) return;
+  const lastAt = indoor.counts[indoor.counts.length - 1]?.[0] ?? 0;
+  const at = Math.min(until, Math.max(lastAt, Math.round(newest - run.startedAt)));
+  indoor.counts.push([at, tally.steps]);
+  stepsUnwritten += 1;
+  if (run.phase === "running") indoor.armed = true;
+}
+
+/** A count at a pause's edge, `at` ms into the run, with the steps as they stood then: the steps taken while paused are
+ *  none of the run's, and those after it are all of it (the maths shares a stretch's steps over its moving part). */
+function fenceAt(run: LiveRun, at: number): void {
+  const indoor = run.indoor;
+  if (indoor == null || indoor.stepsOff || indoor.counts.length >= RUN_MAX_POINTS) return;
+  const counts = indoor.counts;
+  let i = counts.length;
+  while (i > 0 && (counts[i - 1]?.[0] ?? 0) > at) i--;
+  counts.splice(i, 0, [at, stepsAt(counts, at)]);
+  stepsUnwritten = Math.max(stepsUnwritten, counts.length - i);
+}
+
+/** A look at an indoor run's steps, once a second while the app is in front and when it comes back: the steps taken in,
+ *  the heart rate, Auto-pause from the steps (`nextStepPause`), and what is said. */
+export async function takeSteps(now: number = Date.now()): Promise<void> {
+  const mine = generation;
+  const run = current;
+  if (run === null || run.indoor == null || run.phase === "finished" || mine !== generation) return;
+  const indoor = run.indoor;
+  const was = run.phase;
+  let resumedFrom: number | null = null;
+  readSteps(run);
+  takeHeart(run);
+  const change =
+    run.pauses.length < RUN_MAX_PAUSES || run.phase === "paused"
+      ? nextStepPause({ phase: run.phase, byPerson: run.pausedByPerson, autoPause: run.autoPause, armed: indoor.armed, counts: indoor.counts, pauseFrom: openPauseFrom(run), nowMs: elapsedMs(run, now) })
+      : null;
+  if (change?.kind === "pause" && run.phase === "running") {
+    // The clock stops where it stands, never back (37k): the seconds with no step before it are the run's.
+    const at = Math.max(change.at, lastOpenEnd(run));
+    fenceAt(run, at);
+    run.pauses.push([at, null]);
+    run.phase = "paused";
+    run.pausedByPerson = false;
+    writtenAt = 0;
+  } else if (change?.kind === "resume" && run.phase === "paused" && !run.pausedByPerson) {
+    resumedFrom = openPauseFrom(run);
+    fenceAt(run, change.at);
+    closePause(run, change.at);
+    run.phase = "running";
+    writtenAt = 0;
+  }
+  if (mine !== generation || current?.runId !== run.runId) return;
+  const next = { ...run };
+  if (runIsFull(next, now)) {
+    current = next;
+    await finishRun(now);
+    return;
+  }
+  await afterLook(next, was, resumedFrom, now);
 }
 
 /** The phone's motion sensor read from Go until the run is finished (37i). A phone with none, or one whose
@@ -614,6 +801,16 @@ export async function loadRun(): Promise<LiveRun | null> {
     // What was read is written again from the first file at the next write.
     if (hearts.lost) heartUnwritten = heart.length;
     if (motions.lost) motionUnwritten = motion.length;
+    // An indoor run's step counts (37q-ii-a): one file that does not read loses its counts, never the run.
+    const keptIndoor = state.indoor;
+    const stepCounts =
+      keptIndoor === null
+        ? null
+        : await readParts(keptIndoor.stepFiles, stepsFile, (text) => {
+            const kept = keptRunStepsSchema.safeParse(JSON.parse(text));
+            return kept.success ? kept.data : null;
+          });
+    if (stepCounts?.lost === true) stepsUnwritten = stepCounts.list.length;
     const last = points[points.length - 1];
     current = {
       runId: state.runId,
@@ -633,10 +830,16 @@ export async function loadRun(): Promise<LiveRun | null> {
       still: state.still,
       datedBack: state.datedBack,
       clockGapMs: state.clockGapMs,
+      indoor:
+        keptIndoor === null || stepCounts === null
+          ? null
+          : { counts: stepCounts.list, raw: keptIndoor.raw, steps: keptIndoor.steps, stepsOff: keptIndoor.stepsOff, armed: keptIndoor.armed, basis: keptIndoor.basis },
     };
     if (current.phase !== "finished") {
       holdMonitor(current.userId);
-      startMotion();
+      // Indoors the steps, never the motion (no still stretches indoors).
+      if (current.indoor != null) startIndoor(current);
+      else startMotion();
     }
     // A still stretch Auto-pause off had open (37k) is judged as the stop it is: moving on closes it.
     const stillOpen = current.still[current.still.length - 1];
@@ -682,6 +885,8 @@ export async function takeLocations(data: unknown, now: number = Date.now()): Pr
   const mine = generation;
   const run = current ?? (await loadRun());
   if (run === null || mine !== generation) return;
+  // An indoor run has no route (37q-ii-a): a point Android hands over is none of its.
+  if (run.indoor != null) return;
   if (run.phase === "finished") {
     await takeLate(run, parsed.data.locations, mine);
     return;
@@ -775,6 +980,13 @@ export async function takeLocations(data: unknown, now: number = Date.now()): Pr
     await finishRun();
     return;
   }
+  await afterLook(current, was, resumedFrom, now);
+}
+
+/** After a look at the points (or an indoor run's steps): what is said, the guide moved on, and the run written at
+ *  most every WRITE_EVERY_MS. `resumedFrom`: when the Auto-pause this look ended had begun. */
+async function afterLook(run: LiveRun, was: RunPhase, resumedFrom: number | null, now: number): Promise<void> {
+  current = run;
   // Only Auto-pause pauses a run here: a pause ends the stretch the maths smooths, so a mark passed
   // before it is said at once.
   // A stop in the first seconds after Go is not spoken of, nor its end (37j): somebody who presses Start and
@@ -908,7 +1120,16 @@ export const RUN_LOCATION_OPTIONS: Location.LocationTaskOptions = {
 };
 
 /** Go: the run starts now. Its id is made here, so a run sent twice is the same run. */
-export async function startRun(userId: string, runId: string, autoPause: boolean, now: number = Date.now(), guide: KeptRunGuide | null = null): Promise<LiveRun> {
+/** `indoor` (37q-ii-a): an indoor run, its steps measured with `basis`; `stepsOff` when Start was pressed without steps
+ *  (Physical activity not allowed, or no counter). No location is asked for it. */
+export async function startRun(
+  userId: string,
+  runId: string,
+  autoPause: boolean,
+  now: number = Date.now(),
+  guide: KeptRunGuide | null = null,
+  indoor: { basis: StepBasis; stepsOff: boolean } | null = null,
+): Promise<LiveRun> {
   const run: LiveRun = {
     runId,
     userId,
@@ -927,6 +1148,7 @@ export async function startRun(userId: string, runId: string, autoPause: boolean
     still: [],
     datedBack: [],
     clockGapMs: null,
+    indoor: indoor === null ? null : { counts: [], raw: null, steps: 0, stepsOff: indoor.stepsOff, armed: false, basis: indoor.basis },
   };
   generation += 1;
   current = run;
@@ -940,12 +1162,20 @@ export async function startRun(userId: string, runId: string, autoPause: boolean
   unwritten = 0;
   heartUnwritten = 0;
   motionUnwritten = 0;
+  stepsUnwritten = 0;
   writtenAt = now;
   // Readings from before Go are not the run's.
   takeHeartReadings();
   holdMonitor(userId);
-  startMotion();
-  motionReadings();
+  if (run.indoor != null) {
+    // Indoors the phone's step counter, never the GPS nor the motion (37q-ii-a): its first reading is where the run's
+    // steps begin.
+    startIndoor(run);
+    readSteps(run);
+  } else {
+    startMotion();
+    motionReadings();
+  }
   guideLookAt = 0;
   await writeState(run);
   tell();
@@ -955,7 +1185,7 @@ export async function startRun(userId: string, runId: string, autoPause: boolean
     say([beginLine(guide, 0, choices.units)]);
     scheduleGuide(run, now);
   }
-  await Location.startLocationUpdatesAsync(RUN_TASK, RUN_LOCATION_OPTIONS);
+  if (run.indoor == null) await Location.startLocationUpdatesAsync(RUN_TASK, RUN_LOCATION_OPTIONS);
   return run;
 }
 
@@ -971,6 +1201,9 @@ export async function pauseRun(now: number = Date.now()): Promise<void> {
   if (run.phase === "running") {
     const at = Math.max(elapsedMs(run, now), lastOpenEnd(run));
     closeStill(run, at);
+    // Indoors (37q-ii-a): the steps up to now taken in, and the pause's edge marked.
+    readSteps(run);
+    fenceAt(run, at);
     run.pauses.push([at, null]);
   }
   run.phase = "paused";
@@ -992,8 +1225,15 @@ export async function resumeRun(now: number = Date.now()): Promise<void> {
   if (run === null || run.phase !== "paused") return;
   // What the monitor sent while paused is not the run's.
   takeHeartReadings();
-  closePause(run, elapsedMs(run, now));
+  // Indoors (37q-ii-a): the steps taken while paused taken in before the pause's end is marked, so none is the run's;
+  // after Resume pressed, Auto-pause waits for a step (the phone may have been put down on the treadmill).
+  readSteps(run);
+  const resumeAt = elapsedMs(run, now);
+  fenceAt(run, resumeAt);
+  closePause(run, resumeAt);
   const byPerson = run.pausedByPerson;
+  // Resume is only ever pressed: the phone may lie on the treadmill now, paused by the person or by Auto-pause.
+  if (run.indoor != null) run.indoor.armed = false;
   run.phase = "running";
   run.pausedByPerson = false;
   auto = autoRunning(byPerson ? wheelsAtPause : auto.wheels);
@@ -1005,8 +1245,9 @@ export async function resumeRun(now: number = Date.now()): Promise<void> {
   scheduleGuide(current, now);
   await keep(current);
   tell();
-  // A run taken up again after the app was closed: Android's service is started once more.
-  if (!(await Location.hasStartedLocationUpdatesAsync(RUN_TASK))) await Location.startLocationUpdatesAsync(RUN_TASK, RUN_LOCATION_OPTIONS);
+  // A run taken up again after the app was closed: Android's service is started once more; indoors, the steps.
+  if (current.indoor != null) startIndoor(current);
+  else if (!(await Location.hasStartedLocationUpdatesAsync(RUN_TASK))) await Location.startLocationUpdatesAsync(RUN_TASK, RUN_LOCATION_OPTIONS);
 }
 
 /** Skip step (37d-iii-a): the step the screen shows ends now, the next one is said at once and the
@@ -1046,7 +1287,10 @@ export async function setAutoPause(on: boolean, now: number = Date.now()): Promi
   const run = current;
   if (run === null || run.phase === "finished" || run.autoPause === on) return;
   if (!on && run.phase === "paused" && !run.pausedByPerson) {
-    closePause(run, elapsedMs(run, now));
+    readSteps(run);
+    const at = elapsedMs(run, now);
+    fenceAt(run, at);
+    closePause(run, at);
     run.phase = "running";
     say([PAUSE_WORDS.resumed, ...resumeLines(run, now)]);
     scheduleGuide(run, now);
@@ -1077,6 +1321,7 @@ export async function finishRun(now: number = Date.now()): Promise<LiveRun | nul
     quietVoice();
     releaseMonitor();
     stopMotion();
+    stopIndoor();
     await stopLocations();
     return run;
   }
@@ -1086,9 +1331,12 @@ export async function finishRun(now: number = Date.now()): Promise<LiveRun | nul
   takeHeart(run);
   // Never past a day: the most the server takes; never before the clock stopped (the GPS's own clock, which dated
   // an Auto-pause, can be a second ahead of the phone's).
-  const end = Math.min(RUN_MAX_ELAPSED_MS, Math.max(now - run.startedAt, run.points[run.points.length - 1]?.[0] ?? 0, openPauseFrom(run) ?? 0));
+  const end = Math.min(RUN_MAX_ELAPSED_MS, Math.max(now - run.startedAt, lastMarkAt(run) ?? 0, openPauseFrom(run) ?? 0));
   takeMotion(run, end);
   stopMotion();
+  // Indoors (37q-ii-a): the last steps taken in, none past Finish, and the counter let go.
+  readSteps(run, end);
+  stopIndoor();
   closePause(run, end);
   closeStill(run, end);
   // Finished while the phone felt still and Auto-pause had not yet decided (37r): the seconds the screen held still are
@@ -1127,9 +1375,13 @@ export async function forgetRun(): Promise<void> {
   for (let i = 0; i < Math.max(hearts, 1); i++) files.remove(heartFile(i));
   const motions = run === null ? 0 : Math.ceil(run.motion.length / POINTS_PER_FILE);
   for (let i = 0; i < Math.max(motions, 1); i++) files.remove(motionFile(i));
+  const stepParts = run?.indoor == null ? 0 : Math.ceil(run.indoor.counts.length / POINTS_PER_FILE);
+  for (let i = 0; i < Math.max(stepParts, 1); i++) files.remove(stepsFile(i));
   files.remove(STATE_FILE);
   releaseMonitor();
   stopMotion();
+  stopIndoor();
+  stepsUnwritten = 0;
   current = null;
   auto = AUTO_START;
   wheelsAtPause = false;
@@ -1141,4 +1393,4 @@ export async function forgetRun(): Promise<void> {
 
 /** A run left going a day or more: it ends there by itself, and waits to be saved. */
 export const runIsFull = (run: LiveRun, now: number): boolean =>
-  run.phase !== "finished" && (now - run.startedAt >= RUN_MAX_ELAPSED_MS || run.points.length >= RUN_MAX_POINTS);
+  run.phase !== "finished" && (now - run.startedAt >= RUN_MAX_ELAPSED_MS || run.points.length >= RUN_MAX_POINTS || (run.indoor?.counts.length ?? 0) >= RUN_MAX_POINTS);

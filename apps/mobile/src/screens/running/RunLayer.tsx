@@ -2,7 +2,7 @@
 // and Auto-pause, Finish, and the summary to Save or Discard. It lies over every tab while a run goes
 // on, so the person can look at the app and come back; the run itself is the recorder's.
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
-import { AppState, Linking, Pressable, ScrollView, StyleSheet, TextInput, Vibration, View } from "react-native";
+import { AppState, Linking, PermissionsAndroid, Platform, Pressable, ScrollView, StyleSheet, TextInput, Vibration, View } from "react-native";
 import * as Location from "expo-location";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
@@ -11,6 +11,7 @@ import {
   heartSums,
   heartZoneSeconds,
   runRecordsSchema,
+  stepLengthResponseSchema,
   userProfileResponseSchema,
   type KeptRunGuide,
   type RunClimbRequest,
@@ -48,6 +49,9 @@ import {
   runIsFull,
   chooseAutoPause,
   dropOtherHeartMax,
+  indoorChoice,
+  keepRunStepBasis,
+  runStepBasisFor,
   keepRunHeartMax,
   keepRunUnits,
   runHeartMaxFor,
@@ -66,12 +70,17 @@ import { FeelCard, NoteCard, PaceCard, RouteCard, RunFigures, SplitsCard } from 
 import { newRecords, RECORDS_PATH } from "./runRecords";
 import { RunMap, useMapScheme } from "./RunMap";
 import { useRunOutbox } from "./RunOutbox";
-import { currentPace, pacing, saveRequestOf, sentOf, sumsAt, sumsInSlices, trueStart } from "./runLive";
+import { currentPace, indoorSumsAt, marksOf, pacing, saveRequestOf, sentOf, sumsAt, sumsInSlices, trueStart } from "./runLive";
+import { indoorPace, stepsAMinute } from "./indoorSteps";
+import { runMotionNative } from "./runMotionNative";
+import { TreadmillCard } from "./IndoorParts";
 import { clock, distance, pace, paceWord, runName, runWhen, unitWord, METRES_PER_MILE } from "./runWords";
 
 /** What stood in the way of Start, said under it with its button. */
-/** "battery": the phone limits this app in the background, so a run stops recording with the screen off (37l). */
-export type StartProblem = "denied" | "settings" | "approximate" | "off" | "failed" | "battery";
+/** "battery": the phone limits this app in the background, so a run stops recording with the screen off (37l).
+ *  Indoors (37q-ii-a): "activity", Physical activity not allowed; "activitySettings", not allowed and Android will not ask
+ *  again; "noCounter", a phone with no step counter. Each can be passed with Start without steps. */
+export type StartProblem = "denied" | "settings" | "approximate" | "off" | "failed" | "battery" | "activity" | "activitySettings" | "noCounter";
 
 export const START_PROBLEM_WORDS: Record<StartProblem, string> = {
   denied: "Allow location to record your run.",
@@ -80,6 +89,9 @@ export const START_PROBLEM_WORDS: Record<StartProblem, string> = {
   off: "Turn on your phone's location to record your run.",
   failed: "Your run couldn't start. Try again.",
   battery: "Your phone's battery setting stops run recording when the screen is off.",
+  activity: "Allow physical activity to count your steps.",
+  activitySettings: "Physical activity is off for this app. Turn it on in Settings to count your steps.",
+  noCounter: "This phone can't count steps. Type the treadmill's distance after Finish.",
 };
 
 /** The run just saved, for the Running tab to say whether it is on the server yet or waiting to be sent. */
@@ -88,8 +100,9 @@ export type RunDone = { name: string; runId: string } | null;
 interface RunLayerValue {
   /** Start: asks for the location if it must, then counts down. null when the count has begun. With
    *  a guide, today's planned run, step by step (37d-ii). `anyway`: the person chose Start anyway on a phone that
-   *  limits the app (37l). */
-  start: (autoPause: boolean, guide?: KeptRunGuide | null, anyway?: boolean) => Promise<StartProblem | null>;
+   *  limits the app (37l). Indoor picked on the Running page (37q-ii-a): Physical activity asked instead of the location;
+   *  `withoutSteps`, the person chose Start without steps. */
+  start: (autoPause: boolean, guide?: KeptRunGuide | null, anyway?: boolean, withoutSteps?: boolean) => Promise<StartProblem | null>;
   /** Back to the run that is going on. */
   open: () => void;
   run: LiveRun | null;
@@ -120,6 +133,19 @@ function useMyRun(me: string | null): LiveRun | null {
   return run !== null && run.userId === me ? run : null;
 }
 
+/** Asks Android for Physical activity, for an indoor run's steps (37q-ii-a), and says what stands in the way. Android
+ *  9 and earlier count steps with no permission; an iPhone has no counter of this app's yet (Stage 5 item 21). */
+export async function askActivity(): Promise<StartProblem | null> {
+  if (Platform.OS !== "android") return null;
+  if (runMotionNative?.stepsCan?.() === false) return "noCounter";
+  if (Platform.Version < 29) return null;
+  const permission = PermissionsAndroid.PERMISSIONS.ACTIVITY_RECOGNITION;
+  if (await PermissionsAndroid.check(permission)) return null;
+  const answer = await PermissionsAndroid.request(permission);
+  if (answer === PermissionsAndroid.RESULTS.GRANTED) return null;
+  return answer === PermissionsAndroid.RESULTS.NEVER_ASK_AGAIN ? "activitySettings" : "activity";
+}
+
 /** Asks Android for the location, and says what stands in the way. */
 export async function askLocation(): Promise<StartProblem | null> {
   if (!(await Location.hasServicesEnabledAsync())) return "off";
@@ -142,7 +168,7 @@ export function RunLayerProvider({ children }: { children: ReactNode }) {
   const units: Units = (state.kind === "in" ? accountUnits(state.user.units) : null) ?? "metric";
   const run = useMyRun(me);
   const [shown, setShown] = useState(true);
-  const [counting, setCounting] = useState<{ autoPause: boolean; guide: KeptRunGuide | null } | null>(null);
+  const [counting, setCounting] = useState<{ autoPause: boolean; guide: KeptRunGuide | null; indoor: { stepsOff: boolean } | null } | null>(null);
   const [done, setDone] = useState<RunDone>(null);
   const [startFailed, setStartFailed] = useState(false);
   const [kg, setKg] = useState(0);
@@ -171,7 +197,8 @@ export function RunLayerProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (me === null) return;
     void loadRun().then(async (kept) => {
-      if (kept === null || kept.userId !== me || kept.phase !== "running") return;
+      // An indoor run has no location service (37q-ii-a): its steps go on from where the phone's counter is.
+      if (kept === null || kept.userId !== me || kept.phase !== "running" || kept.indoor != null) return;
       if (await Location.hasStartedLocationUpdatesAsync(RUN_TASK)) return;
       await pauseRun(kept.lastFix?.at ?? kept.startedAt);
     });
@@ -188,15 +215,33 @@ export function RunLayerProvider({ children }: { children: ReactNode }) {
     });
   }, [me, session, hasRun, finished]);
 
-  const start = useCallback(async (autoPause: boolean, guide: KeptRunGuide | null = null, anyway = false): Promise<StartProblem | null> => {
+  // The person's step length as the server measures indoor runs with (37q-ii-a), kept for a Start with no signal: read
+  // once a signed-in person is here, and again after each run sent (a treadmill's distance may have taught it).
+  useEffect(() => {
+    if (me === null) return;
+    void session.signedIn({ method: "GET", path: "/v1/geo/runs/step-length" }, stepLengthResponseSchema).then((answer) => {
+      if (answer.kind === "ok") void keepRunStepBasis(me, { heightCm: answer.data.stepLength.heightCm, factor: answer.data.stepLength.factor });
+    });
+  }, [me, session, finished]);
+
+  const start = useCallback(async (autoPause: boolean, guide: KeptRunGuide | null = null, anyway = false, withoutSteps = false): Promise<StartProblem | null> => {
     setStartFailed(false);
+    if (indoorChoice()) {
+      // Indoors (37q-ii-a): no location, and Physical activity asked for the steps, unless the person starts without.
+      const asked = withoutSteps ? null : await askActivity();
+      if (asked !== null) return asked;
+      setDone(null);
+      setShown(true);
+      setCounting({ autoPause, guide, indoor: { stepsOff: withoutSteps } });
+      return null;
+    }
     const problem = await askLocation();
     if (problem !== null) return problem;
     // The location first, as Android asks it; then, only on a phone that limits this app, the battery (37l).
     if (!anyway && batteryLimited()) return "battery";
     setDone(null);
     setShown(true);
-    setCounting({ autoPause, guide });
+    setCounting({ autoPause, guide, indoor: null });
     return null;
   }, []);
 
@@ -206,7 +251,7 @@ export function RunLayerProvider({ children }: { children: ReactNode }) {
     if (count === null || me === null) return;
     Vibration.vibrate(300);
     try {
-      await startRun(me, newGoalId(), count.autoPause, Date.now(), count.guide);
+      await startRun(me, newGoalId(), count.autoPause, Date.now(), count.guide, count.indoor === null ? null : { basis: runStepBasisFor(me), stepsOff: count.indoor.stepsOff });
     } catch {
       // The phone locked, or the app left, during the count: Android refuses the location service.
       await forgetRun();
@@ -334,7 +379,7 @@ function useLiveNumbers(run: LiveRun, kg: number): { now: number; sums: RunSums 
       heard.remove();
     };
   }, []);
-  const count = run.points.length;
+  const count = marksOf(run);
   useEffect(() => {
     if (runIsFull(run, now)) void finishRun();
   }, [run, now]);
@@ -425,6 +470,8 @@ function Live({ run, units, kg, onHide }: { run: LiveRun; units: Units; kg: numb
   // standing with no pause too.
   const moving = movingMsOf(run, now) / 1000;
   const metres = sums?.distanceM ?? 0;
+  // Indoors (37q-ii-a): the steps a minute now, from the counts the phone has kept.
+  const perMinute = run.indoor == null || run.indoor.stepsOff ? null : stepsAMinute(run.indoor.counts, now - run.startedAt);
   const per = units === "imperial" ? METRES_PER_MILE : 1000;
   const isPaused = run.phase === "paused";
   const [busy, setBusy] = useState(false);
@@ -435,7 +482,8 @@ function Live({ run, units, kg, onHide }: { run: LiveRun; units: Units; kg: numb
   const lastPoint = run.points[run.points.length - 1];
   // Before the run's first point, the map opens where Android last knew the phone was, in the last two minutes
   // and sure to GPS_WORST_ACCURACY_M, never a dark space (the hunt's A9); the GPS light still says Finding GPS.
-  const noPlace = run.here === null && lastPoint === undefined;
+  const indoor = run.indoor ?? null;
+  const noPlace = indoor === null && run.here === null && lastPoint === undefined;
   const [before, setBefore] = useState<readonly [number, number] | null>(null);
   useEffect(() => {
     if (!noPlace) return undefined;
@@ -462,7 +510,8 @@ function Live({ run, units, kg, onHide }: { run: LiveRun; units: Units; kg: numb
       setBusy(false);
     });
   };
-  const onMap = view === "map";
+  // Indoors (37q-ii-a) there is no map: the big numbers.
+  const onMap = view === "map" && indoor === null;
   // The heart rate now from the person's monitor (37f-i); none shown without one.
   const heartNowShown = useHeartNow(true);
   // With no heart rate, the pill opens the monitor box, where what stands in the way is said with its button (37n).
@@ -492,7 +541,16 @@ function Live({ run, units, kg, onHide }: { run: LiveRun; units: Units; kg: numb
         </View>
       ) : (
         <View style={styles.pills}>
-          <GpsPill gps={gpsLight(run.lastFix, now)} />
+          {indoor === null ? (
+            <GpsPill gps={gpsLight(run.lastFix, now)} />
+          ) : (
+            <View style={styles.pill} accessible accessibilityLabel="Indoor run">
+              <Icon name="house" size={16} colour="orange" />
+              <Txt kind="small" colour="text">
+                Indoor
+              </Txt>
+            </View>
+          )}
           {heartNowShown.monitor === null ? null : (
             <HeartPill
               bpm={heartNowShown.bpm}
@@ -523,13 +581,18 @@ function Live({ run, units, kg, onHide }: { run: LiveRun; units: Units; kg: numb
   );
   const controls = (
     <View style={styles.controls}>
-      <SideButton
-        icon={onMap ? "timer" : "map"}
-        label={onMap ? "Numbers" : "Map"}
-        onPress={() => {
-          setView(onMap ? "numbers" : "map");
-        }}
-      />
+      {indoor !== null ? (
+        // No map to change to indoors: the width of the side button, so Pause stays in the middle.
+        <View style={styles.sideSpace} />
+      ) : (
+        <SideButton
+          icon={onMap ? "timer" : "map"}
+          label={onMap ? "Numbers" : "Map"}
+          onPress={() => {
+            setView(onMap ? "numbers" : "map");
+          }}
+        />
+      )}
       {isPaused ? (
         <>
           <RoundButton key="finish" label="Finish" kind="ghost" busy={busy} onPress={press(() => finishRun())} />
@@ -597,20 +660,35 @@ function Live({ run, units, kg, onHide }: { run: LiveRun; units: Units; kg: numb
               <Txt style={styles.unit}> {unitWord(units)}</Txt>
             </Txt>
           </View>
-          {sums !== null && sums.track.length > 1 ? (
+          {indoor !== null ? (
+            <View style={[styles.stepsArt, isPaused ? styles.stepsArtDim : null]} accessible={false}>
+              <Icon name="footprints" size={44} colour="orange" />
+            </View>
+          ) : sums !== null && sums.track.length > 1 ? (
             <View style={styles.trace}>
               <RouteLine track={sums.track} starts={sums.trackStarts} units={units} height={110} marks={false} live={run.phase === "running"} testID="live-route" />
             </View>
           ) : null}
         </View>
         <View style={styles.pairs}>
-          <Figure label="Current pace" value={currentPace(run.points, pacing(run), units, now - run.startedAt)} unit={paceWord(units)} dim={isPaused} />
+          <Figure
+            label="Current pace"
+            value={indoor !== null ? indoorPace(perMinute, run.phase === "running", indoor.basis, units) : currentPace(run.points, pacing(run), units, now - run.startedAt)}
+            unit={paceWord(units)}
+            dim={isPaused}
+          />
           {/* No average until there is ground to average: a standing start reads as no pace. */}
           <Figure label="Average pace" value={pace(moving, metres < 50 ? 0 : metres, units)} unit={paceWord(units)} dim={isPaused} />
         </View>
         {heartNowShown.monitor === null ? null : (
           <View style={styles.pairs}>
             <Figure label="Heart rate" value={heartNowShown.bpm === null ? noSignalWords(heartNowShown.bluetooth) : String(heartNowShown.bpm)} {...(heartNowShown.bpm === null ? {} : { unit: "bpm" })} dim={isPaused} />
+          </View>
+        )}
+        {indoor === null ? null : (
+          <View style={styles.pairs}>
+            <Figure label="Steps" value={indoor.stepsOff ? "Off" : indoor.steps.toLocaleString("en-US")} dim={isPaused} />
+            <Figure label="Steps a minute" value={indoor.stepsOff || perMinute === null ? "--" : String(perMinute)} dim={isPaused} />
           </View>
         )}
         <View style={styles.pairs}>
@@ -687,7 +765,11 @@ function Summary({ run, units, kg, onSaved }: { run: LiveRun; units: Units; kg: 
   const { outbox, view } = useRunOutbox();
   const insets = useSafeAreaInsets();
   const finished = run.finishedMs ?? 0;
-  const sums = useMemo(() => sumsAt(run, finished, kg), [run, finished, kg]);
+  const indoor = run.indoor ?? null;
+  // The treadmill's distance typed after Finish (37q-ii-a), in metres; null with none.
+  const [treadmillM, setTreadmillM] = useState<number | null>(null);
+  const indoorNow = useMemo(() => (indoor === null ? null : indoorSumsAt(run, finished, kg, treadmillM)), [run, indoor, finished, kg, treadmillM]);
+  const sums = useMemo(() => indoorNow ?? sumsAt(run, finished, kg), [indoorNow, run, finished, kg]);
   // The heart rate as the server will work it out (37f-i): the same rule, the same readings.
   const heart = useMemo(() => heartSums(run.heart, closedPauses(run, finished), finished), [run, finished]);
   // The heart rate chart and zones (37f-ii-a), as the server will work them out at Save, from the maximum
@@ -708,7 +790,8 @@ function Summary({ run, units, kg, onSaved }: { run: LiveRun; units: Units; kg: 
   const [notKept, setNotKept] = useState(false);
   // What the server is sent: asked for the climb now (37b-ii), and saved with the same points at Save.
   const sent = useMemo((): RunClimbRequest => sentOf(run), [run]);
-  const climb = useRunClimb(session, sent);
+  // Indoors no climb is asked: there is no route (37q-ii-a).
+  const climb = useRunClimb(indoor === null ? session : null, sent);
   // The person's records as the server last gave them (37c-ii): the boxes wait for them, and a read that
   // fails (no signal) shows none, never a record the run may not have set. Read again each time the server
   // takes a run; while another run still waits on the phone, the server's records may not hold it, so no
@@ -726,13 +809,14 @@ function Summary({ run, units, kg, onSaved }: { run: LiveRun; units: Units; kg: 
       live = false;
     };
   }, [session, view.sent]);
-  const beaten = records === null || otherWaiting ? [] : newRecords(sums.bests, sums.distanceM, records, units);
+  // An indoor run never sets a record (Kd, 2026-11-28, `rulings/2026-11-28-37q-i.md`).
+  const beaten = records === null || otherWaiting || indoor !== null ? [] : newRecords(sums.bests, sums.distanceM, records, units);
 
   const save = async () => {
     if (outbox === null || busy) return;
     setBusy(true);
     const kept = name.trim() === "" ? runName(startedAt) : name.trim().slice(0, 60);
-    const body = saveRequestOf(run, sent, kept, effort, note.trim() === "" ? null : note.trim().slice(0, 1000));
+    const body = saveRequestOf(run, sent, kept, effort, note.trim() === "" ? null : note.trim().slice(0, 1000), indoor === null ? null : treadmillM);
     // The recorder's own files go only once the outbox holds the run on the phone (round one, L1).
     if (!(await outbox.add(body))) {
       setBusy(false);
@@ -798,8 +882,13 @@ function Summary({ run, units, kg, onSaved }: { run: LiveRun; units: Units; kg: 
           climb={climb}
           units={units}
           heart={heart}
+          {...(indoorNow === null ? {} : { indoor: { steps: indoorNow.steps, from: indoorNow.distanceFrom, stepsOff: indoor?.stepsOff ?? false } })}
         />
-        <RouteCard track={sums.track} starts={sums.trackStarts} units={units} name={name} distanceM={sums.distanceM} movingS={sums.movingS} />
+        {indoorNow === null ? (
+          <RouteCard track={sums.track} starts={sums.trackStarts} units={units} name={name} distanceM={sums.distanceM} movingS={sums.movingS} />
+        ) : (
+          <TreadmillCard units={units} stepsM={indoorNow.stepsM} movingS={indoorNow.movingS} taken={indoorNow.distanceFrom === "treadmill"} onTyped={setTreadmillM} />
+        )}
         <PaceCard paceLine={sums.paceLine} hillLine={climb.kind === "done" ? climb.hills : []} distanceM={sums.distanceM} movingS={sums.movingS} units={units} />
         <HeartCard
           heartAvg={heart?.avg ?? null}
@@ -982,6 +1071,9 @@ const styles = StyleSheet.create({
   bigDistance: { fontFamily: fonts.bold, fontSize: 62, lineHeight: 70, letterSpacing: -2, color: colours.text },
   unit: { fontFamily: fonts.semibold, fontSize: 22, color: colours.textSoft, letterSpacing: 0 },
   trace: { width: 120 },
+  // Indoors, where the route's line would be (37q-ii-a): the footprints in a ring.
+  stepsArt: { width: 104, height: 104, borderRadius: sizes.round, borderWidth: 1, borderColor: colours.lineStrong, alignItems: "center", justifyContent: "center", backgroundColor: colours.orangeFill },
+  stepsArtDim: { opacity: 0.55 },
   pairs: { flexDirection: "row", borderTopWidth: 1, borderTopColor: colours.line, marginTop: 22, paddingTop: 18 },
   figure: { flex: 1, gap: 6 },
   figureValue: { fontFamily: fonts.bold, fontSize: 34, lineHeight: 40, letterSpacing: -1, color: colours.text },
