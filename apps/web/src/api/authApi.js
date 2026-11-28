@@ -37,7 +37,7 @@ export function isSignedOutPage(p) {
     !p.startsWith('/login') && !p.startsWith('/register') &&
     !p.startsWith('/verify-email') && !p.startsWith('/reset-password') &&
     !p.startsWith('/forgot-password') && !p.startsWith('/restore-account') &&
-    !p.startsWith('/join/') && !p.startsWith('/gyms/') && !p.startsWith('/invite/') &&
+    !p.startsWith('/join/') && !p.startsWith('/gyms/') && !p.startsWith('/invite/') && p !== '/staff-invitation' &&
     !p.startsWith('/check-in') && !p.startsWith('/sign-agreement') && !p.startsWith('/undo-email-change') &&
     !p.startsWith('/admin') &&
     !Object.values(LEGAL_PATHS).some((l) => p === l || p.startsWith(`${l}/`))

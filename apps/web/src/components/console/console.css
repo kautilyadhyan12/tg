@@ -3202,7 +3202,7 @@ button.c-ov-money-who {
 .c-door-wide { width: 100%; }
 .c-door-p { margin: 0; overflow-wrap: anywhere; }
 .c-door-center { text-align: center; }
-.c-door-u { text-decoration: underline; text-underline-offset: 2px; }
+.c-door-u { display: inline-block; text-decoration: underline; text-underline-offset: 2px; }
 .c-door-links { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 12px; }
 .c-door-link { height: auto; min-height: 44px; padding: 0 4px; font-size: 14px; }
 .c-door-link:not(:disabled) { color: var(--link); font-weight: 600; }

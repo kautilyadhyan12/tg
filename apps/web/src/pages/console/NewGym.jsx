@@ -281,8 +281,10 @@ export default function NewGym() {
     </div>
   );
 
+  // The foot stays at the bottom of the screen while the parts scroll, so Create is always in sight; a refusal is
+  // said in it, beside Create.
   const foot = (
-    <div className="c-stack-s">
+    <div className="c-create-foot c-stack-s">
       {error !== null ? <ConsoleFailed newLook message={error} /> : null}
       {throwaway || atUnpaidLimit ? (
         <div className="c-flow-s">
@@ -298,7 +300,7 @@ export default function NewGym() {
           ) : null}
         </div>
       ) : null}
-      <div className="c-create-foot c-flow">
+      <div className="c-flow">
         <button type="submit" disabled={!canSubmit} className="c-btn c-btn-lg c-btn-p">
           {submitting ? <Loader2 size={16} className="animate-spin" aria-hidden="true" /> : null}
           {submitting ? 'Creating…' : 'Create'}

@@ -22,14 +22,14 @@ export default function StaffInvitationLink() {
             <span className="c-gymicon" aria-hidden="true">
               <Dumbbell size={18} />
             </span>
-            <span className="c-s16 c-w7 c-t1">AI Home Gym</span>
+            <span className="c-s16 c-w7 c-t1">KWAZO</span>
           </div>
           <div className="c-card c-stack-m c-door-card">
             <span className="c-invite-ic" aria-hidden="true">
               <UserPlus size={22} />
             </span>
             <div className="c-stack-xs">
-              <h1 className="c-h1">You&apos;re invited to help run a gym</h1>
+              <h1 className="c-h1">You&apos;re invited to help run a gym or studio</h1>
               <p className="c-sub">Sign in with the email address the invitation was sent to. Your invitation will be waiting.</p>
             </div>
             <Link
