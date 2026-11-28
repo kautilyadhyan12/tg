@@ -25,6 +25,7 @@ import android.util.Range
 import android.util.Size
 import android.view.Surface
 import android.view.View
+import android.view.WindowManager
 import android.widget.FrameLayout
 import android.widget.ImageView
 import androidx.camera.camera2.interop.Camera2CameraInfo
@@ -327,15 +328,31 @@ class PoseCameraView(context: Context, appContext: AppContext) : ExpoView(contex
     super.onDetachedFromWindow()
   }
 
+  /** The window marked secure while the camera is on it, on Android 12 and older; null otherwise. */
+  private var secured: View? = null
+
   /**
    * While the camera's picture of the person is on the screen, Android keeps no still of the app for its app switcher (the
    * camera's security pass, H1: Home pressed in a set, or the switcher opened to change the music, saved that picture in the
-   * phone's own storage and showed it there and on the way back). Android 13 and later; the person's own screenshots still
-   * work.
+   * phone's own storage and showed it there and on the way back). Android 13 and later have a switch for that alone, and the
+   * person's own screenshots still work. Android 12 and older have none: the window the camera is in is marked secure
+   * instead, so no still is kept and screenshots of it come out black (Kd, 2026-11-28, `rulings/2026-11-28-camera-passes.md`).
    */
   private fun keepOutOfRecents(out: Boolean) {
-    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
-    appContext.currentActivity?.setRecentsScreenshotEnabled(!out)
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+      appContext.currentActivity?.setRecentsScreenshotEnabled(!out)
+      return
+    }
+    // The window's own root: the camera screen's box over the app, or the app's own window.
+    val root = (if (out) rootView else secured) ?: return
+    secured = if (out) root else null
+    val params = root.layoutParams as? WindowManager.LayoutParams ?: return
+    params.flags = if (out) params.flags or WindowManager.LayoutParams.FLAG_SECURE else params.flags and WindowManager.LayoutParams.FLAG_SECURE.inv()
+    try {
+      (context.getSystemService(Context.WINDOW_SERVICE) as WindowManager).updateViewLayout(root, params)
+    } catch (e: IllegalArgumentException) {
+      // The window has already gone, and its still with it.
+    }
   }
 
   private fun start() {

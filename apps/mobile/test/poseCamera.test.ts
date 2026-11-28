@@ -93,7 +93,16 @@ describe("the camera let go when the screen says so, and no still of it kept (th
   it("while the camera is on the screen, Android keeps no still of it for the app switcher (Android 13 and later)", () => {
     expect(view).toContain("override fun onAttachedToWindow() {\n    super.onAttachedToWindow()\n    keepOutOfRecents(true)\n");
     expect(view).toContain("    stop()\n    keepOutOfRecents(false)\n    super.onDetachedFromWindow()");
-    expect(view).toContain("if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return\n    appContext.currentActivity?.setRecentsScreenshotEnabled(!out)");
+    expect(view).toContain("if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {\n      appContext.currentActivity?.setRecentsScreenshotEnabled(!out)\n      return\n    }");
+  });
+
+  it("on Android 12 and older, which have no such switch, the camera's window is marked secure while it is on it (Kd, 2026-11-28)", () => {
+    // Marked on the window the view is in as it comes on the screen, and that same window unmarked as it goes.
+    expect(view).toContain("val root = (if (out) rootView else secured) ?: return\n    secured = if (out) root else null\n");
+    expect(view).toContain(
+      "params.flags = if (out) params.flags or WindowManager.LayoutParams.FLAG_SECURE else params.flags and WindowManager.LayoutParams.FLAG_SECURE.inv()",
+    );
+    expect(view).toContain(".updateViewLayout(root, params)");
   });
 });
 
