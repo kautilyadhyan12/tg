@@ -94,7 +94,8 @@ function SeatLine({ org }) {
   return (
     <div className="flex flex-col gap-1.5">
       <div className="c-bar" aria-hidden="true">
-        <div className="c-bar-fill" style={{ width: `${Math.round(share * 100)}%` }} />
+        {/* Grey while there is room; orange once it is nearly full. */}
+        <div className={`c-bar-fill${meter.pressure ? '' : ' c-bar-fill-plain'}`} style={{ width: `${Math.round(share * 100)}%` }} />
       </div>
       <div className={`c-s14 ${meter.pressure ? 'c-w6 c-ov-warn-t' : 'c-t2'}`}>{seatLineText(meter, org?.orgType)}</div>
     </div>
@@ -189,6 +190,10 @@ export default function TrialCard({ org }) {
   // One orange button: the first of these the box draws; the others in the soft orange.
   const mainButton = payNow ? 'subscribe' : chooseNext ? 'next' : resize ? 'size' : keepPaddle ? 'keep' : null;
   const line = 'c-s14 c-t2 m-0';
+  /** Manage payment: a plan paid through Paddle; one handed over with the gym is the old owner's account. */
+  const manage = !razorpay && handedOver === null && (subscribed || sub.status === 'active' || sub.status === 'past_due');
+  // The row of buttons is drawn only when it holds one, so it adds no gap.
+  const acts = payNow || chooseNext || resize || keepPaddle || manage || (cancelNew && cancelNewBox === null);
 
   // Cancel this change asks first (Kd at 1d-iii-b's click-through): the box names what stays.
   const changeBox = confirmingCancel ? cancelChangeBox(sub, org?.orgType) : null;
@@ -255,6 +260,9 @@ export default function TrialCard({ org }) {
             it would put a stale date under a live plan. The shared schema says
             this in as many words; gate on the status. */}
         {trialing && endsOn !== null ? <span className="c-tag c-tag-soft">Ends {endsOn}</span> : null}
+        {/* A paid plan's state, as the board's head draws it; a plan set to end says when in its own line. */}
+        {sub.status === 'active' ? <span className="c-tag c-tag-good">Active</span> : null}
+        {sub.status === 'past_due' ? <span className="c-tag c-tag-bad">Payment due</span> : null}
       </div>
       <div className="c-ov-box-body flex flex-col gap-3">
         {nextPayment !== null || firstPayment !== null || ending !== null || following !== null || (nextSize !== null && !sub.cancelAtPeriodEnd && following === null) ? (
@@ -347,46 +355,48 @@ export default function TrialCard({ org }) {
         {payNow ? (
           <p className={line}>{`Your free trial carries on until it ends. To have more ${words.people} now, choose a plan: you pay today and get its full size at once.`}</p>
         ) : null}
-        <div className="c-ov-plan-acts">
-          {payNow ? (
-            <CardButton main={mainButton === 'subscribe'} onClick={() => setChoosing('subscribe')}>
-              Choose a plan
-            </CardButton>
-          ) : null}
-          {chooseNext ? (
-            <CardButton main={mainButton === 'next'} onClick={() => setChoosing('next')}>
-              Choose your plan
-            </CardButton>
-          ) : null}
-          {resize ? (
-            <CardButton main={mainButton === 'size'} onClick={() => setChoosing('size')}>
-              Change size
-            </CardButton>
-          ) : null}
-          {keepPaddle ? (
-            <CardButton main={mainButton === 'keep'} onClick={() => void keepPlan()} disabled={keeping} busy={keeping}>
-              Keep my plan
-            </CardButton>
-          ) : null}
-          {/* A plan paid through Paddle is managed on Paddle's own page: the card, cancelling,
-              invoices. One paid through Razorpay is managed here (1d-ii), below. */}
-          {/* A plan handed over with the gym is the old owner's Paddle account: not opened here. */}
-          {!razorpay && handedOver === null && (subscribed || sub.status === 'active' || sub.status === 'past_due') ? (
-            <ManagePaymentButton newLook gymId={org.id} label={sub.status === 'past_due' ? 'Update payment method' : 'Manage payment'} />
-          ) : null}
-          {cancelNew && cancelNewBox === null ? (
-            <button
-              type="button"
-              onClick={() => {
-                setCancelNewError(null);
-                setConfirmingCancelNew(true);
-              }}
-              className="c-btn c-btn-s"
-            >
-              Cancel new plan
-            </button>
-          ) : null}
-        </div>
+        {acts ? (
+          <div className="c-ov-plan-acts">
+            {payNow ? (
+              <CardButton main={mainButton === 'subscribe'} onClick={() => setChoosing('subscribe')}>
+                Choose a plan
+              </CardButton>
+            ) : null}
+            {chooseNext ? (
+              <CardButton main={mainButton === 'next'} onClick={() => setChoosing('next')}>
+                Choose your plan
+              </CardButton>
+            ) : null}
+            {resize ? (
+              <CardButton main={mainButton === 'size'} onClick={() => setChoosing('size')}>
+                Change size
+              </CardButton>
+            ) : null}
+            {keepPaddle ? (
+              <CardButton main={mainButton === 'keep'} onClick={() => void keepPlan()} disabled={keeping} busy={keeping}>
+                Keep my plan
+              </CardButton>
+            ) : null}
+            {/* A plan paid through Paddle is managed on Paddle's own page: the card, cancelling,
+                invoices. One paid through Razorpay is managed here (1d-ii), below. */}
+            {/* A plan handed over with the gym is the old owner's Paddle account: not opened here. */}
+            {manage ? (
+              <ManagePaymentButton newLook gymId={org.id} label={sub.status === 'past_due' ? 'Update payment method' : 'Manage payment'} />
+            ) : null}
+            {cancelNew && cancelNewBox === null ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setCancelNewError(null);
+                  setConfirmingCancelNew(true);
+                }}
+                className="c-btn c-btn-s"
+              >
+                Cancel new plan
+              </button>
+            ) : null}
+          </div>
+        ) : null}
         {cancelNewBox !== null ? (
           <div className="c-ov-money-ask c-ov-money-ask-bad" role="group" aria-label={cancelNewBox.title} data-testid="cancel-new-plan-box">
             <div className="c-s15 c-w6 c-t1">{cancelNewBox.title}</div>

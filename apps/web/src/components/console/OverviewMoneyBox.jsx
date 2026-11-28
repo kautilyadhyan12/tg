@@ -1,13 +1,15 @@
 // Overview's money boxes in the third look (ROADMAP V5-b; boards `OverviewMoney`, `OverviewMoneyStates`): the box,
 // its title, the count in one line and what it is for; a person's row with their name, Past member and the amount.
 
-/** The box: a title, then the count and the line saying what the box is for, then whatever the box holds. */
-export function MoneyBox({ id, testId, title, headline = null, headlineTestId, intro = null, children }) {
+/** The box: a title, then what must be done first (`lead`), the count and the line saying what the box is for, then
+ *  whatever the box holds. */
+export function MoneyBox({ id, testId, title, lead = null, headline = null, headlineTestId, intro = null, children }) {
   return (
     <section id={id} data-testid={testId} aria-label={title} className="c-card c-ov-box c-ov-money" style={{ scrollMarginTop: 16 }}>
       <div className="c-ov-box-head">
         <h2 className="c-h2">{title}</h2>
       </div>
+      {lead}
       {headline !== null || intro !== null ? (
         <div className="c-ov-box-body flex flex-col gap-1">
           {headline !== null ? (

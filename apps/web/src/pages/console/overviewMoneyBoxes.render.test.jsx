@@ -68,6 +68,7 @@ describe('the worst thing: money rows only for the staff and the business they b
     expect(failed.summary).not.toHaveBeenCalled();
     expect(refunds.list).not.toHaveBeenCalled();
     expect(checks.list).not.toHaveBeenCalled();
+    expect(cancels.list).not.toHaveBeenCalled();
     expect(charges.list).not.toHaveBeenCalled();
   });
 

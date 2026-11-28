@@ -100,26 +100,28 @@ export default function ChargebacksCard({ org, orgSlug, privileges, readOnly }) 
         id="chargebacks"
         testId="chargebacks"
         title="Chargebacks"
+        lead={
+          reconnect ? (
+            settings !== null ? (
+              <div className="c-ov-box-body flex flex-col items-start gap-2" data-testid="chargebacks-reconnect">
+                <p className="c-s14 c-t1 m-0">{CHARGEBACKS_RECONNECT}</p>
+                <button type="button" className="c-btn c-btn-p" disabled={readOnly} onClick={() => navigate(settings)}>
+                  Reconnect Square
+                </button>
+              </div>
+            ) : (
+              <div className="c-ov-box-body">
+                <p className="c-s14 c-t2 m-0" data-testid="chargebacks-reconnect">
+                  {CHARGEBACKS_RECONNECT_OTHERS}
+                </p>
+              </div>
+            )
+          ) : null
+        }
         headline={headline}
         headlineTestId="chargebacks-headline"
         intro={headline !== null ? (list.lostCount === list.count ? CHARGEBACKS_LOST_INTRO : CHARGEBACKS_INTRO) : null}
       >
-        {reconnect ? (
-          settings !== null ? (
-            <div className="c-ov-money-foot" data-testid="chargebacks-reconnect">
-              <p className="c-s14 c-t1 m-0">{CHARGEBACKS_RECONNECT}</p>
-              <button type="button" className="c-btn c-btn-p" disabled={readOnly} onClick={() => navigate(settings)}>
-                Reconnect Square
-              </button>
-            </div>
-          ) : (
-            <div className="c-ov-money-foot">
-              <p className="c-s14 c-t2 m-0" data-testid="chargebacks-reconnect">
-                {CHARGEBACKS_RECONNECT_OTHERS}
-              </p>
-            </div>
-          )
-        ) : null}
         {list !== null && list.rows.length > 0 ? (
           <ul className="list-none m-0 p-0">
             {list.rows.map((row) => {

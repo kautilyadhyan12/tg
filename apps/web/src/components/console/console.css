@@ -2510,6 +2510,8 @@ button.c-ov-money-who {
 .c-ov-ok { font-size: 14px; line-height: 20px; font-weight: 600; color: var(--good); }
 .c-ov-warn-t { color: var(--warn); }
 .c-ov-plan { border-color: var(--soft-line); }
+/* The members bar: grey while there is room, the orange once it is nearly full. */
+.c-bar-fill-plain { background: var(--t3); }
 .c-ov-plan-acts {
   display: flex;
   flex-wrap: wrap;
