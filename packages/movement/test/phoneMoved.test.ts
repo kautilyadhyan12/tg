@@ -153,12 +153,12 @@ function over(readings: readonly Reading[]): PhoneFrame[] {
 }
 
 describe("the rule, on Kd's phone's own readings", () => {
-  it("lying still for two minutes, its unexplained blip included: never moving", () => {
-    expect(over(STILL).filter((f) => f.moving || f.again)).toEqual([]);
+  it("lying still for two minutes, its unexplained blip included: never moving, never trembling", () => {
+    expect(over(STILL).filter((f) => f.moving || f.again || f.trembling)).toEqual([]);
   });
 
-  it("laid down and the desk tapped hard beside it: never moving", () => {
-    expect(over(TAPPED).filter((f) => f.moving || f.again)).toEqual([]);
+  it("laid down and the desk tapped hard beside it: never moving, never trembling", () => {
+    expect(over(TAPPED).filter((f) => f.moving || f.again || f.trembling)).toEqual([]);
   });
 
   it("picked up: moving within a tenth of a second of turning 1.5 degrees, and in every picture while it is held", () => {
@@ -179,7 +179,7 @@ describe("the rule, on Kd's phone's own readings", () => {
     expect(frames.slice((again[0] ?? 0) / 50).every((f) => !f.moving)).toBe(true);
   });
 
-  it("held from the moment the set starts, wherever in the holding: caught within 4.5 s", () => {
+  it("held from the moment the set starts, wherever in the holding: caught within 1.6 s, by its trembling at the latest", () => {
     const all = readingsOf("hand", PICKED_UP + 1000);
     const waits: number[] = [];
     for (let from = 0; from < (all[all.length - 1]?.t ?? 0) - 5000; from += 250) {
@@ -187,7 +187,7 @@ describe("the rule, on Kd's phone's own readings", () => {
       waits.push(caught < 0 ? Number.POSITIVE_INFINITY : caught * 50);
     }
     expect(waits.length).toBeGreaterThan(100);
-    expect(Math.max(...waits)).toBeLessThanOrEqual(4500);
+    expect(Math.max(...waits)).toBeLessThanOrEqual(1600);
   });
 });
 
@@ -224,6 +224,28 @@ describe("the rule, every kind of picture", () => {
     const again = f.flatMap((x, k) => (x.again ? [pictures[k]?.[0] ?? -1] : []));
     // The half second's window must clear the 0.6 degrees of 1.5 s (until 2.0 s), then a whole second: 3.0 s.
     expect(again).toEqual([3000]);
+  });
+
+  it("a hand held steadily, under both of those, trembles: moving once it has trembled for 1.5 s, and still only once it stops", () => {
+    // A quarter of a degree back and forth every answer: 1.25 in each quarter second, 2.5 in all in half a second.
+    const hand: [number, Spin][] = Array.from({ length: 80 }, (_, k) => [k * 50, turn(k % 2 === 0 ? 0.25 : -0.25)]);
+    const f = run([...hand, ...steady(4000, 7000, 0)]);
+    const first = f.findIndex((x) => x.moving);
+    expect(first * 50).toBeGreaterThanOrEqual(1500);
+    expect(first * 50).toBeLessThanOrEqual(1600);
+    expect(f.slice(first, 80).every((x) => x.moving && x.trembling)).toBe(true);
+    // Laid down at 4 s: the half second clears, the trembling stops, then a whole second still.
+    const again = f.flatMap((x, k) => (x.again ? [k * 50] : []));
+    expect(again).toHaveLength(1);
+    expect(again[0] ?? 0).toBeGreaterThanOrEqual(5000);
+    expect(again[0] ?? 0).toBeLessThanOrEqual(5600);
+  });
+
+  it("a still phone whose gyroscope drifts steadily, a degree or two a second, never trembles and is never moving", () => {
+    for (const perSecond of [0.14, 1, 2]) {
+      const f = run(steady(0, 20_000, perSecond / 20));
+      expect(f.some((x) => x.moving || x.trembling)).toBe(false);
+    }
   });
 
   it("a picture with the same time decides nothing new; a clock that went back is a new set", () => {
