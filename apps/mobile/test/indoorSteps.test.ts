@@ -151,6 +151,16 @@ describe("Auto-pause indoors, from the steps", () => {
     expect(nextStepPause({ phase: "paused", byPerson: false, autoPause: true, armed: true, counts, pauseFrom: 70_000, lastPauseEnd: 0, wake: null, nowMs: 95_000 })).toBeNull();
   });
 
+  it("looked at late (the screen off), the pause is where it would have been, ten seconds after the last step (the second re-check, H4)", () => {
+    const counts = walk(0, 400_000, 2);
+    // Looked at in time: where the clock stands.
+    expect(nextStepPause({ ...running, counts, nowMs: 410_250 })).toEqual({ kind: "pause", at: 410_250 });
+    // Looked at ten minutes late: ten seconds after the last step.
+    expect(nextStepPause({ ...running, counts, nowMs: 1_000_000 })).toEqual({ kind: "pause", at: 410_000 });
+    // Just after a resume, from the resume's own ten seconds.
+    expect(nextStepPause({ ...running, counts, lastPauseEnd: 700_000, nowMs: 1_310_000 })).toEqual({ kind: "pause", at: 710_000 });
+  });
+
   it("just after an Auto-pause ended, the ten seconds are counted from its end, not from the last step before it (round one, H1)", () => {
     // The last rise before the pause at 60 s; the pause ended at 95 s; the steps that ended it not yet in a count.
     const counts: StepCount[] = [...walk(0, 60_000, 2), [70_000, 120], [95_000, 120]];

@@ -484,6 +484,48 @@ describe("steps the app could not see as they came, during an Auto-pause (the re
   });
 });
 
+describe("a stand the app could not see as it came, the screen off (the second re-check, H4)", () => {
+  it("twenty steps for a glass of water during an Auto-pause, then ten minutes standing: the stand is a pause, from ten seconds after the last step", async () => {
+    const s = runServer();
+    await openRunning(s);
+    await pickIndoor();
+    await startIndoor();
+    await counterAtStart(8016);
+    const total = await walk(0, 600, 120, 8016);
+    await lookAt(610);
+    expect(going().phase).toBe("paused");
+    const run = going();
+    // With the screen off: 20 steps from 701 to 710 s, then standing until the screen comes back at 1,310 s.
+    for (let t = 1; t <= 10; t++) motion.stepTo(run.startedAt + (700 + t) * 1000, total + t * 2);
+    await act(() => takeSteps(run.startedAt + 1_310_000));
+    const back = going();
+    expect(back.phase).toBe("paused");
+    expect(back.pauses).toEqual([[610_000, 700_000], [720_000, null]]);
+    const sums = indoorSumsAt(back, 1_310_000, 0, null);
+    expect(sums.steps).toBe(1220);
+    expect(sums.movingS).toBe(630);
+    expect(movingMsOf(back, run.startedAt + 1_310_000)).toBe(630_000);
+  });
+
+  it("a run going on, the screen off, the person stops: the stand is a pause from ten seconds after the last step", async () => {
+    const s = runServer();
+    await openRunning(s);
+    await pickIndoor();
+    await startIndoor();
+    await counterAtStart(8016);
+    const run = going();
+    const total = await walk(0, 300, 120, 8016);
+    // With the screen off: 200 more steps to 400 s, then standing until the screen comes back at 1,000 s.
+    for (let t = 1; t <= 100; t++) motion.stepTo(run.startedAt + (300 + t) * 1000, total + t * 2);
+    await act(() => takeSteps(run.startedAt + 1_000_000));
+    const back = going();
+    expect(back.phase).toBe("paused");
+    expect(back.pauses).toEqual([[410_000, null]]);
+    expect(indoorSumsAt(back, 1_000_000, 0, null).steps).toBe(800);
+    expect(movingMsOf(back, run.startedAt + 1_000_000)).toBe(410_000);
+  });
+});
+
 describe("the step length at an indoor Start (round one, L2)", () => {
   it("not yet read for this person, it is asked at Start, so the run is measured as the server will measure it", async () => {
     let asked = 0;
