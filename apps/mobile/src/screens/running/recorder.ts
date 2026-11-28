@@ -27,7 +27,7 @@ import {
   type Units,
 } from "@app/shared";
 import { colours } from "../../look/colours";
-import { AUTO_START, autoPausedFrom, autoRunning, feelAt, nextAutoPause, type AutoPauseState } from "./autoPause";
+import { AUTO_START, RUN_GAP_MS, autoPausedFrom, autoRunning, feelAt, nextAutoPause, type AutoPauseState } from "./autoPause";
 import { clockAt, closeStill, closedPauses, elapsedMs, keepDatedBack, movingMsOf, openStill, sumsAt, undoDatedBack } from "./runLive";
 import { beginLine, guideAdvance, guideDone, guideNextLook, guideSchedule, guideSkip, nowLine, skipLine } from "./runGuide";
 import { PAUSE_WORDS, START_HUSH_MS, VOICE_AFTER_LOAD, VOICE_START, heartLine, voiceCheck, type VoiceState } from "./runVoice";
@@ -81,6 +81,10 @@ export interface LiveRun {
   /** With Auto-pause on, the seconds each Auto-pause was dated back over (37k): from where the stop began to
    *  where the clock stopped, which is never before the time it showed. Sent with the run as standing. */
   datedBack: [number, number][];
+  /** While running: when the phone began to feel still (ms into the run), before Auto-pause has decided the stop
+   *  (37r). The screen, the voice and the guide hold still from there (`liveStill`) and show no pace (`pacing`);
+   *  null or missing when it does not feel still, and never kept in its file or sent. */
+  feltStillFrom?: number | null;
   /** The GPS's time less the phone's (A6, `runClock.ts`), taken off every point's time; null until two deliveries
    *  have shown it, none (0) for a phone whose clock is right. Missing in a test's run: 0. */
   clockGapMs?: number | null;
@@ -690,6 +694,7 @@ export async function takeLocations(data: unknown, now: number = Date.now()): Pr
   learnClock(run, parsed.data.locations, now);
   const gap = run.clockGapMs ?? 0;
   let full = false;
+  let feltFrom = run.feltStillFrom ?? null;
   for (const location of parsed.data.locations) {
     const at = location.timestamp - gap - run.startedAt;
     const lastAt = Math.max(run.points[run.points.length - 1]?.[0] ?? -1, pausedTail[pausedTail.length - 1]?.[0] ?? -1);
@@ -709,6 +714,10 @@ export async function takeLocations(data: unknown, now: number = Date.now()): Pr
       const feel = feelAt(run.motion, at);
       const next = nextAutoPause(auto, { at, lat: point[1], lng: point[2], accuracyM, speed: location.coords.speed ?? null, feel });
       auto = next.state;
+      // Still felt and not yet decided (37r): the seconds the rule is counting, while the phone felt still within the
+      // gap the rule itself bridges; a slow walk under a weak signal that feels neither keeps its metres.
+      const counting = auto.stillRun;
+      feltFrom = !auto.paused && counting !== null && at - counting.lastAt <= RUN_GAP_MS ? counting.firstAt : null;
       const change = next.change;
       if (!run.autoPause) {
         if (change?.kind === "pause") openStill(run, change.at);
@@ -742,7 +751,7 @@ export async function takeLocations(data: unknown, now: number = Date.now()): Pr
         pausedHeart = [];
         writtenAt = 0;
       }
-    }
+    } else feltFrom = null;
     // While paused no point is kept but the last few, for the steps that may start the clock again:
     // the server leaves points inside a pause out, and a run left paused never fills the phone. A point from
     // before the pause began (a batch handed over late) is the run's.
@@ -758,6 +767,7 @@ export async function takeLocations(data: unknown, now: number = Date.now()): Pr
     }
   }
   if (mine !== generation || current?.runId !== run.runId) return;
+  run.feltStillFrom = feltFrom;
   takeHeart(run);
   current = { ...run };
   if (full) {
@@ -987,6 +997,7 @@ export async function resumeRun(now: number = Date.now()): Promise<void> {
   run.phase = "running";
   run.pausedByPerson = false;
   auto = autoRunning(byPerson ? wheelsAtPause : auto.wheels);
+  run.feltStillFrom = null;
   pausedTail = [];
   pausedHeart = [];
   current = { ...run };
@@ -1044,6 +1055,7 @@ export async function setAutoPause(on: boolean, now: number = Date.now()): Promi
   if (on) closeStill(run, elapsedMs(run, now));
   const wheels = run.pausedByPerson ? wheelsAtPause : auto.wheels;
   auto = run.phase === "paused" ? autoPausedFrom(openPauseFrom(run), wheels) : autoRunning(wheels);
+  run.feltStillFrom = null;
   current = { ...run, autoPause: on };
   await keep(current);
   tell();
@@ -1079,7 +1091,17 @@ export async function finishRun(now: number = Date.now()): Promise<LiveRun | nul
   stopMotion();
   closePause(run, end);
   closeStill(run, end);
-  const done: LiveRun = { ...run, phase: "finished", finishedMs: end };
+  // Finished while the phone felt still and Auto-pause had not yet decided (37r): the seconds the screen held still are
+  // standing in the saved run too, as the stop would have been, so the summary and the server show what the screen did.
+  const felt = run.phase === "running" ? (run.feltStillFrom ?? null) : null;
+  if (felt !== null) {
+    if (run.autoPause) keepDatedBack(run, felt, end);
+    else {
+      openStill(run, felt);
+      closeStill(run, end);
+    }
+  }
+  const done: LiveRun = { ...run, phase: "finished", finishedMs: end, feltStillFrom: null };
   current = done;
   quietVoice();
   releaseMonitor();

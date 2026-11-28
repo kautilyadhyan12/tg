@@ -312,7 +312,7 @@ d("record a run (real Postgres)", () => {
       expect(Math.abs(saved.run.distanceM - 1800)).toBeLessThanOrEqual(6);
       const row = (await sql<{ run_calc_version: number }[]>`SELECT run_calc_version FROM runs WHERE id = ${run.runId}`)[0];
       expect(row?.run_calc_version).toBe(RUN_CALC_VERSION);
-      expect(RUN_CALC_VERSION).toBe(4);
+      expect(RUN_CALC_VERSION).toBe(5);
       // No column keeps them: the row holds nothing that names them.
       const columns = await sql<{ column_name: string }[]>`SELECT column_name FROM information_schema.columns WHERE table_name = 'runs'`;
       expect(columns.map((c) => c.column_name).filter((c) => c.includes("still"))).toEqual([]);
@@ -330,7 +330,9 @@ d("record a run (real Postgres)", () => {
       expect(saved.run.distanceM).toBeGreaterThanOrEqual(3590);
     });
 
-    it("made up as a stand every 13 s over a 3 m/s run (round one, H1), the run is saved as the person ran it: its distance, Moving time and splits", async () => {
+    // Each stand is 37 m, inside the 40 m a phone that feels still may go, so it is honoured however fast its points go
+    // (37r: a GPS settling indoors goes as fast): it takes its metres with its time, as a made-up pause does.
+    it("made up as a stand every 13 s over a 3 m/s run (round one, H1), the run is saved at the pace the person ran, and loses no more than the same list sent as pauses", async () => {
       const me = await makeUser("still-forged-short");
       const still: [number, number][] = [];
       for (let t = 1000; t + 12_400 <= 1_200_000; t += 13_000) still.push([t, t + 12_400]);
@@ -339,8 +341,14 @@ d("record a run (real Postgres)", () => {
       expect(res.statusCode, res.body).toBe(201);
       const saved = saveRunResponseSchema.parse(JSON.parse(res.body));
       const plain = runSums(run.points, run.pauses, run.elapsedMs, 70);
-      expect(saved.run).toMatchObject({ distanceM: plain.distanceM, movingS: plain.movingS, splitsKm: plain.splitsKm });
-      expect(saved.run.movingS).toBeGreaterThanOrEqual(1190);
+      const asPauses = runSums(run.points, [...run.pauses, ...still], run.elapsedMs, 70);
+      expect(saved.run.movingS).toBeGreaterThan(0);
+      // Honoured: the stretches took their metres with them (a server ignoring them would save the plain run).
+      expect(saved.run.distanceM).toBeLessThan(plain.distanceM - 100);
+      expect(saved.run.distanceM / saved.run.movingS).toBeLessThanOrEqual((plain.distanceM / plain.movingS) * 1.1);
+      for (const split of saved.run.splitsKm) if (split.m === 1000) expect(split.s).toBeGreaterThanOrEqual(300);
+      expect(saved.run.distanceM).toBeGreaterThanOrEqual(asPauses.distanceM);
+      expect(saved.run.movingS).toBeGreaterThanOrEqual(asPauses.movingS);
     });
 
     it.each<[string, unknown]>([

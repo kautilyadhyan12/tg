@@ -3,11 +3,12 @@
 // would undo the pause (a phone on wheels), removes it. The stretches go with the run, and the server works the
 // run out with them through the same maths. A rule that decides what a person's run counts, so every class of
 // case is here before review: a pram, a phone standing at every accuracy, the real recordings with no
-// stretch, and stretches the phone never made.
+// stretch, and stretches the phone never made. 37r: a stretch is honoured however fast its points go, so a phone lying
+// still while its GPS settles draws nothing (Kd's phone, 2026-11-28), and a pram pushed off is tested for it first.
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { runSums, saveRunRequestSchema, type RunPause, type RunPoint } from "@app/shared";
-import type { AutoPauseChange, Fix } from "../src/screens/running/autoPause";
+import { runSums, saveRunRequestSchema, travelMetresAt, type RunPause, type RunPoint } from "@app/shared";
+import { feelAt, type AutoPauseChange, type Fix } from "../src/screens/running/autoPause";
 import type { LiveRun } from "../src/screens/running/recorder";
 import { closeStill, closedStill, openStill } from "../src/screens/running/runLive";
 import { realRuns } from "./realRuns";
@@ -50,6 +51,126 @@ function phoneAndServer(fixes: readonly Fix[]): { phone: number; server: number;
   const server = runSums(sent.points, sent.pauses, sent.elapsedMs, 70, sent.still);
   return { phone: phone.distanceM, server: server.distanceM, still, movingS: phone.movingS };
 }
+
+describe("the worst thing (37r): a stand is trusted however fast its points go, so a pram's pushed metres must not go with it", () => {
+  // The phone feels still in a pram throughout, pushed off from a stand or from Start, and the run is finished then.
+  // Never fewer metres than Auto-pause on counts for the same push (which pauses and drops them until the phone knows
+  // it is on wheels), and once the push has gone well past where the phone finds that out, at most what Auto-pause on
+  // loses at the edge of the stop (measured: 15 m sure to 30 m, where a pram from Start now loses 13 to 15).
+  it.each([
+    [1, 5],
+    [1.4, 5],
+    [1, 15],
+    [1.4, 15],
+    [1, 30],
+  ])("at %s m a second, sure to %s m: pushed 15 s to 3 minutes from a stand or from Start, then finished", (speed, accuracyM) => {
+    for (const standS of [0, 60]) {
+      for (const pushS of [15, 30, 45, 60, 90, 180]) {
+        for (let seed = 1; seed <= 5; seed++) {
+          const stand: Stretch[] = standS > 0 ? [{ seconds: standS, speed: 0, accuracyM, feel: "still" }] : [];
+          const { fixes, metres } = walk([...stand, { seconds: pushS, speed, accuracyM, feel: "still" }], seed * 31 + pushS);
+          const { phone, server } = phoneAndServer(fixes);
+          expect(server).toBe(phone);
+          const end = endOf(fixes);
+          expect(phone).toBeGreaterThanOrEqual(runSums(pointsOf(fixes), pausesOf(changesOf(fixes), end), end, 70).distanceM);
+          if (metres >= travelMetresAt(accuracyM) + 10) expect(metres - phone).toBeLessThanOrEqual(15);
+        }
+      }
+    }
+  });
+
+  // A walker whose phone feels the steps, under a weak signal, stopping now and then: Auto-pause must see them leave
+  // each stop, or the still stretch (and Auto-pause on's pause) holds over the walk after it. Sure to 30 m, a walk at
+  // 1.2 m/s lost 363 of 792 m with Auto-pause off, as it did with Auto-pause on.
+  it.each([
+    [1, 20],
+    [1.2, 20],
+    [1.4, 20],
+    [1, 25],
+    [1.2, 25],
+    [1.4, 25],
+    [1, 30],
+    [1.2, 30],
+    [1.4, 30],
+  ])("a walk at %s m a second, sure to %s m, with stops of 4 to 15 s: both settings count it, the phone and the server alike", (speed, accuracyM) => {
+    for (const stopS of [4, 6, 15]) {
+      for (let seed = 1; seed <= 3; seed++) {
+        const parts: Stretch[] = [];
+        for (let k = 0; k < 5; k++) parts.push({ seconds: 60, speed, accuracyM, feel: "moving" }, { seconds: stopS, speed: 0, accuracyM, feel: "still" });
+        parts.push({ seconds: 60, speed, accuracyM, feel: "moving" });
+        const { fixes, metres } = walk(parts, seed * 977 + accuracyM + stopS);
+        const { phone, server } = phoneAndServer(fixes);
+        expect(server).toBe(phone);
+        const end = endOf(fixes);
+        expect([stopS, seed, phone >= 0.96 * metres]).toEqual([stopS, seed, true]);
+        expect([stopS, seed, runSums(pointsOf(fixes), pausesOf(changesOf(fixes), end), end, 70).distanceM >= 0.96 * metres]).toEqual([stopS, seed, true]);
+      }
+    }
+  });
+
+  // Wheels the phone feels still, faster than Auto-pause's rise (5 m/s) lets it call wheels: the stretch stays open to
+  // the end, and only its own limit (every point within `travelMetresAt` of the first) keeps the ride's metres.
+  it.each([6, 8])("a ride at %s m a second the phone feels still: every metre counted, the phone and the server alike", (speed) => {
+    for (let seed = 1; seed <= 3; seed++) {
+      const { fixes, metres } = walk([
+        { seconds: 30, speed: 0, accuracyM: 5, feel: "still" },
+        { seconds: 60, speed, accuracyM: 5, feel: "still" },
+      ], seed);
+      const { phone, server, still } = phoneAndServer(fixes);
+      expect(still).toEqual([[1000, endOf(fixes)]]);
+      expect(server).toBe(phone);
+      expect(metres - phone).toBeLessThanOrEqual(6);
+    }
+  });
+});
+
+describe("a phone lying still indoors as its GPS settles (37r)", () => {
+  const fixture = (file: string): Fix[] => {
+    const read = JSON.parse(readFileSync(new URL(`./fixtures/${file}`, import.meta.url), "utf8")) as { points: RunPoint[]; motion: [number, number][] };
+    return read.points.map(([at, lat, lng, accuracyM]): Fix => ({ at, lat, lng, accuracyM, speed: null, feel: feelAt(read.motion, at) }));
+  };
+  const after = (fixes: readonly Fix[], at: number): Fix[] => fixes.filter((f) => f.at <= at);
+
+  // Kd's phone, 2026-11-28: the first sure point at 6.5 s, then 36 m in 5 s and settled. Auto-pause's rule stops the
+  // run from 4.4 s once it has felt 3 s of stillness, at 8.5 s; the seconds before are held on the screen by the
+  // recorder (runMotion.test.tsx), not by the maths.
+  it("Kd's run, Auto-pause off: the still stretch the phone kept from 4.4 s draws no metre and no line, at every second", () => {
+    const fixes = fixture("still-indoors-settle.json");
+    for (let at = 9000; at <= 66_000; at += 1000) {
+      const now = after(fixes, at);
+      const still = stillOf(changesOf(now), at);
+      expect(still).toEqual([[4410, at]]);
+      const sums = runSums(pointsOf(now), [], at, 70, still);
+      expect([at, sums.distanceM, sums.track.length]).toEqual([at, 0, 0]);
+    }
+  });
+
+  it("Kd's run, Auto-pause on: paused at 8.5 s with the seconds back to 4.4 s standing, no metre and no line to the end", () => {
+    const fixes = fixture("still-indoors-settle.json");
+    expect(changesOf(fixes)).toEqual([{ kind: "pause", at: 4410 }]);
+    for (let at = 9000; at <= 66_000; at += 1000) {
+      // As the recorder keeps them: the clock stops at the point that decided it, the seconds before are standing.
+      const sums = runSums(pointsOf(after(fixes, at)), [[8517, at]], at, 70, [[4410, 8517]]);
+      expect([at, sums.distanceM, sums.track.length]).toEqual([at, 0, 0]);
+    }
+  });
+
+  // Its first two points came before the motion sensor's first second, so the phone felt still from the third: their
+  // 1 m of line is drawn, as before 37r, and once the stop is known nothing is added to it.
+  it("Kd's phone on a table in 37j's walk (11.5 m in 20 s): once stopped, no metre, and the line never grows, at every second", () => {
+    const fixes = fixture("table-drift.json");
+    expect(changesOf(fixes)[0]?.kind).toBe("pause");
+    const decided = fixes.find((f) => changesOf(after(fixes, f.at)).length > 0)?.at ?? Infinity;
+    const first = Math.ceil(decided / 1000) * 1000;
+    const line = runSums(pointsOf(after(fixes, first)), [], first, 70, stillOf(changesOf(after(fixes, first)), first)).track;
+    expect(line.length).toBeLessThanOrEqual(2);
+    for (let at = first; at <= endOf(fixes); at += 1000) {
+      const now = after(fixes, at);
+      const sums = runSums(pointsOf(now), [], at, 70, stillOf(changesOf(now), at));
+      expect([at, sums.distanceM, sums.track]).toEqual([at, 0, line]);
+    }
+  });
+});
 
 describe("the worst thing: with Auto-pause off, real metres left out because the phone felt still", () => {
   // A phone in a pram or on a wheelchair feels still throughout while the GPS goes straight: 10 minutes with two
@@ -252,13 +373,15 @@ describe("round one: the step out of a stand, and seconds with no point", () => 
   // The stand is a pause to the route: against the same stop with Auto-pause on, never fewer metres, never a sprint
   // it would not show, and never a metre more than the run without the stretch. Sure to 30 m, the worst a point may
   // be, both settings cut the route at a raw point and Auto-pause notices the walk-off a few seconds late: there the
-  // chart's peak may differ from Auto-pause on's by up to 1.3 m/s either way (measured, 50 tries).
+  // chart's peak may differ from Auto-pause on's by up to 1.3 m/s either way (measured, 50 tries). There too a stand
+  // ended where the person set off cuts the route at a point up to 15 m from where they were: one try in 50 counts
+  // 16 m over the plain run, where the same stand as a pause counts 9 (truth 1,800 m, plain 1,841 m).
   it.each([
-    [5, 10],
-    [15, 10],
-    [20, 10],
-    [30, 150],
-  ])("sure to %s m, 50 tries: never a sprint Auto-pause on would not show (within %s cm/s), nor the stand's drift as metres", (accuracyM, peakLeeway) => {
+    [5, 10, 6],
+    [15, 10, 6],
+    [20, 10, 6],
+    [30, 150, 16],
+  ])("sure to %s m, 50 tries: never a sprint Auto-pause on would not show (within %s cm/s), nor the stand's drift as metres (within %s m)", (accuracyM, peakLeeway, overLeeway) => {
     let worstPeak = -Infinity;
     let worstOver = -Infinity;
     let worstUnder = -Infinity;
@@ -280,22 +403,28 @@ describe("round one: the step out of a stand, and seconds with no point", () => 
       worstUnder = Math.max(worstUnder, on.distanceM - sums.distanceM);
     }
     expect(worstPeak).toBeLessThanOrEqual(peakLeeway);
-    expect(worstOver).toBeLessThanOrEqual(6);
+    expect(worstOver).toBeLessThanOrEqual(overLeeway);
     expect(worstUnder).toBeLessThanOrEqual(10);
   });
 
-  // H1. A straight 30-minute run at 3 m/s sent with a 12.4 s stretch every 13 s, each 37 m long (honoured).
-  it("a made-up stretch every 13 s takes its metres with its time: never a pace faster than the person ran", () => {
+  // H1. A straight 30-minute run at 3 m/s sent with a 12.4 s stretch every 13 s, each 37 m long: honoured (37r), as
+  // the phone's own stand would be, so each takes its metres with its time. The pace chart's few metres between them
+  // peak at 311 cm/s on this 300 cm/s run (measured); the same list sent as pauses, which the server takes on trust,
+  // removes more.
+  it("a made-up stretch every 13 s takes its metres with its time: never a pace faster than the person ran, never more than made-up pauses", () => {
     const { fixes } = walk([{ seconds: 1800, speed: 3, accuracyM: 5, feel: "moving" }]);
     const end = endOf(fixes);
     const made: RunPause[] = [];
     for (let t = 1000; t + 12_400 <= end; t += 13_000) made.push([t, t + 12_400]);
     const plain = runSums(pointsOf(fixes), [], end, 70);
     const forged = runSums(pointsOf(fixes), [], end, 70, made);
+    const asPauses = runSums(pointsOf(fixes), made, end, 70);
     expect(forged.movingS).toBeGreaterThan(0);
     expect(forged.distanceM / forged.movingS).toBeLessThanOrEqual((plain.distanceM / plain.movingS) * 1.1);
-    expect(peak(forged.paceLine)).toBeLessThanOrEqual(peak(plain.paceLine) + 10);
+    expect(peak(forged.paceLine)).toBeLessThanOrEqual(peak(plain.paceLine) + 15);
     for (const split of forged.splitsKm) if (split.m === 1000) expect(split.s).toBeGreaterThanOrEqual(300);
+    expect(forged.distanceM).toBeGreaterThanOrEqual(asPauses.distanceM);
+    expect(forged.movingS).toBeGreaterThanOrEqual(asPauses.movingS);
   });
 
   // H2. Stand 60 s, then walk on at 1.5 m/s with no signal for the first 60 s of it.

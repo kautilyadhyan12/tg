@@ -66,7 +66,7 @@ import { FeelCard, NoteCard, PaceCard, RouteCard, RunFigures, SplitsCard } from 
 import { newRecords, RECORDS_PATH } from "./runRecords";
 import { RunMap, useMapScheme } from "./RunMap";
 import { useRunOutbox } from "./RunOutbox";
-import { currentPace, saveRequestOf, sentOf, sumsAt, sumsInSlices, trueStart } from "./runLive";
+import { currentPace, pacing, saveRequestOf, sentOf, sumsAt, sumsInSlices, trueStart } from "./runLive";
 import { clock, distance, pace, paceWord, runName, runWhen, unitWord, METRES_PER_MILE } from "./runWords";
 
 /** What stood in the way of Start, said under it with its button. */
@@ -567,7 +567,7 @@ function Live({ run, units, kg, onHide }: { run: LiveRun; units: Units; kg: numb
           <View style={styles.panelFigures}>
             <Figure label="Time" value={clock(moving)} dim={isPaused} />
             <Figure label="Distance" value={distance(metres, units)} unit={unitWord(units)} dim={isPaused} />
-            <Figure label="Current pace" value={currentPace(run.points, run.phase === "running", units, now - run.startedAt)} unit={paceWord(units)} dim={isPaused} />
+            <Figure label="Current pace" value={currentPace(run.points, pacing(run), units, now - run.startedAt)} unit={paceWord(units)} dim={isPaused} />
           </View>
           {controls}
         </View>
@@ -604,7 +604,7 @@ function Live({ run, units, kg, onHide }: { run: LiveRun; units: Units; kg: numb
           ) : null}
         </View>
         <View style={styles.pairs}>
-          <Figure label="Current pace" value={currentPace(run.points, run.phase === "running", units, now - run.startedAt)} unit={paceWord(units)} dim={isPaused} />
+          <Figure label="Current pace" value={currentPace(run.points, pacing(run), units, now - run.startedAt)} unit={paceWord(units)} dim={isPaused} />
           {/* No average until there is ground to average: a standing start reads as no pace. */}
           <Figure label="Average pace" value={pace(moving, metres < 50 ? 0 : metres, units)} unit={paceWord(units)} dim={isPaused} />
         </View>

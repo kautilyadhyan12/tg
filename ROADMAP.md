@@ -506,7 +506,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
    - V5. **Overview and getting in**, in four (2026-11-27; boards `Overview*`, `Phone`, `Banners`, `GymReady`, `Orgs`, `CreateGym`, `SignIn`, `StaffInvite`, `PhoneOverview`):
     - V5-a. [x] **Overview, the page** · merged 2026-11-27 · PR #662
     - V5-b. [x] **Overview's money boxes and the plan box** · merged 2026-11-28 · PR #664
-    - V5-c. [ ] **The banner above every page, and choosing a plan or its size** (`Banners`, `OverviewPlan`)
+    - V5-c. [x] **The banner above every page, and choosing a plan or its size** · merged 2026-11-28 · PR #666
     - V5-d. [ ] **Getting in**: your organisations, creating a business, signing in, a staff invitation (`Orgs`, `CreateGym`, `GymReady`, `SignIn`, `StaffInvite`)
    - V6. [ ] **Leads and At risk** (web folder 1): a lead, adding and importing leads, your gym page, At risk (`Lead*`, `GymPage`, `AtRisk*`).
    - V7. [ ] **Attendance and the front desk** (web folder 2; `Attendance*`, `Desk*`, `PhoneAttendance`).
@@ -830,8 +830,10 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
       - 37o. [x] **The run's clock against the GPS, sign-out during a run, the map, long runs and the server** · merged 2026-11-27 · PR #659
     - Two more running jobs (Kd, 2026-11-27, after asking about treadmills and the dot's beam: *"yes"*, `rulings/2026-11-27-37p.md`).
       - 37p. [x] **The dot's beam follows the phone** · merged 2026-11-28 · PR #661
-      - 37r. [ ] **A phone lying still draws no line, again** (built before 37q, Kd 2026-11-28): on Kd's phone after 37p's merge, lying still indoors with the motion saying still every second, a run counted 0.03 km and drew a line in 23 s. Find why 37k's still stretch did not hold, from that run (`reviews/standing-line-2026-11-28`).
-      - 37q. [ ] **Indoor run** (a treadmill, or inside the house): chosen before Start, with no GPS and no map; the distance from steps the phone's motion sensor counts, corrected to the treadmill's own after Finish. Split at its plan, after the other apps' practice is checked; whether such a run counts for records and the global board is Kd's to decide there.
+      - 37r. [x] **A phone lying still draws no line, again** · merged 2026-11-28 · PR #665
+      - 37q. **Indoor run** (split 2026-11-28 in two, Kd's "go": the server first; `rulings/2026-11-28-37q-i.md`).
+        - 37q-i. [x] **The server takes an indoor run** · merged 2026-11-28 · PR #667
+        - 37q-ii. [ ] **Indoor run on the phone**: chosen before Start, no GPS and no map, the distance from the phone's step count, the treadmill's distance typed at Finish; a drawing first. Then Kd's walk in the house measures how far the steps' distance is off.
 38. [ ] **The global board** (its reminders moved to item 19e on 2026-11-05): last, as Kd ruled on 2026-11-01 (`rulings/2026-11-01-17c-ii-a.md`): Active days and Running, the server's checks, a stranger's profile, and follow requests for somebody who chose Hide me, seen from outside their gym; Follow with Followers and Following counts everywhere, gyms included (`rulings/2026-11-01-17c-ii-b.md`). It waits for items 18, 37, 53 and 64.
 40. [ ] **Workouts and runs from your watch** (Kd, 2026-11-12, `rulings/2026-11-12-37f-i.md`), after 37f: Android's Health Connect and a file upload (GPX, TCX, FIT) first, then Garmin's and Polar's own connections (Kd applies to Garmin's); Apple Health with the iPhone version. Workouts and runs with their heart rate, calories and distance, and weight from a smart scale; never sleep or heart rate variability. Steps too, the phone's own and a watch's, through Health Connect on Android 14 and later and Apple Health on the iPhone (Kd, 2026-11-27, `rulings/2026-11-27-37p.md`).
 39. [ ] **Share with your photo** (Kd, 2026-10-18; spec Part 2 §11.8): after a workout, a meal photo or a run, the person takes or picks a photo and the stats are drawn on it, made on the phone and sent through the phone's own share menu. A run's map drawn on it hides its start and end near the person's home, as Strava's does (37a's plan, 2026-11-05). Built once for all three, after items 33 and 37 and exercise folder 2's 64; it brings Part 7 §5's share cards forward from After launch.

@@ -73,36 +73,25 @@ export function PlanRow({ plan, orgType, canPay, busy, working, onSubscribe, but
   const price = planPriceText(plan);
   if (price === null) return null;
   const fits = plan?.fits !== false;
+  // The board `OverviewPlan`: the size at the left, its price and its button at the right; on a
+  // narrow phone the button goes under them, the whole width.
   return (
-    <li
-      className="rounded-xl px-4 py-3 flex flex-col gap-2"
-      style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}
-    >
-      <div className="flex items-baseline justify-between gap-4">
-        <span className="text-sm" style={{ color: 'rgba(255,255,255,0.75)' }}>
-          {planSeatLabel(plan?.seatCap, orgType)}
-        </span>
-        <span className="font-semibold flex-shrink-0" style={{ color: '#fff' }}>
-          {price}
-        </span>
+    <li className="c-plan-row">
+      <div className="c-plan-row-words">
+        <span className="c-s15 c-w6 c-t1">{planSeatLabel(plan?.seatCap, orgType)}</span>
+        {canPay && !fits ? (
+          <span className="c-s14 c-t2">You have more {orgWords(orgType).people} than this plan allows.</span>
+        ) : null}
       </div>
-      {canPay && !fits ? (
-        <span className="text-xs" style={{ color: 'rgba(255,255,255,0.45)' }}>
-          You have more {orgWords(orgType).people} than this plan allows.
-        </span>
-      ) : null}
-      {canPay && fits ? (
-        <button
-          type="button"
-          onClick={() => onSubscribe(plan.code)}
-          disabled={busy}
-          className="self-stretch rounded-xl px-4 py-2.5 text-sm font-semibold flex items-center justify-center gap-2 disabled:opacity-50"
-          style={{ background: 'rgba(255,138,31,0.15)', color: '#FF8A1F', minHeight: 44 }}
-        >
-          {working ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-          {buttonText}
-        </button>
-      ) : null}
+      <div className="c-plan-row-end">
+        <span className="c-s15 c-w7 c-t1 c-num">{price}</span>
+        {canPay && fits ? (
+          <button type="button" onClick={() => onSubscribe(plan.code)} disabled={busy} className="c-btn c-btn-sm c-btn-s">
+            {working ? <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" /> : null}
+            {buttonText}
+          </button>
+        ) : null}
+      </div>
     </li>
   );
 }
@@ -332,15 +321,14 @@ export default function PlanModal({ org, onSignOut, signingOut = false }) {
   };
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      style={{ background: 'rgba(10,9,8,0.94)' }}
-      data-testid="plan-modal"
-    >
+    <div data-testid="plan-modal" className="contents">
+      {/* The cover: nearly solid, so nothing behind it can be read, and with NO `onClick`. */}
+      <div className="c-scrim c-scrim-shut" aria-hidden="true" />
       {/* `tabIndex={-1}` so the dialog can hold focus itself, and `onKeyDown`
           because every key inside it bubbles here — see `keepFocusInside`. The
           handler ONLY cycles Tab; it closes nothing, and there is deliberately
-          no Escape branch. */}
+          no Escape branch. In the third look (V5-c) it is the console's box in the
+          middle, rising from the bottom on a phone, its two ways out pinned at its foot. */}
       <div
         ref={dialogRef}
         role="dialog"
@@ -348,10 +336,9 @@ export default function PlanModal({ org, onSignOut, signingOut = false }) {
         aria-labelledby={titleId}
         tabIndex={-1}
         onKeyDown={keepFocusInside}
-        className="w-full max-w-md rounded-2xl p-6 max-h-[90vh] overflow-y-auto"
-        style={{ background: '#121110', border: '1px solid rgba(255,255,255,0.08)' }}
+        className="c-ask c-plan-gate"
       >
-        <h2 id={titleId} className="text-xl font-bold" style={{ color: '#fff' }}>
+        <h2 id={titleId} className="c-h2 m-0">
           {showing === 'trial'
             ? `Start your ${words.it}'s free trial`
             : showing === 'overdue'
@@ -362,52 +349,52 @@ export default function PlanModal({ org, onSignOut, signingOut = false }) {
         </h2>
 
         {showing === 'overdue' ? (
-          <>
-            <p className="text-sm mt-3" style={{ color: 'rgba(255,255,255,0.6)' }}>
+          <div className="c-stack-s">
+            <p className="c-s14 c-t1 m-0">
               A payment for your {words.it} didn&apos;t go through, so your {words.people} get the free
               app only and nothing here can be changed.
             </p>
             {org?.paymentOverdueThrough === 'razorpay' ? (
               // Paid through Razorpay (1d-ii): Pay now opens Razorpay's page for the bill owed.
               <>
-                <p className="text-sm mt-2" style={{ color: 'rgba(255,255,255,0.6)' }} data-testid="overdue-razorpay">
+                <p className="c-s14 c-t2 m-0" data-testid="overdue-razorpay">
                   Pay the bill that&apos;s owed and everything opens again by itself. To have your next
                   payments go through, update your payment method too.
                 </p>
-                <div className="mt-5">
-                  <RazorpayPlanActions org={org} />
+                <div className="mt-2">
+                  <RazorpayPlanActions main org={org} />
                 </div>
               </>
             ) : (
               <>
-                <p className="text-sm mt-2" style={{ color: 'rgba(255,255,255,0.6)' }}>
+                <p className="c-s14 c-t2 m-0">
                   Updating your payment method pays what&apos;s owed and opens everything again. Paddle
                   also tries your card again by itself; if that works, everything opens again on its own.
                 </p>
-                <div className="mt-5">
-                  <ManagePaymentButton gymId={gymId} label="Update payment method" onOpened={watchForPayment} />
+                <div className="mt-2">
+                  <ManagePaymentButton main gymId={gymId} label="Update payment method" onOpened={watchForPayment} />
                 </div>
               </>
             )}
             {overdueNote !== null ? (
-              <p className="text-sm mt-4" style={{ color: 'rgba(255,255,255,0.6)' }}>
+              <p role="status" className="c-s14 c-t2 m-0">
                 {overdueNote}
               </p>
             ) : null}
-          </>
+          </div>
         ) : showing === 'trial' ? (
-          <>
-            <p className="text-sm mt-3" style={{ color: 'rgba(255,255,255,0.6)' }}>
+          <div className="c-stack-s">
+            <p className="c-s14 c-t1 m-0">
               Your {words.people} get nothing extra for being in your {words.it} until it is on a
               plan.
             </p>
-            <p className="text-sm mt-2" style={{ color: 'rgba(255,255,255,0.6)' }}>
+            <p className="c-s14 c-t2 m-0">
               Your first {GYM_TRIAL_DAYS} days are free, for up to {GYM_TRIAL_MEMBERS} {words.people}. No card needed.
             </p>
-          </>
+          </div>
         ) : (
-          <>
-            <p className="text-sm mt-3" style={{ color: 'rgba(255,255,255,0.6)' }}>
+          <div className="c-stack-s">
+            <p className="c-s14 c-t1 m-0">
               {org?.trialEndedFirstPeople === true
                 ? `This ${words.it}'s free trial has ended because 11 of its ${words.people} came from another ${words.it} that already had one. Choose a plan to keep going.`
                 : org?.ownerTrialUsed !== true && (deviceSpent || org?.deviceTrialUsed === true)
@@ -417,37 +404,28 @@ export default function PlanModal({ org, onSignOut, signingOut = false }) {
                       `This ${words.it} has already had its free trial, so it needs a plan to start.`
                     : `This ${words.it}'s owner has already used their free trial, so this ${words.it} needs a plan to start.`}
             </p>
-            <p className="text-sm mt-2" style={{ color: 'rgba(255,255,255,0.6)' }}>
-              Until it has one, nobody can be checked in at your front desk.
-            </p>
-          </>
+            <p className="c-s14 c-t2 m-0">Until it has one, nobody can be checked in at your front desk.</p>
+          </div>
         )}
 
         {/* ── The price list, on the subscribe arm only ──────────────────── */}
         {showing === 'subscribe' ? (
-          <div className="mt-4">
+          <div>
             {plans.loading ? (
-              <div className="flex items-center gap-3 py-4" style={{ color: 'rgba(255,255,255,0.45)' }}>
-                <Loader2 className="w-4 h-4 animate-spin" />
-                <span className="text-sm">Loading your plans…</span>
-              </div>
+              <p role="status" className="c-s14 c-t2 m-0 flex items-center gap-2">
+                <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
+                Loading your plans…
+              </p>
             ) : null}
 
             {!plans.loading && plans.error !== null ? (
-              <div
-                className="rounded-xl p-4 flex flex-col gap-3"
-                style={{ background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.25)' }}
-              >
-                <p className="text-sm" style={{ color: 'rgba(255,255,255,0.85)' }}>
-                  {plans.error}
-                </p>
+              <div className="c-callout c-callout-bad flex-col">
+                <p className="c-s14 c-t1 m-0">{plans.error}</p>
                 {/* A failed READ is worth retrying — unlike the trial's two
                     permanent refusals, which is why only this side has a Try
                     again. `isRetryable` withholds the button on a 403 and on
                     the two permanent 409 codes, `gym_not_on_plan` and
-                    `trial_already_used` (T3 round 1, Low-3: this said "403 as
-                    the one", which the 409s stopped being true of on the day
-                    they were added). Neither 409 can arrive on THIS path — it
+                    `trial_already_used`. Neither 409 can arrive on THIS path — it
                     is a plans read — so what the predicate does here is let a
                     genuine failure through. */}
                 {plans.retryable ? (
@@ -457,8 +435,7 @@ export default function PlanModal({ org, onSignOut, signingOut = false }) {
                       setPlans({ loading: true, error: null, retryable: true, list: null, payOnline: 'unavailable', supportEmail: null });
                       setAttempt((n) => n + 1);
                     }}
-                    className="self-start rounded-xl px-4 py-2 text-sm font-medium"
-                    style={{ background: 'rgba(255,138,31,0.15)', color: '#FF8A1F' }}
+                    className="c-btn c-btn-sm c-btn-s self-start"
                   >
                     Try again
                   </button>
@@ -468,7 +445,7 @@ export default function PlanModal({ org, onSignOut, signingOut = false }) {
 
             {!plans.loading && plans.error === null && plans.list !== null ? (
               plans.list.length > 0 ? (
-                <ul className="flex flex-col gap-2" data-testid="plan-list">
+                <ul className="c-plan-list" data-testid="plan-list">
                   {plans.list.map((p) => (
                     <PlanRow
                       key={p.code}
@@ -482,22 +459,11 @@ export default function PlanModal({ org, onSignOut, signingOut = false }) {
                   ))}
                 </ul>
               ) : (
-                /* AN EMPTY BOOK IS A REAL ANSWER AND THIS CARD IS WHERE IT WAS
-                   RULED ON. T3 round 1 on the server half found that the route
-                   reads `gyms.currency_display` — a stored column — while the
-                   guard proving every currency has a book walks the country
-                   MAP, so a gym still carrying a currency the book has since
-                   dropped gets a 200 and no plans. It was deferred to this card
-                   with an `OWED.md` line, because an unskippable prompt is what
-                   turns a 200-with-nothing into somebody staring at a wall.
-
-                   DECIDED HERE: THE SCREEN SAYS SOMETHING TRUE, rather than the
-                   service refusing. A typed refusal would leave the owner on an
-                   error card behind a prompt they cannot close — a dead end
-                   dressed as a failure — while this is the same sentence the
-                   arm already ends on, and it needs no server change (R1.1).
-                   Bounded and currently empty on the shared branch. */
-                <p className="text-sm" style={{ color: 'rgba(255,255,255,0.75)' }}>
+                /* AN EMPTY BOOK IS A REAL ANSWER: a gym still carrying a currency the
+                   book has since dropped gets a 200 and no plans. The screen says
+                   something true rather than leaving the owner on an error card behind
+                   a prompt they cannot close. */
+                <p className="c-s14 c-t1 m-0">
                   We don&apos;t have plans listed in your {words.it}&apos;s currency yet.
                 </p>
               )
@@ -507,38 +473,25 @@ export default function PlanModal({ org, onSignOut, signingOut = false }) {
 
         {/* The server's own sentence for a refusal — never re-worded here, and
             never under a Try again: both of the trial door's refusals are
-            permanent (the owner's one trial is spent; their currency has no
-            price book), so a retry button would promise that pressing again
+            permanent, so a retry button would promise that pressing again
             might work. */}
         {(error ?? payError) !== null ? (
-          <p className="text-sm mt-4" style={{ color: '#ef4444' }}>
+          <p role="alert" className="c-err m-0">
             {error ?? payError}
           </p>
         ) : null}
 
         {showing === 'overdue' || (showing === 'trial' && waitsForOwner) ? null : showing === 'trial' && needsCode ? (
-          <button
-            type="button"
-            onClick={onSignOut}
-            disabled={signingOut}
-            className="mt-5 w-full rounded-xl px-4 py-3 text-sm font-semibold flex items-center justify-center gap-2 disabled:opacity-50"
-            style={{ background: 'rgba(255,138,31,0.15)', color: '#FF8A1F' }}
-          >
+          <button type="button" onClick={onSignOut} disabled={signingOut} className="c-btn c-btn-lg c-btn-p c-btn-w">
             {signingOut ? 'Signing out…' : 'Sign in with an email code'}
           </button>
         ) : showing === 'trial' ? (
-          <button
-            type="button"
-            onClick={start}
-            disabled={busy}
-            className="mt-5 w-full rounded-xl px-4 py-3 text-sm font-semibold flex items-center justify-center gap-2 disabled:opacity-50"
-            style={{ background: 'rgba(255,138,31,0.15)', color: '#FF8A1F' }}
-          >
-            {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+          <button type="button" onClick={start} disabled={busy} className="c-btn c-btn-lg c-btn-p c-btn-w">
+            {busy ? <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" /> : null}
             {busy ? 'Starting…' : `Start your ${GYM_TRIAL_DAYS}-day free trial`}
           </button>
         ) : (
-          <p className="text-sm mt-5" style={{ color: 'rgba(255,255,255,0.6)' }}>
+          <p className="c-s14 c-t2 m-0">
             {paying?.phase === 'confirming'
               ? 'Confirming your payment…'
               : payNote !== null
@@ -553,18 +506,18 @@ export default function PlanModal({ org, onSignOut, signingOut = false }) {
 
         {/* How to reach us, and a second-trial code from us (2e-i): only where a plan is needed. */}
         {showing === 'subscribe' ? (
-          <div className="mt-5 pt-4" style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+          <div className="c-plan-gate-part c-stack-s">
             {plans.supportEmail !== null ? (
-              <p className="text-sm" style={{ color: 'rgba(255,255,255,0.6)' }}>
+              <p className="c-s14 c-t2 m-0">
                 Questions, or opening a second {words.it}? Write to us at{' '}
-                <a href={`mailto:${plans.supportEmail}`} style={{ color: '#FF8A1F' }}>
+                <a href={`mailto:${plans.supportEmail}`} className="c-lk">
                   {plans.supportEmail}
                 </a>
                 .
               </p>
             ) : null}
-            <form onSubmit={submitCode} className="mt-3 flex flex-col gap-2">
-              <label htmlFor={`${titleId}-code`} className="text-sm" style={{ color: 'rgba(255,255,255,0.75)' }}>
+            <form onSubmit={submitCode} className="c-field">
+              <label htmlFor={`${titleId}-code`} className="c-label">
                 Have a free trial code from us?
               </label>
               <div className="flex gap-2">
@@ -576,32 +529,16 @@ export default function PlanModal({ org, onSignOut, signingOut = false }) {
                   maxLength={40}
                   autoComplete="off"
                   spellCheck={false}
-                  className="flex-1 min-w-0 rounded-xl px-3 py-3 text-sm uppercase"
-                  style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.12)', color: '#fff' }}
+                  className="c-input flex-1 min-w-0 uppercase"
                 />
-                <button
-                  type="submit"
-                  disabled={usingCode || code.trim() === ''}
-                  className="rounded-xl px-4 py-3 text-sm font-semibold flex items-center gap-2 disabled:opacity-50"
-                  style={{ background: 'rgba(255,138,31,0.15)', color: '#FF8A1F' }}
-                >
-                  {usingCode ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                <button type="submit" disabled={usingCode || code.trim() === ''} className="c-btn c-btn-s">
+                  {usingCode ? <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" /> : null}
                   {usingCode ? 'Checking…' : 'Use code'}
                 </button>
               </div>
-              {codeError !== null ? (
-                <p className="text-sm" style={{ color: '#ef4444' }}>
-                  {codeError}
-                </p>
-              ) : null}
+              {codeError !== null ? <p className="c-err m-0">{codeError}</p> : null}
               {needsCode ? (
-                <button
-                  type="button"
-                  onClick={onSignOut}
-                  disabled={signingOut}
-                  className="w-full rounded-xl px-4 py-3 text-sm font-semibold flex items-center justify-center gap-2 disabled:opacity-50"
-                  style={{ background: 'rgba(255,138,31,0.15)', color: '#FF8A1F' }}
-                >
+                <button type="button" onClick={onSignOut} disabled={signingOut} className="c-btn c-btn-lg c-btn-p c-btn-w">
                   {signingOut ? 'Signing out…' : 'Sign in with an email code'}
                 </button>
               ) : null}
@@ -610,24 +547,19 @@ export default function PlanModal({ org, onSignOut, signingOut = false }) {
         ) : null}
 
         {/* A gym on no plan may still take a copy of its own list (Stage 4 item 14) and its payments (18n). */}
-        {showing === 'trial' ? null : <ListDownload org={org} />}
-        {showing === 'trial' ? null : <PaymentsDownloadAll org={org} />}
+        {showing === 'trial' ? null : (
+          <div className="c-plan-gate-part c-stack-s">
+            <ListDownload org={org} />
+            <PaymentsDownloadAll org={org} />
+          </div>
+        )}
 
-        {/* ── The two ways out, and neither is a way past ─────────────────── */}
-        <div
-          className="mt-6 pt-4 flex items-center justify-between gap-4"
-          style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}
-        >
-          <Link to="/console" className="text-sm" style={{ color: 'rgba(255,255,255,0.55)' }}>
+        {/* ── The two ways out, and neither is a way past: pinned at the foot, in sight however long the box ── */}
+        <div className="c-ask-foot c-plan-gate-foot">
+          <Link to="/console" className="c-btn c-btn-quiet">
             Your organisations
           </Link>
-          <button
-            type="button"
-            onClick={onSignOut}
-            disabled={signingOut}
-            className="text-sm disabled:opacity-50"
-            style={{ color: 'rgba(255,255,255,0.55)' }}
-          >
+          <button type="button" onClick={onSignOut} disabled={signingOut} className="c-btn c-btn-quiet">
             {signingOut ? 'Signing out…' : 'Sign out'}
           </button>
         </div>

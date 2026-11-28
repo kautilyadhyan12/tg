@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { X } from 'lucide-react';
+import { AlertTriangle, Clock, CreditCard, Users, X } from 'lucide-react';
 import { bannerFor, bannerIsDismissed, dismissBanner } from '../../pages/console/billingView';
 import { viewerPrivileges } from '../../pages/console/consoleView';
 import { PLAN_SECTION, placeFor } from '../../pages/console/consolePlaces';
@@ -34,6 +34,16 @@ const TONES = {
   info: 'c-banner-info',
 };
 
+/** Its picture, as the board `Banners` draws each: a warning for a gym shut, a card for a payment,
+ *  a clock for the trial, people for a nearly full plan. */
+const ICONS = {
+  read_only: AlertTriangle,
+  past_due: CreditCard,
+  trial_urgent: Clock,
+  seat_pressure: Users,
+  trial_info: Clock,
+};
+
 export default function ConsoleBanner({ org }) {
   // A dismissal is remembered in per-user storage, so this state exists only to
   // re-render the moment it is pressed. Seeded from storage on mount, which is
@@ -55,49 +65,48 @@ export default function ConsoleBanner({ org }) {
   }
 
   const tone = TONES[banner.tone] ?? TONES.info;
+  const Icon = ICONS[banner.key] ?? AlertTriangle;
 
+  // A rounded box at the top of the page, its words beside its picture and its buttons at the end;
+  // on a phone the button goes under the words (the board `Banners`, V5-c).
   return (
-    <div
-      role="status"
-      data-testid="console-banner"
-      className={`flex items-center gap-3 px-4 md:px-8 py-2.5 text-sm ${tone}`}
-    >
-      <span className="flex-1">
-        {banner.text}
-        {/* A sentence that sends the reader to Plan has a button that opens it (23d). */}
-        {banner.place ? (
-          <>
-            {' '}
-            <PlaceLink
-              to={placeFor(org?.slug, viewerPrivileges(org), banner.place)}
-              className="c-btn-link c-w6 underline"
-              style={{ color: 'inherit', display: 'inline' }}
-              // Already on the Overview, at this address: the address does not change, so
-              // nothing would move. The plan is brought into view by the press itself.
-              onClick={() => document.getElementById(PLAN_SECTION)?.scrollIntoView?.({ block: 'start' })}
-            >
-              Open Plan
-            </PlaceLink>
-          </>
+    <div className="c-banner-at">
+      <div role="status" data-testid="console-banner" className={`c-banner ${tone}`}>
+        <Icon aria-hidden="true" className="c-banner-ic" />
+        <p className="c-banner-text c-s14 c-t1 m-0">{banner.text}</p>
+        {banner.place || (banner.dismissible && gymId !== null) ? (
+          <div className="c-banner-acts">
+            {/* A sentence that sends the reader to Plan has a button that opens it (23d). */}
+            {banner.place ? (
+              <PlaceLink
+                to={placeFor(org?.slug, viewerPrivileges(org), banner.place)}
+                className="c-btn c-btn-sm c-btn-s"
+                // Already on the Overview, at this address: the address does not change, so
+                // nothing would move. The plan is brought into view by the press itself.
+                onClick={() => document.getElementById(PLAN_SECTION)?.scrollIntoView?.({ block: 'start' })}
+              >
+                Open Plan
+              </PlaceLink>
+            ) : null}
+            {banner.dismissible && gymId !== null ? (
+              <button
+                type="button"
+                /* "Dismiss" and not "Close": it comes back tomorrow (§4.2's
+                   "dismissible/day"), and a label promising it is gone for good would
+                   be the small false thing this console keeps being audited for. */
+                aria-label="Dismiss until tomorrow"
+                onClick={() => {
+                  dismissBanner(gymId, banner.key);
+                  setClosedAt(Date.now());
+                }}
+                className="c-icon-btn c-t2"
+              >
+                <X aria-hidden="true" className="w-5 h-5" />
+              </button>
+            ) : null}
+          </div>
         ) : null}
-      </span>
-      {banner.dismissible && gymId !== null ? (
-        <button
-          type="button"
-          /* "Dismiss" and not "Close": it comes back tomorrow (§4.2's
-             "dismissible/day"), and a label promising it is gone for good would
-             be the small false thing this console keeps being audited for. */
-          aria-label="Dismiss until tomorrow"
-          onClick={() => {
-            dismissBanner(gymId, banner.key);
-            setClosedAt(Date.now());
-          }}
-          className="flex-shrink-0 rounded-lg p-1"
-          style={{ color: 'inherit' }}
-        >
-          <X className="w-4 h-4" />
-        </button>
-      ) : null}
+      </div>
     </div>
   );
 }

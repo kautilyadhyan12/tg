@@ -5,8 +5,11 @@
 /** Raised whenever a rule below changes, and kept with each saved run. 2 (37c-iii): standing is judged on the
  *  smoothed path over 40 s, so a phone's wander and drift while standing no longer hide the stop. 3: standing,
  *  the route holds still, so the wander adds no metres and draws no line (testers on Google Play, 2026-11-17).
- *  4 (37k): the stretches the phone felt still are standing too; with none, every number is 3's. */
-export const RUN_CALC_VERSION = 4;
+ *  4 (37k): the stretches the phone felt still are standing too; with none, every number is 3's. 5 (37r): such a
+ *  stretch is standing wherever its points stay within `travelMetresAt` of its first (40 m, or four times how sure the
+ *  point is: up to 120 m), however fast they got there (a GPS just found indoors went 36 m in 5 s while the phone lay
+ *  still); with none, every number is 4's. */
+export const RUN_CALC_VERSION = 5;
 
 /** A point: milliseconds since the run started, latitude, longitude, and how sure the phone was of
  *  it in metres (Android's horizontal accuracy; null when the phone did not say). */
@@ -205,6 +208,18 @@ export function metAtSpeed(metresPerSecond: number): number {
 /** kcal = MET × kg × hours, as the app's workouts already count (`workouts/calories.ts`). */
 const kcalFor = (metresPerSecond: number, kg: number, seconds: number): number =>
   (metAtSpeed(metresPerSecond) * kg * seconds) / 3600;
+
+/** A run's calories: each kilometre at its own speed, and any moving time no step covers (before the first point, a
+ *  gap in the signal) at the run's average speed. `stepS`: the seconds the steps cover; `kg` the person's weight, 70
+ *  where there is none. Outdoors and indoors (`indoorRun.ts`) alike. */
+export function kcalOfRun(splitsKm: readonly RunSplit[], movingS: number, distanceM: number, stepS: number, kg: number): number {
+  const average = movingS > 0 ? distanceM / movingS : 0;
+  const weight = kg > 0 ? kg : 70;
+  return (
+    splitsKm.reduce((sum, split) => sum + (split.s > 0 ? kcalFor(split.m / split.s, weight, split.s) : 0), 0) +
+    (movingS > stepS ? kcalFor(average, weight, movingS - stepS) : 0)
+  );
+}
 
 // ── The run ───────────────────────────────────────────────────────────────────────────────────
 
@@ -624,7 +639,9 @@ export function paceLineOf(steps: readonly Step[]): number[] {
   return out;
 }
 
-function splitsOf(steps: readonly Step[], every: number): RunSplit[] {
+/** The run cut into whole `every` metres and what is left at the end, each with its moving seconds, over its steps
+ *  (metres and moving seconds each). */
+export function splitsOf(steps: readonly Step[], every: number): RunSplit[] {
   const out: RunSplit[] = [];
   let m = 0;
   let s = 0;
@@ -777,8 +794,13 @@ function standingWithin(spans: Spans, from: number, to: number): number {
 
 /** The still stretches (37k) the run's points let stand, each from its first point to its last: the one at its end
  *  left out where the person moved off (Auto-pause dates moving again to the first point that moved), kept where the
- *  run's end or a pause ended it; two points at least, every one within `travelMetresAt` of the first, and going
- *  nowhere at a walk. Seconds with no point in them are never taken for standing (round one, H2). */
+ *  run's end or a pause ended it; two points at least, and every one within `travelMetresAt` of the first (40 m, or
+ *  four times how sure the point is: up to 120 m), as far as the phone's own rule lets a phone that feels still go
+ *  before it is believed to travel. How fast the points got
+ *  there is not asked (37r): a GPS just found indoors went 36 m in 5 s on a phone lying still. The phone ends a
+ *  stretch where a pram sets off (Auto-pause's `goByTravel`), and a stretch made up over a walk takes its metres with
+ *  its time, as a made-up pause does, so it can do no more than one.
+ *  Seconds with no point in them are never taken for standing (round one, H2). */
 function stillHeld(piece: readonly Fix[], held: readonly [number, number][], from: number, to: number): [number, number][] {
   const kept: [number, number][] = [];
   // The stretches are in order and apart (cleanPauses), as are the piece's points: the first stretch ending after
@@ -806,48 +828,10 @@ function stillHeld(piece: readonly Fix[], held: readonly [number, number][], fro
       i1 = i;
     }
     const last = piece[i1];
-    if (!near || last === undefined || i1 === i0 || trendSpeed(piece, i0, i1) >= STAND_TREND_MPS) continue;
+    if (!near || last === undefined || i1 === i0) continue;
     kept.push([first.at, last.at]);
   }
   return kept;
-}
-
-/** A walk's pace (Auto-pause's GO_MPS): points going along this fast, or faster, are walking, not standing. */
-const STAND_TREND_MPS = 1;
-
-/** How fast the points `i0` to `i1` go along, in metres a second: the least-squares line through their places over
- *  time. A standing phone's wander drifts far slower (about a quarter of a metre a second sure to 30 m, the bug
- *  hunt's model), so a stretch made up over a walk or a ride is never taken for a stand, whatever accuracy it claims. */
-function trendSpeed(piece: readonly Fix[], i0: number, i1: number): number {
-  const origin = piece[i0];
-  if (origin === undefined) return 0;
-  const s0 = Math.sin(origin.lat * RAD);
-  const w = Math.sqrt(1 - WGS84_E2 * s0 * s0);
-  const northPerDeg = ((WGS84_A * (1 - WGS84_E2)) / (w * w * w)) * RAD;
-  const eastPerDeg = (WGS84_A / w) * Math.cos(origin.lat * RAD) * RAD;
-  let n = 0;
-  let st = 0;
-  let sx = 0;
-  let sy = 0;
-  let stt = 0;
-  let stx = 0;
-  let sty = 0;
-  for (let i = i0; i <= i1; i++) {
-    const fix = piece[i];
-    if (fix === undefined) continue;
-    const t = (fix.at - origin.at) / 1000;
-    const x = (fix.lng - origin.lng) * eastPerDeg;
-    const y = (fix.lat - origin.lat) * northPerDeg;
-    n++;
-    st += t;
-    sx += x;
-    sy += y;
-    stt += t * t;
-    stx += t * x;
-    sty += t * y;
-  }
-  const spread = n * stt - st * st;
-  return n < 2 || spread <= 0 ? 0 : Math.hypot((n * stx - st * sx) / spread, (n * sty - st * sy) / spread);
 }
 
 /** A piece cut where it stands (37k): the walk to each stand ends at its first point, the walk from it begins at its
@@ -997,14 +981,7 @@ export function* runSumsInSlices(points: readonly RunPoint[], pauses: readonly R
   const splitsKm = splitsOf(steps, 1000);
   const paceLine = paceLineOf(steps);
   yield;
-  // Calories: each kilometre at its own speed, and any moving time no step covers (before the first
-  // point, a gap in the signal) at the run's average speed.
-  const stepS = steps.reduce((sum, step) => sum + step.s, 0);
-  const average = movingS > 0 ? distanceM / movingS : 0;
-  const weight = kg > 0 ? kg : 70;
-  const kcal =
-    splitsKm.reduce((sum, split) => sum + (split.s > 0 ? kcalFor(split.m / split.s, weight, split.s) : 0), 0) +
-    (movingS > stepS ? kcalFor(average, weight, movingS - stepS) : 0);
+  const kcal = kcalOfRun(splitsKm, movingS, distanceM, steps.reduce((sum, step) => sum + step.s, 0), kg);
   const splitsMi = splitsOf(steps, 1609.344);
   yield;
   const k1 = fastestStretch(segments, RECORD_DISTANCES_M.k1);
@@ -1051,7 +1028,7 @@ function clockAtDistance(marks: readonly RunMark[], d: number, from: { k: number
 
 /** `n` evenly spaced places from the start to the finish (as `paceLineOf` places them), each as the
  *  stretch of the clock from halfway back to the place before to halfway on to the next. */
-function placeSpansOf(marks: readonly RunMark[], n: number): [number, number][] {
+export function placeSpansOf(marks: readonly RunMark[], n: number): [number, number][] {
   const total = marks[marks.length - 1]?.d ?? 0;
   if (n < 2 || total <= 0) return [];
   const half = total / (n - 1) / 2;

@@ -1051,3 +1051,38 @@ describe('who the prompt stops', () => {
     expect(screen.getByText(/owner has already used their free trial/i)).toBeTruthy();
   });
 });
+
+// V5-c, THE WORST THING: the third look draws the prompt as the console's box in the middle, over the
+// same dark cover every other box has, and every other box closes when that cover is pressed. This one
+// must not: a gym on no plan that closed it would think its console was working.
+describe('V5-c: the prompt in the third look still cannot be closed', () => {
+  it('pressing the cover, Escape on the page or the box, and every key leave it there; no X is drawn', async () => {
+    orgService.getMine.mockResolvedValue(mineIs(ORG));
+    const { container } = renderConsole(Overview);
+    const dialog = await screen.findByRole('dialog');
+    expect(dialog.className).toContain('c-ask');
+    const cover = container.ownerDocument.querySelector('.c-scrim-shut');
+    expect(cover).not.toBeNull();
+    fireEvent.click(cover);
+    fireEvent.mouseDown(cover);
+    fireEvent.keyDown(document, { key: 'Escape', code: 'Escape' });
+    fireEvent.keyDown(dialog, { key: 'Escape', code: 'Escape' });
+    expect(screen.getByTestId('plan-modal')).toBeTruthy();
+    expect(screen.getByRole('dialog')).toBe(dialog);
+    expect(within(dialog).queryByRole('button', { name: /close|dismiss|not now|later|skip|×/i })).toBeNull();
+    expect(within(dialog).getByRole('button', { name: /start your 10-day free trial/i })).toBeTruthy();
+  });
+
+  it('its two ways out are in its foot, pinned in sight, and lead out of the business, not past the prompt', async () => {
+    orgService.getMine.mockResolvedValue(mineIs({ ...ORG, ownerTrialUsed: true }));
+    renderConsole(Overview);
+    const dialog = await screen.findByRole('dialog');
+    await within(dialog).findByTestId('plan-list');
+    const foot = dialog.querySelector('.c-ask-foot');
+    expect(foot).not.toBeNull();
+    expect(within(foot).getByRole('link', { name: 'Your organisations' }).getAttribute('href')).toBe('/console');
+    expect(within(foot).getByRole('button', { name: 'Sign out' })).toBeTruthy();
+    // The foot is the box's last part, so nothing it holds can be scrolled under the list.
+    expect(dialog.lastElementChild).toBe(foot);
+  });
+});

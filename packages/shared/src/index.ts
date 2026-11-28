@@ -35,6 +35,7 @@ export * from "./labelRead.js";
 export * from "./mealVision.js";
 export * from "./geo.js";
 export * from "./runMaths.js";
+export * from "./indoorRun.js";
 export * from "./heartRate.js";
 export * from "./runPlan.js";
 export * from "./runClimb.js";

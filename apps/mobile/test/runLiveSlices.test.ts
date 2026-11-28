@@ -2,7 +2,7 @@
 // one go, every few seconds, and the clock and every button stood still for it. The answer must be the summary's own,
 // number for number; the work must really stop for the screen; a run that changes meanwhile must not change it.
 import { describe, expect, it } from "vitest";
-import { runSums, runSumsInSlices, type RunPoint } from "@app/shared";
+import { runSums, runSumsInSlices, type RunPoint, type RunSums } from "@app/shared";
 import type { LiveRun } from "../src/screens/running/recorder";
 import { sumsAt, sumsInSlices } from "../src/screens/running/runLive";
 
@@ -28,6 +28,14 @@ describe("the live numbers a slice at a time", () => {
     const at = 3 * 3_600_000;
     const sums = await new Promise((resolve) => sumsInSlices(run, at, 72, resolve));
     expect(JSON.stringify(sums)).toBe(JSON.stringify(sumsAt(run, at, 72)));
+  });
+
+  it("give the summary's own sums with the seconds the phone feels still before Auto-pause decides (37r)", async () => {
+    const run: LiveRun = { ...live(hours(1)), feltStillFrom: 3_590_000 };
+    const at = 3_600_000;
+    const sums = await new Promise<RunSums>((resolve) => sumsInSlices(run, at, 72, resolve));
+    expect(JSON.stringify(sums)).toBe(JSON.stringify(sumsAt(run, at, 72)));
+    expect(sums.distanceM).toBeLessThan(sumsAt(live(hours(1)), at, 72).distanceM - 20);
   });
 
   it("stop for the screen many times on a day's run, never doing a day at once", () => {

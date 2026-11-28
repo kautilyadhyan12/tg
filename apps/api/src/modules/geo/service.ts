@@ -6,7 +6,7 @@
 // candidates only.
 import type { FastifyBaseLogger } from "fastify";
 import type { Sql } from "postgres";
-import { RUN_CALC_VERSION, RUN_CHOICES, hasOwnRun, ownCapOf, ownPlanOf, ownWeekSchema, planDayPlus, restartsPlan, runChoiceOf, runPlanAnswersSchema, runPlanOf, runsFrom, sameRace, climbFromHeights, climbSamples, heartLineFrom, heartLineSchema, heartMaxOf, heartStretches, heartSumsFrom, heartZoneSecondsFrom, heartZonesSchema, type HeartMaxResponse, type HeartZones, decodePolyline, encodePolyline, hillLineOf, hillLineSchema, paceLineSchema, routeShape, runSplitSchema, runSums } from "@app/shared";
+import { INDOOR_CALC_VERSION, indoorSums, stepBasisOf, RUN_CALC_VERSION, RUN_CHOICES, hasOwnRun, ownCapOf, ownPlanOf, ownWeekSchema, planDayPlus, restartsPlan, runChoiceOf, runPlanAnswersSchema, runPlanOf, runsFrom, sameRace, climbFromHeights, climbSamples, heartLineFrom, heartLineSchema, heartMaxOf, heartStretches, heartSumsFrom, heartZoneSecondsFrom, heartZonesSchema, type HeartMaxResponse, type HeartZones, decodePolyline, encodePolyline, hillLineOf, hillLineSchema, paceLineSchema, routeShape, runSplitSchema, runSums } from "@app/shared";
 import type {
   GenerateRoutesRequest,
   RouteCandidate,
@@ -17,7 +17,9 @@ import type {
   ChangeRunRequest,
   RunDaysResponse,
   RunDetail,
+  RunDistanceFrom,
   RunMonthTotal,
+  RunSums,
   RunRecord,
   RunRecordKind,
   OwnWeek,
@@ -28,6 +30,7 @@ import type {
   RunSummary,
   SaveRunRequest,
   SavedRun,
+  StepLength,
 } from "@app/shared";
 import { z } from "zod";
 import { onWorkoutSynced } from "../gamification/service.js";
@@ -141,7 +144,11 @@ const asRunSummary = (r: repo.RunRow): RunSummary => ({
   elapsedS: Math.max(r.elapsedS ?? r.durationS, r.durationS),
   climbM: r.climbM,
   shape: r.shape,
+  indoor: r.indoor,
 });
+
+/** Where a run's distance is from (37q): the GPS outdoors; indoors, a treadmill's own where one was taken, else the steps. */
+const distanceFromOf = (indoor: boolean, treadmillM: number | null): RunDistanceFrom => (!indoor ? "gps" : treadmillM !== null ? "treadmill" : "steps");
 
 /** The person's own time zone, for days and months (an unknown one reads as UTC). */
 const zoneOf = async (deps: ReadDeps, userId: string): Promise<string> => safeTimeZone((await getUserSyncContext(deps.sql, userId)).timezone);
@@ -239,6 +246,8 @@ const asRunDetail = (row: repo.RunDetailRow): RunDetail => {
   return {
     ...asRunSummary(row),
     polyline: line === null || row.polyline === null ? null : row.legacy ? encodePolyline(line) : row.polyline,
+    distanceFrom: distanceFromOf(row.indoor, row.treadmillM),
+    steps: row.steps,
     trackStarts: row.legacy ? [0] : splits.success ? (splits.data.starts ?? [0]) : [0],
     splitsKm: splits.success ? splits.data.km : [],
     splitsMi: splits.success ? splits.data.mi : [],
@@ -337,6 +346,9 @@ const asSavedRun = (r: repo.SavedRunRow): SavedRun => {
     heartAvg: r.heart?.avg ?? null,
     heartMax: r.heart?.max ?? null,
     heartZones: zonesOf(r),
+    indoor: r.indoor !== null,
+    distanceFrom: distanceFromOf(r.indoor !== null, r.indoor?.treadmillM ?? null),
+    steps: r.indoor?.steps ?? null,
   };
 };
 
@@ -439,8 +451,17 @@ export function startedAtKept(sent: Date, elapsedMs: number, now: Date): Date {
   return sent.getTime() + elapsedMs > now.getTime() ? new Date(now.getTime() - elapsedMs) : sent;
 }
 
+/** What an indoor run's steps are measured with (37q): the person's height and what their treadmill runs taught, as
+ *  the next indoor run will be saved with them. */
+export async function stepLength(deps: ReadDeps, userId: string): Promise<StepLength> {
+  const kept = await repo.getStepLessons(deps.sql, userId);
+  const basis = stepBasisOf(kept.heightCm, kept.lessons);
+  return { heightCm: basis.heightCm, heightKnown: basis.heightKnown, factor: basis.factor, learnedFrom: basis.learnedFrom };
+}
+
 /** Works every number out from the points with the shared rules and saves the run once. The
- *  person's weight is the one they keep (70 kg when there is none), as workouts' calories are. */
+ *  person's weight is the one they keep (70 kg when there is none), as workouts' calories are. An indoor run (37q)
+ *  is worked out from its step counts instead, with no route, no climb and no best efforts. */
 export async function saveRun(
   deps: ReadDeps & { now: () => Date; heights: HeightMap; log: Pick<FastifyBaseLogger, "error"> },
   userId: string,
@@ -448,9 +469,24 @@ export async function saveRun(
 ): Promise<{ status: "created" | "duplicate"; run: SavedRun }> {
   const startedAt = startedAtKept(new Date(input.startedAt), input.elapsedMs, deps.now());
   const ctx = await getUserSyncContext(deps.sql, userId);
-  const sums = runSums(input.points, input.pauses, input.elapsedMs, ctx.weightKg ?? 0, input.still);
+  const kg = ctx.weightKg ?? 0;
+  let sums: RunSums;
+  let polyline: string | null;
+  let calcVersion = RUN_CALC_VERSION;
+  let indoor: repo.NewRun["indoor"] = null;
+  if (input.indoor === undefined) {
+    sums = runSums(input.points, input.pauses, input.elapsedMs, kg, input.still);
+    polyline = encodePolyline(sums.track);
+  } else {
+    // The basis the phone showed the run with, read again here: the server's own numbers are the ones kept.
+    const kept = await repo.getStepLessons(deps.sql, userId);
+    const counted = indoorSums(input.indoor.counts, input.pauses, input.elapsedMs, kg, stepBasisOf(kept.heightCm, kept.lessons), input.indoor.treadmillM);
+    sums = counted;
+    polyline = null;
+    calcVersion = INDOOR_CALC_VERSION;
+    indoor = { steps: counted.steps, plainM: counted.plainM, treadmillM: counted.distanceFrom === "treadmill" ? input.indoor.treadmillM : null };
+  }
   const note = input.note === null || input.note === "" ? null : input.note;
-  const polyline = encodePolyline(sums.track);
   // The heart rate chart and the zones (37f-ii-a), worked out here from the readings and the person's
   // maximum as it is now, and kept as they were on the day; the readings themselves are not kept.
   // The readings are put in order and cut at the pauses once, for all three.
@@ -459,13 +495,16 @@ export async function saveRun(
   const heartLine = heart === null ? [] : heartLineFrom(stretches, sums.paceSpans);
   const maxNow = heart === null ? null : await heartMaxNow(deps.sql, userId);
   const zoneSeconds = maxNow === null ? null : heartZoneSecondsFrom(stretches, maxNow);
-  // The run is saved whatever the height map does: anything wrong there leaves its climb waiting.
-  let climb: RunClimb;
-  try {
-    climb = await climbOfLine(deps.heights, polyline, sums.trackStarts, SAVE_CLIMB_WAIT_MS, userId, sums.paceLine.length);
-  } catch (err) {
-    deps.log.error({ event: "geo.climb_failed", errName: err instanceof Error ? err.name : typeof err }, "elevation gain not worked out");
-    climb = { state: "waiting" };
+  // The run is saved whatever the height map does: anything wrong there leaves its climb waiting. Indoors there is
+  // no ground under it to read.
+  let climb: RunClimb = { state: "none" };
+  if (polyline !== null) {
+    try {
+      climb = await climbOfLine(deps.heights, polyline, sums.trackStarts, SAVE_CLIMB_WAIT_MS, userId, sums.paceLine.length);
+    } catch (err) {
+      deps.log.error({ event: "geo.climb_failed", errName: err instanceof Error ? err.name : typeof err }, "elevation gain not worked out");
+      climb = { state: "waiting" };
+    }
   }
   const saved = await repo.insertRun(deps.sql, userId, {
     id: input.runId,
@@ -490,12 +529,13 @@ export async function saveRun(
       ...(zoneSeconds === null || maxNow === null ? {} : { zones: { max: maxNow, seconds: zoneSeconds } }),
     },
     polyline,
-    calcVersion: RUN_CALC_VERSION,
+    calcVersion,
     climb,
-    shape: routeShape(sums.track, sums.trackStarts),
+    shape: polyline === null ? null : routeShape(sums.track, sums.trackStarts),
     bests: sums.bests,
     // Worked out here from the readings, never taken from the phone; the readings are not kept.
     heart,
+    indoor,
   });
   if (saved === "removed") throw new RemovedRunError();
   // On every send, as a workout's sync does: the streak, badges and XP are worked out again from history. A
