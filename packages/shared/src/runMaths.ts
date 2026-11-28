@@ -6,8 +6,9 @@
  *  smoothed path over 40 s, so a phone's wander and drift while standing no longer hide the stop. 3: standing,
  *  the route holds still, so the wander adds no metres and draws no line (testers on Google Play, 2026-11-17).
  *  4 (37k): the stretches the phone felt still are standing too; with none, every number is 3's. 5 (37r): such a
- *  stretch is standing wherever its points stay within `travelMetresAt` of its first, however fast they got there (a
- *  GPS just found indoors went 36 m in 5 s while the phone lay still); with none, every number is 4's. */
+ *  stretch is standing wherever its points stay within `travelMetresAt` of its first (40 m, or four times how sure the
+ *  point is: up to 120 m), however fast they got there (a GPS just found indoors went 36 m in 5 s while the phone lay
+ *  still); with none, every number is 4's. */
 export const RUN_CALC_VERSION = 5;
 
 /** A point: milliseconds since the run started, latitude, longitude, and how sure the phone was of
@@ -779,8 +780,9 @@ function standingWithin(spans: Spans, from: number, to: number): number {
 
 /** The still stretches (37k) the run's points let stand, each from its first point to its last: the one at its end
  *  left out where the person moved off (Auto-pause dates moving again to the first point that moved), kept where the
- *  run's end or a pause ended it; two points at least, and every one within `travelMetresAt` of the first, as far as
- *  the phone's own rule lets a phone that feels still go before it is believed to travel. How fast the points got
+ *  run's end or a pause ended it; two points at least, and every one within `travelMetresAt` of the first (40 m, or
+ *  four times how sure the point is: up to 120 m), as far as the phone's own rule lets a phone that feels still go
+ *  before it is believed to travel. How fast the points got
  *  there is not asked (37r): a GPS just found indoors went 36 m in 5 s on a phone lying still. The phone ends a
  *  stretch where a pram sets off (Auto-pause's `goByTravel`), and a stretch made up over a walk takes its metres with
  *  its time, as a made-up pause does, so it can do no more than one.

@@ -343,6 +343,8 @@ d("record a run (real Postgres)", () => {
       const plain = runSums(run.points, run.pauses, run.elapsedMs, 70);
       const asPauses = runSums(run.points, [...run.pauses, ...still], run.elapsedMs, 70);
       expect(saved.run.movingS).toBeGreaterThan(0);
+      // Honoured: the stretches took their metres with them (a server ignoring them would save the plain run).
+      expect(saved.run.distanceM).toBeLessThan(plain.distanceM - 100);
       expect(saved.run.distanceM / saved.run.movingS).toBeLessThanOrEqual((plain.distanceM / plain.movingS) * 1.1);
       for (const split of saved.run.splitsKm) if (split.m === 1000) expect(split.s).toBeGreaterThanOrEqual(300);
       expect(saved.run.distanceM).toBeGreaterThanOrEqual(asPauses.distanceM);

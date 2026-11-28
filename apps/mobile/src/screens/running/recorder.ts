@@ -1091,6 +1091,16 @@ export async function finishRun(now: number = Date.now()): Promise<LiveRun | nul
   stopMotion();
   closePause(run, end);
   closeStill(run, end);
+  // Finished while the phone felt still and Auto-pause had not yet decided (37r): the seconds the screen held still are
+  // standing in the saved run too, as the stop would have been, so the summary and the server show what the screen did.
+  const felt = run.phase === "running" ? (run.feltStillFrom ?? null) : null;
+  if (felt !== null) {
+    if (run.autoPause) keepDatedBack(run, felt, end);
+    else {
+      openStill(run, felt);
+      closeStill(run, end);
+    }
+  }
   const done: LiveRun = { ...run, phase: "finished", finishedMs: end, feltStillFrom: null };
   current = done;
   quietVoice();

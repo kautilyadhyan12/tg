@@ -1,7 +1,7 @@
 // The numbers the run's screen shows while it goes on: its clock and its current pace. Pure, so the
 // rules are tested second by second (the running faults of 2026-11-20, A3 and A5: the clock that went
 // back and forth while the person stood, and a pace nobody runs from one point the phone was unsure of).
-import { GPS_WORST_ACCURACY_M, RUN_MAX_ELAPSED_MS, RUN_MAX_PAUSES, RUN_MAX_POINTS, geodesicMetres, recordSpeed, runSums, runSumsInSlices, type RunClimbRequest, type RunPause, type RunPoint, type RunSums, type SaveRunRequest, type Units } from "@app/shared";
+import { GPS_WORST_ACCURACY_M, RUN_MAX_ELAPSED_MS, RUN_MAX_PAUSES, RUN_MAX_POINTS, geodesicMetres, recordSpeed, runSums, runSumsInSlices, travelMetresAt, type RunClimbRequest, type RunPause, type RunPoint, type RunSums, type SaveRunRequest, type Units } from "@app/shared";
 import type { LiveRun } from "./recorder";
 import { pace } from "./runWords";
 
@@ -30,14 +30,6 @@ export function liveStill(run: LiveRun, nowMs: number): RunPause[] {
   if (felt === null) return kept;
   const from = Math.max(felt, stillFloor(run));
   return nowMs > from ? [...kept, [from, nowMs]] : kept;
-}
-
-/** Whether Current pace is shown (37r): running, and the phone not feeling the person stand. A still stretch open,
- *  or the seconds before Auto-pause decides one, show no pace, as a pause does: on a phone lying still, a GPS just
- *  found read as 2:17 a kilometre. */
-export function pacing(run: LiveRun): boolean {
-  const open = run.still[run.still.length - 1];
-  return run.phase === "running" && !(open !== undefined && open[1] === null) && (run.feltStillFrom ?? null) === null;
 }
 
 /** The run's numbers at `at` ms into it, from its points, pauses and still stretches: the screen, the voice and
@@ -200,4 +192,39 @@ export function currentPace(points: readonly RunPoint[], running: boolean, units
   const metres = geodesicMetres(from[1], from[2], last[1], last[2]);
   if (metres / seconds > recordSpeed(seconds)) return NO_PACE;
   return pace(seconds, metres, units);
+}
+
+/** Whether the phone, felt still since `from`, is still where it was then: its newest sure point within
+ *  `travelMetresAt` of its first sure point since, as the maths holds a stand. The points come in time order. */
+function stillThere(points: readonly RunPoint[], from: number): boolean {
+  let low = 0;
+  let high = points.length;
+  while (low < high) {
+    const mid = (low + high) >>> 1;
+    if ((points[mid]?.[0] ?? Infinity) < from) low = mid + 1;
+    else high = mid;
+  }
+  let first: RunPoint | undefined;
+  for (let i = low; i < points.length && first === undefined; i++) {
+    const p = points[i];
+    if (p !== undefined && sure(p)) first = p;
+  }
+  let newest: RunPoint | undefined;
+  for (let i = points.length - 1; i >= low && newest === undefined; i--) {
+    const p = points[i];
+    if (p !== undefined && sure(p)) newest = p;
+  }
+  if (first === undefined || newest === undefined) return true;
+  return geodesicMetres(first[1], first[2], newest[1], newest[2]) <= travelMetresAt(Math.max(first[3] ?? 0, newest[3] ?? 0));
+}
+
+/** Whether Current pace is shown (37r): running, and the phone not feeling the person stand where they stood. A still
+ *  stretch open, or the seconds before Auto-pause decides one, show no pace, as a pause does (on a phone lying still, a
+ *  GPS just found read as 2:17 a kilometre), while the phone is still within the distance the maths holds as a stand.
+ *  Wheels too fast for Auto-pause to find (over 5 m/s) go past it, and their pace shows. */
+export function pacing(run: LiveRun): boolean {
+  if (run.phase !== "running") return false;
+  const open = run.still[run.still.length - 1];
+  const from = open !== undefined && open[1] === null ? open[0] : (run.feltStillFrom ?? null);
+  return from === null || !stillThere(run.points, from);
 }

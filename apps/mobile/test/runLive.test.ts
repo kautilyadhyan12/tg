@@ -116,8 +116,12 @@ describe("a phone that feels the person stand (37r)", () => {
   it.each<[string, Partial<LiveRun>, boolean]>([
     ["running, nothing felt", {}, true],
     ["running, a still stretch closed", { still: [[10_000, 20_000]] }, true],
-    ["running, Auto-pause off holding a still stretch open", { still: [[10_000, 20_000], [40_000, null]] }, false],
+    // The points go north at 3 m/s: from 50 s the phone has gone 30 m, within the 40 m the maths holds as a stand.
+    ["running, Auto-pause off holding a still stretch open", { still: [[10_000, 20_000], [50_000, null]] }, false],
     ["running, the phone feeling still before Auto-pause has decided", { feltStillFrom: 55_000 }, false],
+    // From 40 s it has gone 60 m: wheels the phone felt still, too fast for Auto-pause to find.
+    ["running, a still stretch open while the phone went 60 m on", { still: [[40_000, null]] }, true],
+    ["running, felt still while the phone went 60 m on", { feltStillFrom: 40_000 }, true],
     ["running, nothing felt (missing, as in a run read back)", { feltStillFrom: null }, true],
     ["paused", { phase: "paused" }, false],
     ["finished", { phase: "finished", finishedMs: 60_000 }, false],

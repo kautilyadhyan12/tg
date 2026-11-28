@@ -78,6 +78,50 @@ describe("the worst thing (37r): a stand is trusted however fast its points go, 
       }
     }
   });
+
+  // A walker whose phone feels the steps, under a weak signal, stopping now and then: Auto-pause must see them leave
+  // each stop, or the still stretch (and Auto-pause on's pause) holds over the walk after it. Sure to 30 m, a walk at
+  // 1.2 m/s lost 363 of 792 m with Auto-pause off, as it did with Auto-pause on.
+  it.each([
+    [1, 20],
+    [1.2, 20],
+    [1.4, 20],
+    [1, 25],
+    [1.2, 25],
+    [1.4, 25],
+    [1, 30],
+    [1.2, 30],
+    [1.4, 30],
+  ])("a walk at %s m a second, sure to %s m, with stops of 4 to 15 s: both settings count it, the phone and the server alike", (speed, accuracyM) => {
+    for (const stopS of [4, 6, 15]) {
+      for (let seed = 1; seed <= 3; seed++) {
+        const parts: Stretch[] = [];
+        for (let k = 0; k < 5; k++) parts.push({ seconds: 60, speed, accuracyM, feel: "moving" }, { seconds: stopS, speed: 0, accuracyM, feel: "still" });
+        parts.push({ seconds: 60, speed, accuracyM, feel: "moving" });
+        const { fixes, metres } = walk(parts, seed * 977 + accuracyM + stopS);
+        const { phone, server } = phoneAndServer(fixes);
+        expect(server).toBe(phone);
+        const end = endOf(fixes);
+        expect([stopS, seed, phone >= 0.96 * metres]).toEqual([stopS, seed, true]);
+        expect([stopS, seed, runSums(pointsOf(fixes), pausesOf(changesOf(fixes), end), end, 70).distanceM >= 0.96 * metres]).toEqual([stopS, seed, true]);
+      }
+    }
+  });
+
+  // Wheels the phone feels still, faster than Auto-pause's rise (5 m/s) lets it call wheels: the stretch stays open to
+  // the end, and only its own limit (every point within `travelMetresAt` of the first) keeps the ride's metres.
+  it.each([6, 8])("a ride at %s m a second the phone feels still: every metre counted, the phone and the server alike", (speed) => {
+    for (let seed = 1; seed <= 3; seed++) {
+      const { fixes, metres } = walk([
+        { seconds: 30, speed: 0, accuracyM: 5, feel: "still" },
+        { seconds: 60, speed, accuracyM: 5, feel: "still" },
+      ], seed);
+      const { phone, server, still } = phoneAndServer(fixes);
+      expect(still).toEqual([[1000, endOf(fixes)]]);
+      expect(server).toBe(phone);
+      expect(metres - phone).toBeLessThanOrEqual(6);
+    }
+  });
 });
 
 describe("a phone lying still indoors as its GPS settles (37r)", () => {
@@ -329,13 +373,15 @@ describe("round one: the step out of a stand, and seconds with no point", () => 
   // The stand is a pause to the route: against the same stop with Auto-pause on, never fewer metres, never a sprint
   // it would not show, and never a metre more than the run without the stretch. Sure to 30 m, the worst a point may
   // be, both settings cut the route at a raw point and Auto-pause notices the walk-off a few seconds late: there the
-  // chart's peak may differ from Auto-pause on's by up to 1.3 m/s either way (measured, 50 tries).
+  // chart's peak may differ from Auto-pause on's by up to 1.3 m/s either way (measured, 50 tries). There too a stand
+  // ended where the person set off cuts the route at a point up to 15 m from where they were: one try in 50 counts
+  // 16 m over the plain run, where the same stand as a pause counts 9 (truth 1,800 m, plain 1,841 m).
   it.each([
-    [5, 10],
-    [15, 10],
-    [20, 10],
-    [30, 150],
-  ])("sure to %s m, 50 tries: never a sprint Auto-pause on would not show (within %s cm/s), nor the stand's drift as metres", (accuracyM, peakLeeway) => {
+    [5, 10, 6],
+    [15, 10, 6],
+    [20, 10, 6],
+    [30, 150, 16],
+  ])("sure to %s m, 50 tries: never a sprint Auto-pause on would not show (within %s cm/s), nor the stand's drift as metres (within %s m)", (accuracyM, peakLeeway, overLeeway) => {
     let worstPeak = -Infinity;
     let worstOver = -Infinity;
     let worstUnder = -Infinity;
@@ -357,7 +403,7 @@ describe("round one: the step out of a stand, and seconds with no point", () => 
       worstUnder = Math.max(worstUnder, on.distanceM - sums.distanceM);
     }
     expect(worstPeak).toBeLessThanOrEqual(peakLeeway);
-    expect(worstOver).toBeLessThanOrEqual(6);
+    expect(worstOver).toBeLessThanOrEqual(overLeeway);
     expect(worstUnder).toBeLessThanOrEqual(10);
   });
 

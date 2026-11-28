@@ -625,13 +625,14 @@ describe("still stretches, through the recorder", () => {
 describe("a phone lying still indoors as its GPS settles, through the recorder and the screen (37r)", () => {
   const settle = JSON.parse(readFileSync(join(__dirname, "..", "fixtures", "still-indoors-settle.json"), "utf8")) as { points: RunPoint[]; motion: [number, number][] };
 
-  /** Each point at its own time, the motion of its seconds first; after each, what the screen would show. */
-  async function feedSettle(): Promise<{ at: number; metres: number; line: number; pace: string; shown: boolean }[]> {
+  /** Each point at its own time up to `until` ms, the motion of its seconds first; after each, what the screen would show. */
+  async function feedSettle(until = Infinity): Promise<{ at: number; metres: number; line: number; pace: string; shown: boolean }[]> {
     const run = runNow();
     if (run === null) throw new Error("no run going");
     const seen: { at: number; metres: number; line: number; pace: string; shown: boolean }[] = [];
     let m = 0;
     for (const [at, lat, lng, accuracy] of settle.points) {
+      if (at > until) break;
       for (; m < settle.motion.length && (settle.motion[m]?.[0] ?? Infinity) <= at; m++) {
         const [ms, sd] = settle.motion[m] ?? [0, 0];
         motion.send(run.startedAt + ms, sd / 100);
@@ -675,5 +676,40 @@ describe("a phone lying still indoors as its GPS settles, through the recorder a
     expect(run?.phase).toBe("paused");
     expect(run?.datedBack).toEqual([[4410, 8517]]);
     expect(run?.pauses.map(([from]) => from)).toEqual([8517]);
+  });
+
+  // Finished at 8 s, before Auto-pause has felt its 3 s: the screen held still from 4.4 s, and so does the saved run.
+  it.each([false, true])("Finish before Auto-pause decides (Auto-pause on: %s): the summary and the server count what the screen showed, nothing", async (on) => {
+    await act(() => chooseAutoPause(on));
+    await openRunning(runServer());
+    await startRunning();
+    expect(nothing(await feedSettle(7515))).toEqual([]);
+    const run = runNow();
+    expect(run?.feltStillFrom).toBe(4410);
+    const done = await finishRun((run?.startedAt ?? 0) + 8015);
+    if (done === null) throw new Error("no run");
+    const sent = sentOf(done);
+    expect(sent.still).toEqual([[4410, 8015]]);
+    const saved = runSums(sent.points, sent.pauses, sent.elapsedMs, 70, sent.still);
+    expect([saved.distanceM, saved.track.length]).toEqual([0, 0]);
+    expect(sumsAt(done, sent.elapsedMs, 70).distanceM).toBe(0);
+  });
+
+  it("the seconds the screen holds still are never written in the run's file", async () => {
+    await act(() => chooseAutoPause(false));
+    await openRunning(runServer());
+    await startRunning();
+    await feedSettle(7515);
+    // The person's Pause writes the run's file at once, with the seconds still held on the run.
+    await act(() => pauseRun((runNow()?.startedAt ?? 0) + 7600));
+    expect(runNow()?.feltStillFrom).toBe(4410);
+    const kept = await phoneRunFiles.read("run-now.json");
+    expect(kept).not.toBeNull();
+    expect(kept).not.toMatch(/felt/i);
+    // Read back after the app was closed, the run holds none.
+    resetRecorder();
+    motion.reset();
+    await act(() => loadRun());
+    expect(runNow()?.feltStillFrom ?? null).toBeNull();
   });
 });
