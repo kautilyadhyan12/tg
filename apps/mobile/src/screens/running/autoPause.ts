@@ -67,7 +67,7 @@ export const RISE_STEP_MS = 5000;
 export const RISE_BACK_M = 2;
 export const RISE_FASTEST_MPS = 5;
 /** Paused: points in a row that feel moving, no sooner than LEAVE_AFTER_MS after the pause began, start the
- *  clock once the phone is `leaveMetres` farther from the stop than it was LEAVE_WINDOW_MS before, never from a
+ *  clock once the phone is `leaveMetres` farther from the stop than it was `leaveWindowMs` before, never from a
  *  point older than that (round one, H3); with fewer than two usable places among them, LEAVE_BLIND_POINTS. */
 export const LEAVE_POINTS = 3;
 export const LEAVE_BLIND_POINTS = 8;
@@ -103,7 +103,7 @@ interface LeaveRun {
   firstAt: number;
   lastAt: number;
   count: number;
-  /** How many of them had a usable place; those of the last LEAVE_WINDOW_MS, with their distance from the stop. */
+  /** How many of them had a usable place; those of the last `leaveWindowMs`, with their distance from the stop. */
   placed: number;
   recent: { at: number; m: number }[];
   /** The newest of them within `leaveMetres` of the stop. */
@@ -193,6 +193,12 @@ export const travelMetres = (fix: Fix): number => travelMetresAt(fix.accuracyM);
  *  2 minutes (6 m: 10 times). A walker at 1.4 m/s leaves 8 m in 6 s. */
 export const LEAVE_LEAST_M = 8;
 export const leaveMetres = (fix: Fix): number => Math.max(LEAVE_LEAST_M, (fix.accuracyM ?? 0) / 2);
+/** The slowest walk whose leaving is judged in time (37r): sure to 30 m, a walker at 1.2 m/s gains 12 m in
+ *  LEAVE_WINDOW_MS, never the 15 m that is leaving, and stayed stopped. */
+export const LEAVE_SLOWEST_MPS = 0.8;
+/** How far back leaving is judged: LEAVE_WINDOW_MS, or the time a walker at LEAVE_SLOWEST_MPS takes to go `leaveMetres`,
+ *  whichever is longer; LEAVE_WINDOW_MS for a point sure to 16 m or better. */
+export const leaveWindowMs = (fix: Fix): number => Math.max(LEAVE_WINDOW_MS, (leaveMetres(fix) / LEAVE_SLOWEST_MPS) * 1000);
 
 /** How the phone felt at `atMs`: the newest motion second ([ms into the run at its end, sd in hundredths
  *  of a m/s²], oldest first) at or before it, and no more than FEEL_OLDEST_MS older. */
@@ -321,8 +327,8 @@ function goByPlace(state: AutoPauseState, fix: Fix): Step {
 }
 
 /** Paused, step 3: points in a row that feel moving, LEAVE_AFTER_MS or more after the pause began, and
- *  `leaveMetres` farther from the stop than LEAVE_WINDOW_MS before (LEAVE_BLIND_POINTS of them with fewer than
- *  two usable places): dated to the first of them, never more than LEAVE_WINDOW_MS before the leaving point. */
+ *  `leaveMetres` farther from the stop than `leaveWindowMs` before (LEAVE_BLIND_POINTS of them with fewer than
+ *  two usable places): dated to the first of them, never more than `leaveWindowMs` before the leaving point. */
 function goByFeel(state: AutoPauseState, fix: Fix): Step {
   const run: LeaveRun = state.leaveRun !== null && !lost(state.leaveRun, fix.at) ? state.leaveRun : { firstAt: fix.at, lastAt: fix.at, count: 0, placed: 0, recent: [], nearAt: fix.at };
   let anchor = state.anchor;
@@ -331,7 +337,7 @@ function goByFeel(state: AutoPauseState, fix: Fix): Step {
     anchor ??= { ...fix, speed: null };
     const m = metresApart(anchor, fix);
     placed += 1;
-    recent = [...recent, { at: fix.at, m }].filter((r) => fix.at - r.at <= LEAVE_WINDOW_MS);
+    recent = [...recent, { at: fix.at, m }].filter((r) => fix.at - r.at <= leaveWindowMs(fix));
     if (m <= leaveMetres(fix)) nearAt = fix.at;
   }
   const count = run.count + 1;
@@ -340,7 +346,7 @@ function goByFeel(state: AutoPauseState, fix: Fix): Step {
   const newest = recent[recent.length - 1];
   const fresh = newest !== undefined && newest.at === fix.at;
   const blind = placed < 2;
-  // Leaving now: `leaveMetres` farther than LEAVE_WINDOW_MS before. A slow walker under a weak signal never gains
+  // Leaving now: `leaveMetres` farther than `leaveWindowMs` before. A walker slower than LEAVE_SLOWEST_MPS never gains
   // that in the window, so a phone that feels moving and is as far from the stop as a pram must be has left,
   // from the last of these points near the stop.
   const now = count >= LEAVE_POINTS && fresh && oldest !== undefined && newest.m - oldest.m >= leaveMetres(fix);
