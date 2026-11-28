@@ -113,11 +113,62 @@ afterEach(() => cleanup());
 
 // ── The door on screen ──────────────────────────────────────────────────────
 
+// ── The worst thing (V5-d): a code checked for an address the screen no longer shows ──
+
+describe('the code is always for the address on screen (V5-d)', () => {
+  it('after Use a different email, the new address is shown, sent and checked, and the first one is gone', async () => {
+    drawLogin();
+    await askForCode('first@example.com');
+    expect(screen.getByText('first@example.com')).toBeTruthy();
+    fireEvent.click(screen.getByText('Use a different email'));
+    await askForCode('second@example.com');
+    expect(screen.getByText('second@example.com')).toBeTruthy();
+    expect(screen.queryByText('first@example.com')).toBeNull();
+    expect(authState.sendCode).toHaveBeenLastCalledWith('second@example.com', undefined);
+    typeCode('482913');
+    fireEvent.click(screen.getByText('Continue'));
+    await waitFor(() => expect(authState.verifyCode).toHaveBeenCalledTimes(1));
+    expect(authState.verifyCode).toHaveBeenCalledWith('second@example.com', '482913');
+  });
+
+  it('the six boxes show exactly the digits typed, in order, and nothing else', async () => {
+    drawLogin();
+    await askForCode();
+    typeCode('4a8 1');
+    const cells = [...document.querySelectorAll('.c-otp-cell')].map((c) => c.textContent);
+    expect(cells).toEqual(['4', '8', '1', '', '', '']);
+    typeCode('');
+    expect([...document.querySelectorAll('.c-otp-cell')].map((c) => c.textContent)).toEqual(['', '', '', '', '', '']);
+  });
+
+  it('a press on any box keeps the hidden caret at the end, on the lit box; select all is left alone', async () => {
+    drawLogin();
+    await askForCode();
+    typeCode('123456');
+    const field = screen.getByLabelText('6-digit code');
+    field.setSelectionRange(2, 2);
+    fireEvent.select(field);
+    expect([field.selectionStart, field.selectionEnd]).toEqual([6, 6]);
+    field.setSelectionRange(1, 3);
+    fireEvent.select(field);
+    expect([field.selectionStart, field.selectionEnd]).toEqual([6, 6]);
+    field.setSelectionRange(0, 6);
+    fireEvent.select(field);
+    expect([field.selectionStart, field.selectionEnd]).toEqual([0, 6]);
+  });
+
+  it('the code field is the one the phone fills in, labelled "6-digit code"', async () => {
+    drawLogin();
+    await askForCode();
+    expect(screen.getByLabelText('6-digit code').getAttribute('autocomplete')).toBe('one-time-code');
+  });
+});
+
 describe('the Get started screen asks which door you came for', () => {
   it('offers Train and Manage, with Train chosen by default', () => {
     drawLogin();
-    expect(screen.getByText(TRAIN).getAttribute('aria-pressed')).toBe('true');
-    expect(screen.getByText(MANAGE).getAttribute('aria-pressed')).toBe('false');
+    expect(screen.getByText(TRAIN).closest('button').getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByText(MANAGE).closest('button').getAttribute('aria-pressed')).toBe('false');
   });
 
   it('keeps ONE email box whichever door is pressed, and NO password box at all', () => {
@@ -353,7 +404,7 @@ describe('the door survives leaving the page', () => {
     cleanup();
     drawLogin();
     await waitFor(() =>
-      expect(screen.getByText(MANAGE).getAttribute('aria-pressed')).toBe('true'),
+      expect(screen.getByText(MANAGE).closest('button').getAttribute('aria-pressed')).toBe('true'),
     );
   });
 

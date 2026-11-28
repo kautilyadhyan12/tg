@@ -1,11 +1,11 @@
 // The coach's lines (spec Part 2 §12.6; ROADMAP 53b-i), read from packages/movement/voice/lines.json: the script Kd
 // pastes into ElevenLabs, part by part, and the check that every sentence a movement or an exercise file can make the
 // screen say has a line, and every rule line is said by one.
-import { readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { checkedOf, parseExercise, parseMovementFile } from "../src/index.js";
-import { voiceSchema, type MovementFile, type Voice, type VoiceLine } from "@app/shared";
+import { clipName, voiceHeardSchema, voiceSchema, type MovementFile, type Voice, type VoiceHeard, type VoiceLine } from "@app/shared";
 
 const PACKAGE = join(dirname(fileURLToPath(import.meta.url)), "..");
 export const VOICE_FILE = join(PACKAGE, "voice", "lines.json");
@@ -18,6 +18,11 @@ export const CLIPS = join(PACKAGE, "..", "..", "apps", "mobile", "assets", "voic
 
 export function readVoice(): Voice {
   return voiceSchema.parse(JSON.parse(readFileSync(VOICE_FILE, "utf8")));
+}
+
+/** What each kept clip was heard saying, or null when none has been cut yet. */
+export function readHeard(): VoiceHeard | null {
+  return existsSync(HEARD_FILE) ? voiceHeardSchema.parse(JSON.parse(readFileSync(HEARD_FILE, "utf8"))) : null;
 }
 
 /** The pause the script asks for between two wordings. Eleven v4, the model Kd uses (2026-11-27), takes no SSML break
@@ -47,6 +52,14 @@ export function scriptParts(voice: Voice, size: number = PART_SIZE): Wording[][]
   // Parts as even as they can be, so that no last part holds a lone wording.
   const each = Math.ceil(all.length / count);
   return Array.from({ length: count }, (_, i) => all.slice(i * each, (i + 1) * each));
+}
+
+/** The wordings with no clip yet heard saying them (`heard`, voice/heard.json; every wording when none is kept), in the
+ *  script's order: a line added later is recorded alone (`voice-script --new`, `voice-cut --new`, 53c), and every clip
+ *  already kept stays as it was heard. A wording whose clip was heard saying other words is new again. */
+export function newWordings(voice: Voice, heard: VoiceHeard | null): Wording[] {
+  const kept = new Map((heard?.clips ?? []).map((c) => [c.file, c.words]));
+  return wordingsOf(voice).filter((w) => kept.get(clipName(w.line, w.index)) !== w.words);
 }
 
 /** One part's text, as Kd pastes it: each wording on its own line, a pause between two. */

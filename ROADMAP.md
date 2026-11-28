@@ -507,7 +507,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
     - V5-a. [x] **Overview, the page** · merged 2026-11-27 · PR #662
     - V5-b. [x] **Overview's money boxes and the plan box** · merged 2026-11-28 · PR #664
     - V5-c. [x] **The banner above every page, and choosing a plan or its size** · merged 2026-11-28 · PR #666
-    - V5-d. [ ] **Getting in**: your organisations, creating a business, signing in, a staff invitation (`Orgs`, `CreateGym`, `GymReady`, `SignIn`, `StaffInvite`)
+    - V5-d. [x] **Getting in** · merged 2026-11-28 · PR #669
    - V6. [ ] **Leads and At risk** (web folder 1): a lead, adding and importing leads, your gym page, At risk (`Lead*`, `GymPage`, `AtRisk*`).
    - V7. [ ] **Attendance and the front desk** (web folder 2; `Attendance*`, `Desk*`, `PhoneAttendance`).
    - V8. [ ] **Classes and personal training** (web folder 2): the list, the calendar, a class, adding a class and a time slot, personal training's page and boxes (`Class*`, `PT*`, `PhoneClasses`).
@@ -885,7 +885,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
     - 53b. **The coach's voice and Follow-along** (split 2026-11-27 in two, the voice first; `handoff/2026-11-27-53b-i.md` keeps its line as first written):
         - 53b-i. [x] **The coach's voice** — merged 2026-11-27 (PR #657).
         - 53b-ii. [x] **Follow-along** — merged 2026-11-27 (PR #660).
-    - 53c. [ ] **The phone moved in a set** (found at 53b-i's walk, `handoff/2026-11-27-53b-i.md`; its place in the order is Kd's): a phone knocked, picked up or held by hand is told "Keep the phone still.", and the person is taken again once the phone stands and nobody else is in view; today the set stays silent to its end.
+    - 53c. [x] **The phone moved in a set** — merged 2026-11-28 (PR #668).
 54. [ ] **Exercises, movement by movement** (§12.4), towards about 200, with no fixed first list: Kd names one and gives its videos and research file; an exercise that does not pass the proof is published as "count by hand". Since 52b-ii-a: the squat's stance width with its twins, and its hips rising first and knees far forward once more bodies are filmed from the floor (`exercises/squat.json`). Since 52c-i: the squat jack (Kd's two videos jump up out of each wide squat, which the squat jump counts) and the Smith machine split squat, a twin of the lunge that stays split between reps (4 of 10 counted). Since 52c-ii: more hip-thrust and L-sit videos (two people each pass with both, neither with the other left out), the tuck L-sit (a seated body's shape), a long sit on the floor (it reads as an L-sit) and the decline crunch. Since 52d-i (Kd's choice): his sit-and-stand on a chair (`usual_v08`) counts its chair squat under the squat and says "Go lower to count." at 8 pictures a second and on the phone's reading of his first sit.
 55. Folded into 54 on 2026-11-16.
 

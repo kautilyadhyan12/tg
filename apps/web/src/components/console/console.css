@@ -3158,3 +3158,92 @@ button.c-ov-money-who {
     min-height: 44px;
   }
 }
+
+/* Getting in (V5-d; boards `Orgs`, `CreateGym`, `SignIn`, `StaffInvite`). A choice drawn as a box with a
+   line under its name; a staff invitation as a box of its own with its picture; each organisation a
+   box that opens it; Create kept in sight at the foot of the screen. */
+.c-pick { flex-direction: column; gap: 4px; text-align: left; font: inherit; }
+.c-pick:not(.c-choice-on) { background: var(--card); }
+.c-invite { display: flex; align-items: flex-start; gap: 18px; padding: 24px; border-color: var(--soft-line); }
+.c-invite-ic, .c-org-ic {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  background: var(--soft);
+  color: var(--soft-t);
+}
+.c-invite-p { margin: 0; overflow-wrap: anywhere; }
+@media (max-width: 479px) {
+  .c-invite { flex-direction: column; gap: 14px; padding: 20px; }
+}
+.c-orgs { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr)); gap: 16px; margin: 0; padding: 0; list-style: none; }
+.c-org { display: flex; flex-direction: column; gap: 16px; height: 100%; box-sizing: border-box; padding: 22px; color: var(--t1); }
+.c-org:hover { border-color: var(--ctl-line); }
+.c-org:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.c-org-name { overflow-wrap: anywhere; }
+.c-org-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; margin-top: auto; padding-top: 14px; border-top: 1px solid var(--line); min-height: 44px; box-sizing: border-box; }
+.c-org-open { display: inline-flex; align-items: center; gap: 4px; }
+.c-create-foot { position: sticky; bottom: 0; z-index: 15; margin: 0 -8px; padding: 12px 8px; background: var(--page); border-top: 1px solid var(--line); }
+.c-after { display: flex; flex-direction: column; gap: 12px; margin: 0; padding: 0; list-style: none; }
+.c-after li { display: flex; align-items: flex-start; gap: 12px; font-size: 14px; line-height: 20px; color: var(--t2); }
+/* The console's own dropdown list (the country on Create): a box over the page in the look's colours. */
+.c-sel-list { background: var(--sheet); border: 1px solid var(--ctl-line); box-shadow: var(--pop); }
+.c-opt-on { background: var(--soft); color: var(--soft-t); font-weight: 600; }
+
+/* Sign in and the staff invitation's link: the door on the left, the picture beside it from 1024 px. */
+.c-door-page { display: flex; }
+.c-door-side { flex: 1 1 0; min-width: 0; display: flex; align-items: center; justify-content: center; padding: 32px 16px; box-sizing: border-box; }
+.c-door-col { width: 100%; max-width: 400px; }
+.c-door-brand { display: flex; align-items: center; gap: 10px; }
+.c-doors { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 160px), 1fr)); gap: 8px; }
+.c-door-wide { width: 100%; }
+.c-door-p { margin: 0; overflow-wrap: anywhere; }
+.c-door-center { text-align: center; }
+.c-door-u { display: inline-block; text-decoration: underline; text-underline-offset: 2px; }
+.c-door-links { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 12px; }
+.c-door-link { height: auto; min-height: 44px; padding: 0 4px; font-size: 14px; }
+.c-door-link:not(:disabled) { color: var(--link); font-weight: 600; }
+.c-door-or { display: flex; align-items: center; gap: 12px; }
+.c-door-or > span[aria-hidden] { flex: 1; height: 1px; background: var(--line); }
+.c-door-card { padding: 24px; }
+.c-door-pic { display: none; }
+@media (min-width: 1024px) {
+  .c-door-side { padding: 48px; }
+  .c-door-pic { display: block; position: relative; flex: 1 1 0; max-width: 55%; min-height: 100vh; overflow: hidden; }
+  .c-door-pic img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: center 30%; }
+  .c-door-pic-box { position: absolute; left: 40px; right: 40px; bottom: 48px; padding: 24px; border-radius: 18px; background: var(--card); border: 1px solid var(--card-line); }
+}
+/* The code: one field drawn as six boxes. The field lies over the boxes, its own words unseen. */
+.c-otp { position: relative; display: grid; grid-template-columns: repeat(6, minmax(0, 52px)); gap: 8px; }
+.c-otp-cell {
+  display: grid;
+  place-items: center;
+  height: 56px;
+  border: 1px solid var(--input-line);
+  border-radius: 12px;
+  background: var(--input);
+  color: var(--t1);
+  font-size: 24px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.c-otp-input {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: transparent;
+  caret-color: transparent;
+  font-size: 16px;
+  letter-spacing: 0;
+  outline: none;
+}
+.c-otp-input::selection { background: transparent; color: transparent; }
+.c-otp-input:focus-visible ~ .c-otp-at { border-color: var(--accent); box-shadow: 0 0 0 3px var(--soft); }

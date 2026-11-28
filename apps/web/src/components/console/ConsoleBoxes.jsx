@@ -441,28 +441,43 @@ export function Question({
   );
 }
 
+function StepsParts({ parts, foot }) {
+  return (
+    <div className="c-stack-l">
+      {parts.map((part, i) => (
+        <section key={part.key} className="c-card c-part" style={{ padding: 24 }} aria-labelledby={`part-${part.key}`}>
+          <div className="c-part-h">
+            <span className="c-part-n" aria-hidden="true">
+              {i + 1}
+            </span>
+            <h2 id={`part-${part.key}`} className="c-h2">
+              {part.title}
+            </h2>
+          </div>
+          {part.children}
+        </section>
+      ))}
+      {foot}
+    </div>
+  );
+}
+
 /** 4. A page of its own: a big setup (a membership type, a challenge, a new gym) in
  *  numbered parts, with a summary that fills in as they go. `summary` is a list of
- *  `{ label, value }`; a value not chosen yet reads `empty`. */
-export function StepsPage({ parts, summaryTitle = 'Summary', summary, empty = 'Not set yet', foot = null }) {
+ *  `{ label, value }`; a value not chosen yet reads `empty`. `aside` draws a box of the page's
+ *  own in the summary's place (a new business says what happens after Create). */
+export function StepsPage({ parts, summaryTitle = 'Summary', summary = [], empty = 'Not set yet', foot = null, aside = null }) {
+  if (aside !== null) {
+    return (
+      <div className="c-steps">
+        <StepsParts parts={parts} foot={foot} />
+        {aside}
+      </div>
+    );
+  }
   return (
     <div className="c-steps">
-      <div className="c-stack-l">
-        {parts.map((part, i) => (
-          <section key={part.key} className="c-card c-part" style={{ padding: 24 }} aria-labelledby={`part-${part.key}`}>
-            <div className="c-part-h">
-              <span className="c-part-n" aria-hidden="true">
-                {i + 1}
-              </span>
-              <h2 id={`part-${part.key}`} className="c-h2">
-                {part.title}
-              </h2>
-            </div>
-            {part.children}
-          </section>
-        ))}
-        {foot}
-      </div>
+      <StepsParts parts={parts} foot={foot} />
       <aside className="c-card c-steps-sum c-stack-m" style={{ padding: 24 }} aria-label={summaryTitle}>
         <h2 className="c-h2">{summaryTitle}</h2>
         <dl className="c-sum">

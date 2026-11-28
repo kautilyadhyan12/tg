@@ -7,7 +7,8 @@ import { ConsoleFailed, ConsoleLoading } from '../../components/console/ConsoleS
 import StaffInvitations from '../../components/console/StaffInvitations';
 import { errorText, orgService } from '../../api/orgsApi';
 
-// "Your organisations" — the console's front door.
+// "Your organisations" — the console's front door, in the third look (V5-d, board `Orgs`): the
+// invitations waiting first, then each organisation as a box that opens it.
 //
 // Only organisations the caller is STAFF of are listed (`manageableOrgs`). One
 // they merely belong to answers 404 to every console read, so listing it would
@@ -66,70 +67,60 @@ export default function ConsoleHome() {
   }
 
   return (
-    <div className="max-w-3xl mx-auto px-4 md:px-8 py-8">
-      <div className="flex items-center justify-between gap-4 flex-wrap mb-6">
-        <h1 className="text-2xl font-bold" style={{ color: '#fff' }}>
-          Your organisations
-        </h1>
-        <Link
-          to="/console/new"
-          className="rounded-xl px-4 py-2.5 text-sm font-semibold flex items-center gap-2"
-          style={{ background: 'linear-gradient(135deg,#FF8A1F,#FFB347)', color: '#0A0908' }}
-        >
-          <Plus className="w-4 h-4" />
-          {runsNothing ? 'Create an organisation' : 'Create another'}
-        </Link>
+    <div className="c-page">
+      <div className="c-page-headrow">
+        <div className="c-stack-xs">
+          <h1 className="c-h1">Your organisations</h1>
+          <p className="c-sub">The gyms and studios you run or help run.</p>
+        </div>
+        <div className="c-page-headrow-a">
+          <Link to="/console/new" className="c-btn c-btn-lg c-btn-p">
+            <Plus size={18} aria-hidden="true" />
+            {runsNothing ? 'Create an organisation' : 'Create another'}
+          </Link>
+        </div>
       </div>
 
       {/* Only where it decides something: for somebody who runs a gym, a failed check
           (the read allows 60 an hour) must not sit over their list. */}
       {!invitations.loading && invitations.error !== null && runsNothing ? (
-        <div className="mb-6">
-          <ConsoleFailed message={invitations.error} onRetry={invitations.reload} />
-        </div>
+        <ConsoleFailed newLook message={invitations.error} onRetry={invitations.reload} />
       ) : null}
 
       <StaffInvitations invitations={invitations.list} onAnswered={invitations.reload} />
 
-      {state.loading || (runsNothing && invitations.loading) ? <ConsoleLoading label="Loading your organisations…" /> : null}
+      {state.loading || (runsNothing && invitations.loading) ? <ConsoleLoading newLook label="Loading your organisations…" /> : null}
 
-      {!state.loading && state.error !== null ? (
-        <ConsoleFailed message={state.error} onRetry={retry} />
-      ) : null}
+      {!state.loading && state.error !== null ? <ConsoleFailed newLook message={state.error} onRetry={retry} /> : null}
 
       {!state.loading && state.error === null && state.orgs.length > 0 ? (
-        <div className="flex flex-col gap-3">
+        <ul className="c-orgs" aria-label="Your organisations">
           {state.orgs.map((org) => (
-            <Link
-              key={org.id}
-              to={`/console/${org.slug}`}
-              className="rounded-2xl p-4 flex items-center gap-4 transition-colors"
-              style={{ background: '#121110', border: '1px solid rgba(255,255,255,0.06)' }}
-            >
-              <div
-                className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
-                style={{ background: 'rgba(255,138,31,0.15)' }}
-              >
-                <Building2 className="w-5 h-5" style={{ color: '#FF8A1F' }} />
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="font-semibold truncate" style={{ color: '#fff' }}>
-                  {org.name}
-                </div>
-                {/* T3 L-6 named `Overview.jsx`; the same raw enum was printed
-                    here too, so it is fixed as a class (:1239) rather than at
-                    the one site the review happened to open. The type is shown
-                    so a list of three reads "gym · studio · personal trainer"
-                    rather than three identical rows. */}
-                <div className="text-xs truncate" style={{ color: 'rgba(255,255,255,0.45)' }}>
-                  {orgTypeLabel(org.orgType)} · {org.city ? `${org.city} · ` : ''}
-                  {roleLabel(org.staffRole, org.orgType, org.coOwner)}
-                </div>
-              </div>
-              <ChevronRight className="w-5 h-5 flex-shrink-0" style={{ color: 'rgba(255,255,255,0.3)' }} />
-            </Link>
+            <li key={org.id}>
+              {/* The type is shown so a list of three reads "gym · studio · personal trainer"
+                  rather than three identical rows. */}
+              <Link to={`/console/${org.slug}`} className="c-card c-org">
+                <span className="c-org-ic" aria-hidden="true">
+                  <Building2 size={22} />
+                </span>
+                <span className="c-stack-xs">
+                  <span className="c-h2 c-org-name">{org.name}</span>
+                  <span className="c-s14 c-t2">
+                    {orgTypeLabel(org.orgType)}
+                    {org.city ? ` · ${org.city}` : ''}
+                  </span>
+                </span>
+                <span className="c-org-foot">
+                  <span className="c-s14 c-t2">{roleLabel(org.staffRole, org.orgType, org.coOwner)}</span>
+                  <span className="c-s14 c-w6 c-lk c-org-open">
+                    Open
+                    <ChevronRight size={16} aria-hidden="true" />
+                  </span>
+                </span>
+              </Link>
+            </li>
           ))}
-        </div>
+        </ul>
       ) : null}
     </div>
   );

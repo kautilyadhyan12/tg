@@ -29,6 +29,8 @@ function squats(): PoseEvent[] {
       height: 480,
       gravity: [down[0] * EARTH, down[1] * EARTH, -down[2] * EARTH],
       turn: 0,
+      // A phone standing still turns a few hundred-thousandths of a radian between two answers (53c).
+      spin: [0.00005, 0.00008, 0.00003],
       people: f.people.map((p) => ({ points: p.points.flat(), world: p.world === null ? [] : p.world.flat() })),
     };
   });
@@ -53,6 +55,10 @@ const BROKEN: readonly (readonly [string, unknown])[] = [
   ["no clock", { ...good, t: undefined }],
   ["a clock not a number", { ...good, t: Number.NaN }],
   ["seven people", { ...good, people: Array.from({ length: 7 }, () => person) }],
+  ["the phone's turning in two numbers", { ...good, spin: [0.001, 0.002] }],
+  ["the phone's turning in four numbers", { ...good, spin: [0.001, 0.002, 0.003, 0.004] }],
+  ["the phone's turning not a number", { ...good, spin: [0.001, "x", 0.003] }],
+  ["the phone's turning infinite", { ...good, spin: [0.001, Infinity, 0.003] }],
 ];
 
 describe("a broken answer is no frame at all", () => {

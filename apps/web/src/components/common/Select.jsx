@@ -36,6 +36,8 @@ export default function Select({
   // its options, as every caller before the measure picker had it: a food can
   // carry a dozen measures and more.
   maxListHeight,
+  // Drawn from the console's look (`c-sel`, `c-opt`; spec Part 3 §17.11), in either of its colours.
+  newLook = false,
 }) {
   const [open, setOpen] = useState(false);
   // Whether the list opens ABOVE the field: where it would run past the bottom of
@@ -85,27 +87,27 @@ export default function Select({
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-label={ariaLabel}
-        className="w-full rounded-xl px-4 py-3 text-sm flex items-center justify-between gap-2 text-left"
-        style={style}
+        className={newLook ? 'c-sel text-left' : 'w-full rounded-xl px-4 py-3 text-sm flex items-center justify-between gap-2 text-left'}
+        style={newLook ? undefined : style}
       >
         <span
-          className="truncate"
-          style={current === undefined ? { color: 'rgba(255,255,255,0.40)' } : undefined}
+          className={newLook ? `truncate ${current === undefined ? 'c-t3' : 'c-t1'}` : 'truncate'}
+          style={newLook || current !== undefined ? undefined : { color: 'rgba(255,255,255,0.40)' }}
         >
           {current?.label ?? placeholder}
         </span>
         <ChevronDown className="w-4 h-4 flex-shrink-0"
-                     style={{ color: 'rgba(255,255,255,0.45)' }} />
+                     style={{ color: newLook ? 'var(--t3)' : 'rgba(255,255,255,0.45)' }} />
       </button>
 
       {open && (
         <div
           role="listbox"
-          className={`absolute z-50 w-full rounded-xl overflow-hidden py-1 ${above ? 'bottom-full mb-1' : 'mt-1'}`}
+          className={`absolute z-50 w-full rounded-xl overflow-hidden py-1 ${above ? 'bottom-full mb-1' : 'mt-1'}${newLook ? ' c-sel-list' : ''}`}
           style={{
-            background: '#0A0908',
-            border: '1px solid rgba(255,138,31,0.30)',
-            boxShadow: '0 10px 30px rgba(0,0,0,0.60)',
+            ...(newLook
+              ? {}
+              : { background: '#0A0908', border: '1px solid rgba(255,138,31,0.30)', boxShadow: '0 10px 30px rgba(0,0,0,0.60)' }),
             ...(listMax === undefined ? {} : { maxHeight: listMax, overflowY: 'auto' }),
           }}
         >
@@ -118,15 +120,15 @@ export default function Select({
                 role="option"
                 aria-selected={active}
                 onClick={() => { onChange(o.value); setOpen(false); }}
-                className="w-full text-left px-4 py-2 text-sm transition-colors"
-                style={{
+                className={newLook ? `c-opt w-full text-left px-4 min-h-[44px] c-s15${active ? ' c-opt-on' : ''}` : 'w-full text-left px-4 py-2 text-sm transition-colors'}
+                style={newLook ? undefined : {
                   background: active ? 'rgba(255,138,31,0.18)' : 'transparent',
                   color:      active ? '#FF8A1F' : 'rgba(255,255,255,0.85)',
                 }}
-                onMouseEnter={(e) => {
+                onMouseEnter={newLook ? undefined : (e) => {
                   if (!active) e.currentTarget.style.background = 'rgba(255,138,31,0.10)';
                 }}
-                onMouseLeave={(e) => {
+                onMouseLeave={newLook ? undefined : (e) => {
                   if (!active) e.currentTarget.style.background = 'transparent';
                 }}
               >

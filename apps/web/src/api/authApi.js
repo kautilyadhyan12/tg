@@ -31,13 +31,14 @@ function isAuthEndpoint(url) {
 // sign a membership agreement opens (`/sign-agreement`, 18u-ii-b), for a member with no account, and the
 // page the note to an old email address opens to undo the change (`/undo-email-change`, item 19's passes),
 // and the admin page (`/admin`, 14a-i), which has its own sign-in, and our Privacy Policy, Terms of Use and
-// Washington's page (21b-i), which anyone reads, signed in or not.
+// Washington's page (21b-i), which anyone reads, signed in or not, and a staff invitation email's link
+// (`/staff-invitation`, 4a-i), which says which address to sign in with and opens Sign in at the Manage door.
 export function isSignedOutPage(p) {
   return !(
     !p.startsWith('/login') && !p.startsWith('/register') &&
     !p.startsWith('/verify-email') && !p.startsWith('/reset-password') &&
     !p.startsWith('/forgot-password') && !p.startsWith('/restore-account') &&
-    !p.startsWith('/join/') && !p.startsWith('/gyms/') && !p.startsWith('/invite/') &&
+    !p.startsWith('/join/') && !p.startsWith('/gyms/') && !p.startsWith('/invite/') && p !== '/staff-invitation' && !p.startsWith('/staff-invitation/') &&
     !p.startsWith('/check-in') && !p.startsWith('/sign-agreement') && !p.startsWith('/undo-email-change') &&
     !p.startsWith('/admin') &&
     !Object.values(LEGAL_PATHS).some((l) => p === l || p.startsWith(`${l}/`))

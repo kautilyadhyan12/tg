@@ -4,7 +4,8 @@ import { cameraHolds, heldIn } from "../../../packages/movement/scripts/holdChec
 import { cameraRun, proofVideos, withLeadIn, type ProofVideo } from "../../../packages/movement/scripts/movementCheck";
 import { MOVEMENT_VIDEOS } from "../../../packages/movement/scripts/movementVideos";
 import { CAMERA_EXERCISES, type CameraExercise } from "../src/camera/cameraExercises";
-import { FLASH_MS, LINE_MS, LiveSet, LOST_MS, LOST_WORDS, type LiveView, type SetNow } from "../src/camera/liveSet";
+import { FLASH_MS, LINE_MS, LiveSet, LOST_MS, LOST_WORDS, STILL_WORDS, TURN_BACK_WORDS, type LiveView, type SetNow } from "../src/camera/liveSet";
+import { furtherBack, middleOf } from "../../../packages/movement/test/helpers/people";
 import type { PoseEvent } from "../src/camera/poseFrame";
 import { frameOf } from "../src/camera/poseFrame";
 
@@ -16,7 +17,7 @@ const EARTH = 9.81;
 
 /** A kept frame as the camera module sends it: the picture's points and 3D points laid end to end, gravity as Android reads
  *  it (`downOf` turned back), and the phone's clock started at some moment of its own. */
-function eventOf(f: MovementFrame, clock = 1_234_567): PoseEvent {
+function eventOf(f: MovementFrame, clock = 1_234_567, spin?: readonly number[]): PoseEvent {
   const down = f.down ?? [0, 1, 0];
   return {
     t: clock + f.t,
@@ -24,6 +25,7 @@ function eventOf(f: MovementFrame, clock = 1_234_567): PoseEvent {
     height: 480,
     gravity: [down[0] * EARTH, down[1] * EARTH, -down[2] * EARTH],
     turn: 0,
+    ...(spin === undefined ? {} : { spin }),
     people: f.people.map((p) => ({ points: p.points.flat(), world: p.world === null ? [] : p.world.flat() })),
   };
 }
@@ -254,6 +256,133 @@ describe("what the coach says (53b-i)", () => {
     set.next(eventOf(f));
     expect(set.next({ ...eventOf(f), t: 0 }).say).toBeNull();
     expect(set.next({ ...eventOf(f), width: -1 }).say).toBeNull();
+  });
+});
+
+// 53c: the phone itself moved in a set. Each answer carries how far the phone turned since the one before (its gyroscope);
+// a phone standing still turns a few hundred-thousandths of a radian between two answers, a hand holding it far more.
+describe("the phone moved in a set (53c)", () => {
+  const STILL_SPIN = [0.00002, -0.00001, 0.00001];
+  /** A hand's turning between two answers, back and forth: 0.02 rad each way, about a degree. */
+  const handSpin = (k: number): number[] => [k % 2 === 0 ? 0.02 : -0.02, 0.005, 0];
+
+  /** Every view over the video, the phone held by hand from `from` for `ms`, standing still otherwise. */
+  function held(e: CameraExercise, v: ProofVideo, from: number, ms: number, now: SetNow = { byHand: 0, target: null }): { frames: MovementFrame[]; views: LiveView[] } {
+    const frames = withLeadIn(v.video).frames;
+    const set = new LiveSet(e.counts, e.camera, 1);
+    const views = frames.map((f, k) => set.next(eventOf(f, 1_234_567, f.t >= from && f.t < from + ms ? handSpin(k) : STILL_SPIN), now));
+    return { frames: [...frames], views };
+  }
+
+  it("a phone that stands still all through counts and says exactly what a camera with no gyroscope does", () => {
+    const e = exercise("squat");
+    const v = video("prisoner_squat_1");
+    const set = new LiveSet(e.counts, e.camera, 1);
+    const views = withLeadIn(v.video).frames.map((f) => set.next(eventOf(f, 1_234_567, STILL_SPIN), { byHand: 0, target: 3 }));
+    const plain = new LiveSet(e.counts, e.camera, 1);
+    const plainViews = withLeadIn(v.video).frames.map((f) => plain.next(eventOf(f), { byHand: 0, target: 3 }));
+    expect(views).toEqual(plainViews);
+  });
+
+  it("picked up after the first counted rep: \"Keep the phone still.\" in red while it moves, said once; nothing counts meanwhile; it goes once the phone stands", () => {
+    const e = exercise("squat");
+    const v = video("prisoner_squat_1");
+    const plain = play(e, v);
+    const frames = withLeadIn(v.video).frames;
+    const first = plain.views.findIndex((w) => w.reps === 1);
+    const from = (frames[first]?.t ?? 0) + 100;
+    const { views } = held(e, v, from, 1500);
+    const at = (k: number): number => frames[k]?.t ?? 0;
+    const moving = views.flatMap((w, k) => (at(k) >= from + 600 && at(k) < from + 1500 ? [w] : []));
+    expect(moving.length).toBeGreaterThan(0);
+    expect(moving.every((w) => w.line?.words === STILL_WORDS && w.line.tone === "unseen")).toBe(true);
+    // Nothing the camera saw while it moved counts: the count stays where it was.
+    expect(moving.every((w) => w.reps === 1)).toBe(true);
+    // Said once, and only that while it moves.
+    const said = views.flatMap((w) => (w.say === null ? [] : [w.say.words]));
+    expect(said.filter((w) => w === STILL_WORDS)).toEqual([STILL_WORDS]);
+    // Once it has stood still a whole second after its last turning has left the half second read, the line has gone, and
+    // the person lost is never said meanwhile.
+    expect(views.filter((_, k) => at(k) >= from + 1500 + 1600).every((w) => w.line?.words !== STILL_WORDS)).toBe(true);
+    expect(said).not.toContain(LOST_WORDS);
+  });
+
+  it("the count goes on after the phone stands: picked up 0.8 s right after her first squat, laid down, and back at her place 3 s, she is counted every squat she did, as with the phone never moved", () => {
+    const e = exercise("squat");
+    const v = video("prisoner_squat_1");
+    const frames = withLeadIn(v.video).frames;
+    const plain = play(e, v).views;
+    const first = plain.findIndex((w) => w.reps === 1);
+    const at = frames[first];
+    if (at === undefined) throw new Error("no first squat");
+    const step = (frames[1]?.t ?? 0) - (frames[0]?.t ?? 0);
+    // Her own pictures until her first squat was counted; then the phone in a hand 0.8 s and standing 3 s while she stands
+    // where she was; then the rest of her set, its time carried on.
+    const pause = Math.round(3800 / step);
+    const shifted = (f: MovementFrame, n: number): MovementFrame => ({ ...f, t: f.t + n * step });
+    const played = [...frames.slice(0, first + 1), ...Array.from({ length: pause }, (_, n) => shifted(at, n + 1)), ...frames.slice(first + 1).map((f) => shifted(f, pause))];
+    const set = new LiveSet(e.counts, e.camera, 1);
+    const holdEnd = at.t + 800;
+    const views = played.map((f, k) => set.next(eventOf(f, 1_234_567, f.t > at.t && f.t <= holdEnd ? handSpin(k) : STILL_SPIN)));
+    expect(views.some((w) => w.still)).toBe(true);
+    const counts = views.map((w) => w.reps);
+    expect(counts.every((c, k) => k === 0 || c >= (counts[k - 1] ?? 0))).toBe(true);
+    expect(counts[counts.length - 1]).toBe(plain[plain.length - 1]?.reps);
+    expect(plain[plain.length - 1]?.reps).toBe(v.entry.reps);
+  });
+
+  it("put back turned so far that she is 1.3 m from her place on its picture (seen further back, so that she stays on it): the set waits for her there, the foot says \"Turn the phone back towards you.\", and the coach never says the camera cannot see her", () => {
+    const e = exercise("squat");
+    const v = video("prisoner_squat_1");
+    const back = furtherBack(v.video);
+    const frames = withLeadIn(back).frames;
+    const plain = frames.map(((set) => (f: MovementFrame) => set.next(eventOf(f)))(new LiveSet(e.counts, e.camera, 1)));
+    const first = plain.findIndex((w) => w.reps === 1);
+    const at = frames[first];
+    if (at === undefined) throw new Error("no first squat");
+    const step = (frames[1]?.t ?? 0) - (frames[0]?.t ?? 0);
+    const own = middleOf(frames);
+    const aspect = at.aspect;
+    const dx = ((own.middle[0] / aspect < 0.5 ? 1 : -1) * 1.3 * own.size) / aspect;
+    const moved = (f: MovementFrame): MovementFrame => ({ ...f, people: f.people.map((p) => ({ ...p, points: p.points.map(([x, y, z, vis, pr]) => [x + dx, y, z, vis, pr] as [number, number, number, number, number]) })) });
+    const pause = Math.round(3800 / step);
+    const shifted = (f: MovementFrame, n: number): MovementFrame => ({ ...f, t: f.t + n * step });
+    const played = [...frames.slice(0, first + 1), ...Array.from({ length: pause }, (_, n) => shifted(at, n + 1)), ...frames.slice(first + 1).map((f) => moved(shifted(f, pause)))];
+    // Her trunk, which the lock reads, stays on the picture (an elbow of her hands behind her head reaches 2 in 100 past it).
+    expect(played.every((f) => f.people.every((p) => [11, 12, 23, 24].every((k) => { const x = p.points[k]?.[0] ?? -1; return x > 0 && x < 1; })))).toBe(true);
+    const set = new LiveSet(e.counts, e.camera, 1);
+    const holdEnd = at.t + 800;
+    const views = played.map((f, k) => set.next(eventOf(f, 1_234_567, f.t > at.t && f.t <= holdEnd ? handSpin(k) : STILL_SPIN), { byHand: 0, target: null }));
+    expect(views[views.length - 1]?.reps).toBe(1);
+    expect(views.some((w) => w.line?.words === TURN_BACK_WORDS)).toBe(true);
+    expect(views.some((w) => w.line?.words === LOST_WORDS)).toBe(false);
+    expect(views.flatMap((w) => (w.say === null ? [] : [w.say.words]))).toEqual([STILL_WORDS]);
+  });
+
+  it("held in a hand from the start: once it has moved 5 s in a row the set-up says \"Keep the phone still.\", once, and nothing counts", () => {
+    const e = exercise("squat");
+    const v = video("prisoner_squat_1");
+    const frames = withLeadIn(v.video).frames;
+    const t0 = frames[0]?.t ?? 0;
+    const { views } = held(e, v, t0, 1_000_000);
+    const at = (k: number): number => (frames[k]?.t ?? 0) - t0;
+    expect(views.every((w) => w.stage === "setUp" && w.reps === 0)).toBe(true);
+    // Moving from about its first quarter second; said from 5 s after that.
+    expect(views.filter((_, k) => at(k) < 5000).some((w) => w.still)).toBe(false);
+    expect(views.filter((_, k) => at(k) >= 5500).every((w) => w.still)).toBe(true);
+    expect(views.flatMap((w) => (w.say === null ? [] : [w.say.words]))).toEqual([STILL_WORDS]);
+  });
+
+  it("while the person sets up, a phone being put in its place says nothing: the set-up's own words say where it stands", () => {
+    const e = exercise("squat");
+    const v = video("prisoner_squat_1");
+    const frames = withLeadIn(v.video).frames;
+    // Three seconds in the hand, then stood: moving 4.5 s in all, as Kd's own put-down was.
+    const { views } = held(e, v, frames[0]?.t ?? 0, 3000);
+    expect(views.slice(0, 10).every((w) => w.stage === "setUp")).toBe(true);
+    expect(views.every((w) => !w.still && w.say?.words !== STILL_WORDS && w.line?.words !== STILL_WORDS)).toBe(true);
+    // And then counts her squats.
+    expect(views[views.length - 1]?.reps ?? 0).toBeGreaterThan(0);
   });
 });
 
