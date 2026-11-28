@@ -2856,16 +2856,22 @@ place on the picture, and a phone knocked, picked up or held by hand moves the w
 squats counted and the count stopped at 4 or 5, silent. **The phone's own turning:** the camera module reads Android's
 calibrated gyroscope and sends with each answer how far the phone turned since the answer before, radians about its own
 three axes (`spin`; none from a phone without one, or after a gap in its readings), checked with the answer
-(`poseCameraEventSchema`: none or three numbers) and given to the engine's frame (`movementFrameSchema.spin`: absent for a
+(`poseCameraEventSchema`: none or three numbers, refused past three before any is read) and given to the engine's frame (`movementFrameSchema.spin`: absent for a
 reference video, null where the live phone cannot say). **The rule** (`PhoneMotion`, `packages/movement/src/movement/phone.ts`,
 pure, the first thing `CameraSet` does, every movement the same): the phone is **moving** when over the last half second it
 turned more than 1.5 degrees (it points elsewhere) or 3 degrees in all (shaken), or when it **trembles** as a hand does:
 in every quarter second of the last 1.5 s its turning went back and forth at least 0.09 degrees (each answer against its
 quarter's own mean, so a gyroscope's steady drift and any steady turn are not back and forth). While it moves no picture
 reaches the stages after it: nothing counts, nobody is read. It stands **again** after a whole second under 0.5 degrees in
-all and not trembling, and then every stage starts afresh as at the start of a set, the lock included (on a moved phone's
-picture the person is somewhere else), the count and a hold's time going on from where they were; so does a picture after
-a second with none (Pause, the app away, a camera that stalled: the phone may have been moved). **The numbers are Kd's phone's
+all and not trembling, and then the stages that measure the body start afresh (its floor, its standing, a rep under way, all
+read on the old picture), the count and a hold's time going on from where they were. **Who the person is does not start
+afresh** once the set has counted: the lock (52d) keeps their place and size, and on the moved phone's picture looks for them
+where they were (round one: started afresh with the rest, the lock took whoever it found first, a stranger beside the
+member, and did so after every Pause); before the set has counted, it starts afresh too. After a second with no picture
+(Pause, the app away, a camera that stalled) the turning meanwhile is not known: the body stages start afresh only if the
+phone's tilt ("down") is more than 2 degrees from what it was (his still phone's gravity reading moved at most 1.03 degrees in
+4.5 minutes, 0.36 after it was laid down; picked up and laid flat on the desk again it read 0.74 from before, so a phone put
+back at the same tilt is not seen, and the person, still the set's, is found at their place). **The numbers are Kd's phone's
 own readings** (moto g35, its lsm6dsoq gyroscope, the camera screen open; `test/phone-motion`, the turning and the times
 only): lying still on a desk for two minutes it turned 0.06 to 0.09 degrees in each half second (its own drift, about 0.14
 a second) and 0.06 to 0.14 in all, once 0.6 and 1.4 (not known why); with the desk tapped hard beside it 0.18 in all; held in
@@ -2890,14 +2896,21 @@ judged in and held 3 s (his hand's own reading) while a stranger does real reps 
 place and size (where the lock would take them for the member: with the phone taken as standing, it does), then laid down 0.3
 m aside: each counts and is told exactly as with nobody there, the stranger is read in at most the pick-up's first three
 pictures (before the hand turned it 1.5 degrees), and the member, 3 s back at their place, is counted every rep of their own
-set; the other way (`phoneMovedProof.test.ts`, part of the proof): every proof set under its own movement, 119, and the
+set. **Round one's two cases** (the review ran them): the two sumo squatters, a stranger's real squats 1.07 to 1.15 m beside
+the member's place (0.3 picture heights, at 0.8 to 1.3 times their size; outside the lock's 0.95 m), after a 2 s Pause on a
+phone that never moved, with and without a gyroscope, and after the phone was picked up and put back: counted and told as
+with nobody there, and after a Pause exactly as before 53c; a Pause after which the phone stands tilted 3 degrees otherwise:
+the body measured afresh, the member's whole count, the stranger nobody. The other way (`phoneMovedProof.test.ts`, part of
+the proof): every proof set under its own movement, 119, and the
 L-sit's holds, played with his still phone's readings (its blip, then the desk tapped), count, say and time exactly as
 before and are never called moving. On his readings: lying still and tapped, never moving nor trembling; picked up, moving
 within 0.2 s and in every picture while held; held from the start, caught within 1.6 s wherever in the holding; laid down,
 standing again once, about a second after it lay still. **Deliberate breaks**, each run red and put back: pictures read while
-moving (the stranger's reps added, 4 against 3, 7 against 5); the stages not started afresh (the count wrong); the turn that is
-moving a tenth of what was measured (his still phone moving); the trembling line ten times what was measured (first green: the
-test's hand shook far past the line; his real hand and a tremor just either side of 0.09 were added, and it went red). The
+moving (the stranger's reps added, 4 against 3, 7 against 5); the set's person thrown away with the other stages when the phone
+stands again, as first built (round one's cases red, the stranger counted, 5 against 3); the turn that is moving a tenth of what
+was measured (his still phone moving); the trembling line ten times what was measured (first green: the test's hand shook far
+past the line; his real hand and a tremor just either side of 0.09 were added, and it went red); every second with no picture
+taken as a moved phone (only the tilt rule's own test red: the member's protection no longer rests on it). The
 rule costs 24 microseconds a picture on the laptop in the middle (his hand's reading, 929 answers, 20 rounds). **On Kd's phone**
 (Exercise 1, a folder's development copy, 2026-11-28): the module's answers carry the turning, about 20 a second; held steadily
 in his hand facing the laptop's clip it counted a whole set (before the trembling); with it, held in his hand from the start
@@ -2905,12 +2918,16 @@ the heading read "Keep the phone still." about 7 s after the camera opened and A
 he heard it, and laid flat it went back to "Step back until the camera sees you like the picture.". Not walked: a phone
 knocked in the middle of a counted set (he had nothing to stand the phone against). **Limits, in plain sight:** a rep the
 person has just finished, the phone moved before the camera judged it (0.3 to 0.4 s after it), is lost (pinned: a sumo
-squatter's 2 of 3); once the phone stands again, whoever the camera finds there first is followed, as at the start of a set
-(pinned: a stranger doing reps at the member's place first is counted); a phone counts as standing 1.5 s after it lies still
-and the camera then learns the person afresh, so a rep begun at once may be lost; the pick-up's first tenth of a second is
-read; a phone moved without turning (slid along a shelf) is not seen by a gyroscope; a still phone whose gyroscope drifts 3
-degrees a second or more would be called moving (his drifts 0.14); a phone with no gyroscope is checked only for a second with
-no picture; his readings are from a desk, never a phone standing on a floor near someone jumping (§12.9).
+squatter's 2 of 3); 52d's own limit, a stranger of the member's size within 0.95 m of their place is taken for them, holds
+across a Pause as before 53c (pinned: at 0.89 to 0.96 m, 0.8 times their size, one squat counted, before 53c too) and, once the
+phone has moved, around the place where the member was on the old picture (pinned: the phone put back 0.3 m aside, a stranger
+within that room read as the member for one dip the camera could not see whole, nothing counted); a phone laid down turned so
+far that the member is no longer within that room waits for them there (pinned: 1.5 m away, nothing more counted; the screen
+says "The camera can't see you." after 2 s; "Count this set myself" goes on by hand); a phone counts as standing 1.5 s after
+it lies still and the body is then measured afresh, so a rep begun at once may be lost; the pick-up's first tenth of a second
+is read; a phone moved without turning (slid along a shelf) is not seen by a gyroscope; a still phone whose gyroscope drifts 3
+degrees a second or more would be called moving (his drifts 0.14); a phone with no gyroscope is checked only by its tilt
+across a gap with no picture; his readings are from a desk, never a phone standing on a floor near someone jumping (§12.9).
 
 An exercise that does not pass is published as "count by hand", never with a wrong camera
 count. Kd tries one exercise of each kind of movement on the phone, about a dozen, never
