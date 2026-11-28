@@ -20,7 +20,8 @@ export const VOICE_FORMAT = 1;
  *   - "lost": the camera has not seen the person for a while;
  *   - "counts now": a rep counts after the coach said why the one before did not;
  *   - "better": a mistake the coach corrected is fine on the next rep it is seen;
- *   - "get ready", "rest", "next exercise", "workout complete": the workout's own (job 64b), recorded once with the rest. */
+ *   - "get ready", "rest", "next exercise", "workout complete": the workout's own (job 64b), recorded once with the rest;
+ *     "get ready" also begins a set followed along with its clip (53b-ii). */
 export const VOICE_WHENS = [
   "rule",
   "halfway",

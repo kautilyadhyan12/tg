@@ -77,7 +77,13 @@ const draw = () =>
       </Routes>
     </MemoryRouter>,
   );
-const box = () => screen.findByTestId('start-here');
+/** Getting started, with all its steps opened (V5-a: the strip opens them with View all steps). */
+const box = async () => {
+  const card = await screen.findByTestId('start-here');
+  const more = within(card).queryByRole('button', { name: /^View all [0-9]+ steps/ });
+  if (more !== null) fireEvent.click(more);
+  return card;
+};
 const rowOf = (card, step) => card.querySelector(`[data-step="${step}"]`);
 
 beforeEach(() => {
@@ -102,7 +108,7 @@ describe('a gym made today', () => {
     draw();
     const card = await box();
     expect(orgService.getStartHere).toHaveBeenCalledWith(ORG.id);
-    expect(within(card).getByRole('heading', { name: 'Set up your gym' })).toBeTruthy();
+    expect(within(card).getByRole('heading', { name: 'Next: What you sell' })).toBeTruthy();
     expect(within(card).getByTestId('start-here-count').textContent).toBe('0 of 7 done');
     const rows = [...card.querySelectorAll('[data-step]')];
     expect(rows.map((r) => r.getAttribute('data-step'))).toEqual(ALL);
@@ -129,7 +135,7 @@ describe('a gym made today', () => {
     const card = await box();
     const after = screen.getByText(/Nobody has joined yet/);
     expect(card.compareDocumentPosition(after) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    const title = screen.getByRole('heading', { name: 'Iron House' });
+    const title = screen.getByRole('heading', { level: 1 });
     expect(title.compareDocumentPosition(card) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
@@ -242,10 +248,10 @@ describe('Hide this list, and showing it again', () => {
     expect(orgService.setStartHereHidden).toHaveBeenCalledWith(ORG.id, true);
     expect(screen.getByTestId('bring-members-in')).toBeTruthy();
     const line = screen.getByTestId('start-here-hidden');
-    expect(line.textContent).toMatch(/The Start here list is hidden\./);
+    expect(line.textContent).toMatch(/The Getting started list is hidden\./);
 
     orgService.setStartHereHidden.mockResolvedValue(answer({ done: ['members'] }));
-    fireEvent.click(within(line).getByRole('button', { name: 'Show the Start here list' }));
+    fireEvent.click(within(line).getByRole('button', { name: 'Show the Getting started list' }));
     const again = await box();
     expect(orgService.setStartHereHidden).toHaveBeenLastCalledWith(ORG.id, false);
     expect(within(again).getByTestId('start-here-count').textContent).toBe('1 of 7 done');
@@ -341,7 +347,7 @@ describe("another kind of organisation's own words", () => {
     orgService.getMine.mockResolvedValue({ data: { orgs: [{ ...ORG, orgType: 'studio' }] } });
     draw();
     const card = await box();
-    expect(within(card).getByRole('heading', { name: 'Set up your studio' })).toBeTruthy();
+    expect(within(card).getByRole('heading', { name: 'Next: What you sell' })).toBeTruthy();
     expect(within(rowOf(card, 'members')).getByText('Bring your clients in')).toBeTruthy();
     expect(within(card).getByRole('link', { name: 'Add client' }).getAttribute('href')).toBe('/console/iron-house/members?open=add');
     expect(within(card).getByText(/Leave out anything your studio doesn't use\./)).toBeTruthy();

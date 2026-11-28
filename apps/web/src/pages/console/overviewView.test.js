@@ -176,12 +176,12 @@ describe('the headline figures', () => {
 });
 
 describe('this week against last week', () => {
-  // THE UNEVEN COMPARISON. `visits` is this gym-week SO FAR and `prevVisits` is
-  // the WHOLE of the week before, so on a Tuesday a bare arrow compares two days
+  // THE UNEVEN COMPARISON. `visitors` is this gym-week SO FAR and `prevVisitors` is
+  // the WHOLE of the week before (people, as the figure beside it counts: V5-a), so on a Tuesday a bare arrow compares two days
   // against seven and tells a healthy gym it is collapsing (:5807).
   it('never hands back a direction without a sentence naming both ends', () => {
     for (const [now, prev] of [[40, 38], [10, 38], [38, 38], [0, 0], [5, 0]]) {
-      const c = weekComparison({ visits: now, visitors: 0, prevVisits: prev, prevVisitors: 0 });
+      const c = weekComparison({ visits: 0, visitors: now, prevVisits: 0, prevVisitors: prev });
       expect(typeof c.text).toBe('string');
       expect(c.text.length).toBeGreaterThan(0);
       if (c.direction !== null) {
@@ -191,27 +191,33 @@ describe('this week against last week', () => {
     }
   });
 
-  it('points the arrow at the visits and quotes last week in full', () => {
-    expect(weekComparison({ visits: 40, prevVisits: 38 })).toEqual({
+  it('points the arrow at the people and quotes last week in full', () => {
+    expect(weekComparison({ visitors: 40, prevVisitors: 38 })).toEqual({
       direction: 'up',
-      text: 'so far, against 38 visits in the whole of last week',
+      text: 'so far, against 38 people in the whole of last week',
     });
-    expect(weekComparison({ visits: 10, prevVisits: 38 }).direction).toBe('down');
-    expect(weekComparison({ visits: 38, prevVisits: 38 }).direction).toBe('same');
+    expect(weekComparison({ visitors: 10, prevVisitors: 38 }).direction).toBe('down');
+    expect(weekComparison({ visitors: 38, prevVisitors: 38 }).direction).toBe('same');
+  });
+
+  // V5-a's review: more people and fewer visits is UP, because the figure beside it is people.
+  it('follows the people, never the visits', () => {
+    expect(weekComparison({ visits: 26, visitors: 25, prevVisits: 60, prevVisitors: 15 }).direction).toBe('up');
+    expect(weekComparison({ visits: 40, visitors: 12, prevVisits: 30, prevVisitors: 20 }).direction).toBe('down');
   });
 
   // "Up from nothing" is not a trend, and an arrow over a gym's first week is
   // the same false confidence pointed the other way.
   it('draws no arrow at all when there is nothing to compare against', () => {
-    expect(weekComparison({ visits: 12, prevVisits: 0 })).toEqual({
+    expect(weekComparison({ visitors: 12, prevVisitors: 0 })).toEqual({
       direction: null,
       text: 'Nothing was recorded last week.',
     });
   });
 
   it('gets the singular right in the comparison too', () => {
-    expect(weekComparison({ visits: 4, prevVisits: 1 }).text).toBe(
-      'so far, against 1 visit in the whole of last week',
+    expect(weekComparison({ visitors: 4, prevVisitors: 1 }).text).toBe(
+      'so far, against 1 person in the whole of last week',
     );
   });
 });

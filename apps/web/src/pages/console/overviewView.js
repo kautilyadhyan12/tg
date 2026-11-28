@@ -139,8 +139,10 @@ export function weekLine(week) {
  *  **THE COMPARISON IS UNEVEN AND THE SCREEN MUST SAY SO** — a build requirement
  *  the server half's review moved into `CARD-gym-overview-numbers.md` §4b after
  *  finding it lived only in a comment in `packages/shared`, which is not
- *  somewhere the screen's author reads. `week.visits` is this gym-week SO FAR;
- *  `week.prevVisits` is the WHOLE of the week before. **On a Tuesday that is two
+ *  somewhere the screen's author reads. `week.visitors` is this gym-week SO FAR;
+ *  `week.prevVisitors` is the WHOLE of the week before. It compares PEOPLE, as the
+ *  figure beside it counts (Kd, 2026-09-03; V5-a's review: visits under a count of
+ *  people showed fewer visits as fewer people). **On a Tuesday that is two
  *  days against seven, so a bare arrow tells a healthy gym it is collapsing** —
  *  :5807 on its face, a number on screen that is wrong.
  *
@@ -151,11 +153,11 @@ export function weekLine(week) {
  *  trend, and an arrow drawn over a gym's first week would be the same false
  *  confidence in the other direction. */
 export function weekComparison(week) {
-  const prev = count(week?.prevVisits);
+  const prev = count(week?.prevVisitors);
   if (prev === 0) return { direction: null, text: 'Nothing was recorded last week.' };
-  const now = count(week?.visits);
+  const now = count(week?.visitors);
   const direction = now > prev ? 'up' : now < prev ? 'down' : 'same';
-  return { direction, text: `so far, against ${visitsLabel(prev)} in the whole of last week` };
+  return { direction, text: `so far, against ${peopleLabel(prev)} in the whole of last week` };
 }
 
 /** THE LAST 30 DAYS — how many of the gym's members came, and what share that
@@ -406,3 +408,68 @@ export function barTitle(bar) {
   const when = bar?.isCurrent ? 'This week so far' : `Week of ${bar?.label ?? ''}`;
   return `${when}: ${visitsLabel(count(bar?.visits))}, ${peopleLabel(count(bar?.visitors))}`;
 }
+
+/** THE BUSIEST FINISHED WEEK, drawn in orange (V5-a; board `Overview`): the bar's key, or null
+ *  when no finished week had a visit. The current week is never it: it is not over. A tie goes
+ *  to the later week. */
+export function bestWeekKey(bars) {
+  let best = null;
+  for (const bar of Array.isArray(bars) ? bars : []) {
+    if (bar?.isCurrent) continue;
+    if (count(bar?.visits) === 0) continue;
+    if (best === null || count(bar.visits) >= count(best.visits)) best = bar;
+  }
+  return best === null ? null : best.key;
+}
+
+const GREETINGS = [
+  [5, 'Good morning'],
+  [12, 'Good afternoon'],
+  [18, 'Good evening'],
+];
+
+/** THE HEAD OF OVERVIEW (V5-a): "Overview · Monday 16 November" and "Good morning, Dana", both
+ *  in the business's own time zone, so an owner away from it reads its day. An unknown zone
+ *  reads the browser's. */
+export function overviewHeading({ now, timezone, displayName }) {
+  const parts = (zone) =>
+    new Intl.DateTimeFormat('en-GB', { timeZone: zone, weekday: 'long', day: 'numeric', month: 'long', hour: 'numeric', hourCycle: 'h23' }).formatToParts(now);
+  let found;
+  try {
+    found = parts(typeof timezone === 'string' && timezone !== '' ? timezone : undefined);
+  } catch {
+    found = parts(undefined);
+  }
+  const part = (type) => found.find((p) => p.type === type)?.value ?? '';
+  const hour = Number(part('hour'));
+  let hello = 'Good evening';
+  for (const [from, words] of GREETINGS) if (hour >= from) hello = words;
+  const first = String(displayName ?? '').trim().split(/\s+/)[0] ?? '';
+  return {
+    eyebrow: `Overview · ${part('weekday')} ${part('day')} ${part('month')}`,
+    greeting: first === '' || first.includes('@') ? hello : `${hello}, ${first}`,
+  };
+}
+
+/** THE ATTENDANCE FIGURES ACROSS THE TOP OF OVERVIEW (V5-a), from the numbers' own read: who
+ *  checked in today, this week against last, and the share of members who came in the last 30
+ *  days. People, never visits (Kd, 2026-09-03). None until somebody has come: the Attendance box
+ *  then says so in one sentence. */
+export function attendanceTiles(overview, orgType) {
+  if (numbersState(overview) !== 'ready') return [];
+  const { tiles } = overview;
+  const today = tileCounts(tiles.today);
+  const week = tileCounts(tiles.week);
+  const comparison = weekComparison(tiles.week);
+  const out = [
+    { key: 'today', icon: 'checkin', tone: 'accent', title: 'Checked in today', figure: n(today.value), note: today.unit, direction: null },
+    { key: 'week', icon: 'week', tone: 'info', title: 'This week', figure: n(week.value), note: comparison.direction === null ? `${week.unit} so far. ${comparison.text}` : `${week.unit} ${comparison.text}`, direction: comparison.direction },
+  ];
+  const adoption = adoptionLine(tiles.month, orgType);
+  if (adoption !== null) {
+    out.push({ key: 'month', icon: 'people', tone: 'good', title: 'Came in the last 30 days', figure: `${String(adoption.pct)}%`, note: adoption.text, direction: null });
+  }
+  return out;
+}
+
+const n = (value) => value.toLocaleString('en');

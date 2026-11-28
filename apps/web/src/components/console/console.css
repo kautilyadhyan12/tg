@@ -107,6 +107,7 @@
   --cl-purple: #A78BFA;
   --cl-red: #F2544B;
   --cl-teal: #2DD4BF;
+  --chart-bar: #67635F;
   --cl-amber: #FBBF24;
   --cl-slate: #94A3B8;
 }
@@ -176,6 +177,7 @@
   --cl-purple: #7C5CD6;
   --cl-red: #D6453B;
   --cl-teal: #159A8C;
+  --chart-bar: #958D85;
   --cl-amber: #B87E00;
   --cl-slate: #64748B;
 }
@@ -2332,6 +2334,278 @@
 @media (max-width: 479px) {
   .c-pay-tiles { grid-template-columns: minmax(0, 1fr); }
   .c-pay-where { display: none; }
+}
+
+/* Overview (V5-a; spec Part 3 §17.11, the boards `Overview`, `OverviewLight` and `Phone`): the
+   greeting with Check in, Getting started, the figures, Needs attention beside today's check-ins,
+   the attendance chart beside Streaks and the plan, Last 7 days beside Details. A phone holds one
+   box a row and two figures a row. */
+.c-ov-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+}
+.c-ov-start {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 16px;
+  padding: 14px 20px;
+}
+.c-ov-start-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1 1 240px;
+  min-width: 0;
+}
+.c-ov-start-acts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.c-ov-ring {
+  position: relative;
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 52px;
+  height: 52px;
+}
+.c-ov-ring svg { position: absolute; inset: 0; transform: rotate(-90deg); }
+.c-ov-ring-track { stroke: var(--raise); }
+.c-ov-ring-fill { stroke: var(--good); }
+.c-ov-steps {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid var(--line);
+}
+.c-ov-step {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 20px;
+}
+.c-ov-step + .c-ov-step { border-top: 1px solid var(--line); }
+.c-ov-step-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1 1 240px;
+  min-width: 0;
+}
+.c-ov-step-acts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-left: auto;
+}
+.c-ov-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 16px;
+}
+/* Two columns where both have something, one wide box otherwise: a column whose boxes all drew
+   nothing is not drawn, and a row with nothing in it takes no room. */
+.c-ov-split {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 20px;
+}
+.c-ov-col {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  min-width: 0;
+}
+.c-ov-wide { flex: 2 1 520px; }
+.c-ov-side { flex: 1 1 300px; }
+.c-ov-col:not(:has(> :not(:empty))) { display: none; }
+.c-ov-split:not(:has(> .c-ov-col > :not(:empty))) { display: none; }
+.c-ov-box { min-width: 0; }
+/* A box's title that folds its list away: as tall as a button. */
+.c-ov-fold {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  color: inherit;
+  font: inherit;
+}
+.c-ov-box-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 12px;
+  padding: 18px 20px 10px;
+}
+.c-ov-box-body { padding: 0 20px 18px; }
+.c-ov-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 12px 20px;
+  border-top: 1px solid var(--line);
+  min-height: 44px;
+  box-sizing: border-box;
+}
+.c-ov-line-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1 1 180px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.c-ov-line-acts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-left: auto;
+}
+.c-ov-times {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+  margin-left: auto;
+}
+.c-ov-kv {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 8px 0;
+}
+.c-ov-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  padding: 0 20px 10px;
+}
+.c-ov-key {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.c-ov-key-bar,
+.c-ov-key-best {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+}
+.c-ov-key-bar { background: var(--chart-bar); }
+.c-ov-key-best { background: var(--accent); }
+.c-ov-key-line {
+  width: 14px;
+  height: 2px;
+  background: var(--info);
+}
+.c-ov-chart { display: flex; gap: 10px; padding: 0 20px 18px; }
+.c-ov-scale {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  flex: none;
+  min-width: 18px;
+  text-align: right;
+}
+.c-ov-plot { flex: 1 1 auto; min-width: 0; }
+.c-ov-plot svg { display: block; width: 100%; overflow: visible; }
+.c-ov-track { fill: var(--raise); }
+.c-ov-bar { fill: var(--chart-bar); }
+.c-ov-bar-best { fill: var(--accent); }
+.c-ov-bar-now { fill: var(--soft); stroke: var(--soft-line); stroke-dasharray: 4 3; }
+.c-ov-trend { stroke: var(--info); }
+.c-ov-dot { fill: var(--card); stroke: var(--info); }
+.c-ov-base { stroke: var(--line); }
+.c-ov-vals,
+.c-ov-axis {
+  display: grid;
+  grid-template-columns: repeat(var(--weeks, 8), minmax(0, 1fr));
+  text-align: center;
+}
+.c-ov-val {
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--t2);
+}
+.c-ov-val-best { color: var(--soft-t); }
+.c-ov-axis { padding-top: 8px; }
+.c-ov-axis > span { overflow-wrap: anywhere; }
+.c-ov-ask { border-color: var(--soft-line); }
+.c-ov-cheer {
+  display: inline-grid;
+  place-items: center;
+  min-width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: var(--soft);
+  font-size: 16px;
+  line-height: 1;
+}
+.c-ov-cheer-on { box-shadow: inset 0 0 0 1px var(--soft-line); background: var(--raise); }
+.c-ov-cheer-box {
+  position: absolute;
+  right: 0;
+  top: 100%;
+  z-index: 10;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  width: max-content;
+  max-width: min(320px, calc(100vw - 48px));
+  margin-top: 6px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--raise-line);
+  background: var(--sheet);
+  box-shadow: var(--pop);
+  text-align: left;
+}
+@media (pointer: coarse) {
+  .c-ov-start .c-btn,
+  .c-ov-step .c-btn,
+  .c-ov-line .c-btn,
+  .c-ov-box .c-btn { height: 44px; }
+  .c-ov-cheer { min-width: 44px; height: 44px; }
+  .c-ov-fold { min-height: 44px; }
+}
+@media (max-width: 767px) {
+  .c-ov-start .c-btn,
+  .c-ov-step .c-btn,
+  .c-ov-line .c-btn,
+  .c-ov-box .c-btn { height: 44px; }
+  .c-ov-cheer { min-width: 44px; height: 44px; }
+  .c-ov-fold { min-height: 44px; }
+  .c-ov-head > .c-btn { width: 100%; }
+}
+@media (max-width: 599px) {
+  .c-ov-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .c-ov-tiles .c-pay-tile { padding: 14px; }
+  .c-ov-tiles .c-big { font-size: 26px; line-height: 30px; }
+  .c-ov-start,
+  .c-ov-step,
+  .c-ov-line { padding-left: 16px; padding-right: 16px; }
+  .c-ov-box-head { padding: 16px 16px 10px; }
+  .c-ov-box-body,
+  .c-ov-legend { padding-left: 16px; padding-right: 16px; }
+  .c-ov-chart { padding: 0 16px 16px; }
+  /* Four week names fit a phone: every second one, the current week always. */
+  .c-ov-axis > span:nth-child(odd) { visibility: hidden; }
+}
+@media (max-width: 339px) {
+  .c-ov-tiles { grid-template-columns: minmax(0, 1fr); }
 }
 
 /* ── A member's page (V2a; spec Part 3 §17.11, the Person board) ──

@@ -2,17 +2,14 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { weekService } from '../../api/weekApi';
 import { weekRows, weekSpan } from '../../pages/console/weekView';
-import { ConsoleCard } from './ConsoleStates';
 
 // Overview's "Last 7 days" box (ROADMAP 20d-ii): new members and members who left, who is
 // at risk, visits against the seven days before, and payments due, each with a button to
-// the page that holds the detail. In Overview's own look until R4 restyles the page.
+// the page that holds the detail.
 //
 // It reads for itself and draws nothing while there is nothing to say: a read that
 // failed, or staff who may open none of those pages. Each page says its own case.
 
-const BUTTON = 'rounded-xl px-4 text-sm font-semibold inline-flex items-center justify-center text-center flex-shrink-0 min-h-[44px]';
-const PLAIN_STYLE = { background: 'rgba(255,255,255,0.08)', color: '#fff' };
 
 export default function LastSevenDays({ gymId, orgSlug, orgType }) {
   // The answer carries the gym it was asked for, so another gym's figures are never drawn.
@@ -37,50 +34,31 @@ export default function LastSevenDays({ gymId, orgSlug, orgType }) {
   const rows = weekRows(week, orgSlug, orgType);
   if (rows.length === 0) return null;
   return (
-    <ConsoleCard>
-      <section data-testid="last-7-days" aria-label="Last 7 days">
-        <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-          <div className="text-xs uppercase tracking-wider" style={{ color: 'rgba(255,255,255,0.35)' }}>
-            Last 7 days
-          </div>
-          <div className="text-xs" style={{ color: 'rgba(255,255,255,0.45)' }}>
-            {weekSpan(week)}
-          </div>
-        </div>
-        <ul className="mt-2">
-          {rows.map((row) => (
-            <li
-              key={row.key}
-              data-testid={`last-7-days-${row.key}`}
-              className="flex flex-col gap-2 py-3 border-t first:border-t-0 sm:flex-row sm:items-center sm:justify-between"
-              style={{ borderColor: 'rgba(255,255,255,0.06)' }}
-            >
-              <div className="min-w-0">
-                <div className="text-sm" style={{ color: 'rgba(255,255,255,0.45)' }}>
-                  {row.label}
-                </div>
-                <p className="font-semibold mt-0.5" style={{ color: '#fff' }}>
-                  {row.value}
-                </p>
-                {row.note !== null ? (
-                  <p className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.45)' }}>
-                    {row.note}
-                  </p>
-                ) : null}
+    <section className="c-card c-ov-box" data-testid="last-7-days" aria-label="Last 7 days">
+      <div className="c-ov-box-head">
+        <h2 className="c-h2">Last 7 days</h2>
+        <span className="c-s14 c-t3">{weekSpan(week)}</span>
+      </div>
+      <ul className="pb-1">
+        {rows.map((row) => (
+          <li key={row.key} data-testid={`last-7-days-${row.key}`} className="c-ov-line">
+            <div className="c-ov-line-text">
+              <span className="c-s14 c-t3">{row.label}</span>
+              <span className="c-s15 c-w6 c-t1">{row.value}</span>
+              {row.note !== null ? <span className="c-s14 c-t2">{row.note}</span> : null}
+            </div>
+            {row.links.length > 0 ? (
+              <div className="c-ov-line-acts">
+                {row.links.map((link) => (
+                  <Link key={link.to} to={link.to} className="c-btn c-btn-s c-btn-sm">
+                    {link.button}
+                  </Link>
+                ))}
               </div>
-              {row.links.length > 0 ? (
-                <div className="flex flex-col gap-2 sm:flex-row sm:flex-shrink-0">
-                  {row.links.map((link) => (
-                    <Link key={link.to} to={link.to} className={BUTTON} style={PLAIN_STYLE}>
-                      {link.button}
-                    </Link>
-                  ))}
-                </div>
-              ) : null}
-            </li>
-          ))}
-        </ul>
-      </section>
-    </ConsoleCard>
+            ) : null}
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
