@@ -2,7 +2,7 @@ import { act, fireEvent, render, screen, waitFor } from "@testing-library/react-
 import { AppState, PermissionsAndroid, Platform } from "react-native";
 import { saveRunRequestSchema, type SaveRunRequest } from "@app/shared";
 import { App } from "../../src/App";
-import { loadRun, phoneRunFiles, resetRecorder, runNow, takeSteps, type LiveRun } from "../../src/screens/running/recorder";
+import { loadRun, movingMsOf, phoneRunFiles, resetRecorder, runNow, takeSteps, type LiveRun } from "../../src/screens/running/recorder";
 import { indoorSumsAt } from "../../src/screens/running/runLive";
 import { distance } from "../../src/screens/running/runWords";
 import type { Ask, AskInit } from "../../src/session/calls";
@@ -333,7 +333,7 @@ describe("a copy of the app built before 37q-ii-a, with no step counter code", (
 });
 
 describe("Auto-pause from the steps", () => {
-  it("ten seconds with no step: Auto-paused where the clock stood; the next steps carry on from just before them", async () => {
+  it("ten seconds with no step: Auto-paused where the clock stood; the next steps start it again where it stood, never jumping ahead", async () => {
     const s = runServer();
     await openRunning(s);
     await pickIndoor();
@@ -346,14 +346,20 @@ describe("Auto-pause from the steps", () => {
     expect(going().phase).toBe("paused");
     expect(going().pausedByPerson).toBe(false);
     expect(await screen.findByText("Auto-paused")).toBeTruthy();
-    // At 95 s the counter hands four steps over: the clock started again two seconds before them.
+    // At 95 s the counter hands four steps over: the clock starts again at 95 s, from 1:10, never ahead of it.
     motion.stepTo(going().startedAt + 95_000, total + 4);
     await lookAt(95);
     expect(going().phase).toBe("running");
-    expect(going().pauses).toEqual([[70_000, 93_000]]);
-    // The steps taken while paused are none of the run's, and those four all are.
-    const sums = indoorSumsAt(going(), 95_000, 0, null);
-    expect(sums.steps).toBe(124);
+    expect(going().pauses).toEqual([[70_000, 95_000]]);
+    // The clock reads where it stood when the steps came, 1:10, and goes on from there.
+    expect(movingMsOf(going(), going().startedAt + 95_000)).toBe(70_000);
+    expect(movingMsOf(going(), going().startedAt + 96_000)).toBe(71_000);
+    // The four steps that started it again are the run's, kept in the second after, never inside the pause.
+    await lookAt(96);
+    const counts = going().indoor?.counts ?? [];
+    expect(counts.filter(([at]) => at > 70_000 && at < 95_000)).toEqual([]);
+    expect(counts.at(-1)).toEqual([96_000, 124]);
+    expect(indoorSumsAt(going(), 96_000, 0, null).steps).toBe(124);
   });
 
   it("a phone that has counted no step since Start (lying on the treadmill) is never paused", async () => {

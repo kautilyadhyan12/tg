@@ -35,10 +35,6 @@ export type StepCount = readonly [number, number];
  *  over within a second or two (no batching is asked for); ten seconds leaves room for one that is slower, so a run is
  *  never paused while the person steps. The terminal's own, measured on Kd's phone in his walk. */
 export const STEP_PAUSE_MS = 10_000;
-/** A step at a brisk walk takes about half a second: an Auto-pause ends this long before the count that ended it for
- *  each step that count holds, so the steps that started the person moving again are the run's. */
-export const RESUME_STEP_MS = 500;
-
 /** When the steps last rose (ms into the run): the last count higher than the one before it; null with none. */
 export function lastRiseAt(counts: readonly StepCount[]): number | null {
   for (let i = counts.length - 1; i >= 0; i--) {
@@ -62,12 +58,13 @@ export function stepsAt(counts: readonly StepCount[], at: number): number {
 
 export type StepPause = { kind: "pause"; at: number } | { kind: "resume"; at: number } | null;
 
-/** What Auto-pause does indoors, looked at once a second. Running, it pauses where the clock stands (`nowMs`) once no
- *  step has been counted for STEP_PAUSE_MS, but only once a step has been counted since Start or since Resume was last
+/** What Auto-pause does indoors, looked at four times a second. Running, it pauses where the clock stands (`nowMs`) once
+ *  no step has been counted for STEP_PAUSE_MS, but only once a step has been counted since Start or since Resume was last
  *  pressed (`armed`): a phone lying on a treadmill counts none, and its run is never stopped for that; one put down on
- *  the treadmill mid-run pauses once, and after Resume waits for steps again. Paused by Auto-pause, the first step
- *  counted starts the clock again, from just before the steps that count holds (never before the pause began). Paused
- *  by the person, only they start it again. */
+ *  the treadmill mid-run pauses once, and after Resume waits for steps again. Paused by Auto-pause, the first step the
+ *  phone hands over (`rose`, the steps risen since the pause began) starts the clock again where it stood, now: never
+ *  from before, which made the clock jump ahead (Kd, 37q-ii-a's walk: "the timer is jumping"). Paused by the person,
+ *  only they start it again. */
 export function nextStepPause(look: {
   phase: "running" | "paused";
   byPerson: boolean;
@@ -76,6 +73,8 @@ export function nextStepPause(look: {
   counts: readonly StepCount[];
   /** When the open pause began; null when none is open. */
   pauseFrom: number | null;
+  /** The steps rose since the open pause began. */
+  rose: boolean;
   nowMs: number;
 }): StepPause {
   if (!look.autoPause) return null;
@@ -84,13 +83,8 @@ export function nextStepPause(look: {
     const rise = lastRiseAt(look.counts);
     return rise !== null && look.nowMs - rise >= STEP_PAUSE_MS ? { kind: "pause", at: look.nowMs } : null;
   }
-  if (look.byPerson || look.pauseFrom === null) return null;
-  const from = look.pauseFrom;
-  const before = stepsAt(look.counts, from);
-  const next = look.counts.find(([ms, n]) => ms > from && n > before);
-  if (next === undefined) return null;
-  const back = Math.min((next[1] - before) * RESUME_STEP_MS, STEP_PAUSE_MS);
-  return { kind: "resume", at: Math.max(from, next[0] - back) };
+  if (look.byPerson || look.pauseFrom === null || !look.rose) return null;
+  return { kind: "resume", at: Math.max(look.pauseFrom, look.nowMs) };
 }
 
 /** Steps a minute on the screen are counted over this long: ten seconds follows a change of pace as it happens (Kd,

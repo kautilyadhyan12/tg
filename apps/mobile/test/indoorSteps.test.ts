@@ -4,7 +4,6 @@
 import { describe, expect, it } from "vitest";
 import { HEIGHT_UNKNOWN_CM, INDOOR_MOST_STEPS, indoorSums } from "@app/shared";
 import {
-  RESUME_STEP_MS,
   STEP_PAUSE_MS,
   indoorPace,
   lastRiseAt,
@@ -101,7 +100,7 @@ function walk(from: number, to: number, perSecond: number, steps = 0): StepCount
 }
 
 describe("Auto-pause indoors, from the steps", () => {
-  const running = { phase: "running" as const, byPerson: false, autoPause: true, armed: true, pauseFrom: null };
+  const running = { phase: "running" as const, byPerson: false, autoPause: true, armed: true, pauseFrom: null, rose: false };
 
   it("pauses where the clock stands once no step has been counted for ten seconds", () => {
     const counts = walk(0, 60_000, 2);
@@ -127,21 +126,20 @@ describe("Auto-pause indoors, from the steps", () => {
     }
   });
 
-  it("a step after an Auto-pause starts the clock again, from just before the steps that count holds", () => {
-    // Stopped at 60 s, paused at 70 s; at 95 s the counter hands over 4 steps.
-    const counts: StepCount[] = [...walk(0, 60_000, 2), [70_000, 120], [95_000, 124]];
-    const look = { phase: "paused" as const, byPerson: false, autoPause: true, armed: true, counts, pauseFrom: 70_000, nowMs: 95_000 };
-    expect(nextStepPause(look)).toEqual({ kind: "resume", at: 95_000 - 4 * RESUME_STEP_MS });
-    // Many steps at once (the screen was off): never further back than ten seconds, nor before the pause.
-    const many: StepCount[] = [...walk(0, 60_000, 2), [70_000, 120], [75_000, 200]];
-    expect(nextStepPause({ ...look, counts: many, nowMs: 75_000 })).toEqual({ kind: "resume", at: 70_000 });
-    expect(nextStepPause({ ...look, counts: [...walk(0, 60_000, 2), [70_000, 120], [200_000, 400]], nowMs: 200_000 })).toEqual({ kind: "resume", at: 190_000 });
+  it("a step after an Auto-pause starts the clock again where it stood, now: never from before, which made it jump ahead", () => {
+    // Stopped at 60 s, paused at 70 s; at 95 s the counter hands over 4 steps, at 200 s a burst of 280.
+    const counts: StepCount[] = [...walk(0, 60_000, 2), [70_000, 120]];
+    const look = { phase: "paused" as const, byPerson: false, autoPause: true, armed: true, counts, pauseFrom: 70_000, rose: true, nowMs: 95_000 };
+    expect(nextStepPause(look)).toEqual({ kind: "resume", at: 95_000 });
+    expect(nextStepPause({ ...look, nowMs: 200_000 })).toEqual({ kind: "resume", at: 200_000 });
+    // Never before the pause began.
+    expect(nextStepPause({ ...look, nowMs: 60_000 })).toEqual({ kind: "resume", at: 70_000 });
   });
 
   it("paused by the person, steps never start it again; no step since the pause, it stays paused", () => {
-    const counts: StepCount[] = [...walk(0, 60_000, 2), [70_000, 120], [95_000, 160]];
-    expect(nextStepPause({ phase: "paused", byPerson: true, autoPause: true, armed: true, counts, pauseFrom: 70_000, nowMs: 95_000 })).toBeNull();
-    expect(nextStepPause({ phase: "paused", byPerson: false, autoPause: true, armed: true, counts: counts.slice(0, -1), pauseFrom: 70_000, nowMs: 95_000 })).toBeNull();
+    const counts: StepCount[] = [...walk(0, 60_000, 2), [70_000, 120]];
+    expect(nextStepPause({ phase: "paused", byPerson: true, autoPause: true, armed: true, counts, pauseFrom: 70_000, rose: true, nowMs: 95_000 })).toBeNull();
+    expect(nextStepPause({ phase: "paused", byPerson: false, autoPause: true, armed: true, counts, pauseFrom: 70_000, rose: false, nowMs: 95_000 })).toBeNull();
   });
 });
 

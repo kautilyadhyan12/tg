@@ -661,18 +661,19 @@ function flushSteps(run: LiveRun, nowMs: number, force: boolean): boolean {
   if (!force && last !== undefined && nowMs - lastAt < STEP_COUNT_EVERY_MS) return false;
   indoor.pendingAt = null;
   if (indoor.steps <= (last?.[1] ?? 0) || indoor.counts.length >= RUN_MAX_POINTS) return false;
-  indoor.counts.push([Math.max(lastAt, at), indoor.steps]);
+  // Never after now: a count past the clock would move it on (`elapsedMs`).
+  indoor.counts.push([Math.max(lastAt, Math.min(at, nowMs)), indoor.steps]);
   stepsUnwritten += 1;
   return true;
 }
 
 /** A count at a pause's edge, `at` ms into the run, with the steps as they stood then: the steps taken while paused are
  *  none of the run's, and those after it are all of it (the maths shares a stretch's steps over its moving part). */
-function fenceAt(run: LiveRun, at: number): void {
+function fenceAt(run: LiveRun, at: number, flush = true): void {
   const indoor = run.indoor;
   if (indoor == null || indoor.stepsOff) return;
   // The steps taken up to the edge first, at their own time.
-  flushSteps(run, at, true);
+  if (flush) flushSteps(run, at, true);
   if (indoor.counts.length >= RUN_MAX_POINTS) return;
   const counts = indoor.counts;
   let i = counts.length;
@@ -692,10 +693,23 @@ export async function takeSteps(now: number = Date.now()): Promise<void> {
   const was = run.phase;
   let resumedFrom: number | null = null;
   const rose = readSteps(run);
-  const counted = flushSteps(run, elapsedMs(run, now), false);
+  // Auto-paused, the steps that start the person moving again are kept after the clock starts again, never inside the
+  // pause, where the maths would leave them out.
+  const autoPaused = run.phase === "paused" && !run.pausedByPerson;
+  const counted = autoPaused ? false : flushSteps(run, elapsedMs(run, now), false);
+  const pausedFrom = openPauseFrom(run);
   const change =
     run.pauses.length < RUN_MAX_PAUSES || run.phase === "paused"
-      ? nextStepPause({ phase: run.phase, byPerson: run.pausedByPerson, autoPause: run.autoPause, armed: indoor.armed, counts: indoor.counts, pauseFrom: openPauseFrom(run), nowMs: elapsedMs(run, now) })
+      ? nextStepPause({
+          phase: run.phase,
+          byPerson: run.pausedByPerson,
+          autoPause: run.autoPause,
+          armed: indoor.armed,
+          counts: indoor.counts,
+          pauseFrom: pausedFrom,
+          rose: pausedFrom !== null && indoor.steps > stepsAt(indoor.counts, pausedFrom),
+          nowMs: elapsedMs(run, now),
+        })
       : null;
   if (change?.kind === "pause" && run.phase === "running") {
     // The clock stops where it stands, never back (37k): the seconds with no step before it are the run's.
@@ -707,8 +721,10 @@ export async function takeSteps(now: number = Date.now()): Promise<void> {
     writtenAt = 0;
   } else if (change?.kind === "resume" && run.phase === "paused" && !run.pausedByPerson) {
     resumedFrom = openPauseFrom(run);
-    fenceAt(run, change.at);
+    // The clock goes on from where it stood; the steps that started it again are kept in the second after, as moving.
+    fenceAt(run, change.at, false);
     closePause(run, change.at);
+    indoor.pendingAt = change.at + STEP_COUNT_EVERY_MS;
     run.phase = "running";
     writtenAt = 0;
   }
