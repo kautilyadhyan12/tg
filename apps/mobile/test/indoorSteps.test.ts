@@ -100,7 +100,7 @@ function walk(from: number, to: number, perSecond: number, steps = 0): StepCount
 }
 
 describe("Auto-pause indoors, from the steps", () => {
-  const running = { phase: "running" as const, byPerson: false, autoPause: true, armed: true, pauseFrom: null, rose: false };
+  const running = { phase: "running" as const, byPerson: false, autoPause: true, armed: true, pauseFrom: null, lastPauseEnd: 0, rose: false };
 
   it("pauses where the clock stands once no step has been counted for ten seconds", () => {
     const counts = walk(0, 60_000, 2);
@@ -129,7 +129,7 @@ describe("Auto-pause indoors, from the steps", () => {
   it("a step after an Auto-pause starts the clock again where it stood, now: never from before, which made it jump ahead", () => {
     // Stopped at 60 s, paused at 70 s; at 95 s the counter hands over 4 steps, at 200 s a burst of 280.
     const counts: StepCount[] = [...walk(0, 60_000, 2), [70_000, 120]];
-    const look = { phase: "paused" as const, byPerson: false, autoPause: true, armed: true, counts, pauseFrom: 70_000, rose: true, nowMs: 95_000 };
+    const look = { phase: "paused" as const, byPerson: false, autoPause: true, armed: true, counts, pauseFrom: 70_000, lastPauseEnd: 0, rose: true, nowMs: 95_000 };
     expect(nextStepPause(look)).toEqual({ kind: "resume", at: 95_000 });
     expect(nextStepPause({ ...look, nowMs: 200_000 })).toEqual({ kind: "resume", at: 200_000 });
     // Never before the pause began.
@@ -138,8 +138,15 @@ describe("Auto-pause indoors, from the steps", () => {
 
   it("paused by the person, steps never start it again; no step since the pause, it stays paused", () => {
     const counts: StepCount[] = [...walk(0, 60_000, 2), [70_000, 120]];
-    expect(nextStepPause({ phase: "paused", byPerson: true, autoPause: true, armed: true, counts, pauseFrom: 70_000, rose: true, nowMs: 95_000 })).toBeNull();
-    expect(nextStepPause({ phase: "paused", byPerson: false, autoPause: true, armed: true, counts, pauseFrom: 70_000, rose: false, nowMs: 95_000 })).toBeNull();
+    expect(nextStepPause({ phase: "paused", byPerson: true, autoPause: true, armed: true, counts, pauseFrom: 70_000, lastPauseEnd: 0, rose: true, nowMs: 95_000 })).toBeNull();
+    expect(nextStepPause({ phase: "paused", byPerson: false, autoPause: true, armed: true, counts, pauseFrom: 70_000, lastPauseEnd: 0, rose: false, nowMs: 95_000 })).toBeNull();
+  });
+
+  it("just after an Auto-pause ended, the ten seconds are counted from its end, not from the last step before it (round one, H1)", () => {
+    // The last rise before the pause at 60 s; the pause ended at 95 s; the steps that ended it not yet in a count.
+    const counts: StepCount[] = [...walk(0, 60_000, 2), [70_000, 120], [95_000, 120]];
+    for (const now of [95_250, 95_500, 100_000, 104_999]) expect(nextStepPause({ ...running, counts, lastPauseEnd: 95_000, nowMs: now })).toBeNull();
+    expect(nextStepPause({ ...running, counts, lastPauseEnd: 95_000, nowMs: 105_000 })).toEqual({ kind: "pause", at: 105_000 });
   });
 });
 
@@ -164,6 +171,12 @@ describe("steps a minute and current pace on the run's screen", () => {
   it("a steady 162 a minute reads 162, from the last ten seconds", () => {
     const counts = walk(0, 120_000, 2.7);
     expect(stepsAMinute(counts, 120_000)).toBe(162);
+  });
+
+  it("never from before the last pause ended: steps taken while paused are none of the run's", () => {
+    // 60 s at 120 a minute, paused from 60 to 220 s with 300 steps counted in it, then 10 s at 120 a minute.
+    const counts: StepCount[] = [...walk(0, 60_000, 2), ...walk(60_000, 220_000, 1.875, 120), ...walk(220_000, 230_000, 2, 420)];
+    expect(stepsAMinute(counts, 230_000, 220_000)).toBe(120);
   });
 
   it("none before five seconds of counts; 0 once no step has come for ten seconds", () => {

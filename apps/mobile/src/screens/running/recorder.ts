@@ -107,6 +107,9 @@ export interface LiveIndoor {
   raw: number | null;
   /** The steps since Start. */
   steps: number;
+  /** Of those, the steps taken while the person had paused: none of the run's, as the maths leaves them out (round one,
+   *  H2: the screen read them as the run's, then the summary dropped them). The run's own are `runStepsOf`. */
+  pausedSteps: number;
   /** No step is counted: Physical activity not allowed, or no step counter on the phone. */
   stepsOff: boolean;
   /** A step was counted since Start or since Resume was last pressed: Auto-pause may pause (`nextStepPause`). */
@@ -151,6 +154,9 @@ const motionFile = (i: number) => `run-now-motion-${String(i)}.json`;
 const stepsFile = (i: number) => `run-now-steps-${String(i)}.json`;
 /** At most one heart rate a second is kept: straps send about that. */
 const HEART_EVERY_MS = 900;
+
+/** An indoor run's own steps: those since Start, less those taken while the person had paused. */
+export const runStepsOf = (indoor: LiveIndoor): number => Math.max(0, indoor.steps - indoor.pausedSteps);
 
 // ── What the screens see ──────────────────────────────────────────────────────────────────────
 
@@ -264,6 +270,9 @@ export async function keepRunStepBasis(who: string, basis: StepBasis): Promise<v
   if (kept?.who === who && kept.heightCm === basis.heightCm && kept.factor === basis.factor) return;
   await keepChoices({ stepBasis: { who, heightCm: basis.heightCm, factor: basis.factor } });
 }
+
+/** Whether the server's step length was kept for this person. */
+export const runStepBasisKept = (who: string): boolean => choices.stepBasis?.who === who;
 
 /** The step length kept for this person; the shared guess for anybody else, or before one was read (the server measures
  *  the saved run with its own). */
@@ -502,6 +511,7 @@ async function writeState(run: LiveRun): Promise<void> {
               stepFiles: Math.ceil(run.indoor.counts.length / POINTS_PER_FILE),
               raw: run.indoor.raw,
               steps: run.indoor.steps,
+              pausedSteps: run.indoor.pausedSteps,
               stepsOff: run.indoor.stepsOff,
               armed: run.indoor.armed,
               basis: run.indoor.basis,
@@ -585,6 +595,9 @@ const FULL_LOOK_MS = 1000;
 const STEP_COUNT_EVERY_MS = 1000;
 let stepsTimer: ReturnType<typeof setInterval> | null = null;
 let lastFullLook = 0;
+/** This app holds the phone's counter: started at Go or when the app opens on an indoor run, let go at Finish. Resume never
+ *  starts it again, so its next reading is no new listener's first (round one, L1). */
+let stepsListening = false;
 /** The next reading is the first since the app began listening (`tallyStep`). */
 let stepsFresh = true;
 
@@ -593,7 +606,7 @@ let stepsFresh = true;
 function startIndoor(run: LiveRun): void {
   const indoor = run.indoor;
   if (indoor == null) return;
-  if (!indoor.stepsOff) {
+  if (!indoor.stepsOff && !stepsListening) {
     let said = "none";
     try {
       said = runMotionNative?.stepsStart?.() ?? "none";
@@ -601,14 +614,19 @@ function startIndoor(run: LiveRun): void {
       // No steps for this run; the run goes on.
     }
     if (said !== "ok") indoor.stepsOff = true;
+    else {
+      stepsListening = true;
+      // A new listener's first reading: a lower one can only be a counter that started again (`tallyStep`).
+      stepsFresh = true;
+    }
   }
-  stepsFresh = true;
   stepsTimer ??= setInterval(() => void takeSteps(), STEPS_LOOK_MS);
 }
 
 function stopIndoor(): void {
   if (stepsTimer !== null) clearInterval(stepsTimer);
   stepsTimer = null;
+  stepsListening = false;
   try {
     runMotionNative?.stepsStop?.();
   } catch {
@@ -640,6 +658,8 @@ function readSteps(run: LiveRun, until: number = RUN_MAX_ELAPSED_MS): boolean {
     newest = reading.at;
   }
   const rose = tally.steps > indoor.steps;
+  // Taken while the person had paused: none of the run's (an Auto-pause's are the steps that end it, and are).
+  if (rose && run.phase === "paused" && run.pausedByPerson) indoor.pausedSteps += tally.steps - indoor.steps;
   indoor.raw = tally.raw;
   indoor.steps = tally.steps;
   if (rose && newest !== null) {
@@ -707,6 +727,7 @@ export async function takeSteps(now: number = Date.now()): Promise<void> {
           armed: indoor.armed,
           counts: indoor.counts,
           pauseFrom: pausedFrom,
+          lastPauseEnd: lastOpenEnd(run),
           rose: pausedFrom !== null && indoor.steps > stepsAt(indoor.counts, pausedFrom),
           nowMs: elapsedMs(run, now),
         })
@@ -884,7 +905,15 @@ export async function loadRun(): Promise<LiveRun | null> {
       indoor:
         keptIndoor === null || stepCounts === null
           ? null
-          : { counts: stepCounts.list, raw: keptIndoor.raw, steps: keptIndoor.steps, stepsOff: keptIndoor.stepsOff, armed: keptIndoor.armed, basis: keptIndoor.basis },
+          : {
+              counts: stepCounts.list,
+              raw: keptIndoor.raw,
+              steps: keptIndoor.steps,
+              pausedSteps: keptIndoor.pausedSteps,
+              stepsOff: keptIndoor.stepsOff,
+              armed: keptIndoor.armed,
+              basis: keptIndoor.basis,
+            },
     };
     if (current.phase !== "finished") {
       holdMonitor(current.userId);
@@ -1199,7 +1228,7 @@ export async function startRun(
     still: [],
     datedBack: [],
     clockGapMs: null,
-    indoor: indoor === null ? null : { counts: [], raw: null, steps: 0, stepsOff: indoor.stepsOff, armed: false, basis: indoor.basis },
+    indoor: indoor === null ? null : { counts: [], raw: null, steps: 0, pausedSteps: 0, stepsOff: indoor.stepsOff, armed: false, basis: indoor.basis },
   };
   generation += 1;
   current = run;

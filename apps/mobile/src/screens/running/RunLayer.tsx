@@ -52,6 +52,8 @@ import {
   indoorChoice,
   keepRunStepBasis,
   runStepBasisFor,
+  runStepBasisKept,
+  runStepsOf,
   keepRunHeartMax,
   keepRunUnits,
   runHeartMaxFor,
@@ -124,6 +126,8 @@ export function useRunLayer(): RunLayerValue {
 }
 
 const COUNT_FROM = 3;
+/** How long an indoor Start waits for the person's step length when it was never read (round one, L2). */
+const STEP_LENGTH_WAIT_MS = 4000;
 /** The oldest place Android kept that the map opens on before a run's first point (A9). */
 export const LAST_KNOWN_MS = 2 * 60_000;
 
@@ -136,8 +140,10 @@ function useMyRun(me: string | null): LiveRun | null {
 /** Asks Android for Physical activity, for an indoor run's steps (37q-ii-a), and says what stands in the way. Android
  *  9 and earlier count steps with no permission; an iPhone has no counter of this app's yet (Stage 5 item 21). */
 export async function askActivity(): Promise<StartProblem | null> {
+  // No step counter code of this app's (an iPhone, a copy built before 37q-ii-a): said before Start (round one, L3).
+  if (runMotionNative?.stepsStart === undefined) return "noCounter";
   if (Platform.OS !== "android") return null;
-  if (runMotionNative?.stepsCan?.() === false) return "noCounter";
+  if (runMotionNative.stepsCan?.() === false) return "noCounter";
   if (Platform.Version < 29) return null;
   const permission = PermissionsAndroid.PERMISSIONS.ACTIVITY_RECOGNITION;
   if (await PermissionsAndroid.check(permission)) return null;
@@ -219,12 +225,14 @@ export function RunLayerProvider({ children }: { children: ReactNode }) {
   // once Indoor is picked, and again after each run finished (a treadmill's distance may have taught it); never for
   // somebody who runs outdoors.
   const indoorPicked = useSyncExternalStore(subscribeRun, indoorChoice);
+  const readStepLength = useCallback(async (who: string): Promise<void> => {
+    const answer = await session.signedIn({ method: "GET", path: "/v1/geo/runs/step-length" }, stepLengthResponseSchema);
+    if (answer.kind === "ok") await keepRunStepBasis(who, { heightCm: answer.data.stepLength.heightCm, factor: answer.data.stepLength.factor });
+  }, [session]);
   useEffect(() => {
     if (me === null || !indoorPicked) return;
-    void session.signedIn({ method: "GET", path: "/v1/geo/runs/step-length" }, stepLengthResponseSchema).then((answer) => {
-      if (answer.kind === "ok") void keepRunStepBasis(me, { heightCm: answer.data.stepLength.heightCm, factor: answer.data.stepLength.factor });
-    });
-  }, [me, session, finished, indoorPicked]);
+    void readStepLength(me);
+  }, [me, readStepLength, finished, indoorPicked]);
 
   const start = useCallback(async (autoPause: boolean, guide: KeptRunGuide | null = null, anyway = false, withoutSteps = false): Promise<StartProblem | null> => {
     setStartFailed(false);
@@ -232,6 +240,11 @@ export function RunLayerProvider({ children }: { children: ReactNode }) {
       // Indoors (37q-ii-a): no location, and Physical activity asked for the steps, unless the person starts without.
       const asked = withoutSteps ? null : await askActivity();
       if (asked !== null) return asked;
+      // The step length not yet read for this person: asked now, for a few seconds at most, so the run is measured as the
+      // server will measure it (round one, L2); with no answer, the shared guess, which the server puts right at Save.
+      if (me !== null && !runStepBasisKept(me)) {
+        await Promise.race([readStepLength(me).catch(() => undefined), new Promise<void>((done) => setTimeout(done, STEP_LENGTH_WAIT_MS))]);
+      }
       setDone(null);
       setShown(true);
       setCounting({ autoPause, guide, indoor: { stepsOff: withoutSteps } });
@@ -245,7 +258,7 @@ export function RunLayerProvider({ children }: { children: ReactNode }) {
     setShown(true);
     setCounting({ autoPause, guide, indoor: null });
     return null;
-  }, []);
+  }, [me, readStepLength]);
 
   const go = useCallback(async () => {
     const count = counting;
@@ -474,7 +487,7 @@ function Live({ run, units, kg, onHide }: { run: LiveRun; units: Units; kg: numb
   const moving = movingMsOf(run, now) / 1000;
   const metres = sums?.distanceM ?? 0;
   // Indoors (37q-ii-a): the steps a minute now, from the counts the phone has kept.
-  const perMinute = run.indoor == null || run.indoor.stepsOff ? null : stepsAMinute(run.indoor.counts, now - run.startedAt);
+  const perMinute = run.indoor == null || run.indoor.stepsOff ? null : run.phase === "paused" ? 0 : stepsAMinute(run.indoor.counts, now - run.startedAt, run.pauses[run.pauses.length - 1]?.[1] ?? 0);
   const per = units === "imperial" ? METRES_PER_MILE : 1000;
   const isPaused = run.phase === "paused";
   const [busy, setBusy] = useState(false);
@@ -687,7 +700,7 @@ function Live({ run, units, kg, onHide }: { run: LiveRun; units: Units; kg: numb
         {/* Indoors the steps are the run's own number: under the pace, before the heart rate (seen without a scroll). */}
         {indoor === null ? null : (
           <View style={styles.pairs}>
-            <Figure label="Steps" value={indoor.stepsOff ? "Off" : indoor.steps.toLocaleString("en-US")} dim={isPaused} />
+            <Figure label="Steps" value={indoor.stepsOff ? "Off" : runStepsOf(indoor).toLocaleString("en-US")} dim={isPaused} />
             <Figure label="Steps a minute" value={indoor.stepsOff || perMinute === null ? "--" : String(perMinute)} dim={isPaused} />
           </View>
         )}

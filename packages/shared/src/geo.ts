@@ -467,6 +467,8 @@ export const keptIndoorSchema = z.object({
   raw: z.number().nonnegative().nullable(),
   /** The steps since Start. */
   steps: z.number().int().nonnegative().max(INDOOR_MOST_STEPS),
+  /** Of those, the steps taken while the person had paused: none of the run's (round one, H2). */
+  pausedSteps: z.number().int().nonnegative().max(INDOOR_MOST_STEPS).default(0),
   /** No step is counted: Physical activity not allowed, or a phone with no step counter. */
   stepsOff: z.boolean(),
   /** A step was counted since Start, or since Resume was last pressed: only then may Auto-pause pause (a phone lying on

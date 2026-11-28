@@ -73,6 +73,9 @@ export function nextStepPause(look: {
   counts: readonly StepCount[];
   /** When the open pause began; null when none is open. */
   pauseFrom: number | null;
+  /** When the last pause ended (0 with none): the ten seconds are counted from there too, as the steps that ended an
+   *  Auto-pause are kept in the second after it (round one, H1: it Auto-paused again a quarter of a second later). */
+  lastPauseEnd: number;
   /** The steps rose since the open pause began. */
   rose: boolean;
   nowMs: number;
@@ -81,7 +84,8 @@ export function nextStepPause(look: {
   if (look.phase === "running") {
     if (!look.armed) return null;
     const rise = lastRiseAt(look.counts);
-    return rise !== null && look.nowMs - rise >= STEP_PAUSE_MS ? { kind: "pause", at: look.nowMs } : null;
+    if (rise === null) return null;
+    return look.nowMs - Math.max(rise, look.lastPauseEnd) >= STEP_PAUSE_MS ? { kind: "pause", at: look.nowMs } : null;
   }
   if (look.byPerson || look.pauseFrom === null || !look.rose) return null;
   return { kind: "resume", at: Math.max(look.pauseFrom, look.nowMs) };
@@ -93,15 +97,18 @@ export const CADENCE_SPAN_MS = 10_000;
 /** Under this much of it, none yet. */
 const CADENCE_LEAST_MS = 5_000;
 
-/** The steps a minute now, for the run's screen: over the last CADENCE_SPAN_MS of counts; 0 once no step has been counted
- *  for STEP_PAUSE_MS (standing, or paused); null before there is enough to tell. */
-export function stepsAMinute(counts: readonly StepCount[], nowMs: number): number | null {
+/** The steps a minute now, for the run's screen: over the last CADENCE_SPAN_MS of counts, never from before `since` (the
+ *  end of the last pause: steps taken while paused are none of the run's); 0 once no step has been counted for
+ *  STEP_PAUSE_MS (standing, or paused); null before there is enough to tell. */
+export function stepsAMinute(counts: readonly StepCount[], nowMs: number, since = 0): number | null {
   const newest = counts[counts.length - 1];
   if (newest === undefined) return null;
   const rise = lastRiseAt(counts);
   if (rise === null || nowMs - rise >= STEP_PAUSE_MS) return 0;
-  let from: StepCount = counts[0] ?? newest;
-  for (const c of counts) {
+  const after = counts.filter(([at]) => at >= since);
+  let from: StepCount | undefined = after[0];
+  if (from === undefined) return null;
+  for (const c of after) {
     if (c[0] > newest[0] - CADENCE_SPAN_MS) break;
     from = c;
   }
