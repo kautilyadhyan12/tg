@@ -21,8 +21,12 @@ export const LINE_MS = 4_000;
 /** The person unseen this long, once the set has seen them, and the screen says so (§11.8 step 4). */
 export const LOST_MS = 2_000;
 export const LOST_WORDS = COACH_WORDS.lost;
-/** While the phone itself moves, once the set has seen the person ready (53c): nothing the camera sees counts. */
+/** While the phone itself moves (53c): nothing the camera sees counts. */
 export const STILL_WORDS = COACH_WORDS.moved;
+/** While the person sets up, the phone moving this long in a row is held, not being put in its place: the set-up says so.
+ *  Kd's phone took 3 s from its first turning to lying still when he laid it down (test/phone-motion, "down"), and a phone
+ *  counts as standing 1.5 s after it lies still (`PHONE_LIMITS`): 4.5 s moving for a phone put in its place. */
+export const SET_UP_STILL_MS = 5_000;
 
 /** What the line at the foot is about: a rep that fell short or was refused (amber), what the camera could not see, the
  *  person lost or the phone moving (red), or the coach's correction or praise (the page's own dark). */
@@ -49,6 +53,9 @@ export interface LiveView {
   readonly body: SeenPerson | null;
   /** The picture's width / height. */
   readonly aspect: number;
+  /** The phone itself is moving and the screen says so: at the foot once the set has seen the person ready, in the
+   *  set-up's own words before (once it has moved `SET_UP_STILL_MS` in a row). */
+  readonly still: boolean;
 }
 
 /** The set as the screen shows it, apart from the camera: the person's own changes to the count, and its target (reps,
@@ -60,7 +67,7 @@ export interface SetNow {
 
 const NO_SET: SetNow = { byHand: 0, target: null };
 
-export const NO_VIEW: LiveView = { stage: "setUp", reps: 0, heldMs: 0, flash: false, line: null, say: null, body: null, aspect: 3 / 4 };
+export const NO_VIEW: LiveView = { stage: "setUp", reps: 0, heldMs: 0, flash: false, line: null, say: null, body: null, aspect: 3 / 4, still: false };
 
 /** The coach's lines the foot shows as they are said: what to change, and that it is better. The count is the digits'. */
 const SHOWN: ReadonlySet<Say["kind"]> = new Set(["correction", "better", "counts now"]);
@@ -74,6 +81,8 @@ export class LiveSet {
   private seenAt: number | null = null;
   private flashUntil = -1;
   private lineUntil = -1;
+  /** Since when the phone has been moving, in a row; null while it stands. */
+  private movingSince: number | null = null;
   private view: LiveView = NO_VIEW;
   private ended: { readonly reps: number; readonly summary: EngineSetSummary | null; readonly say: Say | null } | null = null;
 
@@ -103,6 +112,7 @@ export class LiveSet {
     // The phone moving is not the person lost: the screen waits for it to stand, then for them (53c).
     const moving = seen.phone.moving;
     if (body !== null || moving) this.seenAt = t;
+    this.movingSince = moving ? (this.movingSince ?? t) : null;
     let { stage, reps, heldMs } = this.view;
     let line = this.view.line;
     let say: Say | null = null;
@@ -141,15 +151,16 @@ export class LiveSet {
     const lost = stage === "counting" && this.seenAt !== null && t - this.seenAt >= LOST_MS;
     if (lost) line = { words: LOST_WORDS, tone: "unseen" };
     else if (line?.words === LOST_WORDS) line = null;
-    // The phone moving, once the set has seen the person ready: said until it stands again. While the person sets up, the
-    // set-up's own words already say to stand the phone, and a phone being put in its place is no fault.
-    const still = moving && stage === "counting";
-    if (still) line = { words: STILL_WORDS, tone: "unseen" };
+    // The phone moving: said until it stands again, at the foot once the set has seen the person ready. While the person
+    // sets up, only once it has moved `SET_UP_STILL_MS` in a row: a phone being put in its place is no fault, and one held in
+    // a hand from the start would otherwise never count and never say why (Kd's walk, 2026-11-28).
+    const still = moving && (stage === "counting" || t - (this.movingSince ?? t) >= SET_UP_STILL_MS);
+    if (still && stage === "counting") line = { words: STILL_WORDS, tone: "unseen" };
     else if (line?.words === STILL_WORDS) line = null;
     const movedSay = this.coach.moved(t, still);
     const lostSay = this.coach.seen(t, lost);
     say = movedSay ?? lostSay ?? say;
-    this.view = { stage, reps, heldMs, flash: t < this.flashUntil, line, say, body, aspect: frame.aspect };
+    this.view = { stage, reps, heldMs, flash: t < this.flashUntil, line, say, body, aspect: frame.aspect, still };
     return this.view;
   }
 

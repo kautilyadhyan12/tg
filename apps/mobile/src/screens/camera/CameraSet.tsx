@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { Pressable, StyleSheet, View, processColor, useWindowDimensions, type NativeSyntheticEvent } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { NO_VIEW, type LineTone, type LiveSet, type LiveView, type SetNow } from "../../camera/liveSet";
+import { NO_VIEW, STILL_WORDS, type LineTone, type LiveSet, type LiveView, type SetNow } from "../../camera/liveSet";
 import { PoseCameraView, type BodyDrawing } from "../../camera/poseCameraNative";
 import type { PoseEvent } from "../../camera/poseFrame";
 import { BODY_RULES } from "../../camera/skeleton";
@@ -181,8 +181,9 @@ export function CameraSet({ live, title, digits, of, paused, sound, now, stopped
         <View style={[styles.bottom, { paddingBottom: insets.bottom + 20 }]} pointerEvents="box-none">
           {setUp ? (
             <View style={styles.setUp}>
+              {/* A phone held in a hand never counts: the set-up says so, above the line that says where the phone stands. */}
               <Txt kind="h2" style={styles.shadow}>
-                {SET_UP_WORDS}
+                {view.still ? STILL_WORDS : SET_UP_WORDS}
               </Txt>
               <Txt kind="body" colour="text" style={styles.shadow}>
                 {SET_UP_LINE}
@@ -237,7 +238,7 @@ const second = (ms: number): number => Math.floor(ms / 1000);
 
 /** Whether the screen, apart from the body's lines, says anything else after this picture. */
 function saysOtherwise(a: LiveView, b: LiveView): boolean {
-  return a.stage !== b.stage || a.reps !== b.reps || second(a.heldMs) !== second(b.heldMs) || a.flash !== b.flash || a.line?.words !== b.line?.words || a.line?.tone !== b.line?.tone;
+  return a.stage !== b.stage || a.reps !== b.reps || second(a.heldMs) !== second(b.heldMs) || a.flash !== b.flash || a.line?.words !== b.line?.words || a.line?.tone !== b.line?.tone || a.still !== b.still;
 }
 
 const styles = StyleSheet.create({

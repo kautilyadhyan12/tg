@@ -318,13 +318,30 @@ describe("the phone moved in a set (53c)", () => {
     expect(counts[counts.length - 1] ?? 0).toBeLessThanOrEqual(v.entry.reps ?? 0);
   });
 
+  it("held in a hand from the start: once it has moved 5 s in a row the set-up says \"Keep the phone still.\", once, and nothing counts", () => {
+    const e = exercise("squat");
+    const v = video("prisoner_squat_1");
+    const frames = withLeadIn(v.video).frames;
+    const t0 = frames[0]?.t ?? 0;
+    const { views } = held(e, v, t0, 1_000_000);
+    const at = (k: number): number => (frames[k]?.t ?? 0) - t0;
+    expect(views.every((w) => w.stage === "setUp" && w.reps === 0)).toBe(true);
+    // Moving from about its first quarter second; said from 5 s after that.
+    expect(views.filter((_, k) => at(k) < 5000).some((w) => w.still)).toBe(false);
+    expect(views.filter((_, k) => at(k) >= 5500).every((w) => w.still)).toBe(true);
+    expect(views.flatMap((w) => (w.say === null ? [] : [w.say.words]))).toEqual([STILL_WORDS]);
+  });
+
   it("while the person sets up, a phone being put in its place says nothing: the set-up's own words say where it stands", () => {
     const e = exercise("squat");
     const v = video("prisoner_squat_1");
     const frames = withLeadIn(v.video).frames;
-    const { views } = held(e, v, frames[0]?.t ?? 0, 600);
+    // Three seconds in the hand, then stood: moving 4.5 s in all, as Kd's own put-down was.
+    const { views } = held(e, v, frames[0]?.t ?? 0, 3000);
     expect(views.slice(0, 10).every((w) => w.stage === "setUp")).toBe(true);
-    expect(views.every((w) => w.say?.words !== STILL_WORDS && w.line?.words !== STILL_WORDS)).toBe(true);
+    expect(views.every((w) => !w.still && w.say?.words !== STILL_WORDS && w.line?.words !== STILL_WORDS)).toBe(true);
+    // And then counts her squats.
+    expect(views[views.length - 1]?.reps ?? 0).toBeGreaterThan(0);
   });
 });
 
