@@ -17,6 +17,14 @@ export interface RunMotionNative {
   compassPlace?(lat: number, lng: number): void;
   /** "heading": each reading while the compass reads (read through phoneCompassSchema, worked out in compassHeading.ts). */
   addListener?(event: "heading", listener: (said: unknown) => void): { remove: () => void };
+  /** The phone's own step counter for an indoor run (37q-ii-a); a copy built before 37q-ii-a has none of these. Whether
+   *  the phone has one at all. */
+  stepsCan?(): boolean;
+  /** Start reading it: "ok", "denied" (Physical activity not allowed) or "none" (no counter). Twice is one listener. */
+  stepsStart?(): string;
+  stepsStop?(): void;
+  /** The readings since the last take (read through phoneStepsSchema, turned into steps since Start in indoorSteps.ts). */
+  stepsTake?(): unknown;
 }
 
 export const runMotionNative: RunMotionNative | null = requireOptionalNativeModule<RunMotionNative>("RunMotion");

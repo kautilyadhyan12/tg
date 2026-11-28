@@ -21,7 +21,7 @@ export async function turnOnLocation(): Promise<boolean> {
 
 /** The one thing to press for each problem. A switch over every kind: a new kind will not build until
  *  it is given its own button here. */
-function AgainButtons({ problem, onAgain, onAnyway }: { problem: StartProblem; onAgain: () => void; onAnyway: () => void }) {
+function AgainButtons({ problem, onAgain, onAnyway, onWithoutSteps }: { problem: StartProblem; onAgain: () => void; onAnyway: () => void; onWithoutSteps: () => void }) {
   switch (problem) {
     case "approximate":
       return (
@@ -57,18 +57,35 @@ function AgainButtons({ problem, onAgain, onAnyway }: { problem: StartProblem; o
           <Button kind="quiet" label="Start anyway" onPress={onAnyway} />
         </View>
       );
+    // An indoor run (37q-ii-a): its time is recorded without steps, and its distance is the treadmill's, typed at Finish.
+    case "activity":
+      return (
+        <View style={styles.choices}>
+          <Button kind="link" label="Allow" say="Allow physical activity" onPress={onAgain} />
+          <Button kind="quiet" label="Start without steps" onPress={onWithoutSteps} />
+        </View>
+      );
+    case "activitySettings":
+      return (
+        <View style={styles.choices}>
+          <Button kind="link" label="Open settings" onPress={openAppSettings} />
+          <Button kind="quiet" label="Start without steps" onPress={onWithoutSteps} />
+        </View>
+      );
+    case "noCounter":
+      return <Button kind="link" label="Start without steps" onPress={onWithoutSteps} />;
   }
 }
 
 /** `onAgain`: Start pressed again, once the person has allowed what was asked. `onAnyway`: the run started as it is, on a
- *  phone that limits the app (37l). */
-export function StartProblemBox({ problem, onAgain, onAnyway }: { problem: StartProblem; onAgain: () => void; onAnyway: () => void }) {
+ *  phone that limits the app (37l). `onWithoutSteps`: an indoor run started with no steps counted (37q-ii-a). */
+export function StartProblemBox({ problem, onAgain, onAnyway, onWithoutSteps }: { problem: StartProblem; onAgain: () => void; onAnyway: () => void; onWithoutSteps: () => void }) {
   return (
     <View style={styles.problem}>
       <Txt kind="small" colour="badText">
         {START_PROBLEM_WORDS[problem]}
       </Txt>
-      <AgainButtons problem={problem} onAgain={onAgain} onAnyway={onAnyway} />
+      <AgainButtons problem={problem} onAgain={onAgain} onAnyway={onAnyway} onWithoutSteps={onWithoutSteps} />
     </View>
   );
 }

@@ -17,9 +17,10 @@ export const unitWord = (units: Units): string => (units === "imperial" ? "mi" :
 export const paceWord = (units: Units): string => (units === "imperial" ? "/mi" : "/km");
 const metresPer = (units: Units): number => (units === "imperial" ? METRES_PER_MILE : 1000);
 
-/** "5.12": two places, never rounded up past what was run. */
+/** "5.12": two places, never rounded up past what was run. A billionth of a hundredth is allowed for the computer's own
+ *  arithmetic: 290 m is 28.999999999999996 hundredths of a kilometre to it, and reads 0.29, never 0.28 (37q-ii-a). */
 export function distance(metres: number, units: Units): string {
-  const hundredths = Math.floor((Math.max(0, metres) / metresPer(units)) * 100);
+  const hundredths = Math.floor((Math.max(0, metres) / metresPer(units)) * 100 + 1e-9);
   return (hundredths / 100).toFixed(2);
 }
 

@@ -452,6 +452,34 @@ export type KeptRunGuide = z.infer<typeof keptRunGuideSchema>;
 export type GuideStep = KeptRunGuide["steps"][number];
 export type GuidePlace = KeptRunGuide["at"];
 
+/** What an indoor run's steps are measured with on the phone (37q-ii-a): the person's height and their own factor, as
+ *  the server last gave them (GET /v1/geo/runs/step-length), so the screen shows the distance the server saves. */
+export const keptStepBasisSchema = z.object({
+  heightCm: z.number().min(50).max(300),
+  factor: z.number().min(STEP_FACTOR_LEAST).max(STEP_FACTOR_MOST),
+});
+/** An indoor run going on (37q-ii-a), kept with the run's state. */
+export const keptIndoorSchema = z.object({
+  /** Its step counts' files. */
+  stepFiles: z.number().int().nonnegative(),
+  /** The phone's own step counter as last read: it counts from when the phone was switched on, never from Start. Null
+   *  before its first reading in this run. */
+  raw: z.number().nonnegative().nullable(),
+  /** The steps since Start. */
+  steps: z.number().int().nonnegative().max(INDOOR_MOST_STEPS),
+  /** Of those, the steps taken while the person had paused: none of the run's (round one, H2). */
+  pausedSteps: z.number().int().nonnegative().max(INDOOR_MOST_STEPS).default(0),
+  /** No step is counted: Physical activity not allowed, or a phone with no step counter. */
+  stepsOff: z.boolean(),
+  /** A step was counted since Start, or since Resume was last pressed: only then may Auto-pause pause (a phone lying on
+   *  a treadmill counts none, and its run is never stopped for that). */
+  armed: z.boolean(),
+  basis: keptStepBasisSchema,
+});
+export type KeptIndoor = z.infer<typeof keptIndoorSchema>;
+/** An indoor run's step counts kept beside its state (37q-ii-a): [ms into the run, steps since Start]. */
+export const keptRunStepsSchema = z.array(z.tuple([z.number(), z.number().int().nonnegative().max(INDOOR_MOST_STEPS)]));
+
 /** The run going on, kept beside its points (`apps/mobile/src/screens/running/recorder.ts`). */
 export const keptRunStateSchema = z.object({
   runId: z.uuid(),
@@ -475,6 +503,8 @@ export const keptRunStateSchema = z.object({
   datedBack: z.array(z.tuple([z.number(), z.number()])).default([]),
   /** The GPS's time less the phone's, taken off each point's (37o); null until known, as for one kept before. */
   clockGapMs: z.number().nullable().default(null),
+  /** An indoor run (37q-ii-a): its steps instead of points; null outdoors, as for one kept before. */
+  indoor: keptIndoorSchema.nullable().default(null),
 });
 /** A run's heart rate kept beside its points: [ms into the run, bpm]. */
 export const keptRunHeartSchema = z.array(z.tuple([z.number(), z.number().int().min(HEART_BPM_LEAST).max(HEART_BPM_MOST)]));
@@ -498,6 +528,11 @@ export const keptRunChoicesSchema = z.object({
     .object({ who: z.string().min(1).max(64), max: heartMaxSchema.nullable() })
     .nullable()
     .catch(null),
+  /** Outdoor or Indoor (37q-ii-a), as last picked on the Running page: outdoors until picked. */
+  indoor: z.boolean().catch(false),
+  /** The person's step length as the server last gave it (37q-ii-a), and whose it is, for an indoor run started with no
+   *  signal; null before one was read. */
+  stepBasis: keptStepBasisSchema.extend({ who: z.string().min(1).max(64) }).nullable().catch(null),
 });
 export type MapColours = KeptRunChoices["mapColours"];
 export type KeptRunChoices = z.infer<typeof keptRunChoicesSchema>;
@@ -524,6 +559,12 @@ export type PhoneLocations = z.infer<typeof phoneLocationsSchema>;
  *  not handed over: not known, never still. */
 export const phoneMotionSchema = z.array(z.object({ at: z.number(), sd: z.number().nonnegative(), n: z.number().int().nonnegative() })).max(10_000);
 export type PhoneMotion = z.infer<typeof phoneMotionSchema>;
+
+/** What the phone's own step counter hands over during an indoor run (37q-ii-a, `apps/mobile/modules/run-motion`): each
+ *  reading since the last take, when it came (ms since 1970, the phone's clock), and the counter's total, which counts
+ *  from when the phone was switched on, never from Start. */
+export const phoneStepsSchema = z.array(z.object({ at: z.number(), steps: z.number().nonnegative() })).max(10_000);
+export type PhoneSteps = z.infer<typeof phoneStepsSchema>;
 
 /** What the phone's compass code hands over while a run's map is on screen (37p, `apps/mobile/modules/run-motion`),
  *  as Android reads it, the way it points worked out by the app (`compassHeading.ts`): `r` the rotation matrix

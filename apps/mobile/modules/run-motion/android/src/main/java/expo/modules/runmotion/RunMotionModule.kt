@@ -1,6 +1,8 @@
 package expo.modules.runmotion
 
+import android.Manifest
 import android.content.Context
+import android.content.pm.PackageManager
 import android.hardware.GeomagneticField
 import android.hardware.display.DisplayManager
 import android.hardware.Sensor
@@ -8,6 +10,7 @@ import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
 import android.location.Location
+import android.os.Build
 import android.os.Handler
 import android.os.HandlerThread
 import android.os.SystemClock
@@ -55,9 +58,23 @@ class RunMotionModule : Module() {
     /** Where the person is, for the gap between magnetic and true north there. */
     Function("compassPlace") { lat: Double, lng: Double -> Compass.place(lat, lng) }
 
+    /** Whether the phone has a step counter at all (37q-ii-a). */
+    Function("stepsCan") { context?.let { Steps.can(it) } ?: false }
+
+    /** Start reading the phone's own step counter for an indoor run (37q-ii-a): "ok"; "denied" where Physical activity
+     *  is not allowed; "none" on a phone with no step counter. Started twice, it is one listener. */
+    Function("stepsStart") { context?.let { Steps.start(it) } ?: "none" }
+
+    /** Stop reading it, and forget what was not taken. */
+    Function("stepsStop") { Steps.stop() }
+
+    /** The readings since the last take, oldest first: { at, steps }. */
+    Function("stepsTake") { Steps.take() }
+
     OnDestroy {
       Motion.stop()
       Compass.stop()
+      Steps.stop()
     }
   }
 }
@@ -324,4 +341,94 @@ object Motion : SensorEventListener {
     sum = 0.0
     sumSquares = 0.0
   }
+}
+
+// The phone's own step counter, for an indoor run (ROADMAP Stage 5 item 37q-ii-a): Android's TYPE_STEP_COUNTER, counted
+// by the phone itself at little cost to the battery, which needs the Physical activity permission (Android 10 and later).
+// It counts from when the phone was last switched on, never from Start, and keeps counting while the app is asleep as
+// long as this listener is held. Nothing here works out the run's steps: each reading is handed over as Android gives it
+// (when it came, on the phone's clock, and the counter's total), and the app's own code turns them into the steps since
+// Start, where every case is tested (src/screens/running/indoorSteps.ts).
+object Steps : SensorEventListener {
+  /** At most this many readings wait to be taken, then the oldest go: only the newest total matters. */
+  private const val MOST_WAITING = 900
+
+  private var manager: SensorManager? = null
+  private var thread: HandlerThread? = null
+  private val waiting = ArrayDeque<Map<String, Any>>()
+
+  fun can(ctx: Context): Boolean =
+    try {
+      (ctx.getSystemService(Context.SENSOR_SERVICE) as? SensorManager)?.getDefaultSensor(Sensor.TYPE_STEP_COUNTER) != null
+    } catch (e: Exception) {
+      false
+    }
+
+  @Synchronized
+  fun start(ctx: Context): String {
+    if (manager != null) return "ok"
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q &&
+      ctx.checkSelfPermission(Manifest.permission.ACTIVITY_RECOGNITION) != PackageManager.PERMISSION_GRANTED
+    ) {
+      return "denied"
+    }
+    var started: HandlerThread? = null
+    return try {
+      val sensors = ctx.getSystemService(Context.SENSOR_SERVICE) as? SensorManager ?: return "none"
+      val counter = sensors.getDefaultSensor(Sensor.TYPE_STEP_COUNTER) ?: return "none"
+      started = HandlerThread("run-steps").also { it.start() }
+      // Asked for each step as it is counted (no batching), so the screen and Auto-pause hear the steps at once.
+      if (!sensors.registerListener(this, counter, SensorManager.SENSOR_DELAY_NORMAL, 0, Handler(started.looper))) {
+        started.quitSafely()
+        return "none"
+      }
+      manager = sensors
+      thread = started
+      "ok"
+    } catch (e: Exception) {
+      // A counter that fails leaves the run counting no steps; it never stops the run.
+      started?.quitSafely()
+      "none"
+    }
+  }
+
+  @Synchronized
+  fun stop() {
+    try {
+      manager?.unregisterListener(this)
+    } catch (e: Exception) {
+      // Already let go by Android.
+    }
+    try {
+      thread?.quitSafely()
+    } catch (e: Exception) {
+      // Already ended.
+    }
+    manager = null
+    thread = null
+    waiting.clear()
+  }
+
+  @Synchronized
+  fun take(): List<Map<String, Any>> {
+    val out = waiting.toList()
+    waiting.clear()
+    return out
+  }
+
+  @Synchronized
+  override fun onSensorChanged(event: SensorEvent) {
+    // A reading already on its way when the run stopped is no run's.
+    if (manager == null) return
+    try {
+      val total = event.values.firstOrNull()?.toDouble() ?: return
+      if (!total.isFinite() || total < 0) return
+      waiting.addLast(mapOf("at" to System.currentTimeMillis().toDouble(), "steps" to total))
+      while (waiting.size > MOST_WAITING) waiting.removeFirst()
+    } catch (e: Exception) {
+      // One reading that cannot be read is left out.
+    }
+  }
+
+  override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) = Unit
 }

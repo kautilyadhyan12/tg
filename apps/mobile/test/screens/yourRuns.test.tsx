@@ -75,8 +75,13 @@ function makeRun(n: number, name: string, km: number, minutes: number, daysAgo: 
 
 const summaryOf = (r: RunDetail) => ({
   id: r.id, startedAt: r.startedAt, durationS: r.durationS, distanceM: r.distanceM, routeName: r.routeName, kcalPoint: r.kcalPoint,
-  source: r.source, name: r.name, day: r.day, elapsedS: r.elapsedS, climbM: r.climbM, shape: r.shape,
+  source: r.source, name: r.name, day: r.day, elapsedS: r.elapsedS, climbM: r.climbM, shape: r.shape, indoor: r.indoor,
 });
+
+/** An indoor run (37q-ii-a), as the server saves one: no route, its steps, its distance from the treadmill. */
+function makeIndoorRun(n: number, name: string, km: number, minutes: number, daysAgo: number): RunDetail {
+  return { ...makeRun(n, name, km, minutes, daysAgo), shape: null, polyline: null, trackStarts: [], climbM: null, indoor: true, distanceFrom: "treadmill", steps: 5066 };
+}
 
 /** The person's runs on the server, newest first, as its routes answer them. */
 function runsServer(runs: RunDetail[], records: RunRecords | null = null) {
@@ -359,6 +364,24 @@ async function renameFromList(name: string, to: string) {
   await fireEvent.changeText(screen.getByLabelText("Run name"), to);
   await fireEvent.press(newest(await screen.findAllByRole("button", { name: "Save changes" })));
 }
+
+describe("An indoor run in Your runs (37q-ii-a)", () => {
+  it("its line says Indoor with a house for its picture; its page has no Route box and no records, and says where its distance is from", async () => {
+    const s = runsServer([makeIndoorRun(1, "Evening Run", 5.2, 32, 0), makeRun(2, "Hill repeats", 5.2, 31, 2)]);
+    await openList(s);
+    const row = await rowOf("Evening Run");
+    expect(within(row).getByText(/ · Indoor$/)).toBeTruthy();
+    // The outdoor run's line says no such thing.
+    expect(within(await rowOf("Hill repeats")).queryByText(/Indoor/)).toBeNull();
+    await fireEvent.press(row);
+    expect(await screen.findByText("Indoor · from the treadmill")).toBeTruthy();
+    expect(screen.getByText("5,066")).toBeTruthy();
+    expect(screen.getByText("Steps")).toBeTruthy();
+    expect(screen.queryByTestId("run-map")).toBeNull();
+    expect(screen.queryByText("Route")).toBeNull();
+    expect(screen.queryByText("Elevation gain")).toBeNull();
+  });
+});
 
 describe("Your runs read again (37m; the hunt's B3 to B6)", () => {
   const many = () => Array.from({ length: 25 }, (_, i) => makeRun(i + 1, `Run ${String(i + 1)}`, 5, 30, i));

@@ -1,3 +1,5 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
   <!-- The phone's motion during a run (37i): Android's accelerometer needs no permission; nor do its rotation vectors, the compass for the map's beam (37p), nor the screen's turn. -->
+  <!-- An indoor run's steps (37q-ii-a): the phone's own step counter needs Physical activity, asked at an indoor Start (Android 10 and later). -->
+  <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION" />
 </manifest>
