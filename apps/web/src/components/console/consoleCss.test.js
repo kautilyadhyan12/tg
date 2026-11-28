@@ -73,6 +73,19 @@ describe('the plan prompt a gym on no plan cannot skip (V5-c)', () => {
   });
 });
 
+describe('what a person must press stays in sight and big enough (V5-c)', () => {
+  const TOUCH = '(pointer: coarse), (max-width: 767px)';
+  it("a box's foot is pinned to its bottom edge, so Confirm and the price beside it never scroll away", () => {
+    expect(declarations('.c-ask-foot')).toMatchObject({ position: 'sticky' });
+    expect(declarations('.c-ask-foot').bottom.startsWith('calc(-20px')).toBe(true);
+    expect(declarations('.c-ask-foot', '(min-width: 768px)').bottom).toBe('-28px');
+  });
+  it("the banner's Dismiss and Open Plan are 44 px on a touch screen or a phone", () => {
+    expect(declarations('.c-banner .c-icon-btn', TOUCH)).toMatchObject({ width: '44px', height: '44px' });
+    expect(declarations('.c-banner .c-btn', TOUCH)).toMatchObject({ 'min-height': '44px' });
+  });
+});
+
 describe('every text colour is readable on every surface, in both looks', () => {
   // WCAG 2's contrast ratio. Every word is 7:1 or more on what it sits on (WCAG's AAA bar), so
   // nobody leans in to read it (Kd, 2026-11-19, V1-f's click-through); a disabled control's
