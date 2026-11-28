@@ -34,7 +34,8 @@ export default function PhotoViewer({ photos, index, onIndex, onClose }) {
         const all = [...boxRef.current.querySelectorAll('button')];
         const at = all.indexOf(document.activeElement);
         e.preventDefault();
-        all[(at + (e.shiftKey ? -1 : 1) + all.length) % all.length]?.focus();
+        const next = at === -1 ? (e.shiftKey ? all.length - 1 : 0) : (at + (e.shiftKey ? -1 : 1) + all.length) % all.length;
+        all[next]?.focus();
       }
     };
     window.addEventListener('keydown', onKey, true);

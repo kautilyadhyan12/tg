@@ -619,6 +619,7 @@ export default function LeadSheet({ gymId, gym, leadId, orgSlug, words, readOnly
               <Link
                 to={`/console/${orgSlug}/members`}
                 onClick={(e) => {
+                  if (!unsaved) return;
                   e.preventDefault();
                   panelRef.current?.leave(toMembers);
                 }}

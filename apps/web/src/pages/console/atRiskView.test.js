@@ -102,11 +102,12 @@ describe('what the gym’s own check-ins allow the list to say', () => {
 });
 
 describe('the bar of days while check-in is new (the board AtRisk)', () => {
-  it('counts the days from the first check-in to today, both counted, out of the gym’s own number', () => {
-    expect(checkinDays(list({ checkin: 'new', firstCheckinOn: '2026-11-14', today: '2026-11-20' }))).toEqual({ done: 7, of: 14, from: '14 Nov', today: 'Today, 20 Nov', ready: '28 Nov' });
+  it('counts the days of check-ins that are over, out of the gym’s own number', () => {
+    expect(checkinDays(list({ checkin: 'new', firstCheckinOn: '2026-11-14', today: '2026-11-20' }))).toEqual({ done: 6, of: 14, from: '14 Nov', today: 'Today, 20 Nov', ready: '28 Nov' });
   });
-  it('the first day is one bar, and it never passes the number the list needs', () => {
-    expect(checkinDays(list({ checkin: 'new', firstCheckinOn: '2026-11-20', today: '2026-11-20' })).done).toBe(1);
+  it('the first day lights none; the last day still new lights all but one, so it is never full before the list opens', () => {
+    expect(checkinDays(list({ checkin: 'new', firstCheckinOn: '2026-11-20', today: '2026-11-20' })).done).toBe(0);
+    expect(checkinDays(list({ checkin: 'new', firstCheckinOn: '2026-11-14', today: '2026-11-27' })).done).toBe(13);
     expect(checkinDays(list({ checkin: 'new', firstCheckinOn: '2026-11-01', today: '2026-11-20', settings: { quietDays: 7, weeksCame: 2 } })).done).toBe(7);
   });
   it('a day the server got wrong (the first check-in after today) draws no bar lit, never a negative one', () => {

@@ -368,12 +368,19 @@ describe('the third look (ROADMAP V6; the board AtRisk)', () => {
     expect(within(row('Stan Stopped')).getByText('SS')).toBeTruthy();
   });
 
+  it('with no list to show, Who is listed keeps a narrow column, never the page’s whole width', async () => {
+    svc.list.mockResolvedValue(answer({ checkin: 'new', firstCheckinOn: '2026-10-06', total: 0, people: [] }));
+    open();
+    const box = await screen.findByRole('region', { name: 'Who is listed' });
+    expect(box.parentElement.className).toContain('c-alone');
+  });
+
   it('while check-in is new, a bar shows the days so far out of the days the list needs', async () => {
     svc.list.mockResolvedValue(answer({ checkin: 'new', firstCheckinOn: '2026-10-06', total: 0, people: [] }));
     open();
     const days = await screen.findByTestId('at-risk-days');
-    expect(within(days).getByRole('img', { name: '7 of 14 days of check-ins' })).toBeTruthy();
-    expect(days.querySelectorAll('.c-days > span.on')).toHaveLength(7);
+    expect(within(days).getByRole('img', { name: '6 of 14 days of check-ins' })).toBeTruthy();
+    expect(days.querySelectorAll('.c-days > span.on')).toHaveLength(6);
     expect(days.querySelectorAll('.c-days > span')).toHaveLength(14);
     expect(days.textContent).toContain('Today, 12 Oct');
     expect(days.textContent).toContain('20 Oct');

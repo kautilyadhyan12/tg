@@ -152,6 +152,19 @@ describe('the list keeps every control', () => {
     expect(row('Arjun Shah').textContent).toContain('arjun@example.com · +447700900004');
   });
 
+  it('beside Load more, how many of how many are shown; with no next page, neither', async () => {
+    api.getLeads.mockResolvedValue({ data: { ...PAGE.data, total: 342 } });
+    draw();
+    await screen.findAllByTestId('lead-row');
+    expect(screen.getByTestId('leads-more').textContent).toContain('Showing 2 of 342 leads');
+    cleanup();
+    api.getLeads.mockResolvedValue({ data: { ...PAGE.data, cursor: null } });
+    draw();
+    await screen.findAllByTestId('lead-row');
+    expect(screen.queryByTestId('leads-more')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Load more' })).toBeNull();
+  });
+
   it('"?open=add" opens Add lead once: it leaves the address, and closing the form does not open it again', async () => {
     draw('/console/iron-house/leads?open=add');
     await within(await screen.findByRole('dialog')).findByRole('heading', { name: 'Add lead' });

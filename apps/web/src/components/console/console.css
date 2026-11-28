@@ -3275,3 +3275,6 @@ button.c-ov-money-who {
 @media (pointer: coarse), (max-width: 767px) {
   .c-atrisk-name { min-height: 44px; }
 }
+/* At risk with no list to show (check-in new, none, or stopped with nobody listed): Who is listed keeps the
+   width of the column it has beside the list, never the page's whole width. */
+.c-alone { display: flex; flex-direction: column; max-width: 480px; }

@@ -97,12 +97,13 @@ export function checkinNote(list, gymName) {
 }
 
 /** While check-in is new, the board's bar of days (`AtRisk`): the days of check-ins so far out of the
- *  days the list needs, and the three days under it, by the gym's own day that the server sent. */
+ *  days the list needs, and the three days under it, by the gym's own day that the server sent. A day
+ *  counts once it is over, so the bar is full on the day the list opens, never the day before. */
 export function checkinDays(list) {
   const today = list.today;
   if (list.checkin !== 'new' || list.firstCheckinOn === null || typeof today !== 'string') return null;
   const of = list.settings.quietDays;
-  const done = Math.min(of, Math.max(0, daysBetween(list.firstCheckinOn, today) + 1));
+  const done = Math.min(of, Math.max(0, daysBetween(list.firstCheckinOn, today)));
   return { done, of, from: shortDay(list.firstCheckinOn), today: `Today, ${shortDay(today)}`, ready: shortDay(addDays(list.firstCheckinOn, of)) };
 }
 

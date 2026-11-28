@@ -375,7 +375,7 @@ export default function AtRisk() {
           ) : null}
 
           {/* Who has stopped coming, with Who is listed beside it on a wide screen (the board `AtRisk`). */}
-          <div className={showList ? 'c-split' : 'flex flex-col'}>
+          <div className={showList ? 'c-split' : 'c-alone'}>
             {showList ? (
               <section className="c-card overflow-hidden" aria-label="Who has stopped coming">
                 <h2 className="c-h3 px-4 pt-4 pb-3 md:px-5" data-testid="at-risk-headline">
