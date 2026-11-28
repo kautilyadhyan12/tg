@@ -2851,6 +2851,67 @@ turn on" sits beside them on his phone, no way back to the camera once the set h
 opened folding phone, a small phone where the camera's button goes under the timer, the largest text), his settings put
 back as read (1080x2400, 400, 1.15, animations 1.0).
 
+**As built, the phone moved in a set (53c, 2026-11-28; `rulings/2026-11-28-53c.md`).** Every number the engine reads is a
+place on the picture, and a phone knocked, picked up or held by hand moves the whole picture: at 53b-i, held by hand, some
+squats counted and the count stopped at 4 or 5, silent. **The phone's own turning:** the camera module reads Android's
+calibrated gyroscope and sends with each answer how far the phone turned since the answer before, radians about its own
+three axes (`spin`; none from a phone without one, or after a gap in its readings), checked with the answer
+(`poseCameraEventSchema`: none or three numbers) and given to the engine's frame (`movementFrameSchema.spin`: absent for a
+reference video, null where the live phone cannot say). **The rule** (`PhoneMotion`, `packages/movement/src/movement/phone.ts`,
+pure, the first thing `CameraSet` does, every movement the same): the phone is **moving** when over the last half second it
+turned more than 1.5 degrees (it points elsewhere) or 3 degrees in all (shaken), or when it **trembles** as a hand does:
+in every quarter second of the last 1.5 s its turning went back and forth at least 0.09 degrees (each answer against its
+quarter's own mean, so a gyroscope's steady drift and any steady turn are not back and forth). While it moves no picture
+reaches the stages after it: nothing counts, nobody is read. It stands **again** after a whole second under 0.5 degrees in
+all and not trembling, and then every stage starts afresh as at the start of a set, the lock included (on a moved phone's
+picture the person is somewhere else), the count and a hold's time going on from where they were; so does a picture after
+a second with none (Pause, the app away, a camera that stalled: the phone may have been moved). **The numbers are Kd's phone's
+own readings** (moto g35, its lsm6dsoq gyroscope, the camera screen open; `test/phone-motion`, the turning and the times
+only): lying still on a desk for two minutes it turned 0.06 to 0.09 degrees in each half second (its own drift, about 0.14
+a second) and 0.06 to 0.14 in all, once 0.6 and 1.4 (not known why); with the desk tapped hard beside it 0.18 in all; held in
+his hand 1 to 13 degrees in all in most half seconds, its steadiest moments 0.4 to 0.7. 1.5 degrees is where a squat's picture
+starts to be another movement (53b-i's sway: 0.2 cm on an 11 cm person kept every squat, 0.5 cm lost every one, 0.7 and 1.7
+degrees of a body 1.7 m tall 2.5 m from the phone). **The trembling, added at Kd's walk:** held steadily in his hand, under the
+first two lines, the phone counted a whole set and was never told, where the job's line says a phone held by hand is told;
+the smallest quarter second's back and forth over 1.5 s read at most 0.042 degrees lying still and 0.051 with the desk tapped,
+at least 0.152 in his hand (0.44 in the middle), under 0.05 the moment it was laid down: 0.09 lies about 1.7 times from each.
+First built on the turning with the gyroscope's drift estimated over the last seconds and taken out: a hand's sway in that
+estimate kept a phone just laid down trembling up to 2 s, and the member's next rep was lost. **On the screen:** once the set
+has seen the person ready, "Keep the phone still." at the foot in red while it moves, and the coach says it once, not again
+within 10 s (`Coach.moved`; it outranks every other line); "The camera can't see you." is not said while it moves. While the
+person sets up, the set-up's heading becomes "Keep the phone still." once the phone has moved 5 s in a row, the line saying
+where the phone stands staying under it, and the coach says it once (`SET_UP_STILL_MS`: his own put-down took 3 s from its
+first turning to lying still, and a phone counts as standing 1.5 s after it lies still); a phone put in its place says nothing.
+**The voice** (`phone_still`, "moved"): "Keep the phone still." and "Stand the phone and keep it still.", Korina on Eleven v4
+as every line, cut by `voice-cut --new`, which cuts only the wordings with no clip yet and keeps every clip already heard,
+byte for byte (both heard by base.en; 37 clips, 735 KB). **Measured, the worst thing first** (`phoneMoved.test.ts`): six members'
+sets (two squats, a lunge, a squat jump, a sit-up, a hip thrust), picked up after the picture their first counted rep was
+judged in and held 3 s (his hand's own reading) while a stranger does real reps of the same movement at the member's very
+place and size (where the lock would take them for the member: with the phone taken as standing, it does), then laid down 0.3
+m aside: each counts and is told exactly as with nobody there, the stranger is read in at most the pick-up's first three
+pictures (before the hand turned it 1.5 degrees), and the member, 3 s back at their place, is counted every rep of their own
+set; the other way (`phoneMovedProof.test.ts`, part of the proof): every proof set under its own movement, 119, and the
+L-sit's holds, played with his still phone's readings (its blip, then the desk tapped), count, say and time exactly as
+before and are never called moving. On his readings: lying still and tapped, never moving nor trembling; picked up, moving
+within 0.2 s and in every picture while held; held from the start, caught within 1.6 s wherever in the holding; laid down,
+standing again once, about a second after it lay still. **Deliberate breaks**, each run red and put back: pictures read while
+moving (the stranger's reps added, 4 against 3, 7 against 5); the stages not started afresh (the count wrong); the turn that is
+moving a tenth of what was measured (his still phone moving); the trembling line ten times what was measured (first green: the
+test's hand shook far past the line; his real hand and a tremor just either side of 0.09 were added, and it went red). The
+rule costs 24 microseconds a picture on the laptop in the middle (his hand's reading, 929 answers, 20 rounds). **On Kd's phone**
+(Exercise 1, a folder's development copy, 2026-11-28): the module's answers carry the turning, about 20 a second; held steadily
+in his hand facing the laptop's clip it counted a whole set (before the trembling); with it, held in his hand from the start
+the heading read "Keep the phone still." about 7 s after the camera opened and Android's record shows the one sound asked for,
+he heard it, and laid flat it went back to "Step back until the camera sees you like the picture.". Not walked: a phone
+knocked in the middle of a counted set (he had nothing to stand the phone against). **Limits, in plain sight:** a rep the
+person has just finished, the phone moved before the camera judged it (0.3 to 0.4 s after it), is lost (pinned: a sumo
+squatter's 2 of 3); once the phone stands again, whoever the camera finds there first is followed, as at the start of a set
+(pinned: a stranger doing reps at the member's place first is counted); a phone counts as standing 1.5 s after it lies still
+and the camera then learns the person afresh, so a rep begun at once may be lost; the pick-up's first tenth of a second is
+read; a phone moved without turning (slid along a shelf) is not seen by a gyroscope; a still phone whose gyroscope drifts 3
+degrees a second or more would be called moving (his drifts 0.14); a phone with no gyroscope is checked only for a second with
+no picture; his readings are from a desk, never a phone standing on a floor near someone jumping (§12.9).
+
 An exercise that does not pass is published as "count by hand", never with a wrong camera
 count. Kd tries one exercise of each kind of movement on the phone, about a dozen, never
 each one. After launch the server sees, for each exercise, how often members changed the
@@ -2937,7 +2998,7 @@ terminal (Kd, 2026-11-16).
 
 How the phone counts what its own live camera sees, rather than the laptop's pictures of a video (job 53; on the laptop's
 pictures of all 78 proof videos it counts and speaks as the laptop on 74, the other four open in §12.5, 52a-iii) · whether full on the main chip still holds 15 a second with the camera
-screen's engine, voice and drawing, and how the selfie camera reads a person in the room (job 53) · (whether one long recording cuts cleanly into lines: in parts, at 53b-i) · a busy room in front of the live phone: a neighbour, a passer-by, a mirror, a walk to a machine, a step and a turn in a set
+screen's engine, voice and drawing, and how the selfie camera reads a person in the room (job 53) · (whether one long recording cuts cleanly into lines: in parts, at 53b-i) · a phone standing on a floor while somebody jumps or stamps near it, and a phone knocked in the middle of a counted set on the real phone (53c measured a desk, a tap and a hand only) · a busy room in front of the live phone: a neighbour, a passer-by, a mirror, a walk to a machine, a step and a turn in a set
 (52d-i is proven on real videos with a second person put into them, 52d-ii's step drawn on them and its turn on his own floor
 videos; job 53) · whether a video redrawn from another
 phone place is faithful (52a-ii-b-ii-a: drawn as a change added to the picture, it comes back exactly from its own place; his raised squats, redrawn from the floor, move every phone-changed reading towards his real floor squats but not yet far enough at any of his six leans, so it is shown, not held; the pose model's foot wander measured on his four floor sets and added lost squats his real floor counts and still did not read as it, 52a-ii-b-ii-b-i, so it stays shown until more floor videos exist) · the lens of a web clip (taken as 26 mm) and how high a phone's lens stands on the floor (taken as 15 cm) · a floor phone on anybody but the one man of 2026-11-20, and on a floor that is neither his shiny nor his dull one (job 53's live tries) · what the hips do in a real one-leg lift: on the drawn
