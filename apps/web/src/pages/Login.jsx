@@ -1,13 +1,13 @@
 import { useState, useEffect, useRef } from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { motion } from 'framer-motion';
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useTransition } from '../context/TransitionContext';
-import { Dumbbell, ArrowRight, Zap, Mail } from 'lucide-react';
+import { Dumbbell, ArrowRight, Loader2, Zap, Mail } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { LEGAL_PATHS, SIGN_IN_CODE_RULES, SIGN_IN_ROBOT_WORDS } from '@app/shared';
 import { GYM_DOOR, MEMBER_DOOR, landingRoute, readDoor, rememberDoor, returnForDoor } from './landingRoute';
 import { useRobotCheck } from './useRobotCheck';
+import { consoleLook } from './console/consoleMenu';
 
 // ONE "GET STARTED" SCREEN (Kd, 2026-09-07). Sign-up and sign-in are the same
 // act: type your email, type the 6-digit code we send, you are in — a new
@@ -17,10 +17,11 @@ import { useRobotCheck } from './useRobotCheck';
 // Kd's two doors stay (DECISIONS 2026-08-18, relabelled 2026-09-07): the same
 // email, the same account; the choice decides only where you land. "Train"
 // goes to the member app (the questionnaire first, for a new person); "Manage"
-// goes to the console.
+// goes to the console. Drawn in the console's third look (V5-d, board `SignIn`): each door a
+// box with what it opens under its name.
 const DOORS = [
-  { value: MEMBER_DOOR, label: 'Train' },
-  { value: GYM_DOOR,    label: 'Manage my gym or studio' },
+  { value: MEMBER_DOOR, label: 'Train', line: 'Use the member app' },
+  { value: GYM_DOOR, label: 'Manage my gym or studio', line: 'Open the console for your business' },
 ];
 
 // Google OAuth on the NEW API (v1 §6.1). A full-page navigation to
@@ -56,6 +57,7 @@ const TOO_SOON_WORDS = `You asked for a code ${TOO_SOON.when} ${TOO_SOON.next}`;
 export default function Login() {
   const { sendCode, verifyCode } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const { triggerTransition } = useTransition();
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -246,63 +248,25 @@ export default function Login() {
     setProblem('');
   };
 
+  const gymDoor = door === GYM_DOOR;
+  const look = consoleLook(location.search, import.meta.env.DEV);
+
   return (
-    <div
-      className="min-h-screen flex"
-      style={{ background: '#0A0908' }}
-    >
-      {/* ── Left — the door ──────────────────────────────────────────────── */}
-      <div className="flex-1 flex items-center justify-center p-8 relative">
-
-        {/* Ambient glow */}
-        <div
-          className="absolute pointer-events-none"
-          style={{
-            top:       '20%',
-            left:      '10%',
-            width:     400,
-            height:    400,
-            background:'radial-gradient(ellipse, rgba(255,138,31,0.06) 0%, transparent 70%)',
-          }}
-        />
-
-        <motion.div
-          initial={{ opacity: 0, y: 24 }}
-          animate={{ opacity: 1, y: 0  }}
-          transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
-          className="w-full max-w-sm relative z-10"
-        >
-          {/* Logo */}
-          <div className="flex items-center gap-2.5 mb-10">
-            <div
-              className="w-9 h-9 rounded-xl flex items-center justify-center"
-              style={{
-                background: 'linear-gradient(135deg, #FF8A1F, #FFB347)',
-                boxShadow:  '0 0 20px rgba(255,138,31,0.35)',
-              }}
-            >
-              <Dumbbell className="w-4 h-4 text-white" />
-            </div>
-            <span
-              className="font-bold text-lg tracking-tight"
-              style={{ color: 'rgba(255,255,255,0.95)' }}
-            >
-              KWAZO
+    <div className={`c-console t-${look} c-door-page`}>
+      {/* ── The door: who you are here as, then your email and its code ─────────── */}
+      <div className="c-door-side">
+        <div className="c-door-col c-stack-m">
+          <div className="c-door-brand">
+            <span className="c-gymicon" aria-hidden="true">
+              <Dumbbell size={18} />
             </span>
+            <span className="c-s16 c-w7 c-t1">KWAZO</span>
           </div>
 
-          {/* Heading */}
-          <div className="mb-8">
-            <h1
-              className="text-4xl font-bold tracking-tighter mb-2"
-              style={{ color: 'rgba(255,255,255,0.95)' }}
-            >
-              Get started.
-            </h1>
-            <p className="text-sm" style={{ color: 'rgba(255,255,255,0.40)' }}>
-              {door === GYM_DOOR
-                ? 'Sign in to manage your gym or studio'
-                : 'Sign in or create your account — no password needed'}
+          <div className="c-stack-xs">
+            <h1 className="c-h1">Get started.</h1>
+            <p className="c-sub">
+              {gymDoor ? 'Sign in to manage your gym or studio' : 'Sign in or create your account — no password needed'}
             </p>
           </div>
 
@@ -311,192 +275,150 @@ export default function Login() {
               decides where you land. A gym owner is member #1 of their own
               gym (Part 3 §4.0 step 6), so separate accounts would mean
               logging out to use their own app. */}
-          <div
-            role="group"
-            aria-label="What are you here for?"
-            className="grid grid-cols-2 gap-2 mb-6"
-          >
-            {DOORS.map(({ value, label }) => {
-              const active = door === value;
-              return (
-                <button
-                  key={value}
-                  type="button"
-                  aria-pressed={active}
-                  onClick={() => chooseDoor(value)}
-                  className="py-3 px-2 rounded-2xl text-sm font-semibold transition-all duration-200 leading-snug"
-                  style={{
-                    background: active ? 'rgba(255,138,31,0.14)' : 'rgba(255,255,255,0.04)',
-                    border:     active
-                      ? '1px solid rgba(255,138,31,0.55)'
-                      : '1px solid rgba(255,255,255,0.07)',
-                    color:      active ? '#FF8A1F' : 'rgba(255,255,255,0.55)',
-                  }}
-                >
-                  {label}
-                </button>
-              );
-            })}
+          <div className="c-stack-xs">
+            <span className="c-label" aria-hidden="true">
+              I&apos;m here to
+            </span>
+            <div role="group" aria-label="What are you here for?" className="c-doors">
+              {DOORS.map(({ value, label, line }) => {
+                const active = door === value;
+                return (
+                  <button
+                    key={value}
+                    type="button"
+                    aria-pressed={active}
+                    onClick={() => chooseDoor(value)}
+                    className={`c-choice c-pick${active ? ' c-choice-on' : ''}`}
+                  >
+                    <span className={`c-s15 c-w6 ${active ? 'c-ui' : 'c-t1'}`}>{label}</span>
+                    <span className="c-s14 c-t2">{line}</span>
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
           {step === 'email' ? (
             /* ── Step 1: the address ─────────────────────────────────────── */
-            <form onSubmit={handleEmailSubmit} className="space-y-4" noValidate>
-              <div>
-                <label
-                  htmlFor="get-started-email"
-                  className="block text-xs font-medium mb-2 uppercase tracking-wider"
-                  style={{ color: 'rgba(255,255,255,0.35)' }}
-                >
+            <form onSubmit={handleEmailSubmit} className="c-stack-s" noValidate>
+              <div className="c-field">
+                <label htmlFor="get-started-email" className="c-label">
                   Email
                 </label>
                 <input
                   id="get-started-email"
                   type="email"
                   value={email}
-                  onChange={(e) => { setEmail(e.target.value); setProblem(''); }}
+                  onChange={(e) => {
+                    setEmail(e.target.value);
+                    setProblem('');
+                  }}
                   placeholder="you@example.com"
-                  className="input-field"
+                  className="c-input"
                   autoComplete="email"
                   autoFocus
                 />
               </div>
 
               {problem && (
-                <p role="alert" className="text-sm" style={{ color: '#f87171' }}>{problem}</p>
+                <p role="alert" className="c-err c-door-p">
+                  {problem}
+                </p>
               )}
 
-              <motion.button
-                type="submit"
-                disabled={busy}
-                whileHover={{ scale: 1.01 }}
-                whileTap={{ scale: 0.99 }}
-                className="w-full py-3.5 rounded-2xl font-semibold text-sm
-                           text-white flex items-center justify-center gap-2
-                           transition-all duration-200 mt-2"
-                style={{
-                  background: busy
-                    ? 'rgba(255,138,31,0.4)'
-                    : 'linear-gradient(135deg, #FF8A1F, #FFB347)',
-                  boxShadow: busy
-                    ? 'none'
-                    : '0 4px 20px rgba(255,138,31,0.35)',
-                }}
-              >
+              <button type="submit" disabled={busy} className="c-btn c-btn-lg c-btn-p c-door-wide">
                 {busy ? (
-                  <div
-                    className="w-5 h-5 rounded-full border-2 border-white
-                               border-t-transparent animate-spin"
-                  />
+                  <Loader2 size={18} className="animate-spin" aria-label="Sending the code" />
                 ) : (
                   <>
-                    <Mail className="w-4 h-4" />
+                    <Mail size={18} aria-hidden="true" />
                     Continue with email
                   </>
                 )}
-              </motion.button>
-              <p className="text-xs text-center" style={{ color: 'rgba(255,255,255,0.30)' }}>
-                We&apos;ll email you a 6-digit code. No password needed.
-              </p>
+              </button>
+              <p className="c-hint c-door-p c-door-center">We&apos;ll email you a 6-digit code. No password needed.</p>
             </form>
           ) : (
             /* ── Step 2: the code ────────────────────────────────────────── */
-            <form onSubmit={handleCodeSubmit} className="space-y-4" noValidate>
-              <p className="text-sm" style={{ color: 'rgba(255,255,255,0.65)' }}>
-                {arrival === 'sent' ? (
-                  <>
-                    We sent a 6-digit code to{' '}
-                    <strong style={{ color: 'rgba(255,255,255,0.95)' }}>{email.trim()}</strong>.
-                  </>
-                ) : secondsToResend > 0 ? (
-                  <>
-                    You asked for a code for{' '}
-                    <strong style={{ color: 'rgba(255,255,255,0.95)' }}>{email.trim()}</strong>{' '}
-                    {TOO_SOON.when} {TOO_SOON.next}
-                  </>
-                ) : (
-                  /* The countdown has run out, so "less than a minute ago" would
-                     now be false; the button's last tick re-renders this line. */
-                  <>
-                    Type the 6-digit code for{' '}
-                    <strong style={{ color: 'rgba(255,255,255,0.95)' }}>{email.trim()}</strong>,
-                    or press Resend for a new one.
-                  </>
-                )}
-              </p>
-              <div>
-                <label
-                  htmlFor="get-started-code"
-                  className="block text-xs font-medium mb-2 uppercase tracking-wider"
-                  style={{ color: 'rgba(255,255,255,0.35)' }}
-                >
+            <form onSubmit={handleCodeSubmit} className="c-stack-s" noValidate>
+              <div className="c-stack-xs">
+                <h2 className="c-h2">Check your email</h2>
+                <p className="c-sub">
+                  {arrival === 'sent' ? (
+                    <>
+                      We sent a 6-digit code to <strong className="c-t1 c-w6">{email.trim()}</strong>.
+                    </>
+                  ) : secondsToResend > 0 ? (
+                    <>
+                      You asked for a code for <strong className="c-t1 c-w6">{email.trim()}</strong> {TOO_SOON.when}{' '}
+                      {TOO_SOON.next}
+                    </>
+                  ) : (
+                    /* The countdown has run out, so "less than a minute ago" would
+                       now be false; the button's last tick re-renders this line. */
+                    <>
+                      Type the 6-digit code for <strong className="c-t1 c-w6">{email.trim()}</strong>, or press Resend for a new
+                      one.
+                    </>
+                  )}
+                </p>
+              </div>
+              <div className="c-field">
+                <label htmlFor="get-started-code" className="c-label">
                   6-digit code
                 </label>
-                <input
-                  id="get-started-code"
-                  type="text"
-                  inputMode="numeric"
-                  pattern="[0-9]*"
-                  maxLength={6}
-                  value={code}
-                  onChange={(e) => { setCode(e.target.value.replace(/\D/g, '').slice(0, 6)); setProblem(''); }}
-                  placeholder="123456"
-                  className="input-field tracking-[0.4em] text-lg"
-                  autoComplete="one-time-code"
-                  autoFocus
-                />
+                {/* ONE field drawn as six boxes: the phone's own code suggestion, pasting the
+                    whole code and deleting all work as in any field. The boxes only show it. */}
+                <div className="c-otp">
+                  <input
+                    id="get-started-code"
+                    type="text"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    maxLength={6}
+                    value={code}
+                    onChange={(e) => {
+                      setCode(e.target.value.replace(/\D/g, '').slice(0, 6));
+                      setProblem('');
+                    }}
+                    className="c-otp-input"
+                    autoComplete="one-time-code"
+                    autoFocus
+                  />
+                  {[0, 1, 2, 3, 4, 5].map((i) => (
+                    <span
+                      key={i}
+                      aria-hidden="true"
+                      className={`c-otp-cell${i === Math.min(code.length, 5) ? ' c-otp-at' : ''}`}
+                    >
+                      {code[i] ?? ''}
+                    </span>
+                  ))}
+                </div>
               </div>
 
               {problem && (
-                <p role="alert" className="text-sm" style={{ color: '#f87171' }}>{problem}</p>
+                <p role="alert" className="c-err c-door-p">
+                  {problem}
+                </p>
               )}
 
-              <motion.button
-                type="submit"
-                disabled={busy}
-                whileHover={{ scale: 1.01 }}
-                whileTap={{ scale: 0.99 }}
-                className="w-full py-3.5 rounded-2xl font-semibold text-sm
-                           text-white flex items-center justify-center gap-2
-                           transition-all duration-200 mt-2"
-                style={{
-                  background: busy
-                    ? 'rgba(255,138,31,0.4)'
-                    : 'linear-gradient(135deg, #FF8A1F, #FFB347)',
-                  boxShadow: busy
-                    ? 'none'
-                    : '0 4px 20px rgba(255,138,31,0.35)',
-                }}
-              >
+              <button type="submit" disabled={busy} className="c-btn c-btn-lg c-btn-p c-door-wide">
                 {busy ? (
-                  <div
-                    className="w-5 h-5 rounded-full border-2 border-white
-                               border-t-transparent animate-spin"
-                  />
+                  <Loader2 size={18} className="animate-spin" aria-label="Checking the code" />
                 ) : (
                   <>
                     Continue
-                    <ArrowRight className="w-4 h-4" />
+                    <ArrowRight size={18} aria-hidden="true" />
                   </>
                 )}
-              </motion.button>
+              </button>
 
-              <div className="flex items-center justify-between text-xs">
-                <button
-                  type="button"
-                  onClick={handleResend}
-                  disabled={secondsToResend > 0 || busy}
-                  className="transition-colors duration-200"
-                  style={{ color: secondsToResend > 0 ? 'rgba(255,255,255,0.30)' : 'rgba(255,138,31,0.85)' }}
-                >
+              <div className="c-door-links">
+                <button type="button" onClick={handleResend} disabled={secondsToResend > 0 || busy} className="c-btn c-btn-quiet c-door-link">
                   {secondsToResend > 0 ? `Resend code in ${secondsToResend}s` : 'Resend code'}
                 </button>
-                <button
-                  type="button"
-                  onClick={changeEmail}
-                  className="transition-colors duration-200"
-                  style={{ color: 'rgba(255,255,255,0.45)' }}
-                >
+                <button type="button" onClick={changeEmail} className="c-btn c-btn-quiet c-door-link">
                   Use a different email
                 </button>
               </div>
@@ -505,123 +427,82 @@ export default function Login() {
 
           {/* The robot check: only once the server has asked for it. */}
           {robotKey !== null && (
-            <div className="mt-4 space-y-2" data-testid="robot-check">
+            <div className="c-stack-xs" data-testid="robot-check">
               <div ref={robotBox} />
               {robotLine && (
-                <p role="status" className="text-sm" style={{ color: 'rgba(255,255,255,0.65)' }}>{robotLine}</p>
+                <p role="status" className="c-s14 c-t2 c-door-p">
+                  {robotLine}
+                </p>
               )}
             </div>
           )}
 
-          {/* Or divider */}
-          <div className="flex items-center gap-3 my-5">
-            <div className="flex-1 h-px" style={{ background: 'rgba(255,255,255,0.06)' }} />
-            <span className="text-xs" style={{ color: 'rgba(255,255,255,0.25)' }}>
-              or
-            </span>
-            <div className="flex-1 h-px" style={{ background: 'rgba(255,255,255,0.06)' }} />
+          <div className="c-door-or">
+            <span aria-hidden="true" />
+            <span className="c-s14 c-t2">or</span>
+            <span aria-hidden="true" />
           </div>
 
-          {/* Google sign in */}
-          <motion.button
+          <button
             type="button"
-            whileHover={{ scale: 1.01 }}
-            whileTap={{   scale: 0.99 }}
             onClick={() => {
               window.location.href = GOOGLE_LOGIN_URL;
             }}
-            className="w-full py-3.5 rounded-2xl font-semibold text-sm
-                       flex items-center justify-center gap-2.5
-                       transition-all duration-200"
-            style={{
-              background: 'rgba(255,255,255,0.06)',
-              border:     '1px solid rgba(255,255,255,0.10)',
-              color:      'rgba(255,255,255,0.90)',
-            }}
+            className="c-btn c-btn-lg c-btn-s c-door-wide"
           >
             {/* Google G logo */}
-            <svg width="18" height="18" viewBox="0 0 18 18" xmlns="http://www.w3.org/2000/svg">
+            <svg width="18" height="18" viewBox="0 0 18 18" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
               <path d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.874 2.684-6.615z" fill="#4285F4"/>
               <path d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z" fill="#34A853"/>
               <path d="M3.964 10.71A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.042l3.007-2.332z" fill="#FBBC05"/>
               <path d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.958L3.964 7.29C4.672 5.163 6.656 3.58 9 3.58z" fill="#EA4335"/>
             </svg>
             Continue with Google
-          </motion.button>
+          </button>
 
-          {/* Footer */}
-          <p
-            className="text-center text-xs mt-8"
-            style={{ color: 'rgba(255,255,255,0.45)' }}
-          >
-            By continuing you agree to our{' '}
-            <Link to={LEGAL_PATHS.terms} className="underline" style={{ color: 'rgba(255,255,255,0.75)' }}>Terms</Link>
-            {' & '}
-            <Link to={LEGAL_PATHS.privacy} className="underline" style={{ color: 'rgba(255,255,255,0.75)' }}>Privacy Policy</Link>
-          </p>
-          <p className="text-center text-xs mt-2">
-            <Link to={LEGAL_PATHS.washington} className="underline" style={{ color: 'rgba(255,255,255,0.45)' }}>
-              Washington Consumer Health Data Privacy Policy
-            </Link>
-          </p>
-        </motion.div>
-      </div>
-
-      {/* ── Right — Image panel ───────────────────────────────────────────── */}
-      <div
-        className="hidden lg:flex flex-1 relative overflow-hidden"
-        style={{ maxWidth: '55%' }}
-      >
-        <img
-          src="/images/exercises/lifting.jpg"
-          alt="Training"
-          className="w-full h-full object-cover"
-          style={{ objectPosition: 'center 30%' }}
-        />
-
-        {/* Overlay */}
-        <div
-          className="absolute inset-0"
-          style={{
-            background: 'linear-gradient(to right, #0A0908 0%, rgba(10,9,8,0.3) 40%, rgba(10,9,8,0.1) 100%)',
-          }}
-        />
-        <div
-          className="absolute inset-0"
-          style={{
-            background: 'radial-gradient(ellipse at 60% 50%, rgba(255,138,31,0.08) 0%, transparent 60%)',
-          }}
-        />
-
-        {/* Quote overlay */}
-        <div className="absolute bottom-12 left-10 right-10">
-          <div
-            className="p-6 rounded-3xl"
-            style={{
-              background:    'rgba(10,9,8,0.7)',
-              backdropFilter:'blur(20px)',
-              border:        '1px solid rgba(255,255,255,0.06)',
-            }}
-          >
-            <div className="flex items-center gap-2 mb-3">
-              <Zap className="w-4 h-4" style={{ color: '#FF8A1F' }} />
-              <span
-                className="text-xs font-semibold uppercase tracking-widest"
-                style={{ color: '#FF8A1F' }}
-              >
-                AI-Powered Training
-              </span>
-            </div>
-            <p
-              className="text-xl font-bold tracking-tight mb-2"
-              style={{ color: 'rgba(255,255,255,0.95)' }}
-            >
-              "Real-time form correction.<br />Every rep. Every set."
+          <div className="c-stack-xs c-door-center">
+            <p className="c-s14 c-t2 c-door-p">
+              By continuing you agree to our{' '}
+              <Link to={LEGAL_PATHS.terms} className="c-lk c-door-u">
+                Terms
+              </Link>
+              {' & '}
+              <Link to={LEGAL_PATHS.privacy} className="c-lk c-door-u">
+                Privacy Policy
+              </Link>
             </p>
-            <p className="text-sm" style={{ color: 'rgba(255,255,255,0.40)' }}>
-              Pose detection · Rep counting · Voice coaching
+            <p className="c-s14 c-door-p">
+              <Link to={LEGAL_PATHS.washington} className="c-t2 c-door-u">
+                Washington Consumer Health Data Privacy Policy
+              </Link>
             </p>
           </div>
+        </div>
+      </div>
+
+      {/* ── The picture, on a computer: its words follow the door ─────────────── */}
+      <div className="c-door-pic">
+        <img src="/images/exercises/lifting.jpg" alt="Training" />
+        <div className="c-door-pic-box c-stack-xs">
+          {gymDoor ? (
+            <>
+              <span className="c-eyebrow">For gyms and studios</span>
+              <p className="c-h2">Members, classes, the front desk and money, in one place.</p>
+            </>
+          ) : (
+            <>
+              <span className="c-eyebrow c-flow-s" style={{ gap: 6 }}>
+                <Zap size={14} aria-hidden="true" />
+                AI-Powered Training
+              </span>
+              <p className="c-h2">
+                &quot;Real-time form correction.
+                <br />
+                Every rep. Every set.&quot;
+              </p>
+              <p className="c-s14 c-t2 c-door-p">Pose detection · Rep counting · Voice coaching</p>
+            </>
+          )}
         </div>
       </div>
     </div>

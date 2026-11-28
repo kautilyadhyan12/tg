@@ -359,6 +359,91 @@ const STAFF_INVITATION = {
 const invitationsAre = (invitations) =>
   orgService.getMyStaffInvitations.mockResolvedValue({ data: { address: 'anil@example.com', addressProved: true, invitations } });
 
+// ── The worst thing (V5-d): a press reaching another business than the one it sits beside ──
+
+const SECOND_INVITATION = {
+  ...STAFF_INVITATION,
+  id: '33333333-3333-4333-8333-333333333333',
+  role: 'manager',
+  gym: { id: '44444444-4444-4444-8444-444444444444', name: 'Lotus Family Gym', city: 'Pune', orgType: 'gym' },
+  invitedBy: 'Priya Shah',
+};
+
+const drawHomeWithLandings = () =>
+  render(
+    <MemoryRouter initialEntries={['/console']}>
+      <Routes>
+        <Route path="/console" element={<ConsoleHome />} />
+        <Route path="/console/iron-house" element={<p>Opened Iron House</p>} />
+        <Route path="/console/lotus-family" element={<p>Opened Lotus Family Gym</p>} />
+      </Routes>
+    </MemoryRouter>,
+  );
+
+describe('each answer goes to the business it sits beside (V5-d)', () => {
+  it('Accept in the second box accepts the second invitation and opens that business, never the first', async () => {
+    invitationsAre([STAFF_INVITATION, SECOND_INVITATION]);
+    orgService.acceptStaffInvitation.mockImplementation(async (id) => ({
+      data: {
+        outcome: 'accepted',
+        role: 'manager',
+        gym: id === SECOND_INVITATION.id ? { slug: 'lotus-family', name: 'Lotus Family Gym' } : { slug: 'iron-house', name: 'Iron House' },
+      },
+    }));
+    drawHomeWithLandings();
+    const second = await screen.findByTestId(`staff-invitation-${SECOND_INVITATION.id}`);
+    expect(within(second).getByRole('heading').textContent).toContain('Lotus Family Gym');
+    fireEvent.click(within(second).getByRole('button', { name: 'Accept' }));
+    expect(await screen.findByText('Opened Lotus Family Gym')).toBeTruthy();
+    expect(orgService.acceptStaffInvitation).toHaveBeenCalledTimes(1);
+    expect(orgService.acceptStaffInvitation).toHaveBeenCalledWith(SECOND_INVITATION.id);
+  });
+
+  it('No thanks in the first box answers only the first invitation', async () => {
+    invitationsAre([STAFF_INVITATION, SECOND_INVITATION]);
+    orgService.declineStaffInvitation.mockResolvedValue({ data: { state: 'declined' } });
+    drawHome();
+    const first = await screen.findByTestId(`staff-invitation-${STAFF_INVITATION.id}`);
+    fireEvent.click(within(first).getByRole('button', { name: 'No thanks' }));
+    await waitFor(() => expect(orgService.declineStaffInvitation).toHaveBeenCalledTimes(1));
+    expect(orgService.declineStaffInvitation).toHaveBeenCalledWith(STAFF_INVITATION.id);
+    expect(orgService.acceptStaffInvitation).not.toHaveBeenCalled();
+  });
+
+  it('each business box opens its own console, with its kind, city and the role', async () => {
+    orgService.getMine.mockResolvedValue({
+      data: { orgs: [ORG, { ...ORG, id: SECOND_INVITATION.gym.id, slug: 'lotus-family', name: 'Lotus Family Gym', city: 'Pune', staffRole: 'manager' }] },
+    });
+    drawHomeWithLandings();
+    const list = await screen.findByRole('list', { name: 'Your organisations' });
+    const lotus = within(list).getByText('Lotus Family Gym').closest('a');
+    expect(lotus.getAttribute('href')).toBe('/console/lotus-family');
+    expect(lotus.textContent).toContain('Pune');
+    fireEvent.click(lotus);
+    expect(await screen.findByText('Opened Lotus Family Gym')).toBeTruthy();
+  });
+
+  it('Create sends the kind, country and answer that are picked on screen, and only those', async () => {
+    drawNew();
+    fireEvent.click(screen.getByText('Pilates studio'));
+    fireEvent.click(screen.getByText('Gym'));
+    fireEvent.click(screen.getByText('Pilates studio'));
+    const pressed = [...screen.getByRole('group', { name: 'What is it?' }).querySelectorAll('button[aria-pressed="true"]')];
+    expect(pressed.map((b) => b.textContent)).toEqual([expect.stringContaining('Pilates studio')]);
+    fireEvent.change(screen.getByLabelText('Studio name'), { target: { value: 'Core Pilates' } });
+    await chooseCountry('India');
+    await chooseCountry('Canada');
+    expect(screen.queryByLabelText('Mobile number for payments')).toBeNull();
+    fireEvent.click(screen.getByRole('radio', { name: /^Yes/ }));
+    fireEvent.click(screen.getByRole('radio', { name: /^No, I only run it/ }));
+    orgService.createOrg.mockResolvedValue({ data: { org: { ...ORG, name: 'Core Pilates', orgType: 'pilates_studio' }, joinCode: { code: 'K7QM2X', label: 'Front Desk' } } });
+    fireEvent.click(screen.getByText('Create'));
+    await waitFor(() => expect(orgService.createOrg).toHaveBeenCalledTimes(1));
+    expect(orgService.createOrg.mock.calls[0][0]).toMatchObject({ name: 'Core Pilates', orgType: 'pilates_studio', country: 'CA', trainsHere: false });
+    expect(orgService.createOrg.mock.calls[0][0].billingMobile).toBeUndefined();
+  });
+});
+
 describe('a person invited to help run a gym', () => {
   it('lands on the invitation, never on "Create your organisation"', async () => {
     orgService.getMine.mockResolvedValue({ data: { orgs: [] } });

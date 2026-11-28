@@ -1,9 +1,10 @@
 import { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
-import { normaliseIndianMobile } from '@app/shared';
+import { GYM_TRIAL_DAYS, GYM_TRIAL_MEMBERS, normaliseIndianMobile } from '@app/shared';
 import Select from '../../components/common/Select';
-import { ConsoleCard, ConsoleFailed } from '../../components/console/ConsoleStates';
+import { ConsoleFailed } from '../../components/console/ConsoleStates';
+import { StepsPage } from '../../components/console/ConsoleBoxes';
 import { orgService, errorCode, errorText } from '../../api/orgsApi';
 import { refreshConsoleOrgs } from './consoleOrgs';
 import { useConsoleSignOut } from './consoleSignOut';
@@ -37,24 +38,13 @@ import {
 // ruling: the server derives the gym's currency from it and REFUSES a country
 // we have no prices for, rather than quoting somebody else's money.
 
-const inputStyle = {
-  background: '#0A0908',
-  border: '1px solid rgba(255,255,255,0.10)',
-  color: '#fff',
-};
-
+/** A field: its label, the line under it, then the box (8 between, spec §17.11). */
 function Field({ label, hint, children }) {
   return (
-    <label className="block">
-      <span className="text-sm font-medium" style={{ color: 'rgba(255,255,255,0.75)' }}>
-        {label}
-      </span>
-      {hint ? (
-        <span className="block text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.35)' }}>
-          {hint}
-        </span>
-      ) : null}
-      <div className="mt-2">{children}</div>
+    <label className="c-field">
+      <span className="c-label">{label}</span>
+      {hint ? <span className="c-hint">{hint}</span> : null}
+      {children}
     </label>
   );
 }
@@ -168,221 +158,208 @@ export default function NewGym() {
     }
   };
 
-  // ── Step 1 ──────────────────────────────────────────────────────────────
-  return (
-    <div className="max-w-2xl mx-auto px-4 md:px-8 py-8">
-      <h1 className="text-2xl font-bold mb-1" style={{ color: '#fff' }}>
-        Create your organisation
-      </h1>
-      <p className="text-sm mb-6" style={{ color: 'rgba(255,255,255,0.45)' }}>
-        Then you can bring your {words.people} in: import your list, or add people one at a time.
-      </p>
-
-      <form onSubmit={submit} className="flex flex-col gap-5">
-        <ConsoleCard className="flex flex-col gap-5">
-          {/* THE TYPE COMES FIRST because every label below it follows the
-              answer — a trainer is not asked for a "gym name". */}
-          <div>
-            <span className="text-sm font-medium" style={{ color: 'rgba(255,255,255,0.75)' }}>
-              What is it?
-            </span>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-2">
-              {ORG_TYPE_CHOICES.map((choice) => {
-                const active = orgType === choice.value;
-                return (
-                  <button
-                    key={choice.value}
-                    type="button"
-                    onClick={() => setOrgType(choice.value)}
-                    aria-pressed={active}
-                    className="rounded-xl p-4 text-left"
-                    style={{
-                      background: active ? 'rgba(255,138,31,0.12)' : '#0A0908',
-                      border: active
-                        ? '1px solid rgba(255,138,31,0.45)'
-                        : '1px solid rgba(255,255,255,0.10)',
-                    }}
-                  >
-                    <div className="text-sm font-semibold" style={{ color: active ? '#FF8A1F' : '#fff' }}>
-                      {choice.label}
-                    </div>
-                    <div className="text-xs mt-1" style={{ color: 'rgba(255,255,255,0.45)' }}>
-                      {choice.hint}
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          <Field label={words.nameLabel}>
-            <input
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              maxLength={120}
-              placeholder={words.placeholder}
-              aria-label={words.nameLabel}
-              className="w-full rounded-xl px-4 py-3 text-sm"
-              style={inputStyle}
-            />
-          </Field>
-
-          <Field label="City" hint="Optional">
-            <input
-              type="text"
-              value={city}
-              onChange={(e) => setCity(e.target.value)}
-              maxLength={120}
-              placeholder="Austin"
-              aria-label="City"
-              className="w-full rounded-xl px-4 py-3 text-sm"
-              style={inputStyle}
-            />
-          </Field>
-
-          <Field label="Country" hint="This decides the currency you are billed in.">
-            <Select
-              value={country}
-              onChange={setCountry}
-              options={countries}
-              ariaLabel="Country"
-              placeholder="Choose a country"
-              style={inputStyle}
-            />
-          </Field>
-
-          {inIndia ? (
-            <Field label="Mobile number for payments" hint="Yours, as the owner: Razorpay uses it for messages about your payments. Only people who manage billing here can see it.">
-              <input
-                type="tel"
-                inputMode="tel"
-                autoComplete="tel"
-                value={mobile}
-                onChange={(e) => setMobile(e.target.value)}
-                maxLength={40}
-                placeholder="98765 43210"
-                aria-label="Mobile number for payments"
-                className="w-full rounded-xl px-4 py-3 text-sm"
-                style={inputStyle}
-              />
-              {mobile.trim() !== '' && !mobileOk ? (
-                <span className="block text-xs mt-1.5" style={{ color: '#FF8A1F' }} data-testid="mobile-check">
-                  This isn&apos;t a mobile number. Type your 10-digit mobile number, for example 98765 43210.
-                </span>
-              ) : null}
-            </Field>
-          ) : null}
-
-          <Field label="Timezone" hint="Your daily figures use this.">
-            {zones.length > 0 ? (
-              // A native select for ~400 options: the OS picker scrolls and
-              // type-ahead searches, which the app's own dropdown does not, and
-              // on a phone it is the right control. `Select.jsx` is used for the
-              // 24-item country list, where its styling wins.
-              <select
-                value={timezone}
-                onChange={(e) => setTimezone(e.target.value)}
-                aria-label="Timezone"
-                className="w-full rounded-xl px-4 py-3 text-sm"
-                style={{ ...inputStyle, colorScheme: 'dark' }}
-              >
-                {zones.map((z) => (
-                  <option key={z} value={z}>
-                    {z}
-                  </option>
-                ))}
-              </select>
-            ) : (
-              // This browser cannot enumerate zones. Typing one is better than
-              // being handed a default — the server proves it names a real zone
-              // and refuses it otherwise.
-              <input
-                type="text"
-                value={timezone}
-                onChange={(e) => setTimezone(e.target.value)}
-                placeholder="America/Chicago"
-                aria-label="Timezone"
-                className="w-full rounded-xl px-4 py-3 text-sm"
-                style={inputStyle}
-              />
-            )}
-          </Field>
-
-          <div role="radiogroup" aria-label={trainChoices.question}>
-            <span className="text-sm font-medium" style={{ color: 'rgba(255,255,255,0.75)' }}>
-              {trainChoices.question}
-            </span>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-2">
-              {trainChoices.options.map((choice) => {
-                const active = trainsHere === choice.value;
-                return (
-                  <button
-                    key={String(choice.value)}
-                    type="button"
-                    role="radio"
-                    aria-checked={active}
-                    onClick={() => setTrainsHere(choice.value)}
-                    className="rounded-xl p-4 text-left"
-                    style={{
-                      background: active ? 'rgba(255,138,31,0.12)' : '#0A0908',
-                      border: active ? '1px solid rgba(255,138,31,0.45)' : '1px solid rgba(255,255,255,0.10)',
-                    }}
-                  >
-                    <div className="text-sm font-semibold" style={{ color: active ? '#FF8A1F' : '#fff' }}>
-                      {choice.label}
-                    </div>
-                    <div className="text-xs mt-1" style={{ color: 'rgba(255,255,255,0.45)' }}>
-                      {choice.hint}
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        </ConsoleCard>
-
-        {error !== null ? <ConsoleFailed message={error} /> : null}
-        {throwaway ? (
+  // ── The page: three numbered parts, Create always in sight (V5-d, board `CreateGym`) ──
+  const typePart = (
+    <div className="c-choices" role="group" aria-label="What is it?">
+      {/* THE TYPE COMES FIRST because every label below it follows the answer — a
+          trainer is not asked for a "gym name". */}
+      {ORG_TYPE_CHOICES.map((choice) => {
+        const active = orgType === choice.value;
+        return (
           <button
+            key={choice.value}
             type="button"
-            onClick={signOut}
-            disabled={signingOut}
-            className="self-start rounded-xl px-4 py-2 text-sm font-medium disabled:opacity-50"
-            style={{ background: 'rgba(255,138,31,0.15)', color: '#FF8A1F' }}
+            onClick={() => setOrgType(choice.value)}
+            aria-pressed={active}
+            className={`c-choice c-pick${active ? ' c-choice-on' : ''}`}
           >
-            {signingOut ? 'Signing out…' : 'Sign in with another email'}
+            <span className={`c-s15 c-w6 ${active ? 'c-ui' : 'c-t1'}`}>{choice.label}</span>
+            <span className="c-s14 c-t2">{choice.hint}</span>
           </button>
-        ) : null}
-        {atUnpaidLimit ? (
-          <Link
-            to="/console"
-            className="self-start rounded-xl px-4 py-2 text-sm font-medium"
-            style={{ background: 'rgba(255,138,31,0.15)', color: '#FF8A1F' }}
-          >
-            Your organisations
-          </Link>
-        ) : null}
+        );
+      })}
+    </div>
+  );
 
-        <div className="flex items-center gap-3">
+  const aboutPart = (
+    <div className="c-stack-m">
+      <Field label={words.nameLabel}>
+        <input
+          type="text"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          maxLength={120}
+          placeholder={words.placeholder}
+          aria-label={words.nameLabel}
+          className="c-input"
+        />
+      </Field>
+
+      <Field label="City" hint="Optional">
+        <input
+          type="text"
+          value={city}
+          onChange={(e) => setCity(e.target.value)}
+          maxLength={120}
+          placeholder="Austin"
+          aria-label="City"
+          className="c-input"
+        />
+      </Field>
+
+      <Field label="Country" hint="This decides the currency you are billed in.">
+        <Select newLook value={country} onChange={setCountry} options={countries} ariaLabel="Country" placeholder="Choose a country" />
+      </Field>
+
+      {inIndia ? (
+        <Field label="Mobile number for payments" hint="Yours, as the owner: Razorpay uses it for messages about your payments. Only people who manage billing here can see it.">
+          <input
+            type="tel"
+            inputMode="tel"
+            autoComplete="tel"
+            value={mobile}
+            onChange={(e) => setMobile(e.target.value)}
+            maxLength={40}
+            placeholder="98765 43210"
+            aria-label="Mobile number for payments"
+            className="c-input"
+          />
+          {mobile.trim() !== '' && !mobileOk ? (
+            <span className="c-err" data-testid="mobile-check">
+              This isn&apos;t a mobile number. Type your 10-digit mobile number, for example 98765 43210.
+            </span>
+          ) : null}
+        </Field>
+      ) : null}
+
+      <Field label="Timezone" hint="Your daily figures use this.">
+        {zones.length > 0 ? (
+          // A native select for ~400 options: the OS picker scrolls and type-ahead
+          // searches, which the app's own dropdown does not, and on a phone it is the
+          // right control. `Select.jsx` is used for the 24-item country list.
+          <select value={timezone} onChange={(e) => setTimezone(e.target.value)} aria-label="Timezone" className="c-sel">
+            {zones.map((z) => (
+              <option key={z} value={z}>
+                {z}
+              </option>
+            ))}
+          </select>
+        ) : (
+          // This browser cannot enumerate zones. Typing one is better than being handed
+          // a default — the server proves it names a real zone and refuses it otherwise.
+          <input
+            type="text"
+            value={timezone}
+            onChange={(e) => setTimezone(e.target.value)}
+            placeholder="America/Chicago"
+            aria-label="Timezone"
+            className="c-input"
+          />
+        )}
+      </Field>
+    </div>
+  );
+
+  const trainPart = (
+    <div role="radiogroup" aria-label={trainChoices.question} className="c-choices">
+      {trainChoices.options.map((choice) => {
+        const active = trainsHere === choice.value;
+        return (
           <button
-            type="submit"
-            disabled={!canSubmit}
-            className="rounded-xl px-5 py-3 text-sm font-semibold flex items-center gap-2"
-            style={{
-              background: canSubmit ? 'linear-gradient(135deg,#FF8A1F,#FFB347)' : 'rgba(255,255,255,0.08)',
-              color: canSubmit ? '#0A0908' : 'rgba(255,255,255,0.35)',
-            }}
+            key={String(choice.value)}
+            type="button"
+            role="radio"
+            aria-checked={active}
+            onClick={() => setTrainsHere(choice.value)}
+            className={`c-choice c-pick${active ? ' c-choice-on' : ''}`}
           >
-            {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-            {submitting ? 'Creating…' : 'Create'}
+            <span className={`c-s15 c-w6 ${active ? 'c-ui' : 'c-t1'}`}>{choice.label}</span>
+            <span className="c-s14 c-t2">{choice.hint}</span>
           </button>
-          {runsSomething ? (
-            <Link to="/console" className="text-sm" style={{ color: 'rgba(255,255,255,0.45)' }}>
-              Cancel
+        );
+      })}
+    </div>
+  );
+
+  const foot = (
+    <div className="c-stack-s">
+      {error !== null ? <ConsoleFailed newLook message={error} /> : null}
+      {throwaway || atUnpaidLimit ? (
+        <div className="c-flow-s">
+          {throwaway ? (
+            <button type="button" onClick={signOut} disabled={signingOut} className="c-btn c-btn-lg c-btn-soft">
+              {signingOut ? 'Signing out…' : 'Sign in with another email'}
+            </button>
+          ) : null}
+          {atUnpaidLimit ? (
+            <Link to="/console" className="c-btn c-btn-lg c-btn-soft">
+              Your organisations
             </Link>
           ) : null}
         </div>
+      ) : null}
+      <div className="c-create-foot c-flow">
+        <button type="submit" disabled={!canSubmit} className="c-btn c-btn-lg c-btn-p">
+          {submitting ? <Loader2 size={16} className="animate-spin" aria-hidden="true" /> : null}
+          {submitting ? 'Creating…' : 'Create'}
+        </button>
+        {runsSomething ? (
+          <Link to="/console" className="c-btn c-btn-lg c-btn-s">
+            Cancel
+          </Link>
+        ) : null}
+      </div>
+    </div>
+  );
+
+  const after = (
+    <aside className="c-card c-steps-sum c-stack-s" style={{ padding: 24 }} aria-labelledby="after-create">
+      <h2 id="after-create" className="c-h2">
+        After you press Create
+      </h2>
+      <ol className="c-after">
+        <li>
+          <span className="c-step-n" aria-hidden="true">
+            1
+          </span>
+          <span>Your Overview opens, with the steps to set up your {words.it}.</span>
+        </li>
+        <li>
+          <span className="c-step-n" aria-hidden="true">
+            2
+          </span>
+          <span>
+            Choose a plan, or start a {GYM_TRIAL_DAYS}-day free trial for up to {GYM_TRIAL_MEMBERS} {words.people} if you
+            haven&apos;t had one. The trial needs no card.
+          </span>
+        </li>
+        <li>
+          <span className="c-step-n" aria-hidden="true">
+            3
+          </span>
+          <span>Once your {words.people} are on your list, invite them to the app.</span>
+        </li>
+      </ol>
+    </aside>
+  );
+
+  return (
+    <div className="c-page">
+      <div className="c-stack-xs">
+        <h1 className="c-h1">Create your organisation</h1>
+        <p className="c-sub">Then you can bring your {words.people} in: import your list, or add people one at a time.</p>
+      </div>
+
+      <form onSubmit={submit} noValidate>
+        <StepsPage
+          parts={[
+            { key: 'kind', title: 'What is it?', children: typePart },
+            { key: 'about', title: 'About it', children: aboutPart },
+            { key: 'train', title: trainChoices.question, children: trainPart },
+          ]}
+          foot={foot}
+          aside={after}
+        />
       </form>
     </div>
   );
