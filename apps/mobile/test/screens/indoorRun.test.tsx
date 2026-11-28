@@ -464,19 +464,19 @@ describe("steps the app could not see as they came, during an Auto-pause (the re
     await pickIndoor();
     await startIndoor();
     const total = await walkThenStand();
-    // From 700 s to 1,300 s, 1,200 steps, handed over as they came but not looked at until the screen is back at 1,310 s.
+    // From 700 s to 1,300 s, 1,200 steps, handed over as they came but not looked at until the screen is back at 1,301 s.
     const run = going();
     for (let t = 1; t <= 600; t++) motion.stepTo(run.startedAt + (700 + t) * 1000, total + t * 2);
-    await act(() => takeSteps(run.startedAt + 1_310_000));
+    await act(() => takeSteps(run.startedAt + 1_301_000));
     const back = going();
     expect(back.phase).toBe("running");
     // Started again from just before the first steps (two steps at a brisk walk, a second), never from the screen's return.
     expect(back.pauses).toEqual([[610_000, 700_000]]);
-    const sums = indoorSumsAt(back, 1_310_000, 0, null);
+    const sums = indoorSumsAt(back, 1_301_000, 0, null);
     expect(sums.steps).toBe(2400);
     expect(shownSteps(back)).toBe(2400);
-    // A walk's speed, never a run's: 1.5 m/s or under over the moving time.
-    expect(sums.distanceM / sums.movingS).toBeLessThan(1.5);
+    // A walk's speed (2 steps a second at 0.43 of 1.75 m is 1.5 m/s), never a run's.
+    expect(sums.distanceM / sums.movingS).toBeLessThan(2);
     // The counts kept at their own times through the ten minutes, at most one a second.
     const counts = (back.indoor?.counts ?? []).filter(([at]) => at > 700_000);
     expect(counts.length).toBeGreaterThan(550);

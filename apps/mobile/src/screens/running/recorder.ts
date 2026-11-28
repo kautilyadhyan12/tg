@@ -33,7 +33,7 @@ import {
 import { colours } from "../../look/colours";
 import { AUTO_START, RUN_GAP_MS, autoPausedFrom, autoRunning, feelAt, nextAutoPause, type AutoPauseState } from "./autoPause";
 import { clockAt, closeStill, closedPauses, elapsedMs, keepDatedBack, lastMarkAt, markAt, marksOf, movingMsOf, openStill, runToMark, sumsAt, undoDatedBack } from "./runLive";
-import { nextStepPause, stepsAt, tallyStep } from "./indoorSteps";
+import { nextStepPause, stepsAt, tallyStep, type StepPause } from "./indoorSteps";
 import { beginLine, guideAdvance, guideDone, guideNextLook, guideSchedule, guideSkip, nowLine, skipLine } from "./runGuide";
 import { PAUSE_WORDS, START_HUSH_MS, VOICE_AFTER_LOAD, VOICE_START, heartLine, voiceCheck, type VoiceState } from "./runVoice";
 import { runVoiceNative } from "./runVoiceNative";
@@ -750,30 +750,38 @@ export async function takeSteps(now: number = Date.now()): Promise<void> {
   } else for (const rise of rises) keepRise(run, rise);
   const wake = waking[0];
   const counted = autoPaused ? false : flushSteps(run, elapsedMs(run, now), false);
-  const pausedFrom = openPauseFrom(run);
-  const change =
-    run.pauses.length < RUN_MAX_PAUSES || run.phase === "paused"
+  /** What Auto-pause does at this look, from the run as it now stands. */
+  const decide = (): StepPause => {
+    const phase = run.phase;
+    if (phase === "finished") return null;
+    const pausedFrom = openPauseFrom(run);
+    return run.pauses.length < RUN_MAX_PAUSES || phase === "paused"
       ? nextStepPause({
-          phase: run.phase,
+          phase,
           byPerson: run.pausedByPerson,
           autoPause: run.autoPause,
           armed: indoor.armed,
           counts: indoor.counts,
           pauseFrom: pausedFrom,
           lastPauseEnd: lastOpenEnd(run),
-          wake: wake === undefined ? null : { at: wake.at, gained: wake.gained },
+          wake: phase === "paused" && wake !== undefined ? { at: wake.at, gained: wake.gained } : null,
           nowMs: elapsedMs(run, now),
         })
       : null;
-  if (change?.kind === "pause" && run.phase === "running") {
-    // The clock stops where it stands, never back (37k): the seconds with no step before it are the run's.
-    const at = Math.max(change.at, lastOpenEnd(run));
-    fenceAt(run, at);
-    run.pauses.push([at, null]);
+  };
+  /** An Auto-pause from `at` (where the clock stands, or, looked at late, ten seconds after the last step). */
+  const autoPauseAt = (at: number): void => {
+    // Never inside a pause already kept: the seconds with no step before it are the run's.
+    const from = Math.max(at, lastOpenEnd(run));
+    fenceAt(run, from);
+    run.pauses.push([from, null]);
     run.phase = "paused";
     run.pausedByPerson = false;
     writtenAt = 0;
-  } else if (change?.kind === "resume" && run.phase === "paused" && !run.pausedByPerson) {
+  };
+  const change = decide();
+  if (change?.kind === "pause" && run.phase === "running") autoPauseAt(change.at);
+  else if (change?.kind === "resume" && run.phase === "paused" && !run.pausedByPerson) {
     resumedFrom = openPauseFrom(run);
     // Steps kept inside the pause before these (a new listener's first) are counted there first.
     flushSteps(run, change.at, true);
@@ -786,7 +794,13 @@ export async function takeSteps(now: number = Date.now()): Promise<void> {
       // second after, as moving.
       indoor.steps = last.steps;
       indoor.pendingAt = change.at + STEP_COUNT_EVERY_MS;
-    } else for (const rise of waking) keepRise(run, rise);
+    } else {
+      for (const rise of waking) keepRise(run, rise);
+      // Started again from steps seen late (the screen was off): a stand after them is found at once, from its own
+      // time (the second re-check, H4).
+      const after = decide();
+      if (after?.kind === "pause") autoPauseAt(after.at);
+    }
     waking = [];
     writtenAt = 0;
   }

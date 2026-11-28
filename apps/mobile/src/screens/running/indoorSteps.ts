@@ -94,7 +94,13 @@ export function nextStepPause(look: {
     if (!look.armed) return null;
     const rise = lastRiseAt(look.counts);
     if (rise === null) return null;
-    return look.nowMs - Math.max(rise, look.lastPauseEnd) >= STEP_PAUSE_MS ? { kind: "pause", at: look.nowMs } : null;
+    const from = Math.max(rise, look.lastPauseEnd);
+    if (look.nowMs - from < STEP_PAUSE_MS) return null;
+    // Looked at in time: where the clock stands, never back (37k). Looked at late (the screen was off, nobody saw the
+    // clock): where the pause would have been, ten seconds after the last step, so a stand is never moving time (the
+    // second re-check, H4: ten minutes standing read as moving, and the clock jumped them ahead).
+    const late = look.nowMs - from > STEP_PAUSE_MS + WAKE_LIVE_MS;
+    return { kind: "pause", at: late ? from + STEP_PAUSE_MS : look.nowMs };
   }
   if (look.byPerson || look.pauseFrom === null || look.wake === null) return null;
   // Seen as they came: now, where the clock stands (Kd, 37q-ii-a's walk: "the timer is jumping" when it started from
