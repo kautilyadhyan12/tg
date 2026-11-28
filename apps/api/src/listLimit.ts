@@ -19,6 +19,10 @@ declare module "fastify" {
   interface FastifyContextConfig {
     /** This route's own `LIST_ITEMS_MOST`. */
     listItemsMost?: number;
+    /** The most object keys a body may hold, counted the same way, for a route that names it. Zod checks every key of a
+     *  record, and names every unknown key of a strict object: a body of 131,594 keys in one record held the server half a
+     *  second and answered 500 (job 64b-i, round one, H1). Not counted for a route that names none. */
+    objectMembersMost?: number;
   }
 }
 
@@ -84,6 +88,49 @@ export function countJsonListItems(text: string, most: number): number {
   return count;
 }
 
+/**
+ * The keys of every object in a JSON text, nested ones included, in one pass, stopping as soon as `most` is passed: the
+ * same walk as `countJsonListItems`, counting an object's members where that counts a list's items.
+ */
+export function countJsonObjectMembers(text: string, most: number): number {
+  let count = 0;
+  // One entry a bracket still open: true for an object, false for a list.
+  const open: boolean[] = [];
+  // Whether the innermost open object has had a member yet.
+  let objectHasMember = false;
+  const hadMember: boolean[] = [];
+  for (let i = 0; i < text.length; i++) {
+    const c = text.charCodeAt(i);
+    if (isSpace(c)) continue;
+    const inObject = open.length > 0 && open[open.length - 1] === true;
+    if (inObject && !objectHasMember && c !== CLOSE_OBJECT) {
+      count++;
+      objectHasMember = true;
+    }
+    if (c === QUOTE) {
+      let j = i + 1;
+      while (j < text.length) {
+        const d = text.charCodeAt(j);
+        if (d === BACKSLASH) j += 2;
+        else if (d === QUOTE) break;
+        else j++;
+      }
+      i = j;
+    } else if (c === COMMA) {
+      if (inObject) count++;
+    } else if (c === OPEN_LIST || c === OPEN_OBJECT) {
+      open.push(c === OPEN_OBJECT);
+      hadMember.push(objectHasMember);
+      objectHasMember = false;
+    } else if (c === CLOSE_LIST || c === CLOSE_OBJECT) {
+      open.pop();
+      objectHasMember = hadMember.pop() ?? false;
+    }
+    if (count > most) return count;
+  }
+  return count;
+}
+
 /** The list items in a parsed value, counted without recursion, stopping as soon as `most` is passed.
  *  For the query string only, which Node holds to 16 KB. */
 export function countListItems(value: unknown, most: number): number {
@@ -112,7 +159,8 @@ export function registerListLimit(app: FastifyInstance): void {
   app.addContentTypeParser("application/json", { parseAs: "string" }, (req, body, done) => {
     const text = typeof body === "string" ? body : body.toString("utf8");
     const most = req.routeOptions.config.listItemsMost ?? LIST_ITEMS_MOST;
-    if (countJsonListItems(text, most) > most) {
+    const members = req.routeOptions.config.objectMembersMost;
+    if (countJsonListItems(text, most) > most || (members !== undefined && countJsonObjectMembers(text, members) > members)) {
       done(new TooManyItemsError(), undefined);
       return;
     }

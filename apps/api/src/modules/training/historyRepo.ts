@@ -129,13 +129,15 @@ export interface SetRow {
   duration_ms: number;
   counted: string | null;
   mode: string | null;
+  /** The camera's form score for the set; null for one it did not judge (job 64b-i). */
+  avg_form_score: number | null;
 }
 
 const setColumns = (sql: Sql) => sql`
   s.workout_id, w.started_at, s.exercise_id, e.slug,
   l.entry->'text'->'en'->>'name' AS name,
   s.set_index, s.measured_in, s.reps, s.hold_ms, s.target, s.weight_grams, s.rest_seconds,
-  s.duration_ms, s.counted, s.mode`;
+  s.duration_ms, s.counted, s.mode, s.avg_form_score`;
 
 /** One workout's sets, in their places. */
 export async function workoutSets(sql: Sql, userId: string, workoutId: string): Promise<SetRow[]> {
