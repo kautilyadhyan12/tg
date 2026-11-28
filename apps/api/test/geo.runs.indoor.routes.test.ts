@@ -159,6 +159,24 @@ d("an indoor run (real Postgres)", () => {
       expect(right.distanceFrom).toBe("treadmill");
     });
 
+    it("Finish forgotten on the treadmill for 2.5 hours, 5.4 typed as 54: saved at its steps' distance (round one, H3)", async () => {
+      const runner = await makeUser("forgot");
+      const honest = indoorSums(steady(1800, 165), [], 1_800_000, 0, stepBasisOf(null, []), null);
+      const kept = await saved(runner.cookies, indoorBody(54_000, { elapsedMs: 1_800_000 + 9_000_000 }));
+      expect(kept.distanceFrom).toBe("steps");
+      expect(kept.distanceM).toBe(honest.distanceM);
+      const list = runPageSchema.parse(JSON.parse((await inject({ method: "GET", url: "/v1/geo/runs", cookies: runner.cookies })).body));
+      expect(list.total.distanceM).toBe(honest.distanceM);
+    });
+
+    it("the walk to the changing room after Finish is not the run's (round one, H2)", async () => {
+      const runner = await makeUser("after");
+      const late = indoorBody(null, { indoor: { counts: [...steady(1800, 165), [1_800_001, 4951], [1_980_000, 5280]], treadmillM: null } });
+      const kept = await saved(runner.cookies, late);
+      expect(kept.steps).toBe(4950);
+      expect(kept.distanceM).toBe(indoorSums(steady(1800, 165), [], 1_800_000, 0, stepBasisOf(null, []), null).distanceM);
+    });
+
     it("an indoor run longer than every run outdoors sets no record, and its page holds none", async () => {
       const runner = await makeUser("records");
       const outdoor = await saved(runner.cookies, {
@@ -279,6 +297,19 @@ d("an indoor run (real Postgres)", () => {
       const res = await save(walker.cookies, run);
       expect(res.statusCode).toBe(400);
       expect((await sql`SELECT 1 FROM runs WHERE id = ${run.runId}`).length).toBe(0);
+    });
+
+    it("the database keeps no indoor run without its steps, and no outdoor run with them (round one, L1)", async () => {
+      const owner = await makeUser("check");
+      const row = (kind: string, steps: number | null, stepsM: number | null) =>
+        sql`INSERT INTO runs (id, user_id, started_at, duration_s, distance_m, kind, steps, steps_m)
+            VALUES (${randomUUID()}, ${owner.id}, now(), 60, 100, ${kind}, ${steps}, ${stepsM})`;
+      await expect(row("indoor", null, null)).rejects.toThrow(/runs_indoor_check/);
+      await expect(row("indoor", 100, null)).rejects.toThrow(/runs_indoor_check/);
+      await expect(row("outdoor", 100, 80)).rejects.toThrow(/runs_indoor_check/);
+      // Both checks refuse it; Postgres names whichever it tried first.
+      await expect(row("treadmill", null, null)).rejects.toThrow(/runs_(kind|indoor)_check/);
+      await row("indoor", 100, 80);
     });
 
     it("the step length to nobody signed in: 401", async () => {

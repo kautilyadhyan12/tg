@@ -91,7 +91,7 @@ export const runs = pgTable(
     check("runs_kind_check", sql`${t.kind} IN ('outdoor', 'indoor')`),
     check(
       "runs_indoor_check",
-      sql`(${t.kind} = 'outdoor' AND ${t.steps} IS NULL AND ${t.stepsM} IS NULL AND ${t.treadmillM} IS NULL) OR (${t.kind} = 'indoor' AND ${t.steps} >= 0 AND ${t.stepsM} >= 0 AND (${t.treadmillM} IS NULL OR ${t.treadmillM} > 0) AND ${t.polyline} IS NULL AND ${t.shape} IS NULL AND ${t.best1kS} IS NULL AND ${t.bestMileS} IS NULL AND ${t.best5kS} IS NULL AND ${t.best10kS} IS NULL)`,
+      sql`(${t.kind} = 'outdoor' AND ${t.steps} IS NULL AND ${t.stepsM} IS NULL AND ${t.treadmillM} IS NULL) OR (${t.kind} = 'indoor' AND ${t.steps} IS NOT NULL AND ${t.steps} >= 0 AND ${t.stepsM} IS NOT NULL AND ${t.stepsM} >= 0 AND (${t.treadmillM} IS NULL OR ${t.treadmillM} > 0) AND ${t.polyline} IS NULL AND ${t.shape} IS NULL AND ${t.best1kS} IS NULL AND ${t.bestMileS} IS NULL AND ${t.best5kS} IS NULL AND ${t.best10kS} IS NULL)`,
     ),
     index("runs_user_treadmill_idx").on(t.userId, t.startedAt.desc()).where(sql`${t.treadmillM} IS NOT NULL`),
     check(

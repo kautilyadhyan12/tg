@@ -18,6 +18,6 @@ ALTER TABLE "runs" ADD COLUMN "treadmill_m" integer;
 --> statement-breakpoint
 ALTER TABLE "runs" ADD CONSTRAINT "runs_kind_check" CHECK ("runs"."kind" IN ('outdoor', 'indoor'));
 --> statement-breakpoint
-ALTER TABLE "runs" ADD CONSTRAINT "runs_indoor_check" CHECK (("runs"."kind" = 'outdoor' AND "runs"."steps" IS NULL AND "runs"."steps_m" IS NULL AND "runs"."treadmill_m" IS NULL) OR ("runs"."kind" = 'indoor' AND "runs"."steps" >= 0 AND "runs"."steps_m" >= 0 AND ("runs"."treadmill_m" IS NULL OR "runs"."treadmill_m" > 0) AND "runs"."polyline" IS NULL AND "runs"."shape" IS NULL AND "runs"."best_1k_s" IS NULL AND "runs"."best_mile_s" IS NULL AND "runs"."best_5k_s" IS NULL AND "runs"."best_10k_s" IS NULL));
+ALTER TABLE "runs" ADD CONSTRAINT "runs_indoor_check" CHECK (("runs"."kind" = 'outdoor' AND "runs"."steps" IS NULL AND "runs"."steps_m" IS NULL AND "runs"."treadmill_m" IS NULL) OR ("runs"."kind" = 'indoor' AND "runs"."steps" IS NOT NULL AND "runs"."steps" >= 0 AND "runs"."steps_m" IS NOT NULL AND "runs"."steps_m" >= 0 AND ("runs"."treadmill_m" IS NULL OR "runs"."treadmill_m" > 0) AND "runs"."polyline" IS NULL AND "runs"."shape" IS NULL AND "runs"."best_1k_s" IS NULL AND "runs"."best_mile_s" IS NULL AND "runs"."best_5k_s" IS NULL AND "runs"."best_10k_s" IS NULL));
 --> statement-breakpoint
 CREATE INDEX "runs_user_treadmill_idx" ON "runs" USING btree ("user_id","started_at" DESC) WHERE "runs"."treadmill_m" IS NOT NULL;

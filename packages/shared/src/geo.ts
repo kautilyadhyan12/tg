@@ -171,7 +171,6 @@ export const runRecordsSchema = z.object({
 });
 export type RunRecords = z.infer<typeof runRecordsSchema>;
 
-/** A run's own page: everything its summary showed after Finish. */
 /** Where a run's distance is from (37q): the GPS, the steps the phone counted indoors, or a treadmill's own, typed
  *  after Finish. A server from before sends none: the GPS. */
 export const runDistanceFromSchema = z.enum(["gps", "steps", "treadmill"]).default("gps");
@@ -179,6 +178,7 @@ export type RunDistanceFrom = z.infer<typeof runDistanceFromSchema>;
 /** The steps counted on an indoor run (37q); null outdoors. */
 const runStepsSchema = z.number().int().nonnegative().nullable().default(null);
 
+/** A run's own page: everything its summary showed after Finish. */
 export const runDetailSchema = runSummarySchema.extend({
   polyline: z.string().nullable(),
   distanceFrom: runDistanceFromSchema,

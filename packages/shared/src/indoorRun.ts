@@ -7,8 +7,8 @@
 // a walking one. Once they have typed what a treadmill showed, their step length is put right by how far their steps
 // were from it, as Garmin calibrates from the distance a treadmill shows after a run (support.garmin.com, FAQ
 // bpO2rljrqH2yUG1wSG73s9). A treadmill's distance typed after Finish is the run's own, when somebody could have run that
-// far in that time. Such a run never sets a running record and is never on any board: what it says is the phone's
-// guess or the person's own word.
+// far in that time and it is near what the steps said. Such a run never sets a running record and is never on any
+// board: what it says is the phone's guess or the person's own word.
 import { RUN_MAX_ELAPSED_MS, cleanPauses, kcalOfRun, paceLineOf, placeSpansOf, recordSpeed, splitsOf, type RunMark, type RunPause, type RunSums } from "./runMaths.js";
 
 /** Raised whenever a rule below changes, and kept with each saved indoor run (in `run_calc_version`, beside its kind). */
@@ -108,12 +108,29 @@ export function stepLengthAt(stepsPerMinute: number, basis: StepBasis): number {
   return (walk + share * (run - walk)) * basis.factor;
 }
 
+/** From this far, the steps say how far the person went: a treadmill's distance is held to them. Under it the phone
+ *  counted next to nothing (it lay on the treadmill), and only the time can judge. The line from which a run counts at
+ *  all (the streak's and XP's, `RUN_COUNTS_FROM_M`): a walk of 600 m left going an hour and typed ten times over was
+ *  taken from 500 m. The terminal's own. */
+export const STEPS_JUDGE_FROM_M = 200;
+/** A treadmill's distance is taken from a third to three times what the steps said: wider than what teaches the step
+ *  (`STEP_FACTOR_LEAST` to `STEP_FACTOR_MOST`), as athletes at 24 km/h step 2.01 m (Leeds Beckett, eprint 11031), 2.3
+ *  times the 0.49 of a 1.80 m height. Ten times the true distance is past it whenever the steps were near the truth,
+ *  however long the run was left going. The terminal's own. */
+export const TREADMILL_OF_STEPS_LEAST = 1 / 3;
+export const TREADMILL_OF_STEPS_MOST = 3;
+
 /** Whether a treadmill's distance typed after Finish is the run's: somebody could have run that far in that moving time
- *  (never faster than the world record for that long, as a stretch outdoors is held to). A slip of the finger by ten
- *  times is never taken from anybody who went faster than a metre a second: ten times that is past every record. */
-export function treadmillTaken(treadmillM: number | null, movingS: number): boolean {
+ *  (never faster than the world record for that long, as a stretch outdoors is held to), and, where the steps measured
+ *  a real distance (`stepsM`, STEPS_JUDGE_FROM_M or more), it is within a third to three times theirs. A slip of the
+ *  finger by ten times is never taken: the steps say so, or, with a phone that counted next to nothing, the record does
+ *  for anybody who went faster than a metre a second over the moving time. */
+export function treadmillTaken(treadmillM: number | null, movingS: number, stepsM = 0): boolean {
   if (treadmillM === null || !(treadmillM >= 1) || treadmillM > TREADMILL_MOST_M || !(movingS > 0)) return false;
-  return treadmillM / movingS <= recordSpeed(movingS);
+  if (treadmillM / movingS > recordSpeed(movingS)) return false;
+  if (!(stepsM >= STEPS_JUDGE_FROM_M)) return true;
+  const ratio = treadmillM / stepsM;
+  return ratio >= TREADMILL_OF_STEPS_LEAST && ratio <= TREADMILL_OF_STEPS_MOST;
 }
 
 // ── The run ───────────────────────────────────────────────────────────────────────────────────
@@ -166,18 +183,21 @@ export function indoorSums(
     return total;
   };
 
-  // The counts in order of time (two at one moment in the order sent), each inside the run.
+  // The counts in order of time (two at one moment in the order sent). A count after Finish is none of the run's: the
+  // walk to the changing room is not run (round one, H2).
   const sorted = counts
-    .map(([at, steps], i) => ({ at: Math.max(0, Math.min(at, elapsed)), steps, i }))
+    .map(([at, steps], i) => ({ at: Math.max(0, at), steps, i }))
+    .filter((count) => count.at <= elapsed)
     .sort((a, b) => a.at - b.at || a.i - b.i);
   const stretches: Stretch[] = [];
   let lastAt = 0;
   let lastSteps = 0;
   for (const count of sorted) {
-    // A count that went back is a counter that started again from nothing (a phone restarted): what it says now is
-    // what it has counted since.
-    const gained = count.steps >= lastSteps ? count.steps - lastSteps : count.steps;
-    lastSteps = count.steps;
+    // The steps since Start only rise: a count lower than one before it adds nothing, and the higher stays (round one,
+    // H1: one count a step lower re-added the whole run). The phone keeps them rising across a restart of its own
+    // counter (37q-ii).
+    const gained = Math.max(0, count.steps - lastSteps);
+    lastSteps = Math.max(lastSteps, count.steps);
     if (count.at > lastAt) {
       const span = count.at - lastAt;
       const moving = span - pausedWithin(lastAt, count.at);
@@ -233,7 +253,7 @@ export function indoorSums(
   }
   const plainM = basis.factor > 0 ? stepsM / basis.factor : 0;
 
-  const taken = treadmillTaken(treadmillM, movingS);
+  const taken = treadmillTaken(treadmillM, movingS, stepsM);
   const distanceM = taken && treadmillM !== null ? treadmillM : stepsM;
   // The treadmill's distance laid along the steps, as they went. A phone that counted no step has no line: its
   // kilometres and pace are not made up.

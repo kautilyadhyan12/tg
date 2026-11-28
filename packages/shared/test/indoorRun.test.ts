@@ -11,6 +11,7 @@ import {
   RUN_MAX_POINTS,
   RUN_STEP_OF_HEIGHT,
   STEP_FACTOR_MOST,
+  STEPS_JUDGE_FROM_M,
   TREADMILL_MOST_M,
   WALK_STEP_OF_HEIGHT,
   indoorSums,
@@ -48,6 +49,22 @@ describe("the worst thing: a treadmill's distance typed ten times too big, taken
     expect(treadmillTaken(trueM * 100, movingS)).toBe(false);
   });
 
+  // The same with the steps the phone counted near the truth (seven tenths to 1.4 times it), and the run left going on
+  // the treadmill six times as long before Finish was pressed: ten times the true distance is never taken (round one, H3).
+  const left = cases.flatMap((c) => [0.7, 1, 1.4].map((near) => ({ ...c, near })));
+  it.each(left)("$mps m/s for $min minutes, steps at $near of it, left going six times as long: ten times is refused", ({ mps, min, near }) => {
+    const trueM = mps * min * 60;
+    expect(treadmillTaken(Math.round(trueM * 10), min * 60 * 6, trueM * near)).toBe(false);
+    expect(treadmillTaken(Math.round(trueM), min * 60, trueM * near)).toBe(true);
+  });
+
+  it("Finish forgotten on a treadmill for two and a half hours, 5.4 typed as 54: the run keeps its steps' distance", () => {
+    const counts = steady(1800, 165);
+    const sums = indoorSums(counts, [], 1_800_000 + 9_000_000, 60, PERSON, 54_000);
+    expect(sums.distanceFrom).toBe("steps");
+    expect(sums.distanceM).toBe(indoorSums(counts, [], 1_800_000, 60, PERSON, null).distanceM);
+  });
+
   it("Maya's 5.4 km in 30 minutes typed as 54: the run keeps the distance her steps made", () => {
     const sums = indoorSums(steady(1800, 165), [], 1_800_000, 60, PERSON, 54_000);
     expect(sums.distanceFrom).toBe("steps");
@@ -59,10 +76,20 @@ describe("the worst thing: a treadmill's distance typed ten times too big, taken
     expect(right.distanceM).toBe(5400);
   });
 
-  it("where the rule cannot help: somebody who stood about at under 0.6 m/s on average, typed ten times", () => {
-    // A long slow walk with stops, three hours at 0.5 m/s: ten times it is 5 m/s, under the record for three hours.
+  it("where only the time can judge: a phone that counted next to nothing, at under 0.6 m/s on average, typed ten times", () => {
+    // Three hours at 0.5 m/s: ten times it is 5 m/s, under the record for three hours. With the steps of it, refused.
     expect(treadmillTaken(5400 * 10, 10_800)).toBe(true);
+    expect(treadmillTaken(5400 * 10, 10_800, 5400)).toBe(false);
     expect(recordSpeed(10_800)).toBeGreaterThan(5);
+  });
+
+  it("the steps judge from 500 m, from a third to three times theirs", () => {
+    expect(treadmillTaken(5000, 1800, STEPS_JUDGE_FROM_M - 1)).toBe(true);
+    expect(treadmillTaken(5000, 1800, STEPS_JUDGE_FROM_M)).toBe(false);
+    expect(treadmillTaken(3000, 1800, 1000)).toBe(true);
+    expect(treadmillTaken(3001, 1800, 1000)).toBe(false);
+    expect(treadmillTaken(1000, 1800, 3000)).toBe(true);
+    expect(treadmillTaken(999, 1800, 3000)).toBe(false);
   });
 
   it("no distance, nothing, a negative, past the most, or no moving time: never taken", () => {
@@ -243,12 +270,22 @@ describe("the run's numbers from its counts", () => {
     expect(indoorSums(twice, [], 600_000, 70, PERSON, null)).toEqual(base);
   });
 
-  it("a counter that starts again goes on from where it is", () => {
-    const first = steady(300, 165);
-    // The phone's counter fell back to 0 at five minutes and counted on from there.
-    const again = steady(300, 165, 300, 0);
-    const sums = indoorSums([...first, ...again], [], 600_000, 70, PERSON, null);
-    expect(sums.steps).toBe(1650);
+  it("a count lower than one before adds nothing: a step lower at once, half a second on, or none at all", () => {
+    // Round one, H1: a walk of 3,300 steps with one count a step lower at 15 minutes was saved as 4,952 steps.
+    const walk = steady(1800, 110);
+    const base = indoorSums(walk, [], 1_800_000, 70, PERSON, null);
+    const at = (i: number): IndoorCount => walk[i] ?? [0, 0];
+    const lower = (c: IndoorCount, laterMs: number, steps: number): IndoorCount => [c[0] + laterMs, steps];
+    const glitches: IndoorCount[][] = [
+      [...walk.slice(0, 900), lower(at(899), 0, at(899)[1] - 1), ...walk.slice(900)],
+      [...walk.slice(0, 900), lower(at(899), 500, at(899)[1] - 1), ...walk.slice(900)],
+      [...walk.slice(0, 900), lower(at(899), 500, 0), ...walk.slice(900)],
+    ];
+    for (const counts of glitches) {
+      const sums = indoorSums(counts, [], 1_800_000, 70, PERSON, null);
+      expect(sums.steps).toBe(3300);
+      expect(Math.abs(sums.distanceM - base.distanceM)).toBeLessThanOrEqual(1);
+    }
   });
 
   it("steps during a pause are not the run's, nor its time", () => {
@@ -261,8 +298,9 @@ describe("the run's numbers from its counts", () => {
   it("a count at Start, past Finish, or more steps than anybody takes: none of it is made up", () => {
     const atStart: IndoorCount[] = [[0, 40], ...steady(60, 165, 0, 40)];
     expect(indoorSums(atStart, [], 60_000, 70, PERSON, null).steps).toBe(165);
-    const past: IndoorCount[] = [...steady(60, 165), [3_600_000, 99_999]];
-    expect(indoorSums(past, [], 60_000, 70, PERSON, null).steps).toBeLessThanOrEqual(MOST_STEPS_PER_S * 60);
+    // Round one, H2: the steps counted after Finish (the walk to the changing room) are none of the run's.
+    const past: IndoorCount[] = [...steady(60, 165), [60_001, 166], [240_000, 495], [3_600_000, 99_999]];
+    expect(indoorSums(past, [], 60_000, 70, PERSON, null).steps).toBe(165);
     const shaken: IndoorCount[] = [[60_000, INDOOR_MOST_STEPS]];
     const sums = indoorSums(shaken, [], 60_000, 70, PERSON, null);
     expect(sums.steps).toBe(MOST_STEPS_PER_S * 60);

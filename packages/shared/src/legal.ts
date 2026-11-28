@@ -892,7 +892,7 @@ export function washingtonHealthDataPolicy(facts: LegalFacts = LEGAL_FACTS): Leg
           list(
             "Camera-Based Exercise Results: Exercise-related measurements generated through camera-based analysis, including repetition counts and exercise form scores. Camera processing occurs locally on your device. No video footage is recorded, and no video is transmitted from your device to KWAZO or any third party.",
             "Running and Location Information: Device location information collected while you actively record a running session through the Application.",
-            "Steps: Counted by your device's motion sensor while you record an indoor run, such as on a treadmill. For each indoor run, only its number of steps and the distance worked out from them are kept.",
+            "Steps: Counted by your device's motion sensor while you record an indoor run, such as on a treadmill. For each indoor run, only its number of steps, the distance worked out from them and, if you enter it, the distance your treadmill showed are kept.",
             "Heart Rate: Readings from a heart rate monitor you connect through your device's Bluetooth, while you record a run or do a workout. For each run, only its average and highest heart rate, its heart rate along the route and its time in each heart rate zone are kept; for each workout, only its average and highest heart rate.",
           ),
         ],
