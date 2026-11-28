@@ -324,16 +324,16 @@ export default function NewGym() {
           <span className="c-step-n" aria-hidden="true">
             1
           </span>
-          <span>Your Overview opens, with the steps to set up your {words.it}.</span>
+          <span>
+            Choose a plan, or start a {GYM_TRIAL_DAYS}-day free trial for up to {GYM_TRIAL_MEMBERS} {words.people} if you
+            haven&apos;t had one. The trial needs no card.
+          </span>
         </li>
         <li>
           <span className="c-step-n" aria-hidden="true">
             2
           </span>
-          <span>
-            Choose a plan, or start a {GYM_TRIAL_DAYS}-day free trial for up to {GYM_TRIAL_MEMBERS} {words.people} if you
-            haven&apos;t had one. The trial needs no card.
-          </span>
+          <span>Your Overview opens, with the steps to set up your {words.it}.</span>
         </li>
         <li>
           <span className="c-step-n" aria-hidden="true">

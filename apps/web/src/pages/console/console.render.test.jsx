@@ -399,6 +399,23 @@ describe('each answer goes to the business it sits beside (V5-d)', () => {
     expect(orgService.acceptStaffInvitation).toHaveBeenCalledWith(SECOND_INVITATION.id);
   });
 
+  it('Accept in the first box accepts the first invitation and opens that business, never the second', async () => {
+    invitationsAre([STAFF_INVITATION, SECOND_INVITATION]);
+    orgService.acceptStaffInvitation.mockImplementation(async (id) => ({
+      data: {
+        outcome: 'accepted',
+        role: 'trainer',
+        gym: id === STAFF_INVITATION.id ? { slug: 'iron-house', name: 'Iron House' } : { slug: 'lotus-family', name: 'Lotus Family Gym' },
+      },
+    }));
+    drawHomeWithLandings();
+    const first = await screen.findByTestId(`staff-invitation-${STAFF_INVITATION.id}`);
+    fireEvent.click(within(first).getByRole('button', { name: 'Accept' }));
+    expect(await screen.findByText('Opened Iron House')).toBeTruthy();
+    expect(orgService.acceptStaffInvitation).toHaveBeenCalledTimes(1);
+    expect(orgService.acceptStaffInvitation).toHaveBeenCalledWith(STAFF_INVITATION.id);
+  });
+
   it('No thanks in the first box answers only the first invitation', async () => {
     invitationsAre([STAFF_INVITATION, SECOND_INVITATION]);
     orgService.declineStaffInvitation.mockResolvedValue({ data: { state: 'declined' } });
@@ -416,6 +433,7 @@ describe('each answer goes to the business it sits beside (V5-d)', () => {
     });
     drawHomeWithLandings();
     const list = await screen.findByRole('list', { name: 'Your organisations' });
+    expect(within(list).getByText(ORG.name).closest('a').getAttribute('href')).toBe(`/console/${ORG.slug}`);
     const lotus = within(list).getByText('Lotus Family Gym').closest('a');
     expect(lotus.getAttribute('href')).toBe('/console/lotus-family');
     expect(lotus.textContent).toContain('Pune');

@@ -381,6 +381,14 @@ export default function Login() {
                       setCode(e.target.value.replace(/\D/g, '').slice(0, 6));
                       setProblem('');
                     }}
+                    // The caret is never seen, so it stays at the end, on the lit box: a press on any box
+                    // types or deletes there, never at a hidden place in the middle. Select all still works.
+                    onSelect={(e) => {
+                      const f = e.currentTarget;
+                      const end = f.value.length;
+                      const all = f.selectionStart === 0 && f.selectionEnd === end;
+                      if (!all && (f.selectionStart !== end || f.selectionEnd !== end)) f.setSelectionRange(end, end);
+                    }}
                     className="c-otp-input"
                     autoComplete="one-time-code"
                     autoFocus

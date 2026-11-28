@@ -141,6 +141,22 @@ describe('the code is always for the address on screen (V5-d)', () => {
     expect([...document.querySelectorAll('.c-otp-cell')].map((c) => c.textContent)).toEqual(['', '', '', '', '', '']);
   });
 
+  it('a press on any box keeps the hidden caret at the end, on the lit box; select all is left alone', async () => {
+    drawLogin();
+    await askForCode();
+    typeCode('123456');
+    const field = screen.getByLabelText('6-digit code');
+    field.setSelectionRange(2, 2);
+    fireEvent.select(field);
+    expect([field.selectionStart, field.selectionEnd]).toEqual([6, 6]);
+    field.setSelectionRange(1, 3);
+    fireEvent.select(field);
+    expect([field.selectionStart, field.selectionEnd]).toEqual([6, 6]);
+    field.setSelectionRange(0, 6);
+    fireEvent.select(field);
+    expect([field.selectionStart, field.selectionEnd]).toEqual([0, 6]);
+  });
+
   it('the code field is the one the phone fills in, labelled "6-digit code"', async () => {
     drawLogin();
     await askForCode();

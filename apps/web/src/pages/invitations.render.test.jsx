@@ -303,6 +303,8 @@ describe("a staff invitation email's link (4a-i)", () => {
   it('is a page a signed-out person stays on', async () => {
     const { isSignedOutPage } = await vi.importActual('../api/authApi');
     expect(isSignedOutPage('/staff-invitation')).toBe(true);
+    expect(isSignedOutPage('/staff-invitation/')).toBe(true);
+    expect(isSignedOutPage('/staff-invitations')).toBe(false);
   });
 
   it('signed out: sends the person to sign in through the Manage door', async () => {
