@@ -189,10 +189,15 @@ export function OpenUnder({ anchorRef, label, onClose, children }) {
  *  `cancelLabel` draws a button at the foot that closes it as the X does, asking first.
  *  `closeRef.current.close()` is that same close, for a button in the form that leaves it;
  *  `leave(then)` asks the same, and goes to `then` in place of `onClose`; `unsaved` is read
- *  by the page's own ways out (the browser's Back). */
+ *  by the page's own ways out (the browser's Back). `avatar`: initials beside the title (a lead).
+ *  `ask`: the page's own words for that question (`{ question, confirm, cancel }`). `unsavedNote`:
+ *  whether the foot says "You have changes that aren't saved." (by default, whenever `unsaved`). */
 export function SidePanel({
   title,
   sub = null,
+  avatar = null,
+  ask = null,
+  unsavedNote = undefined,
   onClose,
   unsaved = false,
   saveLabel = 'Save',
@@ -233,7 +238,12 @@ export function SidePanel({
       <div className="c-scrim" />
       <div ref={boxRef} role="dialog" aria-modal="true" aria-labelledby={titleId} tabIndex={-1} className="c-panel" data-testid={testId}>
         <div className="c-panel-h">
-          <div className="c-stack-xs flex-grow">
+          {avatar !== null ? (
+            <span className="c-avatar" aria-hidden="true">
+              {avatar}
+            </span>
+          ) : null}
+          <div className="c-stack-xs flex-grow min-w-0">
             <h2 id={titleId} className="c-h1" style={{ fontSize: 26, lineHeight: '32px' }}>
               {title}
             </h2>
@@ -245,12 +255,12 @@ export function SidePanel({
         <div className="c-panel-f">
           {/* At the foot, which is always on screen, whichever close was pressed. */}
           {asking ? (
-            <div className="c-callout w-full" role="group" aria-label="Close without saving?">
+            <div className="c-callout w-full" role="group" aria-label={ask?.question ?? 'Close without saving?'}>
               <ConfirmInline
                 newLook
-                question="Your changes aren't saved. Close and lose them?"
-                confirmLabel="Close without saving"
-                cancelLabel="Keep editing"
+                question={ask?.question ?? "Your changes aren't saved. Close and lose them?"}
+                confirmLabel={ask?.confirm ?? 'Close without saving'}
+                cancelLabel={ask?.cancel ?? 'Keep editing'}
                 onConfirm={() => (leaveTo.current ?? onClose)()}
                 onCancel={() => setAsking(false)}
               />
@@ -273,7 +283,7 @@ export function SidePanel({
               {cancelLabel}
             </button>
           ) : null}
-          {unsaved ? (
+          {(unsavedNote ?? unsaved) ? (
             <span role="status" className="c-s14 c-t2">
               You have changes that aren't saved.
             </span>
