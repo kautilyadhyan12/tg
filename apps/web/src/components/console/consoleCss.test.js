@@ -400,6 +400,14 @@ describe('read without leaning in (Kd, 2026-11-19, V1-f): no words under 14 px',
     './LastSevenDays.jsx',
     './CoOwnerRequest.jsx',
     './BringMembersInCard.jsx',
+    // V5-b: Overview's money boxes and the plan box.
+    './OverviewMoneyBox.jsx',
+    './FailedPaymentsCard.jsx',
+    './RefundsToReviewCard.jsx',
+    './AppPaymentChecksCard.jsx',
+    './AppCancelsCard.jsx',
+    './ChargebacksCard.jsx',
+    './TrialCard.jsx',
   ];
   // V3a-ii: a member's page opened from Invite to app dims the box in the middle under it too.
   it("a cover drawn after a box in the middle is over that box, and a panel after it is over the cover", () => {

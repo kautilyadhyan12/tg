@@ -22,16 +22,10 @@ import { canRemoveMembers, orgWords } from '../../pages/console/consoleView';
 import { canSeeRefundsToReview } from '../../pages/console/refundsToReviewView';
 import { useCameBack } from '../../pages/console/useCameBack';
 import MemberListPerson from '../../pages/console/MemberListPerson';
-import { ConsoleCard } from './ConsoleStates';
+import { MoneyBox, MoneyWho } from './OverviewMoneyBox';
 
 // Overview's chargebacks to answer (ROADMAP 18d-iv-e-i; spec Part 3 §14.8): the soonest of Square's dates first. The gym answers in
-// Square. In Overview's own look, as Refunds to review is. It reads for itself, and draws nothing where there is nothing to say.
-
-const BUTTON = 'rounded-xl px-4 text-sm font-semibold inline-flex items-center justify-center gap-2 text-center min-h-[44px] disabled:opacity-50 disabled:cursor-not-allowed';
-const MAIN_STYLE = { background: '#FF8A1F', color: '#121110' };
-const PLAIN_STYLE = { background: 'rgba(255,255,255,0.08)', color: '#fff' };
-const QUIET = { color: 'rgba(255,255,255,0.45)' };
-const SOFT = { color: 'rgba(255,255,255,0.75)' };
+// Square. In the third look (V5-b). It reads for itself, and draws nothing where there is nothing to say.
 
 export default function ChargebacksCard({ org, orgSlug, privileges, readOnly }) {
   const gymId = org.id;
@@ -101,90 +95,76 @@ export default function ChargebacksCard({ org, orgSlug, privileges, readOnly }) 
   const settings = reconnect && list.canReconnect ? placeFor(orgSlug, privileges, 'payments') : null;
 
   return (
-    <ConsoleCard>
-      <section id="chargebacks" data-testid="chargebacks" aria-label="Chargebacks" className="flex flex-col gap-1">
-        <div className="text-xs uppercase tracking-wider" style={{ color: 'rgba(255,255,255,0.35)' }}>
-          Chargebacks
-        </div>
+    <>
+      <MoneyBox
+        id="chargebacks"
+        testId="chargebacks"
+        title="Chargebacks"
+        headline={headline}
+        headlineTestId="chargebacks-headline"
+        intro={headline !== null ? (list.lostCount === list.count ? CHARGEBACKS_LOST_INTRO : CHARGEBACKS_INTRO) : null}
+      >
         {reconnect ? (
           settings !== null ? (
-            <div className="flex flex-col gap-2 mt-1" data-testid="chargebacks-reconnect">
-              <p className="text-sm m-0" style={SOFT}>
-                {CHARGEBACKS_RECONNECT}
-              </p>
-              <button type="button" className={`${BUTTON} self-start`} style={MAIN_STYLE} disabled={readOnly} onClick={() => navigate(settings)}>
+            <div className="c-ov-money-foot" data-testid="chargebacks-reconnect">
+              <p className="c-s14 c-t1 m-0">{CHARGEBACKS_RECONNECT}</p>
+              <button type="button" className="c-btn c-btn-p" disabled={readOnly} onClick={() => navigate(settings)}>
                 Reconnect Square
               </button>
             </div>
           ) : (
-            <p className="text-sm m-0 mt-1" style={QUIET} data-testid="chargebacks-reconnect">
-              {CHARGEBACKS_RECONNECT_OTHERS}
-            </p>
+            <div className="c-ov-money-foot">
+              <p className="c-s14 c-t2 m-0" data-testid="chargebacks-reconnect">
+                {CHARGEBACKS_RECONNECT_OTHERS}
+              </p>
+            </div>
           )
-        ) : null}
-        {headline !== null ? (
-          <>
-            <p className="font-semibold mt-1 m-0" style={{ color: '#fff' }} data-testid="chargebacks-headline">
-              {headline}
-            </p>
-            <p className="text-sm m-0 mb-2" style={QUIET}>
-              {list.lostCount === list.count ? CHARGEBACKS_LOST_INTRO : CHARGEBACKS_INTRO}
-            </p>
-          </>
         ) : null}
         {list !== null && list.rows.length > 0 ? (
           <ul className="list-none m-0 p-0">
-            {list.rows.map((row) => (
-              <li key={row.id} className="flex flex-col gap-2 py-3" style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }} data-testid="chargeback-row">
-                <div className="flex flex-wrap items-baseline gap-x-2">
-                  <span className="font-semibold" style={{ color: '#fff' }}>
-                    {chargebackWho(row)}
-                  </span>
-                  {row.past ? (
-                    <span className="text-xs" style={QUIET}>
-                      Past member
-                    </span>
+            {list.rows.map((row) => {
+              const lost = chargebackRowLost(row);
+              const openWords = chargebackOpenWords(row);
+              // A row's own main button in the soft orange, as a list has many: Respond in Square while it can be
+              // answered, otherwise the page to act on.
+              return (
+                <li key={row.id} className="c-ov-money-row" data-testid="chargeback-row">
+                  <MoneyWho name={chargebackWho(row)} past={row.past} amount={chargebackAmount(row)} />
+                  <p className="c-s14 c-t1 m-0">{chargebackWhat(row)}</p>
+                  <p className="c-s14 c-t2 m-0">{chargebackRowDetail(row)}</p>
+                  {!lost || openWords !== null ? (
+                    <div className="c-ov-money-acts">
+                      {lost ? null : (
+                        <a className="c-btn c-btn-soft" href={SQUARE_DISPUTES_URL} target="_blank" rel="noreferrer">
+                          Respond in Square
+                        </a>
+                      )}
+                      {openWords !== null ? (
+                        <button type="button" className={`c-btn ${lost ? 'c-btn-soft' : 'c-btn-s'}`} onClick={() => open(row)}>
+                          {openWords}
+                        </button>
+                      ) : null}
+                    </div>
                   ) : null}
-                  <span className="font-semibold" style={{ color: '#fff' }}>
-                    {chargebackAmount(row)}
-                  </span>
-                </div>
-                <p className="text-sm m-0" style={SOFT}>
-                  {chargebackWhat(row)}
-                </p>
-                <p className="text-sm m-0" style={QUIET}>
-                  {chargebackRowDetail(row)}
-                </p>
-                <div className="flex flex-wrap gap-2">
-                  {chargebackRowLost(row) ? null : (
-                    <a className={BUTTON} style={MAIN_STYLE} href={SQUARE_DISPUTES_URL} target="_blank" rel="noreferrer">
-                      Respond in Square
-                    </a>
-                  )}
-                  {chargebackOpenWords(row) !== null ? (
-                    <button type="button" className={BUTTON} style={chargebackRowLost(row) ? MAIN_STYLE : PLAIN_STYLE} onClick={() => open(row)}>
-                      {chargebackOpenWords(row)}
-                    </button>
-                  ) : null}
-                </div>
-              </li>
-            ))}
+                </li>
+              );
+            })}
           </ul>
         ) : null}
         {list !== null && list.next !== null ? (
-          <div className="flex flex-col gap-2 pt-2">
-            <button type="button" className={`${BUTTON} self-start`} style={PLAIN_STYLE} disabled={more.busy} onClick={() => void showMore(list.rows.length)}>
+          <div className="c-ov-money-foot">
+            <button type="button" className="c-btn c-btn-s" disabled={more.busy} onClick={() => void showMore(list.rows.length)}>
               {more.busy ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : null}
               Show more
             </button>
             {more.error !== null ? (
-              <p role="alert" className="text-sm m-0" style={{ color: '#ef4444' }}>
+              <p role="alert" className="c-err m-0">
                 {more.error}
               </p>
             ) : null}
           </div>
         ) : null}
-      </section>
+      </MoneyBox>
       {person !== null ? (
         <MemberListPerson
           key={person}
@@ -203,6 +183,6 @@ export default function ChargebacksCard({ org, orgSlug, privileges, readOnly }) 
           onChanged={() => void load()}
         />
       ) : null}
-    </ConsoleCard>
+    </>
   );
 }

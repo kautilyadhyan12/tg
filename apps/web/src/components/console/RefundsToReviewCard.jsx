@@ -8,78 +8,52 @@ import { useCameBack } from '../../pages/console/useCameBack';
 import MemberListPerson from '../../pages/console/MemberListPerson';
 import { canRemoveMembers, orgWords } from '../../pages/console/consoleView';
 import { REVIEW_INTRO, canSeeRefundsToReview, reviewAmount, reviewAsk, reviewButtons, reviewDone, reviewHeadline, reviewWhat, reviewWho, reviewWhy } from '../../pages/console/refundsToReviewView';
-import { ConsoleCard } from './ConsoleStates';
+import { MoneyBox, MoneyWho } from './OverviewMoneyBox';
 
 // Overview's Refunds to review (ROADMAP 18d-iv-b-iii; spec Part 3 §14.8; Kd, `rulings/2026-10-31-18d-iv-b-i.md`): fees no longer owed
 // and refunds that went wrong, each opening the exact place to act. Money moves only in the box there, which asks Square first.
-// In Overview's own look, as Failed payments is. It reads for itself, and draws nothing where the list is empty or the read failed.
-
-const BUTTON = 'rounded-xl px-4 text-sm font-semibold inline-flex items-center justify-center gap-2 text-center min-h-[44px] disabled:opacity-50 disabled:cursor-not-allowed';
-const MAIN_STYLE = { background: '#FF8A1F', color: '#121110' };
-const PLAIN_STYLE = { background: 'rgba(255,255,255,0.08)', color: '#fff' };
-const QUIET = { color: 'rgba(255,255,255,0.45)' };
-const SOFT = { color: 'rgba(255,255,255,0.75)' };
+// In the third look (V5-b). It reads for itself, and draws nothing where the list is empty or the read failed.
 
 function Row({ row, readOnly, busy, error, asking, onAsk, onCancel, onDecide, onOpen, onOpenPerson }) {
   const buttons = reviewButtons(row);
   const ask = asking ? reviewAsk(row) : null;
   return (
-    <li className="flex flex-col gap-2 py-3" style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }} data-testid="refund-review-row">
-      <div className="flex flex-wrap items-baseline gap-x-2">
-        {row.member !== null ? (
-          <button type="button" className="font-semibold text-left underline" style={{ color: '#fff', minHeight: 44 }} onClick={() => onOpenPerson(row)} aria-label={`Open ${reviewWho(row)}'s page`}>
-            {reviewWho(row)}
-          </button>
-        ) : (
-          <span className="font-semibold" style={{ color: '#fff' }}>
-            {reviewWho(row)}
-          </span>
-        )}
-        {row.past ? (
-          <span className="text-xs" style={QUIET}>
-            Past member
-          </span>
-        ) : null}
-        <span className="font-semibold" style={{ color: '#fff' }}>
-          {reviewAmount(row)}
-        </span>
-      </div>
-      <p className="text-sm m-0" style={SOFT}>
-        {reviewWhat(row)}
-      </p>
-      <p className="text-sm m-0" style={QUIET}>
-        {reviewWhy(row)}
-      </p>
+    <li className="c-ov-money-row" data-testid="refund-review-row">
+      <MoneyWho
+        name={reviewWho(row)}
+        onOpen={row.member !== null ? () => onOpenPerson(row) : null}
+        openLabel={`Open ${reviewWho(row)}'s page`}
+        past={row.past}
+        amount={reviewAmount(row)}
+      />
+      <p className="c-s14 c-t1 m-0">{reviewWhat(row)}</p>
+      <p className="c-s14 c-t2 m-0">{reviewWhy(row)}</p>
       {ask === null ? (
-        <div className="flex flex-wrap gap-2">
-          <button type="button" className={BUTTON} style={buttons.decide === null ? PLAIN_STYLE : MAIN_STYLE} disabled={readOnly} onClick={() => onOpen(row)}>
+        <div className="c-ov-money-acts">
+          <button type="button" className={`c-btn ${buttons.decide === null ? 'c-btn-s' : 'c-btn-soft'}`} disabled={readOnly} onClick={() => onOpen(row)}>
             {buttons.open}
           </button>
           {buttons.decide !== null ? (
-            <button type="button" className={BUTTON} style={PLAIN_STYLE} disabled={readOnly} onClick={() => onAsk(row)}>
+            <button type="button" className="c-btn c-btn-s" disabled={readOnly} onClick={() => onAsk(row)}>
               {buttons.decide}
             </button>
           ) : null}
         </div>
       ) : (
-        <div className="flex flex-col gap-2 rounded-xl p-3" style={{ background: 'rgba(255,255,255,0.05)' }} data-testid="refund-review-ask">
-          <p className="text-sm font-semibold m-0" style={{ color: '#fff' }}>
-            {ask.question}
-          </p>
-          <p className="text-sm m-0" style={SOFT}>
-            {ask.detail}
-          </p>
+        <div className="c-ov-money-ask" data-testid="refund-review-ask">
+          <p className="c-s15 c-w6 c-t1 m-0">{ask.question}</p>
+          <p className="c-s14 c-t2 m-0">{ask.detail}</p>
           {error !== null ? (
-            <p role="alert" className="text-sm m-0" style={{ color: '#ef4444' }}>
+            <p role="alert" className="c-err m-0">
               {error}
             </p>
           ) : null}
-          <div className="flex flex-wrap gap-2">
-            <button type="button" className={BUTTON} style={MAIN_STYLE} disabled={busy || readOnly} onClick={() => onDecide(row)}>
+          <div className="c-ov-money-acts">
+            <button type="button" className="c-btn c-btn-p" disabled={busy || readOnly} onClick={() => onDecide(row)}>
               {busy ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : null}
               {ask.button}
             </button>
-            <button type="button" className={BUTTON} style={PLAIN_STYLE} disabled={busy} onClick={onCancel}>
+            <button type="button" className="c-btn c-btn-s" disabled={busy} onClick={onCancel}>
               Back
             </button>
           </div>
@@ -189,23 +163,17 @@ export default function RefundsToReviewCard({ org, orgSlug, privileges, readOnly
   const words = orgWords(org.orgType);
 
   return (
-    <ConsoleCard>
-      <section id="refunds-to-review" data-testid="refunds-to-review" aria-label="Refunds to review" className="flex flex-col gap-1">
-        <div className="text-xs uppercase tracking-wider" style={{ color: 'rgba(255,255,255,0.35)' }}>
-          Refunds to review
-        </div>
-        {headline !== null ? (
-          <>
-            <p className="font-semibold mt-1 m-0" style={{ color: '#fff' }} data-testid="refunds-to-review-headline">
-              {headline}
-            </p>
-            <p className="text-sm m-0 mb-2" style={QUIET}>
-              {REVIEW_INTRO}
-            </p>
-          </>
-        ) : null}
+    <>
+      <MoneyBox
+        id="refunds-to-review"
+        testId="refunds-to-review"
+        title="Refunds to review"
+        headline={headline}
+        headlineTestId="refunds-to-review-headline"
+        intro={headline !== null ? REVIEW_INTRO : null}
+      >
         {said !== null ? (
-          <p className="text-sm font-semibold m-0 mb-2" style={{ color: said.bad ? '#ef4444' : '#4ade80' }} role="status" data-testid="refunds-to-review-said">
+          <p className={`${said.bad ? 'c-err' : 'c-ov-ok'} c-w6 c-ov-box-body m-0`} role="status" data-testid="refunds-to-review-said">
             {said.line}
           </p>
         ) : null}
@@ -233,19 +201,19 @@ export default function RefundsToReviewCard({ org, orgSlug, privileges, readOnly
           </ul>
         ) : null}
         {list !== null && list.next !== null ? (
-          <div className="flex flex-col gap-2 pt-2">
-            <button type="button" className={`${BUTTON} self-start`} style={PLAIN_STYLE} disabled={more.busy} onClick={() => void showMore(list.rows.length)}>
+          <div className="c-ov-money-foot">
+            <button type="button" className="c-btn c-btn-s" disabled={more.busy} onClick={() => void showMore(list.rows.length)}>
               {more.busy ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : null}
               Show more
             </button>
             {more.error !== null ? (
-              <p role="alert" className="text-sm m-0" style={{ color: '#ef4444' }}>
+              <p role="alert" className="c-err m-0">
                 {more.error}
               </p>
             ) : null}
           </div>
         ) : null}
-      </section>
+      </MoneyBox>
       {person !== null ? (
         <MemberListPerson
           key={person.entryId}
@@ -265,6 +233,6 @@ export default function RefundsToReviewCard({ org, orgSlug, privileges, readOnly
           onChanged={() => void load()}
         />
       ) : null}
-    </ConsoleCard>
+    </>
   );
 }

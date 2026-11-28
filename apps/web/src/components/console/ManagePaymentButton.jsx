@@ -6,7 +6,7 @@ import { openPaddlePortal } from '../../utils/paddlePortal';
 /** Opens Paddle's own page for the gym's paid plan in a new tab: the card, cancelling
  *  and invoices, or straight to the card when a payment is owed (the server decides
  *  which). Drawn only for staff who manage billing; the server refuses anyone else. */
-export default function ManagePaymentButton({ gymId, label = 'Manage payment', onOpened }) {
+export default function ManagePaymentButton({ gymId, label = 'Manage payment', onOpened, newLook = false }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
 
@@ -24,6 +24,18 @@ export default function ManagePaymentButton({ gymId, label = 'Manage payment', o
     }
   };
 
+  // The third look (V5-b), on Overview's plan box; the plan prompt keeps the old one until V5-c.
+  if (newLook) {
+    return (
+      <div className="flex flex-col gap-2">
+        <button type="button" onClick={open} disabled={busy} className="c-btn c-btn-s">
+          {busy ? <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" /> : <ExternalLink className="w-4 h-4" aria-hidden="true" />}
+          {label}
+        </button>
+        {error !== null ? <p className="c-err m-0">{error}</p> : null}
+      </div>
+    );
+  }
   return (
     <div className="flex flex-col gap-2">
       <button
