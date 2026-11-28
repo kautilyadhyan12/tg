@@ -7,14 +7,16 @@ import { KEYPOINT_COUNT, movementFrameSchema, poseCameraEventSchema, type Down, 
 
 /** One answer, as the module sends it. `t`: the phone's own clock, ms, never back. `gravity`: Android's reading in the
  *  phone's own axes, or none. `turn`: how the screen, and so the picture turned upright for it, is turned from those axes,
- *  in degrees (0 on a phone held upright; 90 or 270 on a tablet held upright). Each person: 33 points of 5 numbers, laid
- *  end to end, and 33 3D points of 3, or none. */
+ *  in degrees (0 on a phone held upright; 90 or 270 on a tablet held upright). `spin`: how far the phone turned since the
+ *  answer before, radians about its own three axes, from its gyroscope, or none (53c). Each person: 33 points of 5
+ *  numbers, laid end to end, and 33 3D points of 3, or none. */
 export interface PoseEvent {
   readonly t: number;
   readonly width: number;
   readonly height: number;
   readonly gravity: readonly number[];
   readonly turn: number;
+  readonly spin?: readonly number[];
   readonly people: readonly { readonly points: readonly number[]; readonly world: readonly number[] }[];
 }
 
@@ -90,6 +92,14 @@ export function frameOf(e: PoseEvent, t: number): MovementFrame | null {
     }
     people.push({ points, world: p.world.length > 0 ? world : null });
   }
-  const parsed = movementFrameSchema.safeParse({ t, aspect: e.width / e.height, down: downOf(e.gravity, e.turn), people });
+  const parsed = movementFrameSchema.safeParse({ t, aspect: e.width / e.height, down: downOf(e.gravity, e.turn), people, spin: spinOf(e.spin ?? []) });
   return parsed.success ? parsed.data : null;
+}
+
+/** How far the phone turned since the answer before, as the module read it: three numbers, or null when it could not say
+ *  (a phone with no gyroscope, or a gap in its readings). Always given for the live phone, so the engine knows the picture
+ *  came from a phone that can say it moved (53c). */
+export function spinOf(spin: readonly number[]): [number, number, number] | null {
+  const [x, y, z] = spin;
+  return spin.length === 3 && x !== undefined && y !== undefined && z !== undefined ? [x, y, z] : null;
 }

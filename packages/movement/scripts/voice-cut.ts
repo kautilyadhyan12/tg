@@ -1,7 +1,9 @@
 // Cuts Kd's ElevenLabs recording into the coach's clips (spec Part 2 §12.6; ROADMAP 53b-i), on the laptop:
 //   corepack pnpm --filter @app/movement voice-cut [part1.mp3 part2.mp3 ...]
 // With no files it takes the newest ElevenLabs downloads in Downloads, one a part of the script (voice-script), the
-// oldest first; with --redo <clip>, the newest download is that one wording generated again on its own. Each part is
+// oldest first; with --redo <clip>, the newest download is that one wording generated again on its own; with --new, the
+// newest download holds only the wordings that have no clip yet (voice-script --new, 53c), and every clip already kept
+// stays, byte for byte, as long as it is still the very clip heard saying its line. Each part is
 // cut at its pauses into one clip a wording, its loudness evened (EBU R128, -16 LUFS), kept as AAC in the app
 // (apps/mobile/assets/voice), and read back as text by whisper.cpp: every clip must say exactly its own wording, or
 // nothing at all is written. What each clip was heard saying is kept in packages/movement/voice/heard.json.
@@ -16,7 +18,7 @@ import { copyFileSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync
 import { homedir, tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { clipName, type VoiceHeard } from "@app/shared";
-import { CLIPS, HEARD_FILE, readVoice, scriptParts, type Wording } from "./voiceLines.js";
+import { CLIPS, HEARD_FILE, newWordings, readHeard, readVoice, scriptParts, wordingsOf, type Wording } from "./voiceLines.js";
 import { heardOf, loudnessOf, QUIET_DB, QUIET_S, saysIt, silencesOf, silentClip, spansOf, type Span } from "./voiceCut.js";
 import { CLIPS_MODULE, clipsModule } from "./voiceClips.js";
 
@@ -82,8 +84,29 @@ function newestDownloads(count: number): string[] {
 }
 
 const voice = readVoice();
-const parts = scriptParts(voice);
 const args = process.argv.slice(2);
+// --new: only the wordings with no clip yet, one part; every other clip kept as it was heard.
+const fresh = args.includes("--new");
+const heardBefore = readHeard();
+const parts = fresh ? [newWordings(voice, heardBefore)] : scriptParts(voice);
+if (fresh && (parts[0] ?? []).length === 0) throw new Error("Every wording has its clip already: nothing to cut.");
+/** With --new, every clip kept from before, by its file: the very clip heard saying its wording (its SHA-256), or the cut
+ *  is refused. */
+const kept = new Map<string, VoiceHeard["clips"][number]>();
+if (fresh) {
+  const cutting = new Set((parts[0] ?? []).map((w) => clipName(w.line, w.index)));
+  const wrong: string[] = [];
+  for (const w of wordingsOf(voice)) {
+    const name = clipName(w.line, w.index);
+    if (cutting.has(name)) continue;
+    const old = heardBefore?.clips.find((c) => c.file === name && c.words === w.words);
+    const file = join(CLIPS, name);
+    const sha = old === undefined ? null : createHash("sha256").update(readFileSync(file)).digest("hex");
+    if (old === undefined || sha !== old.sha256) wrong.push(name);
+    else kept.set(name, old);
+  }
+  if (wrong.length > 0) throw new Error(`These clips are not the ones heard saying their words, so --new cannot keep them: ${wrong.join(", ")}. Cut the whole script again.`);
+}
 // --check: cut every clip and say how loud each was as recorded, with no reader, writing nothing.
 const check = args.includes("--check");
 // --redo <clip>: one wording generated again on its own (its clip's name without ".m4a", "workout_complete_1"): the last
@@ -91,7 +114,7 @@ const check = args.includes("--check");
 const redoAt = args.indexOf("--redo");
 const redo = redoAt < 0 ? null : (args[redoAt + 1] ?? "");
 if (redo !== null && !parts.flat().some((w) => clipName(w.line, w.index) === `${redo}.m4a`)) throw new Error(`No clip is called ${redo}.`);
-const given = args.filter((a, i) => a !== "--check" && i !== redoAt && i !== redoAt + 1);
+const given = args.filter((a, i) => a !== "--check" && a !== "--new" && i !== redoAt && i !== redoAt + 1);
 const all = given.length > 0 ? given : newestDownloads(parts.length + (redo === null ? 0 : 1));
 const files = redo === null ? all : all.slice(0, -1);
 const redoFile = redo === null ? null : (all[all.length - 1] ?? null);
@@ -154,18 +177,25 @@ try {
     process.exitCode = 1;
   } else {
     mkdirSync(CLIPS, { recursive: true });
-    const keep = new Set(rows.map((r) => r.file));
+    const keep = new Set([...rows.map((r) => r.file), ...kept.keys()]);
     for (const old of readdirSync(CLIPS)) if (old.endsWith(".m4a") && !keep.has(old)) unlinkSync(join(CLIPS, old));
-    const clips: VoiceHeard["clips"] = rows.map((r) => {
+    // Every wording's clip, in the lines' order: the one just cut, or with --new the one kept from before.
+    const clips: VoiceHeard["clips"] = wordingsOf(voice).flatMap((w) => {
+      const name = clipName(w.line, w.index);
+      const old = kept.get(name);
+      if (old !== undefined) return [old];
+      const r = rows.find((x) => x.file === name);
+      if (r === undefined) return [];
       copyFileSync(r.m4a, join(CLIPS, r.file));
       const sha256 = createHash("sha256").update(readFileSync(join(CLIPS, r.file))).digest("hex");
-      return { file: r.file, words: r.wording.words, heard: r.heard, by: r.by, sha256, seconds: Math.round(r.seconds * 100) / 100 };
+      return [{ file: r.file, words: r.wording.words, heard: r.heard, by: r.by, sha256, seconds: Math.round(r.seconds * 100) / 100 }];
     });
     const record: VoiceHeard = { version: voice.version, voice: `${voice.voice.name}, ${voice.voice.model}`, reader: `whisper.cpp 1.9.5: ${MODELS.map(modelName).join(", then ")} where the one before did not hear the clip`, clips };
     writeFileSync(HEARD_FILE, `${JSON.stringify(record, null, 2)}\n`);
     writeFileSync(CLIPS_MODULE, clipsModule(voice));
     const bytes = clips.reduce((n, c) => n + statSync(join(CLIPS, c.file)).size, 0);
-    console.log(`\nAll ${String(clips.length)} clips say their own words: written to apps/mobile/assets/voice (${(bytes / 1024).toFixed(0)} KB), with heard.json and the app's list of clips.`);
+    const told = fresh ? `${String(rows.length)} new clips, ${String(kept.size)} kept as they were heard; all ${String(clips.length)}` : `All ${String(clips.length)} clips`;
+    console.log(`\n${told} say their own words: written to apps/mobile/assets/voice (${(bytes / 1024).toFixed(0)} KB), with heard.json and the app's list of clips.`);
   }
 } finally {
   rmSync(work, { recursive: true, force: true });

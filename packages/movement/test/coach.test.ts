@@ -185,6 +185,29 @@ describe("the person lost", () => {
   });
 });
 
+describe("the phone moving (53c)", () => {
+  it("said once while it moves, not again within 10 s, again after; in its next wording", () => {
+    const coach = new Coach(EXERCISE, WORDS);
+    const steps: [number, boolean][] = [
+      [1000, false],
+      [3000, true],
+      [3100, true],
+      [5000, false],
+      [8000, true],
+      [9000, false],
+      [14_000, true],
+    ];
+    const out = steps.map(([t, moving]) => coach.moved(t, moving));
+    expect(out.map((s) => (s === null ? "-" : `${s.words} ${s.kind} ${String(s.times)}`))).toEqual(["-", "Keep the phone still. moved 0", "-", "-", "-", "-", "Keep the phone still. moved 1"]);
+  });
+
+  it("it is no line that only encourages: said at once, even right after another line", () => {
+    const coach = new Coach(EXERCISE, WORDS);
+    expect(coach.seen(1000, true)?.words).toBe("The camera can't see you.");
+    expect(coach.moved(1100, true)?.words).toBe("Keep the phone still.");
+  });
+});
+
 describe("a hold", () => {
   const frame = (t: number, holding: boolean, heldMs: number, unseen = false): HoldFrame => ({ t, holding, heldMs, unseen, reason: unseen ? "Keep your whole body in view." : null, hold: null });
   it("its reason once the position has been unread 2 s, and again only after it was held again; \"Halfway.\" at half its time, after the quiet", () => {
@@ -226,7 +249,7 @@ describe("a camera file's corrections", () => {
 
 describe("the voice file holds every line the coach says", () => {
   it("its own lines are found by their first wording", () => {
-    expect(Object.values(WORDS).sort()).toEqual(["Better.", "Halfway.", "Last one.", "Set complete.", "That one counts.", "The camera can't see you.", "Two more."]);
+    expect(Object.values(WORDS).sort()).toEqual(["Better.", "Halfway.", "Keep the phone still.", "Last one.", "Set complete.", "That one counts.", "The camera can't see you.", "Two more."]);
   });
 
   it("a voice file without one of them is refused", () => {

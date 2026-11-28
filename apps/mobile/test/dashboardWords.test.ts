@@ -129,6 +129,7 @@ const run = (more: Partial<RunSummary>): RunSummary => ({
   elapsedS: 31 * 60,
   climbM: null,
   shape: null,
+  indoor: false,
   ...more,
 });
 

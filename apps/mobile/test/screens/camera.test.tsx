@@ -5,12 +5,13 @@ import { join } from "node:path";
 import { AppState, Linking, processColor } from "react-native";
 import { decodeBodyPoints } from "../../../../packages/movement/scripts/bodyPoints";
 import { App } from "../../src/App";
+import { STILL_WORDS } from "../../src/camera/liveSet";
 import type { PoseEvent } from "../../src/camera/poseFrame";
 import { FIRST_LINE, FIRST_TITLE } from "../../src/screens/camera/CameraFirst";
 import type { BodyDrawing } from "../../src/camera/poseCameraNative";
 import { BODY_LINES } from "../../src/camera/skeleton";
 import { colours } from "../../src/look/colours";
-import { FOLLOW_LINE, FOLLOW_WORDS, REPS_BOX_WORDS, SET_UP_WORDS, STOPPED_WORDS, TIME_BOX_WORDS } from "../../src/screens/camera/CameraSet";
+import { FOLLOW_LINE, FOLLOW_WORDS, REPS_BOX_WORDS, SET_UP_LINE, SET_UP_WORDS, STOPPED_WORDS, TIME_BOX_WORDS } from "../../src/screens/camera/CameraSet";
 import { ASK_REPS_WORDS, CAMERA_OFF_WORDS, CAMERA_ON_WORDS, FOLLOW_BOX_WORDS } from "../../src/screens/camera/FollowAlong";
 import { FOLLOW_TICK_MS } from "../../src/screens/camera/TryCamera";
 import { RAVI, fakeServer, kept, memoryStore, tokens } from "../kit";
@@ -292,6 +293,48 @@ describe("I stand my phone up, step back, do my squats, and the phone counts the
     await fireEvent.press(screen.getByRole("button", { name: "Set done · 3 reps" }));
     await screen.findByTestId("camera-done");
     expect(sounds.spoken[sounds.spoken.length - 1]).toEqual({ id: "set_complete", index: 0 });
+  });
+
+  it("I pick up the phone after my first squat: the screen and the coach say \"Keep the phone still.\", once; I put it back and the line goes (53c)", async () => {
+    await openTry();
+    await turnOn();
+    // A phone standing still turns a few hundred-thousandths of a radian between two answers; a hand, about a degree.
+    const still = [0.00002, -0.00001, 0.00001];
+    let heldFrom: number | null = null;
+    let shownWhileHeld = false;
+    for (const [k, e] of SQUATS.entries()) {
+      const holding = heldFrom !== null && k >= heldFrom && k < heldFrom + 45;
+      await act(() => {
+        poseCamera.answer({ ...e, spin: holding ? [k % 2 === 0 ? 0.02 : -0.02, 0.005, 0] : still });
+      });
+      if (heldFrom === null && countSays() === "01 / 10") heldFrom = k + 1;
+      if (heldFrom !== null && k === heldFrom + 30) {
+        shownWhileHeld = screen.queryByText(STILL_WORDS) !== null;
+        expect(countSays()).toBe("01 / 10");
+      }
+    }
+    expect(shownWhileHeld).toBe(true);
+    expect(sounds.spoken.filter((s) => s.id === "phone_still")).toEqual([{ id: "phone_still", index: 0 }]);
+    expect(screen.queryByText(STILL_WORDS)).toBeNull();
+  });
+
+  it("I hold the phone in my hand from the start: after 5 s the set-up says \"Keep the phone still.\", the coach says it once, and nothing counts (53c)", async () => {
+    await openTry();
+    await turnOn();
+    expect(screen.getByText(SET_UP_WORDS)).toBeTruthy();
+    // Seven seconds of answers, the phone in the hand all through.
+    expect(SQUATS.length).toBeGreaterThan(210);
+    for (const [k, e] of SQUATS.slice(0, 210).entries()) {
+      await act(() => {
+        poseCamera.answer({ ...e, spin: [k % 2 === 0 ? 0.02 : -0.02, 0.005, 0] });
+      });
+    }
+    expect(screen.getByText(STILL_WORDS)).toBeTruthy();
+    expect(screen.queryByText(SET_UP_WORDS)).toBeNull();
+    // The line that says where the phone stands stays under it.
+    expect(screen.getByText(SET_UP_LINE)).toBeTruthy();
+    expect(countSays()).toBe("00 / 10");
+    expect(sounds.spoken.filter((s) => s.id === "phone_still")).toEqual([{ id: "phone_still", index: 0 }]);
   });
 
   it("with Sound off the coach says nothing, and no rep sounds", async () => {

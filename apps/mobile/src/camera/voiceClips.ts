@@ -1,5 +1,5 @@
 // Made by voice-cut (packages/movement/scripts/voice-cut.ts) from the coach's lines (packages/movement/voice/lines.json,
-// version 1) and Kd's recording, every clip read back saying its own words: never edited by hand.
+// version 2) and Kd's recording, every clip read back saying its own words: never edited by hand.
 import clip_go_lower_1 from "../../assets/voice/go_lower_1.m4a";
 import clip_go_lower_2 from "../../assets/voice/go_lower_2.m4a";
 import clip_go_lower_3 from "../../assets/voice/go_lower_3.m4a";
@@ -25,6 +25,8 @@ import clip_set_complete_1 from "../../assets/voice/set_complete_1.m4a";
 import clip_set_complete_2 from "../../assets/voice/set_complete_2.m4a";
 import clip_lost_1 from "../../assets/voice/lost_1.m4a";
 import clip_lost_2 from "../../assets/voice/lost_2.m4a";
+import clip_phone_still_1 from "../../assets/voice/phone_still_1.m4a";
+import clip_phone_still_2 from "../../assets/voice/phone_still_2.m4a";
 import clip_counts_now_1 from "../../assets/voice/counts_now_1.m4a";
 import clip_counts_now_2 from "../../assets/voice/counts_now_2.m4a";
 import clip_better_1 from "../../assets/voice/better_1.m4a";
@@ -37,7 +39,7 @@ import clip_workout_complete_1 from "../../assets/voice/workout_complete_1.m4a";
 import clip_workout_complete_2 from "../../assets/voice/workout_complete_2.m4a";
 
 /** The lines file's version the clips were recorded for. */
-export const VOICE_CLIPS_VERSION = 1;
+export const VOICE_CLIPS_VERSION = 2;
 
 /** Each line's clips, one a wording, in the line's own order, by the line's id. */
 export const VOICE_CLIPS: Readonly<Record<string, readonly number[]>> = {
@@ -52,6 +54,7 @@ export const VOICE_CLIPS: Readonly<Record<string, readonly number[]>> = {
   last_one: [clip_last_one_1, clip_last_one_2],
   set_complete: [clip_set_complete_1, clip_set_complete_2],
   lost: [clip_lost_1, clip_lost_2],
+  phone_still: [clip_phone_still_1, clip_phone_still_2],
   counts_now: [clip_counts_now_1, clip_counts_now_2],
   better: [clip_better_1, clip_better_2],
   get_ready: [clip_get_ready_1],

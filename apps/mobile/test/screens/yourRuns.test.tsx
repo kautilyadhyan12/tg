@@ -67,6 +67,9 @@ function makeRun(n: number, name: string, km: number, minutes: number, daysAgo: 
     heartMax: null,
     heartLine: [],
     heartZones: null,
+    indoor: false,
+    distanceFrom: "gps",
+    steps: null,
   };
 }
 
