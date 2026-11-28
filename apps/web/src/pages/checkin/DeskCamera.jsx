@@ -148,7 +148,7 @@ export default function DeskCamera({ onCode }) {
 
   if (problem !== null) {
     return (
-      <p className="c-callout c-s15 max-w-xl" role="alert">
+      <p className="c-strip c-strip-warn c-s15 max-w-xl" role="alert">
         {problem}
       </p>
     );

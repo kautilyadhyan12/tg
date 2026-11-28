@@ -1,5 +1,5 @@
 // STAFF CHECK-IN AND THE LIVE LOG, the pure half (Attendance; ROADMAP 16b-ii).
-import { CHECKIN_LOG_LIMIT } from '@app/shared';
+import { CHECKIN_LOG_LIMIT, HELD_PAYMENT_WORDS, MEMBER_LIST_OVERDUE_WORD } from '@app/shared';
 
 /** Whether this person may check people in from the console. */
 export function canCheckPeopleIn(privileges) {
@@ -55,6 +55,20 @@ export function wordsLine(words) {
     .filter((word) => typeof word === 'string' && word.trim() !== '')
     .map((word) => word.trim())
     .join(' · ');
+}
+
+/** The same words split for the screen (V7): the status, and a payment that needs nothing, are quiet
+ *  words; money owed ("Payment due", "Overdue") is a tag of its own. The gym's own words for somebody
+ *  who holds nothing in the app are not guessed at: they stay quiet words. */
+export function wordsParts(words) {
+  const clean = (word) => (typeof word === 'string' ? word.trim() : '');
+  const status = clean(words?.status);
+  const payment = clean(words?.payment);
+  const owed = payment === HELD_PAYMENT_WORDS.due || payment === MEMBER_LIST_OVERDUE_WORD;
+  return {
+    quiet: [status, owed ? '' : payment].filter((word) => word !== '').join(' · '),
+    owed: owed ? payment : '',
+  };
 }
 
 /** A found person's second line: member number and email, whichever the gym has. */

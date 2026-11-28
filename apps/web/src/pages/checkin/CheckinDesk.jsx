@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { AlertTriangle, Camera, CheckCircle2, Loader2, LogOut, QrCode, RefreshCw, ScanLine, Volume2, VolumeX, XCircle } from 'lucide-react';
+import { AlertTriangle, Building2, Camera, CheckCircle2, Loader2, LogOut, QrCode, RefreshCw, ScanLine, Volume2, VolumeX, XCircle } from 'lucide-react';
 import { CHECKIN_WORDS } from '@app/shared';
 import { checkinService } from '../../api/checkinApi';
 import { useAuth } from '../../context/AuthContext';
@@ -42,12 +42,23 @@ import '../../components/console/console.css';
 // A browser somebody is signed in to is never a desk, set up or in use: whoever stood at
 // it could open the console in the next tab. It says so and offers Sign out.
 
+// Green for checked in, gold for "see staff", red for refused, grey for "try again": on the round mark
+// above the words, which always say which (the board `Desk`).
 const TONES = {
-  good: { background: 'var(--good-bg)', color: 'var(--good)', Icon: CheckCircle2 },
-  plain: { background: 'var(--raise)', color: 'var(--t1)', Icon: RefreshCw },
-  bad: { background: 'var(--bad-bg)', color: 'var(--bad)', Icon: XCircle },
-  warn: { background: 'var(--warn-bg)', color: 'var(--warn)', Icon: AlertTriangle },
+  good: { mark: 'c-desk-mark-good', Icon: CheckCircle2 },
+  plain: { mark: '', Icon: RefreshCw },
+  bad: { mark: 'c-desk-mark-bad', Icon: XCircle },
+  warn: { mark: 'c-desk-mark-warn', Icon: AlertTriangle },
 };
+
+function Mark({ tone }) {
+  const { mark, Icon } = TONES[tone] ?? TONES.warn;
+  return (
+    <span className={`c-desk-mark ${mark}`} aria-hidden="true">
+      <Icon />
+    </span>
+  );
+}
 
 function storage() {
   try {
@@ -58,7 +69,7 @@ function storage() {
 }
 
 function DeskShell({ children, look }) {
-  return <div className={`c-console t-${look} min-h-screen flex flex-col`}>{children}</div>;
+  return <div className={`c-console c-desk t-${look} min-h-screen flex flex-col`} style={{ background: 'var(--page)' }}>{children}</div>;
 }
 
 function SignedIn({ look, user, logout }) {
@@ -73,15 +84,14 @@ function SignedIn({ look, user, logout }) {
   };
   return (
     <DeskShell look={look}>
-      <main className="flex-grow flex items-center justify-center px-4 py-10">
-        <div className="c-card w-full max-w-lg p-6 flex flex-col gap-4" role="alert">
-          <h1 className="c-h2">Sign out to use this as a check-in desk</h1>
-          <p className="c-s15 c-t2">{signedInLine(user)}</p>
-          <button type="button" className="c-btn c-btn-p self-start" onClick={() => void signOut()} disabled={busy}>
-            <LogOut aria-hidden="true" className="w-5 h-5" />
-            Sign out
-          </button>
-        </div>
+      <main className="c-desk-mid" role="alert">
+        <Mark tone="warn" />
+        <h1 className="c-desk-say">Sign out to use this as a check-in desk</h1>
+        <p className="c-s16 c-t2 max-w-xl">{signedInLine(user)}</p>
+        <button type="button" className="c-btn c-btn-p" onClick={() => void signOut()} disabled={busy}>
+          <LogOut aria-hidden="true" className="w-5 h-5" />
+          Sign out
+        </button>
       </main>
     </DeskShell>
   );
@@ -109,20 +119,21 @@ function SetUp({ look, token }) {
 
   return (
     <DeskShell look={look}>
-      <main className="flex-grow flex items-center justify-center px-4 py-10">
-        <div className="c-card w-full max-w-lg p-6 flex flex-col gap-3" role="status">
-          {problem === null ? (
-            <p className="c-s15 c-t2 flex items-center gap-2">
-              <Loader2 aria-hidden="true" className="w-5 h-5 animate-spin" />
-              Setting up this device…
-            </p>
-          ) : (
-            <>
-              <h1 className="c-h2">This link can&apos;t be used</h1>
-              <p className="c-s15 c-t2">{problem}</p>
-            </>
-          )}
-        </div>
+      <main className="c-desk-mid" role="status">
+        {problem === null ? (
+          <>
+            <span className="c-desk-mark" aria-hidden="true">
+              <Loader2 className="animate-spin" />
+            </span>
+            <p className="c-h2">Setting up this device…</p>
+          </>
+        ) : (
+          <>
+            <Mark tone="bad" />
+            <h1 className="c-desk-say">This link can&apos;t be used</h1>
+            <p className="c-s16 c-t2 max-w-xl">{problem}</p>
+          </>
+        )}
       </main>
     </DeskShell>
   );
@@ -131,32 +142,22 @@ function SetUp({ look, token }) {
 function Answer({ shown, pending, stopped }) {
   if (pending) {
     return (
-      <p className="c-s16 c-t2 flex items-center gap-2">
-        <Loader2 aria-hidden="true" className="w-6 h-6 animate-spin" />
-        Checking…
-      </p>
+      <div className="flex flex-col items-center text-center gap-3">
+        <span className="c-desk-mark" aria-hidden="true">
+          <Loader2 className="animate-spin" />
+        </span>
+        <p className="c-desk-say">Checking…</p>
+      </div>
     );
   }
   if (shown !== null) {
-    const tone = TONES[shown.tone] ?? TONES.warn;
-    const { Icon } = tone;
     return (
-      <div
-        data-tone={shown.tone}
-        className="w-full max-w-2xl rounded-2xl px-6 py-8 flex flex-col items-center text-center gap-3"
-        style={{ background: tone.background }}
-      >
-        <Icon aria-hidden="true" className="w-16 h-16" style={{ color: tone.color }} />
-        <p className="c-h1" style={{ color: tone.color }}>
-          {shown.title}
-        </p>
-        {shown.name ? <p className="c-big c-t1 break-words max-w-full">{shown.name}</p> : null}
+      <div data-tone={shown.tone} className="w-full max-w-2xl flex flex-col items-center text-center gap-3">
+        <Mark tone={shown.tone} />
+        <p className="c-desk-say">{shown.title}</p>
+        {shown.name ? <p className="c-desk-who">{shown.name}</p> : null}
         {shown.notice ? (
-          <p
-            data-notice=""
-            className="c-s16 c-w6 rounded-xl px-4 py-2 max-w-full break-words"
-            style={{ background: TONES.warn.background, color: TONES.warn.color }}
-          >
+          <p data-notice="" className="c-tag c-tag-warn c-s14 max-w-full" style={{ height: 'auto', padding: '6px 14px', whiteSpace: 'normal' }}>
             {shown.notice}
           </p>
         ) : null}
@@ -167,19 +168,19 @@ function Answer({ shown, pending, stopped }) {
   }
   if (stopped !== null) {
     return (
-      <div className="w-full max-w-2xl rounded-2xl px-6 py-8 flex flex-col items-center text-center gap-3" style={{ background: TONES.bad.background }}>
-        <XCircle aria-hidden="true" className="w-16 h-16" style={{ color: TONES.bad.color }} />
-        <p className="c-h1" style={{ color: TONES.bad.color }}>
-          {stopped.title}
-        </p>
+      <div className="w-full max-w-2xl flex flex-col items-center text-center gap-3">
+        <Mark tone="bad" />
+        <p className="c-desk-say">{stopped.title}</p>
         <p className="c-s16 c-t1 max-w-xl">{stopped.message}</p>
       </div>
     );
   }
   return (
     <div className="flex flex-col items-center text-center gap-3">
-      <QrCode aria-hidden="true" className="w-20 h-20 c-t3" />
-      <p className="c-h1">Scan your pass or key tag</p>
+      <span className="c-desk-mark" aria-hidden="true">
+        <QrCode />
+      </span>
+      <p className="c-desk-say">Scan your pass or key tag</p>
       <p className="c-s16 c-t2">Open your pass in the app and hold it under the scanner.</p>
     </div>
   );
@@ -356,24 +357,26 @@ function Desk({ look }) {
 
   return (
     <DeskShell look={look}>
-      <header className="px-4 md:px-12 pt-6 flex flex-wrap items-start justify-between gap-4">
-        <div className="min-w-0">
-          {names?.gymName ? <p className="c-eyebrow">{names.deviceName ? `Check-in · ${names.deviceName}` : 'Check-in'}</p> : null}
-          <p className="c-h1 c-ell">{names?.gymName || 'Check-in'}</p>
+      <header className="c-desk-top">
+        <span className="c-gymicon" aria-hidden="true">
+          <Building2 className="w-5 h-5" />
+        </span>
+        <div className="grow">
+          <p className="c-s16 c-w6 c-t1 c-ell">{names?.gymName || 'Check-in'}</p>
+          {names?.gymName ? <p className="c-s14 c-t2 c-ell">{names.deviceName ? `Check-in · ${names.deviceName}` : 'Check-in'}</p> : null}
         </div>
-        <div className="flex flex-wrap gap-2">
-          <button type="button" className="c-btn c-btn-s" onClick={toggleMuted}>
-            {muted ? <VolumeX aria-hidden="true" className="w-5 h-5" /> : <Volume2 aria-hidden="true" className="w-5 h-5" />}
-            {muted ? 'Turn sound on' : 'Turn sound off'}
-          </button>
-          <button type="button" className="c-btn c-btn-s" onClick={() => setCamera((on) => !on)} aria-pressed={camera}>
-            <Camera aria-hidden="true" className="w-5 h-5" />
-            {camera ? 'Close the camera' : 'Use the camera'}
-          </button>
-        </div>
+        {/* On a phone or a narrow desk the words are kept for screen readers and the buttons show as icons. */}
+        <button type="button" className="c-btn c-btn-s" onClick={toggleMuted}>
+          {muted ? <VolumeX aria-hidden="true" className="w-5 h-5" /> : <Volume2 aria-hidden="true" className="w-5 h-5" />}
+          <span className="c-desk-bw">{muted ? 'Turn sound on' : 'Turn sound off'}</span>
+        </button>
+        <button type="button" className="c-btn c-btn-s" onClick={() => setCamera((on) => !on)} aria-pressed={camera}>
+          <Camera aria-hidden="true" className="w-5 h-5" />
+          <span className="c-desk-bw">{camera ? 'Close the camera' : 'Use the camera'}</span>
+        </button>
       </header>
 
-      <main className="flex-grow flex flex-col items-center justify-center gap-6 px-4 py-8">
+      <main className="c-desk-mid">
         <div role="status" aria-live="polite" className="w-full flex flex-col items-center">
           <Answer shown={shown} pending={pending} stopped={stopped} />
         </div>
@@ -383,7 +386,7 @@ function Desk({ look }) {
       {/* Held at the bottom of the window: with the camera open the page is taller than
           the window, and a scanner's typing would otherwise scroll down to this box and
           take the answer off the screen. */}
-      <form onSubmit={onSubmit} className="sticky bottom-0 px-4 md:px-12 pt-3 pb-8 w-full max-w-2xl mx-auto" style={{ background: 'var(--page)' }}>
+      <form onSubmit={onSubmit} className="sticky bottom-0 c-desk-foot">
         <label htmlFor="desk-scan" className="c-label flex items-center gap-2">
           <ScanLine aria-hidden="true" className="w-4 h-4" />
           Scanner
@@ -391,7 +394,7 @@ function Desk({ look }) {
         <input
           id="desk-scan"
           ref={inputRef}
-          className="c-input w-full mt-2"
+          className="c-input w-full"
           value={typed}
           onChange={(event) => setTyped(event.target.value.slice(0, DESK_READ_MAX + 1))}
           onBlur={keepFocus}

@@ -3278,3 +3278,77 @@ button.c-ov-money-who {
 /* At risk with no list to show (check-in new, none, or stopped with nobody listed): Who is listed keeps the
    width of the column it has beside the list, never the page's whole width. */
 .c-alone { display: flex; flex-direction: column; max-width: 480px; }
+
+/* Attendance (V7; the boards `Attendance` and `PhoneAttendance`): Check in beside Today's check-ins once the
+   page is wide enough for both (`c-split`), one under the other on a tablet or a phone. */
+.c-attend-head { display: flex; align-items: flex-start; gap: 12px; padding: 18px 20px 14px; }
+.c-attend-fold { display: flex; flex: 1 1 auto; min-width: 0; align-items: flex-start; gap: 12px; padding: 0; border: 0; background: none; color: inherit; text-align: left; cursor: pointer; }
+.c-attend-fold > svg { flex-shrink: 0; margin-top: 4px; color: var(--t2); transition: transform 0.15s; }
+.c-attend-fold[aria-expanded='false'] > svg { transform: rotate(-90deg); }
+.c-attend-body { padding: 0 20px 20px; display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.c-attend-row { display: flex; align-items: flex-start; gap: 12px; padding: 13px 0; border-top: 1px solid var(--line); min-width: 0; }
+.c-attend-row > .grow { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.c-attend-tm { flex: none; min-width: 76px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.c-attend-day { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.c-attend-date { display: flex; align-items: center; gap: 8px; min-width: 0; height: 44px; padding: 0 14px; box-sizing: border-box; border: 1px solid var(--input-line); border-radius: 12px; background: var(--input); color: var(--t1); cursor: pointer; }
+.c-attend-date input { min-width: 0; border: 0; padding: 0; background: transparent; color: inherit; font: inherit; font-size: 15px; outline: none; cursor: pointer; }
+.c-attend-date:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--soft); }
+.c-attend-who { display: flex; align-items: center; gap: 12px 14px; flex-wrap: wrap; width: 100%; padding: 13px 20px; border: 0; border-top: 1px solid var(--line); background: none; color: inherit; text-align: left; cursor: pointer; min-height: 44px; box-sizing: border-box; }
+.c-attend-who:hover { background: var(--raise); }
+.c-attend-who[aria-expanded='true'] { background: var(--soft); }
+.c-attend-who > .grow { flex: 1 1 200px; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.c-attend-times { display: flex; gap: 6px; flex-wrap: wrap; }
+.c-attend-hist { margin: 0 20px 16px; }
+.c-attend-hist-day { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.c-attend-hist-day > :first-child { min-width: 110px; }
+/* On a phone a box's buttons are full width, one under the other. */
+@media (max-width: 767px) {
+  .c-attend-head { padding: 16px 16px 12px; }
+  .c-attend-body { padding: 0 16px 16px; }
+  .c-attend-who { padding: 13px 16px; }
+  .c-attend-hist { margin: 0 16px 14px; }
+  .c-attend .c-inbox-a { flex-direction: column; }
+  .c-attend .c-inbox-a .c-btn { width: 100%; height: auto; min-height: 44px; }
+}
+/* On a touch screen wider than a phone every button is 44 px to touch, as on Leads. */
+@media (pointer: coarse) {
+  .c-attend .c-btn { height: auto; min-height: 44px; }
+  .c-attend .c-icon-btn { width: 44px; height: 44px; }
+}
+
+/* The front desk (V7; the board `Desk`): a page of its own with no menu. The answer is said in words, with
+   its colour on the round mark above them, never colour alone. */
+.c-desk-top { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 16px 20px; border-bottom: 1px solid var(--line); }
+.c-desk-top > .grow { flex: 1 1 160px; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.c-desk-mid { flex: 1 1 auto; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; text-align: center; padding: 40px 24px; min-width: 0; }
+.c-desk-foot { position: sticky; bottom: 0; padding: 16px 20px 20px; border-top: 1px solid var(--line); background: var(--page); display: flex; flex-direction: column; gap: 8px; }
+.c-desk-foot > * { width: 100%; max-width: 640px; margin: 0 auto; }
+.c-desk-mark { width: 96px; height: 96px; border-radius: 999px; display: grid; place-items: center; flex: none; background: var(--raise); color: var(--t2); }
+.c-desk-mark > svg { width: 48px; height: 48px; }
+.c-desk-mark-good { background: var(--good-bg); color: var(--good); }
+.c-desk-mark-warn { background: var(--warn-bg); color: var(--warn); }
+.c-desk-mark-bad { background: var(--bad-bg); color: var(--bad); }
+.c-desk-say { font-size: 30px; line-height: 38px; font-weight: 700; letter-spacing: -0.02em; color: var(--t1); overflow-wrap: anywhere; max-width: 100%; }
+.c-desk-who { font-size: 22px; line-height: 30px; font-weight: 600; color: var(--t1); overflow-wrap: anywhere; max-width: 100%; }
+.c-desk .c-btn { height: auto; min-height: 44px; }
+/* On a phone or a narrow desk the two buttons show as icons; their names stay for screen readers. */
+@media (max-width: 639px) {
+  .c-desk-top { padding: 12px 16px; }
+  .c-desk-mid { padding: 32px 16px; }
+  .c-desk-foot { padding: 12px 16px 16px; }
+  .c-desk-bw { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .c-desk-top .c-btn { width: 44px; padding: 0; justify-content: center; }
+  .c-desk-say { font-size: 26px; line-height: 32px; }
+}
+/* The browser's own calendar in a day box follows the look. */
+.c-attend-date input { color-scheme: dark; }
+.t-light .c-attend-date input { color-scheme: light; }
+/* Check-in history: the people run edge to edge of the box; the search sits at the title's end where
+   it fits, under the title otherwise. */
+.c-attend-head { flex-wrap: wrap; }
+.c-attend-find { flex: 1 1 220px; max-width: 320px; }
+.c-attend-bleed { margin: 0 -20px; }
+@media (max-width: 767px) {
+  .c-attend-bleed { margin: 0 -16px; }
+  .c-attend-find { max-width: none; }
+}

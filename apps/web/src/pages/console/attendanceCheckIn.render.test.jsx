@@ -4,7 +4,7 @@
 // a name the staff member did not pick — so the green line names the person the SERVER
 // checked in, and a slow answer to an older search never replaces a newer one.
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, waitFor, cleanup, fireEvent, act } from '@testing-library/react';
+import { render, screen, waitFor, cleanup, fireEvent, act, within } from '@testing-library/react';
 import { Link, MemoryRouter, Routes, Route } from 'react-router-dom';
 
 const api = {
@@ -242,8 +242,9 @@ describe('check someone in', () => {
     resetConsoleOrgs();
     api.getMine.mockResolvedValue({ data: { orgs: [{ ...ORG, staffRole: 'trainer', privileges: ['members.read', 'attendance.read'] }], formerOrgs: [] } });
     drawScreen();
-    await screen.findByText('Checked in today');
-    expect(screen.queryByText('Check someone in')).toBeNull();
+    await screen.findByRole('heading', { name: "Today's check-ins" });
+    expect(screen.queryByRole('heading', { name: 'Check in' })).toBeNull();
+    expect(screen.queryByLabelText('Find someone to check in')).toBeNull();
     // The page's first line promises only what this person can do.
     expect(screen.getByText(/^Who came in, by day\./)).toBeTruthy();
     expect(screen.queryByText(/Check people in/)).toBeNull();
@@ -334,6 +335,56 @@ describe('fixing a visit on Attendance', () => {
     expect(dayBox.value).toBe(today);
     await typeSearch('Anil');
     expect(await screen.findByRole('button', { name: 'Check in Anil Kumar' })).toBeTruthy();
+  });
+
+  // V7's worst thing: the box now opens under a row that stays on screen, among other rows. It must be
+  // under the row pressed, name only that person, and send only that visit or that person.
+  it('Remove opens under the row pressed, the rows around it stay, and only that visit is sent', async () => {
+    api.getCheckinLog.mockResolvedValue(
+      logAnswer([
+        lv('v3', '2026-10-03T06:09:00.000Z', 'Maya Patel'),
+        lv('v2', '2026-10-03T06:05:00.000Z', 'Ravi Noapp', { method: 'staff', by: 'Iron Owner' }),
+        lv('v1', '2026-10-03T06:02:00.000Z', 'Asha App'),
+      ]),
+    );
+    api.removeVisit.mockResolvedValue({ data: { removed: true, day: '2026-10-03' } });
+    drawScreen();
+    await screen.findByText('Ravi Noapp');
+    fireEvent.click(screen.getByRole('button', { name: "Remove Ravi Noapp's 07:05 check-in" }));
+    const box = screen.getByRole('group', { name: "Remove Ravi Noapp's check-in" });
+    // Under Ravi's row, in Ravi's place in the list, and about nobody else.
+    const ravi = screen.getByText('Ravi Noapp').closest('li');
+    expect(ravi.contains(box)).toBe(true);
+    expect(ravi.previousElementSibling.textContent).toContain('Maya Patel');
+    expect(ravi.nextElementSibling.textContent).toContain('Asha App');
+    expect(box.textContent).not.toMatch(/Maya|Asha/);
+    expect(screen.getByRole('button', { name: "Remove Maya Patel's 07:09 check-in" })).toBeTruthy();
+    expect(screen.getByRole('button', { name: "Remove Asha App's 07:02 check-in" })).toBeTruthy();
+
+    fireEvent.click(within(box).getByRole('button', { name: 'Remove visit' }));
+    await waitFor(() => expect(screen.queryByText('Ravi Noapp')).toBeNull());
+    expect(api.removeVisit.mock.calls).toEqual([['g1', 'v2']]);
+    expect(screen.getByText('Maya Patel')).toBeTruthy();
+    expect(screen.getByText('Asha App')).toBeTruthy();
+  });
+
+  it('Add visit opens under the person pressed, only they are listed while it is open, and only they are sent', async () => {
+    const yesterday = addDays(gymToday('Europe/London'), -1);
+    api.findCheckinPeople.mockResolvedValue({ data: { people: [ANIL, ANITA] } });
+    api.addVisit.mockResolvedValue({ data: { result: 'added', person: { name: 'Anil Kumar' }, day: yesterday } });
+    drawScreen();
+    fireEvent.change(await screen.findByLabelText('Day they came'), { target: { value: yesterday } });
+    await typeSearch('Kumar');
+    fireEvent.click(await screen.findByRole('button', { name: 'Add a visit for Anil Kumar' }));
+    const box = screen.getByRole('group', { name: 'Add a visit for Anil Kumar' });
+    expect(screen.getByText('Anil Kumar', { selector: 'span' }).closest('li').contains(box)).toBe(true);
+    expect(box.textContent).not.toContain('Anita');
+    expect(screen.queryByText('Anita Kumar')).toBeNull();
+
+    fireEvent.click(within(box).getByRole('button', { name: 'Add visit' }));
+    await screen.findByRole('status');
+    expect(api.addVisit.mock.calls).toEqual([['g1', { entryId: 'e-anil' }, yesterday]]);
+    expect(api.staffCheckIn).not.toHaveBeenCalled();
   });
 
   it('Remove on a visit today: a box names the person and the time; the press is for THAT visit, and it leaves the list', async () => {
@@ -452,12 +503,14 @@ describe('checked in today', () => {
     const row = (payment) => logAnswer([lv('v1', '2026-10-03T06:02:00.000Z', 'Maya Patel', { method: 'key_tag', status: 'Active', payment })]);
     api.getCheckinLog.mockResolvedValueOnce(row('Payment due'));
     drawScreen();
-    expect(await screen.findByText('Active · Payment due')).toBeTruthy();
+    // Money owed is a tag of its own beside the status.
+    expect((await screen.findByText('Payment due')).className).toContain('c-tag-warn');
+    expect(screen.getByText('Active')).toBeTruthy();
     api.getCheckinLog.mockResolvedValueOnce(row('Paid'));
     tell({ what: 'memberships', entryId: '00000000-0000-4000-8000-000000000001' });
     expect(await screen.findByText('Active · Paid')).toBeTruthy();
     expect(api.getCheckinLog).toHaveBeenLastCalledWith('g1', null);
-    expect(screen.queryByText('Active · Payment due')).toBeNull();
+    expect(screen.queryByText('Payment due')).toBeNull();
   });
 
   it('news of a visit removed in another window reads the whole of today, and the row goes', async () => {
@@ -643,7 +696,8 @@ describe('checked in today', () => {
     drawScreen();
     const maya = (await screen.findByText('Maya Patel')).closest('li');
     expect(maya.textContent).toContain('Key tag · Front desk');
-    expect(maya.textContent).toContain('Active · Overdue');
+    expect(maya.textContent).toContain('ActiveOverdue');
+    expect([...maya.querySelectorAll('.c-tag-warn')].map((tag) => tag.textContent)).toEqual(['Overdue']);
     const asha = screen.getByText('Asha App').closest('li');
     // Nothing under her but how she came in, then the row's Remove.
     expect(asha.textContent).toBe('07:02Asha AppPass · Front deskRemove');

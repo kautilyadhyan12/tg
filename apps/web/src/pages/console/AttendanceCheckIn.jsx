@@ -1,8 +1,8 @@
 // STAFF CHECK-IN AND THE LIVE LOG (Attendance; spec Part 3 §12.5, ROADMAP 16b-ii).
 //
-// "Check someone in": staff find a person by name, member number or email and press
+// Check in: staff find a person by name, member number or email and press
 // Check in beside them; the answer is the desk's (green, or "Already checked in at …",
-// with the gym's own status and payment words in orange). "Checked in today": every visit
+// with the gym's own status and payment words as a tag). Today's check-ins: every visit
 // today, newest first, with those same words, read again when the server says a visit was
 // added or removed, or a membership changed (live updates, Stage 4 item 18), and at the
 // gym's midnight.
@@ -10,19 +10,20 @@
 // Fixing a visit (ROADMAP 19a-iv): "Day they came" turns Check in into Add visit for an
 // earlier day, and each of today's visits has Remove. A box names the person, the day and
 // what it counts for before either happens.
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { CHECKIN_LOG_LIMIT, VISIT_ADD_DAYS_BACK } from '@app/shared';
-import { Check, Loader2, Search } from 'lucide-react';
+import { CalendarDays, Check, CheckCircle2, ChevronDown, Loader2, Plus, Search } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
 import { orgService, errorText, isRetryable } from '../../api/orgsApi';
-import { ConsoleCard, ConsoleFailed, ConsoleLoading, ConsoleSection } from '../../components/console/ConsoleStates';
+import { ConsoleFailed, ConsoleLoading } from '../../components/console/ConsoleStates';
 import { visitTimeLabel } from '../../components/gym/attendanceView';
 import { dayLabel } from '../../components/gym/leaderboardView';
 import { deskAnswer } from '../checkin/deskView';
-import { foundDetails, howLine, mergeLog, newestAt, pickKey, wordsLine } from './checkinLogView';
+import { foundDetails, howLine, mergeLog, newestAt, pickKey, wordsParts } from './checkinLogView';
 import { stoppedLine } from './checkinRulesView';
 import { gymToday } from './hoursView';
 import { addVisitWindow } from './leaderboardStaffView';
+import { initialsOf } from './memberListPeople';
 import { msToGymMidnight, useLiveNews } from './liveNews';
 
 const SEARCH_WAIT_MS = 250;
@@ -42,9 +43,6 @@ const MIDNIGHT_TRIES = 10;
  *  that is 23 or 25 hours long at a clock change is still met at its midnight. */
 const HOUR_MS = 3_600_000;
 
-const muted = { color: 'rgba(255,255,255,0.55)' };
-const ORANGE = '#FFB347';
-
 // A click anywhere on the box opens the calendar, not only its small icon.
 const openCalendar = (e) => {
   try {
@@ -57,31 +55,57 @@ const openCalendar = (e) => {
 /** The two buttons under a box that asks before it changes a visit. */
 function BoxButtons({ label, busy, danger, onPress, onCancel }) {
   return (
-    <div className="mt-3 flex flex-wrap gap-2">
-      <button
-        type="button"
-        onClick={onPress}
-        disabled={busy}
-        className="rounded-xl px-3.5 py-2 text-sm font-semibold inline-flex items-center gap-1.5 disabled:opacity-40"
-        style={danger ? { background: 'rgba(239,68,68,0.18)', color: '#f87171' } : { background: '#FF8A1F', color: '#0b0a09' }}
-      >
-        {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+    <div className="c-inbox-a">
+      <button type="button" onClick={onPress} disabled={busy} className={`c-btn ${danger ? 'c-btn-d' : 'c-btn-p'} c-btn-sm`}>
+        {busy ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : null}
         {label}
       </button>
-      <button
-        type="button"
-        onClick={onCancel}
-        disabled={busy}
-        className="rounded-xl px-3.5 py-2 text-sm font-semibold disabled:opacity-40"
-        style={{ background: 'rgba(255,255,255,0.07)', color: '#fff' }}
-      >
+      <button type="button" onClick={onCancel} disabled={busy} className="c-btn c-btn-s c-btn-sm">
         Cancel
       </button>
     </div>
   );
 }
 
-const boxStyle = { background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.12)' };
+/** A box of the Attendance page: its title and the line under it fold the box, as the old sections
+ *  did; `aside` sits at the title's end (a count). */
+export function FoldBox({ title, note, aside = null, label, children }) {
+  const [open, setOpen] = useState(true);
+  const bodyId = useId();
+  return (
+    <section className="c-card min-w-0" aria-label={label ?? title}>
+      <div className="c-attend-head">
+        <div className="flex flex-col gap-1 min-w-0" style={{ flex: '1 1 220px' }}>
+          <h2 className="c-h3">
+            <button type="button" className="c-attend-fold" aria-expanded={open} aria-controls={bodyId} onClick={() => setOpen((was) => !was)}>
+              <ChevronDown aria-hidden="true" className="w-4 h-4" />
+              {title}
+            </button>
+          </h2>
+          {note !== null ? <div className="pl-7">{note}</div> : null}
+        </div>
+        {aside}
+      </div>
+      {open ? (
+        <div id={bodyId} className="c-attend-body">
+          {children}
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+/** A person's status and payment: quiet words, and money owed as a tag. */
+function Words({ words }) {
+  const { quiet, owed } = wordsParts(words);
+  if (quiet === '' && owed === '') return null;
+  return (
+    <span className="flex flex-wrap items-center gap-2">
+      {quiet !== '' ? <span className="c-s14 c-t2">{quiet}</span> : null}
+      {owed !== '' ? <span className="c-tag c-tag-warn">{owed}</span> : null}
+    </span>
+  );
+}
 
 export function CheckSomeoneIn({ gymId, words, keepsList, timezone, clearSignal, onCheckedIn, onAdded }) {
   const today = gymToday(timezone);
@@ -102,6 +126,8 @@ export function CheckSomeoneIn({ gymId, words, keepsList, timezone, clearSignal,
   const answer = said !== null && said.under === clearSignal ? said : null;
   const asked = useRef(0);
   const input = useRef(null);
+  const findId = useId();
+  const dayId = useId();
   // New, in the bar across the top, opens here (`#check-in`): the box in view, ready to type.
   // Each press is a new visit (`key`), so pressing it again on the same address works too.
   const { hash, key: visit } = useLocation();
@@ -189,161 +215,150 @@ export function CheckSomeoneIn({ gymId, words, keepsList, timezone, clearSignal,
   const searching = query !== '' && !answered;
 
   return (
-    <ConsoleCard>
-      <h2 className="text-base font-semibold" style={{ color: '#fff' }}>
-        Check someone in
-      </h2>
-      <p className="text-sm mt-1" style={muted}>
-        For a {words.person} without the app or without their pass. Find them, then press Check in.
-      </p>
-
-      <label className="mt-3 flex flex-wrap items-center gap-2 text-sm" style={{ color: '#fff' }}>
-        Day they came
-        <input
-          type="date"
-          value={day}
-          min={range.min}
-          max={today}
-          // A date box cleared with Backspace gives '': back to today.
-          onChange={(e) => {
-            setPicked(e.target.value === '' || e.target.value >= today ? null : e.target.value);
-            setAdding(null);
-            // The last answer was about another day.
-            setAnswer(null);
-          }}
-          onClick={openCalendar}
-          aria-label="Day they came"
-          className="rounded-lg px-2 py-1 text-sm cursor-pointer"
-          style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.10)', color: '#fff', colorScheme: 'dark' }}
-        />
-        <span className="text-xs" style={muted}>
-          {earlier
-            ? `${dayLabel(day)}: a missed visit is added for that day.`
-            : `Today. Pick an earlier day, up to ${VISIT_ADD_DAYS_BACK} days back, to add a visit they missed.`}
-        </span>
-      </label>
-
-      <label
-        className="mt-3 flex items-center gap-2 rounded-xl px-3 py-2"
-        style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.10)' }}
-      >
-        <Search className="w-4 h-4 flex-shrink-0" style={{ color: 'rgba(255,255,255,0.45)' }} />
-        <input
-          ref={input}
-          type="search"
-          value={typed}
-          onChange={(e) => setTyped(e.target.value)}
-          // A list person's email is searched only for staff who keep the list.
-          placeholder={keepsList ? 'Name, member number or email' : 'Name or member number'}
-          aria-label="Find someone to check in"
-          maxLength={100}
-          className="flex-1 bg-transparent text-sm outline-none"
-          style={{ color: '#fff' }}
-        />
-        {searching ? <Loader2 className="w-4 h-4 animate-spin" style={muted} /> : null}
-      </label>
+    <FoldBox
+      title="Check in"
+      note={<span className="c-s14 c-t2">For a {words.person} without the app or without their pass. Find them, then press Check in.</span>}
+    >
+      <div className="grid gap-4 md:grid-cols-2">
+        <div className="c-field min-w-0">
+          <label className="c-label" htmlFor={findId}>
+            Find someone to check in
+          </label>
+          <div className="c-search">
+            <Search aria-hidden="true" className="w-4 h-4" />
+            <input
+              id={findId}
+              ref={input}
+              type="search"
+              value={typed}
+              onChange={(e) => {
+                setTyped(e.target.value);
+                // An Add visit box belongs to the last search's row.
+                setAdding(null);
+              }}
+              // A list person's email is searched only for staff who keep the list.
+              placeholder={keepsList ? 'Name, member number or email' : 'Name or member number'}
+              maxLength={100}
+              className="c-input"
+            />
+          </div>
+          <span className="c-s14 c-t2 flex items-center gap-2">
+            {searching ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : null}
+            {keepsList ? 'Name, member number or email' : 'Name or member number'}
+          </span>
+        </div>
+        <div className="c-field min-w-0">
+          <label className="c-label" htmlFor={dayId}>
+            Day they came
+          </label>
+          <label className="c-attend-date">
+            <CalendarDays aria-hidden="true" className="w-4 h-4 flex-shrink-0" />
+            <input
+              id={dayId}
+              type="date"
+              value={day}
+              min={range.min}
+              max={today}
+              // A date box cleared with Backspace gives '': back to today.
+              onChange={(e) => {
+                setPicked(e.target.value === '' || e.target.value >= today ? null : e.target.value);
+                setAdding(null);
+                // The last answer was about another day.
+                setAnswer(null);
+              }}
+              onClick={openCalendar}
+              aria-label="Day they came"
+              className="flex-1"
+            />
+          </label>
+          <span className="c-s14 c-t2">
+            {earlier
+              ? `${dayLabel(day)}: a missed visit is added for that day.`
+              : `Today. Pick an earlier day, up to ${VISIT_ADD_DAYS_BACK} days back, to add a visit they missed.`}
+          </span>
+        </div>
+      </div>
 
       {answer !== null ? (
-        <div
-          role="status"
-          className="mt-3 rounded-xl px-3 py-2.5"
-          style={{
-            background: answer.tone === 'good' ? 'rgba(34,197,94,0.12)' : 'rgba(239,68,68,0.12)',
-            border: `1px solid ${answer.tone === 'good' ? 'rgba(34,197,94,0.35)' : 'rgba(239,68,68,0.35)'}`,
-          }}
-        >
-          <p className="text-sm font-semibold" style={{ color: answer.tone === 'good' ? '#4ade80' : '#f87171' }}>
-            {answer.name ? `${answer.name} — ${answer.title}` : answer.title}
-          </p>
-          {answer.notice ? (
-            <p className="text-sm mt-0.5" style={{ color: ORANGE }}>
-              {answer.notice}
-            </p>
-          ) : null}
+        <div role="status" className={`c-strip ${answer.tone === 'good' ? 'c-strip-good' : 'c-strip-bad'}`}>
+          {answer.tone === 'good' ? <CheckCircle2 aria-hidden="true" className="w-5 h-5 flex-shrink-0" style={{ color: 'var(--good)' }} /> : null}
+          <span className="c-strip-words">
+            <span className="c-s15 c-w6">{answer.name ? `${answer.name} — ${answer.title}` : answer.title}</span>
+            {answer.notice ? <span className="c-s14 c-w6" style={{ color: 'var(--warn)' }}>{answer.notice}</span> : null}
+          </span>
         </div>
       ) : null}
 
       {answered && found.status === 'failed' ? (
-        <p className="text-sm mt-3" style={{ color: '#f87171' }}>
+        <p className="c-strip c-strip-bad c-s15" role="alert">
           {found.error}
         </p>
       ) : null}
 
       {answered && found.status === 'ready' && people.length === 0 ? (
-        <p className="text-sm mt-3" style={muted}>
-          Nobody on your list matches &ldquo;{found.forQuery}&rdquo;.
-        </p>
+        <p className="c-inbox c-s15 c-t1">Nobody on your list matches &ldquo;{found.forQuery}&rdquo;.</p>
       ) : null}
 
-      {adding !== null ? (
-        <div role="group" aria-label={`Add a visit for ${adding.name}`} className="mt-3 rounded-xl px-3 py-3" style={boxStyle}>
-          <p className="text-sm font-semibold" style={{ color: '#fff' }}>
-            Add a visit for {adding.name} on {dayLabel(day)}?
-          </p>
-          <p className="text-sm mt-1" style={muted}>
-            {adding.name} — a visit is added for {dayLabel(day)}. It counts on the leaderboard, unless they already have a visit that day.
-          </p>
-          <p className="text-sm mt-1" style={muted}>
-            In their app, they see who added it and today&apos;s date. Nobody else&apos;s visits change.
-          </p>
-          <BoxButtons label="Add visit" busy={busy !== null} onPress={addVisit} onCancel={() => setAdding(null)} />
-        </div>
-      ) : null}
-
-      {people.length > 0 && adding === null ? (
-        <ul className="mt-2 flex flex-col">
-          {people.map((person) => {
+      {people.length > 0 ? (
+        <ul className="flex flex-col">
+          {/* While an Add visit box is open only its person is listed: nobody else can be pressed. */}
+          {people.filter((person) => adding === null || pickKey(person.pick) === pickKey(adding.pick)).map((person) => {
             const key = pickKey(person.pick);
             const details = foundDetails(person);
-            const notice = wordsLine(person.notice);
             const stopped = stoppedLine(person);
+            const asking = adding !== null && pickKey(adding.pick) === key;
             return (
-              <li
-                key={key}
-                className="flex items-center gap-3 py-2.5"
-                style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}
-              >
-                <span className="min-w-0 flex-1">
-                  <span className="block text-sm font-medium truncate" style={{ color: '#fff' }}>
-                    {person.name}
+              <li key={key} className="min-w-0">
+                <div className="c-attend-row items-center flex-wrap">
+                  <span className="c-avatar c-avatar-sm c-avatar-md" aria-hidden="true">
+                    {initialsOf(person.name)}
                   </span>
-                  {details !== '' ? (
-                    <span className="block text-xs truncate" style={{ color: 'rgba(255,255,255,0.45)' }}>
-                      {details}
-                    </span>
-                  ) : null}
-                  {notice !== '' ? (
-                    <span className="block text-xs truncate" style={{ color: ORANGE }}>
-                      {notice}
-                    </span>
-                  ) : null}
-                  {stopped !== '' ? (
-                    <span className="block text-xs mt-0.5" style={{ color: '#fff' }}>
-                      {stopped}
-                    </span>
-                  ) : null}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (!earlier) return checkIn(person);
-                    setAnswer(null);
-                    return setAdding(person);
-                  }}
-                  disabled={busy !== null}
-                  aria-label={earlier ? `Add a visit for ${person.name}` : `Check in ${person.name}`}
-                  className="rounded-xl px-3.5 py-2 text-sm font-semibold inline-flex items-center gap-1.5 disabled:opacity-40 flex-shrink-0"
-                  style={{ background: '#FF8A1F', color: '#0b0a09' }}
-                >
-                  {busy === key ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
-                  {earlier ? 'Add visit' : 'Check in'}
-                </button>
+                  <span className="grow" style={{ flexBasis: 200 }}>
+                    <span className="c-s15 c-w6 c-t1 break-words">{person.name}</span>
+                    {details !== '' ? <span className="c-s14 c-t2 break-words">{details}</span> : null}
+                    <Words words={person.notice} />
+                    {stopped !== '' ? <span className="c-s14 c-t1">{stopped}</span> : null}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!earlier) return checkIn(person);
+                      setAnswer(null);
+                      return setAdding(person);
+                    }}
+                    disabled={busy !== null || asking}
+                    aria-label={earlier ? `Add a visit for ${person.name}` : `Check in ${person.name}`}
+                    className="c-btn c-btn-p c-btn-sm flex-shrink-0"
+                  >
+                    {busy === key ? (
+                      <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" />
+                    ) : earlier ? (
+                      <Plus aria-hidden="true" className="w-4 h-4" />
+                    ) : (
+                      <Check aria-hidden="true" className="w-4 h-4" />
+                    )}
+                    {earlier ? 'Add visit' : 'Check in'}
+                  </button>
+                </div>
+                {/* Add visit opens under the row that was pressed (Boxes, way 1). */}
+                {asking ? (
+                  <div role="group" aria-label={`Add a visit for ${adding.name}`} className="c-inbox flex flex-col gap-2 mb-3">
+                    <p className="c-s15 c-w6 c-t1">
+                      Add a visit for {adding.name} on {dayLabel(day)}?
+                    </p>
+                    <p className="c-s14 c-t1">
+                      {adding.name} — a visit is added for {dayLabel(day)}. It counts on the leaderboard, unless they already have a visit that day.
+                    </p>
+                    <p className="c-s14 c-t2">In their app, they see who added it and today&apos;s date. Nobody else&apos;s visits change.</p>
+                    <BoxButtons label="Add visit" busy={busy !== null} onPress={addVisit} onCancel={() => setAdding(null)} />
+                  </div>
+                ) : null}
               </li>
             );
           })}
         </ul>
       ) : null}
-    </ConsoleCard>
+    </FoldBox>
   );
 }
 
@@ -521,10 +536,11 @@ export function CheckedInToday({ gymId, words, refreshSignal, canFix, onRemoved 
       .finally(() => setRemoveBusy(false));
   };
 
-  if (log.status === 'loading') return <ConsoleLoading label="Loading today's check-ins…" />;
+  if (log.status === 'loading') return <ConsoleLoading label="Loading today's check-ins…" newLook />;
   if (log.status === 'failed') {
     return (
       <ConsoleFailed
+        newLook
         message={log.error}
         onRetry={
           log.retryable
@@ -539,39 +555,68 @@ export function CheckedInToday({ gymId, words, refreshSignal, canFix, onRemoved 
   }
 
   const count = log.visits.length;
+  const live = log.stale ? "Couldn't refresh — trying again" : (liveRefused ?? 'Updates as people check in');
   return (
-    <ConsoleSection
-      title="Checked in today"
-      aside={log.stale ? "Couldn't refresh — trying again" : (liveRefused ?? 'Updates as people check in')}
-      defaultOpen
+    <FoldBox
+      title="Today's check-ins"
+      note={
+        <span className="c-s14 c-t2 flex items-center gap-2">
+          <span className={`c-dot ${log.stale || liveRefused !== null ? 'c-dot-warn' : 'c-dot-good'}`} aria-hidden="true" />
+          {live}
+        </span>
+      }
+      // Below the server's page the count is the day's; at it, the line at the foot says it is the latest.
+      aside={count > 0 && count < CHECKIN_LOG_LIMIT ? <span className="c-tag c-tag-plain flex-shrink-0">{count}</span> : null}
     >
       {count === 0 ? (
-        <p className="text-sm mt-1" style={muted}>
+        <p className="c-inbox c-s15 c-t1">
           Nobody has checked in yet today. Scans at your front desk and check-ins by staff show here as they happen.
         </p>
       ) : (
-        <ul className="mt-1 flex flex-col">
+        <ul className="flex flex-col">
           {log.visits.map((visit) => {
-            const notice = wordsLine(visit);
             const name = visit.name === '' ? `A ${words.person}` : visit.name;
             const time = visitTimeLabel(visit.markedAt, log.timezone, log.clockFormat);
-            if (removing === visit.id) {
-              return (
-                <li key={visit.id} className="py-2" style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
-                  <div role="group" aria-label={`Remove ${name}'s check-in`} className="rounded-xl px-3 py-3" style={boxStyle}>
-                    <p className="text-sm font-semibold" style={{ color: '#fff' }}>
+            const asking = removing === visit.id;
+            return (
+              <li key={visit.id} className="min-w-0">
+                <div className="c-attend-row">
+                  <span className="c-attend-tm c-s15 c-t1">{time}</span>
+                  <span className="grow">
+                    <span className="c-s15 c-w6 c-t1 break-words">{name}</span>
+                    <span className="c-s14 c-t2">{howLine(visit)}</span>
+                    <Words words={visit} />
+                  </span>
+                  {canFix && !asking ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setRemoving(visit.id);
+                        setRemoveError(null);
+                      }}
+                      aria-label={`Remove ${name}'s ${time} check-in`}
+                      className="c-btn c-btn-s c-btn-sm flex-shrink-0"
+                    >
+                      Remove
+                    </button>
+                  ) : null}
+                </div>
+                {/* Remove opens under the row that was pressed (Boxes, way 1). */}
+                {asking ? (
+                  <div role="group" aria-label={`Remove ${name}'s check-in`} className="c-inbox flex flex-col gap-2 mb-3">
+                    <p className="c-s15 c-w6 c-t1">
                       Remove {name}&apos;s {time} check-in?
                     </p>
-                    <p className="text-sm mt-1" style={muted}>
-                      {name} — this visit is removed. It no longer counts today, on the leaderboard or for their streak,
-                      unless they have another visit today.
+                    <p className="c-s14 c-t1">
+                      {name} — this visit is removed. It no longer counts today, on the leaderboard or for their streak, unless they have
+                      another visit today.
                     </p>
-                    <p className="text-sm mt-1" style={muted}>
-                      In their app, they still see it under &ldquo;Didn&apos;t count&rdquo;, with who removed it and today&apos;s date.
-                      Nobody else&apos;s visits change.
+                    <p className="c-s14 c-t2">
+                      In their app, they still see it under &ldquo;Didn&apos;t count&rdquo;, with who removed it and today&apos;s date. Nobody
+                      else&apos;s visits change.
                     </p>
                     {removeError !== null ? (
-                      <p className="text-sm mt-2" role="alert" style={{ color: '#f87171' }}>
+                      <p className="c-s14 c-w6" role="alert" style={{ color: 'var(--bad)' }}>
                         {removeError}
                       </p>
                     ) : null}
@@ -586,40 +631,6 @@ export function CheckedInToday({ gymId, words, refreshSignal, canFix, onRemoved 
                       }}
                     />
                   </div>
-                </li>
-              );
-            }
-            return (
-              <li key={visit.id} className="flex items-baseline gap-3 py-2" style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
-                <span className="text-xs w-16 flex-shrink-0 tabular-nums" style={{ color: ORANGE }}>
-                  {time}
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="block text-sm font-medium truncate" style={{ color: '#fff' }}>
-                    {name}
-                  </span>
-                  <span className="block text-xs truncate" style={{ color: 'rgba(255,255,255,0.45)' }}>
-                    {howLine(visit)}
-                  </span>
-                  {notice !== '' ? (
-                    <span className="block text-xs truncate" style={{ color: ORANGE }}>
-                      {notice}
-                    </span>
-                  ) : null}
-                </span>
-                {canFix ? (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setRemoving(visit.id);
-                      setRemoveError(null);
-                    }}
-                    aria-label={`Remove ${name}'s ${time} check-in`}
-                    className="text-xs font-semibold underline flex-shrink-0"
-                    style={{ color: 'rgba(255,255,255,0.65)' }}
-                  >
-                    Remove
-                  </button>
                 ) : null}
               </li>
             );
@@ -627,10 +638,8 @@ export function CheckedInToday({ gymId, words, refreshSignal, canFix, onRemoved 
         </ul>
       )}
       {count >= CHECKIN_LOG_LIMIT ? (
-        <p className="text-xs mt-2" style={{ color: 'rgba(255,255,255,0.35)' }}>
-          Showing the latest {CHECKIN_LOG_LIMIT}. Everyone who came today is in the day list for today.
-        </p>
+        <p className="c-s14 c-t2">Showing the latest {CHECKIN_LOG_LIMIT}. Everyone who came today is in Check-in history for today.</p>
       ) : null}
-    </ConsoleSection>
+    </FoldBox>
   );
 }
