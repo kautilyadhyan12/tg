@@ -156,7 +156,7 @@ function Row({ person, org, readOnly, canWrite, onOpenPerson, onSent }) {
         </span>
         <div className="flex flex-col gap-1 min-w-[200px] flex-1">
           {person.entryId !== null ? (
-            <button type="button" className="c-btn-link c-s15 c-w6 self-start text-left inline-flex items-center" style={{ minHeight: 32, height: 'auto' }} onClick={() => onOpenPerson(person.entryId)} aria-label={`Open ${name.full}'s page`}>
+            <button type="button" className="c-btn-link c-atrisk-name c-s15 c-w6 self-start text-left inline-flex items-center" onClick={() => onOpenPerson(person.entryId)} aria-label={`Open ${name.full}'s page`}>
               {name.full}
             </button>
           ) : (

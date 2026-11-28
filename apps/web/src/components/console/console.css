@@ -3270,3 +3270,8 @@ button.c-ov-money-who {
     min-height: 44px;
   }
 }
+/* A name on At risk opens their page: 32 px with a mouse, 44 to touch. */
+.c-atrisk-name { height: auto; min-height: 32px; }
+@media (pointer: coarse), (max-width: 767px) {
+  .c-atrisk-name { min-height: 44px; }
+}
