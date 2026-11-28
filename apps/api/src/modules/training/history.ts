@@ -121,6 +121,7 @@ export async function historyWorkout(deps: HistoryDeps, userId: string, workoutI
     kcalCalcVersion: w.kcal_calc_version,
     kcalWeightKg: w.kcal_weight_grams === null ? null : w.kcal_weight_grams / 1000,
     platform: platformSchema.parse(w.platform),
+    formScore: w.avg_form_score,
     sets: sets.map((s) => {
       const f = fact(s);
       return {
@@ -134,6 +135,8 @@ export async function historyWorkout(deps: HistoryDeps, userId: string, workoutI
         restSeconds: s.rest_seconds,
         durationMs: s.duration_ms,
         counted: countedOf(s),
+        // A set by hand or by timer never has one: the database refuses it (0249's checks).
+        formScore: s.avg_form_score,
       };
     }),
     newRecords: newRecordsIn(sets.map(fact), before.sets, before.lifted),

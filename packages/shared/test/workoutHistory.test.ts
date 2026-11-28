@@ -20,7 +20,7 @@ describe("the calendar's days asked for in one read", () => {
 
 describe("what each new record was", () => {
   const set = (position: number, exercise: string, measuredIn: "reps" | "time", done: number, weightGrams: number | null) => ({
-    position, exercise, exerciseName: exercise === "plank" ? "Plank" : "Barbell Curl", measuredIn, target: null, done, weightGrams, restSeconds: null, durationMs: 30_000, counted: "hand" as const,
+    position, exercise, exerciseName: exercise === "plank" ? "Plank" : "Barbell Curl", measuredIn, target: null, done, weightGrams, restSeconds: null, durationMs: 30_000, counted: "hand" as const, formScore: null,
   });
   const sets: HistoryWorkout["sets"] = [set(3, "barbell_curl", "reps", 10, 30_000), set(5, "barbell_curl", "reps", 8, 32_500), set(9, "plank", "time", 75, null)];
 

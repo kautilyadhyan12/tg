@@ -313,7 +313,15 @@ export function privacyPolicy(facts: LegalFacts = LEGAL_FACTS): LegalDocument {
           p("KWAZO does not record, store, or transmit video footage or photographs obtained through this functionality."),
           p("Such footage is not transmitted to KWAZO's servers, is not accessible to KWAZO or any other person, and is discarded when the exercise session ends."),
           p("Only the resulting exercise information is retained in text or numerical form, including:"),
-          list("Repetition counts.", "Exercise sets.", "Exercise duration.", "Form scores.", "Identified exercise form errors or mistakes."),
+          list(
+            "Repetition counts.",
+            "Exercise sets.",
+            "Exercise duration.",
+            "Form scores.",
+            "Identified exercise form errors or mistakes.",
+            "For each set, how long the camera could see you, the average pace and depth of your repetitions, and whether you faced the camera or stood side-on.",
+            "For each set, the count the camera made beside the count you saved, and whether you counted the rest of the set yourself or the camera stopped.",
+          ),
           h3("3.7. Nutrition and Meal Information"),
           p("We collect information relating to your dietary tracking and nutrition activities, including:"),
           list(

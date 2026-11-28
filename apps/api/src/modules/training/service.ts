@@ -5,10 +5,11 @@
 // none, never refused); an exercise the Library never had
 // refuses the whole save; then the workout and all its sets are written
 // together, and only by the request that made the workout. The server works out the calories, the
-// heart rate's average and highest, and (after the commit) the streak and XP from history, which is
-// what makes a second send give nothing twice.
+// heart rate's average and highest, each camera set's form score and the workout's (job 64b-i), and
+// (after the commit) the streak and XP from history, which is what makes a second send give nothing
+// twice.
 import type { Sql } from "postgres";
-import { heartSums, trainedMsOf, type WorkoutSave } from "@app/shared";
+import { heartSums, setFormScore, trainedMsOf, workoutFormScore, type WorkoutSave } from "@app/shared";
 import { onWorkoutSynced } from "../gamification/service.js";
 import { getUserSyncContext } from "../users/service.js";
 import { KCAL_CALC_VERSION_SAVE, kcalForSave } from "./calories.js";
@@ -101,6 +102,8 @@ export async function saveWorkout(deps: SaveDeps, userId: string, input: Workout
       heartAvg: heart?.avg ?? null,
       heartMax: heart?.max ?? null,
       kcalWeightGrams: ctx.weightKg !== null && ctx.weightKg > 0 ? Math.round(ctx.weightKg * 1000) : null,
+      // The camera sets' form scores alone (job 64b-i): a set by hand or by timer has none, whatever it carried.
+      avgFormScore: workoutFormScore(sets.map((s) => (s.counted === "camera" && s.camera?.summary ? setFormScore(s.camera.summary.repScores) : null))),
     });
     if (!made) {
       // Another request made it between the first question and this insert: it is the person's own

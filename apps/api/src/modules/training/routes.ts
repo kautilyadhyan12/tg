@@ -35,9 +35,10 @@ import { ForeignWorkoutError, RefusedSaveError, UnknownExercisesError, saveWorko
 import { giveEffort, workoutSummary } from "./summary.js";
 import { ForeignSavedError, FutureEditError, SavedFullError, deleteSaved, listSaved, readSaved, writeSaved } from "./saved.js";
 
-/** Twelve hours of heart rate at one a second, as text, is about 0.6 MB. */
-const BODY_MOST_BYTES = 1024 * 1024;
-const LIST_ITEMS_FOR_SAVE = LIST_ITEMS_MOST + WORKOUT_SAVE_LIMITS.heartMost * 3;
+/** Twelve hours of heart rate at one a second, as text, is about 0.6 MB; the biggest save the schema takes, with 200
+ *  camera sets at their longest (job 64b-i), 1.2 MB, measured under it in `training.camera.unit.test.ts`. */
+export const BODY_MOST_BYTES = 1.5 * 1024 * 1024;
+export const LIST_ITEMS_FOR_SAVE = LIST_ITEMS_MOST + WORKOUT_SAVE_LIMITS.heartMost * 3 + WORKOUT_SAVE_LIMITS.repScoresMost;
 
 const validationError = (req: FastifyRequest, reply: FastifyReply, message: string) =>
   reply.status(400).send({ error: "validation_error", message, requestId: req.id });

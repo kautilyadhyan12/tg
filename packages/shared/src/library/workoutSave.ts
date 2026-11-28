@@ -28,6 +28,15 @@ export const WORKOUT_SAVE_LIMITS = {
   /** How far a set's own times may run past the workout's length, for each set: whole seconds of rest
    *  rounded up. */
   slackMsEachSet: 1000,
+  /** Each counted rep's form score, in all the camera sets of one workout (job 64b-i): 200 sets of 50 reps. A phone keeps
+   *  to it (job 64b-ii), so the biggest save stays inside the route's body and list limits. */
+  repScoresMost: 10_000,
+  /** A set's mistakes seen made, and its movement's count readings: more than any exercise file has (the squat has 12
+   *  mistakes and 2 count rules). */
+  faultsMost: 32,
+  romStatsMost: 8,
+  /** The furthest a count rule's reading can be, either way: a reading is degrees or a share of a body length. */
+  romStatMost: 1000,
 } as const;
 
 const L = WORKOUT_SAVE_LIMITS;
@@ -37,8 +46,82 @@ const L = WORKOUT_SAVE_LIMITS;
 const noNul = (s: string): boolean => !s.includes("\u0000");
 const NUL = { message: "a NUL character" };
 
-export const setCountedSchema = z.enum(["hand", "timer"]);
+/** How a set was counted: by the person, by a timer, or by the camera (job 64b-i). A set done with Follow along is the
+ *  person's own count or a timer's, never the camera's: the camera was off. */
+export const setCountedSchema = z.enum(["hand", "timer", "camera"]);
 export type SetCounted = z.infer<typeof setCountedSchema>;
+
+/** A mistake's id word, as an exercise's camera file names it (`movementDefinition.ts`'s own rule). */
+const mistakeIdSchema = z
+  .string()
+  .max(40)
+  .regex(/^[a-z][a-z0-9_]*$/);
+/** A movement's count rule's name ("depth", "knees bent"), as its movement file names it (`movementRuleSchema`). */
+const ruleNameSchema = z
+  .string()
+  .max(60)
+  .regex(/^[A-Za-z0-9][A-Za-z0-9 ]*$/);
+const fewKeys = (most: number) => (r: Record<string, unknown>) => Object.keys(r).length <= most;
+
+/** What the camera judged of a set, where the exercise has a camera file of its own (spec §2.4's set summary, as the
+ *  movement engine makes it: `SetRecord.summary`). The set's own fields are not repeated here (its exercise, place, reps,
+ *  time and length), and its form score is the server's, worked out from `repScores` (`setFormScore`). */
+export const cameraSummarySchema = z
+  .object({
+    /** The exercise's camera file's version. */
+    definitionVersion: z.number().int().min(1).max(2_147_483_647),
+    /** Each counted rep's form score where the camera could judge it, in order. */
+    repScores: z.array(z.number().int().min(0).max(100)).max(L.repsMost),
+    /** For each mistake seen made, in how many reps. */
+    faultCounts: z.record(mistakeIdSchema, z.number().int().min(1).max(L.repsMost)).refine(fewKeys(L.faultsMost), { message: `more than ${String(L.faultsMost)} mistakes` }),
+    /** How long the camera read the person; the server keeps no more than the set lasted. */
+    watchedMs: z.number().int().min(0).max(L.lengthMostMs),
+    /** A counted rep's own time, the mean; null with none counted. */
+    tempoMsAvg: z.number().int().min(0).max(L.lengthMostMs).nullable(),
+    /** Each of the movement's count rules' readings, the mean over the counted reps; null with none counted. */
+    romStats: z
+      .record(ruleNameSchema, z.number().min(-L.romStatMost).max(L.romStatMost))
+      .refine(fewKeys(L.romStatsMost), { message: `more than ${String(L.romStatsMost)} readings` })
+      .nullable(),
+    /** Where the body stood to the phone at the bottom of the counted reps. */
+    view: z.enum(["front", "side", "unknown"]),
+  })
+  .strict();
+export type CameraSummary = z.infer<typeof cameraSummarySchema>;
+
+/** A set counted by the camera (job 64b-i; spec §13.3, §13.5). Numbers and the movement files' own words only: never a
+ *  picture, a body point, or anything else of the person's body, and a field the server does not know refuses the whole
+ *  save. */
+export const cameraSetSchema = z
+  .object({
+    /** What the camera itself counted, in the set's own unit (reps, or whole seconds held), whatever the person changed
+     *  by hand: kept beside the set's `done` for the proof table's numbers after launch (§12.5). */
+    done: z.number().int().min(0).max(L.secondsMost),
+    /** The person left the camera and counted the rest themselves ("chosen": Count this set myself), or the camera stopped
+     *  ("camera_stopped"); null when the camera counted the set to its end. */
+    left: z.enum(["chosen", "camera_stopped"]).nullable(),
+    /** The movement engine that counted it. */
+    engineVersion: z.string().regex(/^\d{1,4}\.\d{1,4}\.\d{1,4}$/),
+    /** Null for an exercise the camera counts but does not judge yet: no camera file of its own (the squat's twins until
+     *  exercise folder 1's job 54 writes theirs). */
+    summary: cameraSummarySchema.nullable(),
+  })
+  .strict();
+export type CameraSetFacts = z.infer<typeof cameraSetSchema>;
+
+/** A set's form score: the mean of its reps' scores, rounded; null with none, never a good one. The server's own, as the
+ *  movement engine's summary works it out. */
+export function setFormScore(repScores: readonly number[]): number | null {
+  if (repScores.length === 0) return null;
+  return Math.round(repScores.reduce((a, b) => a + b, 0) / repScores.length);
+}
+
+/** A workout's form score: the mean of its camera sets' form scores, rounded; null with none (the old save route's own
+ *  rule, which XP and the badges read). */
+export function workoutFormScore(setScores: readonly (number | null)[]): number | null {
+  const scored = setScores.filter((s): s is number => s !== null);
+  return scored.length === 0 ? null : Math.round(scored.reduce((a, b) => a + b, 0) / scored.length);
+}
 
 /** One set. `target` and `done` are in the set's own unit: reps, or seconds for a set measured in
  *  time. Weight is in whole grams, shown in the person's kg or lb. */
@@ -56,12 +139,29 @@ export const savedSetSchema = z
     /** How long the set itself lasted. */
     durationMs: z.number().int().min(0).max(L.lengthMostMs),
     counted: setCountedSchema,
+    /** What the camera made of it: present on a set counted by the camera, and on no other (job 64b-i). Absent from every
+     *  set kept on a phone before it. */
+    camera: cameraSetSchema.optional(),
   })
   .strict()
   .superRefine((s, ctx) => {
     if (s.measuredIn === "reps") {
       for (const field of ["target", "done"] as const) {
         if (s[field] > L.repsMost) ctx.addIssue({ code: "custom", message: `reps above ${String(L.repsMost)}`, path: [field] });
+      }
+    }
+    // THE WORST THING HERE: a form score kept for a set no camera watched. The camera's facts go with a camera set alone.
+    if ((s.counted === "camera") !== (s.camera !== undefined)) {
+      ctx.addIssue({ code: "custom", message: "the camera's facts belong to a set counted by the camera, and to no other", path: ["camera"] });
+    }
+    if (s.camera !== undefined) {
+      if (s.measuredIn === "reps" && s.camera.done > L.repsMost) {
+        ctx.addIssue({ code: "custom", message: `reps above ${String(L.repsMost)}`, path: ["camera", "done"] });
+      }
+      const scores = s.camera.summary?.repScores.length ?? 0;
+      // A score for each rep the camera counted, at most; a set measured in time has no reps to score.
+      if (scores > (s.measuredIn === "reps" ? s.camera.done : 0)) {
+        ctx.addIssue({ code: "custom", message: "more rep scores than reps the camera counted", path: ["camera", "summary", "repScores"] });
       }
     }
     // A set's time cannot be more than the set lasted (a second of rounding allowed).
@@ -128,7 +228,13 @@ export const workoutSaveSchema = z
     if (w.heart.some(([at]) => at > lengthMs)) {
       ctx.addIssue({ code: "custom", message: "a heart rate after the workout ended", path: ["heart"] });
     }
+    if (repScoresIn(w.sets) > L.repScoresMost) {
+      ctx.addIssue({ code: "custom", message: `more than ${String(L.repScoresMost)} rep scores in one workout`, path: ["sets"] });
+    }
   });
+
+/** Every rep score a workout's camera sets carry. */
+export const repScoresIn = (sets: readonly Pick<SavedSet, "camera">[]): number => sets.reduce((n, s) => n + (s.camera?.summary?.repScores.length ?? 0), 0);
 export type WorkoutSave = z.infer<typeof workoutSaveSchema>;
 
 /** What a saved workout counts as trained: the phone's time trained, or, for a workout kept on a phone before it

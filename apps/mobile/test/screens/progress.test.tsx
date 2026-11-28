@@ -105,10 +105,10 @@ const pastWorkout = (workoutId: string, name: string | null, back: number) => {
   const at = new Date();
   at.setDate(at.getDate() - back);
   at.setHours(7, 5, 0, 0);
-  const set = (position: number, exercise: string, exerciseName: string, measuredIn: "reps" | "time", target: number, done: number, weightGrams: number | null) => ({ position, exercise, exerciseName, measuredIn, target, done, weightGrams, restSeconds: 60, durationMs: 40_000, counted: "hand" });
+  const set = (position: number, exercise: string, exerciseName: string, measuredIn: "reps" | "time", target: number, done: number, weightGrams: number | null) => ({ position, exercise, exerciseName, measuredIn, target, done, weightGrams, restSeconds: 60, durationMs: 40_000, counted: "hand", formScore: null });
   return {
     workoutId, name, startedAt: at.toISOString(), endedAt: null, timeZone: "Asia/Kolkata", startedFrom: "none", effort: 3, heartAvg: null, heartMax: null,
-    durationMs: (42 * 60 + 10) * 1000, kcalPoint: 238, kcalCalcVersion: 4, kcalWeightKg: 82, platform: "android",
+    durationMs: (42 * 60 + 10) * 1000, kcalPoint: 238, kcalCalcVersion: 4, kcalWeightKg: 82, platform: "android", formScore: null,
     sets: [set(0, "barbell_curl", "Barbell Curl", "reps", 10, 10, 30_000), set(1, "barbell_curl", "Barbell Curl", "reps", 10, 8, 32_500), set(2, "plank", "Plank", "time", 60, 60, null), set(3, "plank", "Plank", "time", 60, 75, null)],
     newRecords: [{ exercise: "barbell_curl", measuredIn: "reps", kind: "heaviest", position: 1 }],
   };

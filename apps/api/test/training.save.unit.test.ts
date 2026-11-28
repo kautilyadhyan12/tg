@@ -87,7 +87,8 @@ describe("what a phone may report in a saved workout", () => {
     ["half a gram", workout({ sets: [set({ weightGrams: 1.5 })] }), "sets.0.weightGrams"],
     ["an hour's rest", workout({ endedAt: at(2 * 3_600_000), sets: [set({ restSeconds: 3600 })] }), "ok"],
     ["an hour and a second's rest", workout({ endedAt: at(2 * 3_600_000), sets: [set({ restSeconds: 3601 })] }), "sets.0.restSeconds"],
-    ["counted by camera (job 64b adds it)", workout({ sets: [{ ...set(), counted: "camera" }] }), "sets.0.counted"],
+    // Job 64b-i takes a set counted by the camera with the camera's facts (training.camera.unit.test.ts), never without.
+    ["counted by camera with nothing of the camera", workout({ sets: [{ ...set(), counted: "camera" }] }), "sets.0.camera"],
     ["six stars", workout({ effort: 6 }), "effort"],
     ["no stars", workout({ effort: null }), "ok"],
     ["a heart rate at the end", workout({ heart: [[30 * 60_000, 120]] }), "ok"],
