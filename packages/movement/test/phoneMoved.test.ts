@@ -179,6 +179,12 @@ describe("the rule, on Kd's phone's own readings", () => {
     expect(frames.slice((again[0] ?? 0) / 50).every((f) => !f.moving)).toBe(true);
   });
 
+  it("held in a hand: trembling in every picture once 1.5 s have been read (its steadiest quarter second 0.152 degrees back and forth, the line 0.09)", () => {
+    const frames = over(readingsOf("hand", PICKED_UP + 1000));
+    expect(frames.length).toBeGreaterThan(700);
+    expect(frames.slice(1600 / 50).every((f) => f.trembling)).toBe(true);
+  });
+
   it("held from the moment the set starts, wherever in the holding: caught within 1.6 s, by its trembling at the latest", () => {
     const all = readingsOf("hand", PICKED_UP + 1000);
     const waits: number[] = [];
@@ -239,6 +245,13 @@ describe("the rule, every kind of picture", () => {
     expect(again).toHaveLength(1);
     expect(again[0] ?? 0).toBeGreaterThanOrEqual(5000);
     expect(again[0] ?? 0).toBeLessThanOrEqual(5600);
+  });
+
+  it("trembling is back and forth of 0.09 degrees in every quarter second: 0.1 trembles, 0.08 does not", () => {
+    // Five answers a quarter second, each turning `each` degrees one way then the other: back and forth 5 x `each` a quarter.
+    const tremor = (each: number): [number, Spin][] => Array.from({ length: 60 }, (_, k) => [k * 50, turn(k % 2 === 0 ? each : -each)]);
+    expect(run(tremor(0.1 / 5)).slice(40).every((x) => x.trembling)).toBe(true);
+    expect(run(tremor(0.08 / 5)).some((x) => x.trembling)).toBe(false);
   });
 
   it("a still phone whose gyroscope drifts steadily, a degree or two a second, never trembles and is never moving", () => {
