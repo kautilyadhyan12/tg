@@ -58,6 +58,14 @@ export function stepsAt(counts: readonly StepCount[], at: number): number {
 
 export type StepPause = { kind: "pause"; at: number } | { kind: "resume"; at: number } | null;
 
+/** The steps that end an Auto-pause, seen this long after the counter handed them over or sooner, were seen as they came:
+ *  the clock starts again now. Later than this, the app was not looking (the screen off), and the clock starts again from
+ *  when they were taken. */
+export const WAKE_LIVE_MS = 2000;
+/** A step at a brisk walk takes about half a second: steps seen late start the clock again this long before the reading
+ *  that held them, for each step it held (never more than STEP_PAUSE_MS). */
+export const WAKE_STEP_MS = 500;
+
 /** What Auto-pause does indoors, looked at four times a second. Running, it pauses where the clock stands (`nowMs`) once
  *  no step has been counted for STEP_PAUSE_MS, but only once a step has been counted since Start or since Resume was last
  *  pressed (`armed`): a phone lying on a treadmill counts none, and its run is never stopped for that; one put down on
@@ -76,8 +84,9 @@ export function nextStepPause(look: {
   /** When the last pause ended (0 with none): the ten seconds are counted from there too, as the steps that ended an
    *  Auto-pause are kept in the second after it (round one, H1: it Auto-paused again a quarter of a second later). */
   lastPauseEnd: number;
-  /** The steps rose since the open pause began. */
-  rose: boolean;
+  /** The first reading this look that raised the steps while Auto-paused, when it came (ms into the run) and the steps it
+   *  added; null with none. A new listener's first reading is never one: when its steps were taken is not known. */
+  wake: { at: number; gained: number } | null;
   nowMs: number;
 }): StepPause {
   if (!look.autoPause) return null;
@@ -87,8 +96,13 @@ export function nextStepPause(look: {
     if (rise === null) return null;
     return look.nowMs - Math.max(rise, look.lastPauseEnd) >= STEP_PAUSE_MS ? { kind: "pause", at: look.nowMs } : null;
   }
-  if (look.byPerson || look.pauseFrom === null || !look.rose) return null;
-  return { kind: "resume", at: Math.max(look.pauseFrom, look.nowMs) };
+  if (look.byPerson || look.pauseFrom === null || look.wake === null) return null;
+  // Seen as they came: now, where the clock stands (Kd, 37q-ii-a's walk: "the timer is jumping" when it started from
+  // before). Seen late, the screen off: from when they were taken, at a walk's pace, so ten minutes walked with the screen
+  // off are ten minutes of the run, never squeezed into a second of it (the re-check, H3).
+  const late = look.nowMs - look.wake.at > WAKE_LIVE_MS;
+  const at = late ? look.wake.at - Math.min(look.wake.gained * WAKE_STEP_MS, STEP_PAUSE_MS) : look.nowMs;
+  return { kind: "resume", at: Math.max(look.pauseFrom, at) };
 }
 
 /** Steps a minute on the screen are counted over this long: ten seconds follows a change of pace as it happens (Kd,

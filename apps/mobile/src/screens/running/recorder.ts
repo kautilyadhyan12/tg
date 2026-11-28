@@ -644,29 +644,53 @@ function stepReadings(): { at: number; steps: number }[] {
   }
 }
 
-/** The counter's readings taken into the run: the steps since Start (`tallyStep`), shown at once, and kept as a count at
- *  the newest reading's time (never past `until`, Finish) within a second (`flushSteps`). True when they rose. */
-function readSteps(run: LiveRun, until: number = RUN_MAX_ELAPSED_MS): boolean {
+/** A reading of the counter that raised the steps: when it came (ms into the run, never past `until`), the steps since
+ *  Start after it, how many it added, and whether it was a new listener's first after the app opened again (when those
+ *  steps were taken is not known: the app was closed). */
+interface StepRise {
+  at: number;
+  steps: number;
+  gained: number;
+  unknown: boolean;
+}
+
+/** The counter's readings since the last look, each at its own time (`tallyStep`); the counter's last total kept. */
+function takeRises(run: LiveRun, until: number = RUN_MAX_ELAPSED_MS): StepRise[] {
   const indoor = run.indoor;
-  if (indoor == null || indoor.stepsOff) return false;
-  const readings = stepReadings();
+  if (indoor == null || indoor.stepsOff) return [];
+  const rises: StepRise[] = [];
   let tally = { raw: indoor.raw, steps: indoor.steps };
-  let newest: number | null = null;
-  for (const reading of readings) {
-    tally = tallyStep(tally, reading.steps, stepsFresh);
+  for (const reading of stepReadings()) {
+    const fresh = stepsFresh;
+    const next = tallyStep(tally, reading.steps, fresh);
     stepsFresh = false;
-    newest = reading.at;
+    if (next.steps > tally.steps) {
+      const at = Math.min(until, Math.max(0, Math.round(reading.at - run.startedAt)));
+      rises.push({ at, steps: next.steps, gained: next.steps - tally.steps, unknown: fresh && tally.raw !== null });
+    }
+    tally = next;
   }
-  const rose = tally.steps > indoor.steps;
-  // Taken while the person had paused: none of the run's (an Auto-pause's are the steps that end it, and are).
-  if (rose && run.phase === "paused" && run.pausedByPerson) indoor.pausedSteps += tally.steps - indoor.steps;
   indoor.raw = tally.raw;
-  indoor.steps = tally.steps;
-  if (rose && newest !== null) {
-    indoor.pendingAt = Math.min(until, Math.max(0, Math.round(newest - run.startedAt)));
-    if (run.phase === "running") indoor.armed = true;
-  }
-  return rose;
+  return rises;
+}
+
+/** One rise kept: shown at once, and kept as a count at its own time within a second (`flushSteps`), so readings handed
+ *  over together after the screen was off keep the pace they were taken at. Paused, its steps are none of the run's. */
+function keepRise(run: LiveRun, rise: StepRise): void {
+  const indoor = run.indoor;
+  if (indoor == null) return;
+  if (run.phase === "paused") indoor.pausedSteps += rise.gained;
+  indoor.steps = rise.steps;
+  indoor.pendingAt = rise.at;
+  if (run.phase === "running") indoor.armed = true;
+  flushSteps(run, rise.at, false);
+}
+
+/** The counter's readings taken into the run (`takeRises`, `keepRise`). True when the steps rose. */
+function readSteps(run: LiveRun, until: number = RUN_MAX_ELAPSED_MS): boolean {
+  const rises = takeRises(run, until);
+  for (const rise of rises) keepRise(run, rise);
+  return rises.length > 0;
 }
 
 /** The steps not yet in a count kept as one, at the time they last rose, never before the count before it: at most one
@@ -712,10 +736,19 @@ export async function takeSteps(now: number = Date.now()): Promise<void> {
   const indoor = run.indoor;
   const was = run.phase;
   let resumedFrom: number | null = null;
-  const rose = readSteps(run);
+  const rises = takeRises(run);
+  const rose = rises.length > 0;
   // Auto-paused, the steps that start the person moving again are kept after the clock starts again, never inside the
-  // pause, where the maths would leave them out.
+  // pause, where the maths would leave them out. A new listener's first reading (the app opened again) cannot say when
+  // its steps were taken: none of the run's, kept inside the pause (the re-check, H3).
   const autoPaused = run.phase === "paused" && !run.pausedByPerson;
+  let waking: StepRise[] = [];
+  if (autoPaused) {
+    const first = rises.findIndex((r) => !r.unknown);
+    for (const rise of first < 0 ? rises : rises.slice(0, first)) keepRise(run, rise);
+    waking = first < 0 ? [] : rises.slice(first);
+  } else for (const rise of rises) keepRise(run, rise);
+  const wake = waking[0];
   const counted = autoPaused ? false : flushSteps(run, elapsedMs(run, now), false);
   const pausedFrom = openPauseFrom(run);
   const change =
@@ -728,7 +761,7 @@ export async function takeSteps(now: number = Date.now()): Promise<void> {
           counts: indoor.counts,
           pauseFrom: pausedFrom,
           lastPauseEnd: lastOpenEnd(run),
-          rose: pausedFrom !== null && indoor.steps > stepsAt(indoor.counts, pausedFrom),
+          wake: wake === undefined ? null : { at: wake.at, gained: wake.gained },
           nowMs: elapsedMs(run, now),
         })
       : null;
@@ -742,13 +775,23 @@ export async function takeSteps(now: number = Date.now()): Promise<void> {
     writtenAt = 0;
   } else if (change?.kind === "resume" && run.phase === "paused" && !run.pausedByPerson) {
     resumedFrom = openPauseFrom(run);
-    // The clock goes on from where it stood; the steps that started it again are kept in the second after, as moving.
+    // Steps kept inside the pause before these (a new listener's first) are counted there first.
+    flushSteps(run, change.at, true);
     fenceAt(run, change.at, false);
     closePause(run, change.at);
-    indoor.pendingAt = change.at + STEP_COUNT_EVERY_MS;
     run.phase = "running";
+    const last = waking[waking.length - 1];
+    if (last !== undefined && change.at >= elapsedMs(run, now)) {
+      // Seen as they came: the clock goes on from where it stood, and the steps that started it again are kept in the
+      // second after, as moving.
+      indoor.steps = last.steps;
+      indoor.pendingAt = change.at + STEP_COUNT_EVERY_MS;
+    } else for (const rise of waking) keepRise(run, rise);
+    waking = [];
     writtenAt = 0;
   }
+  // Steps that started nothing again are none of the run's.
+  for (const rise of waking) keepRise(run, rise);
   // Nothing new, and under a second since the last full look: nothing to tell.
   if (!rose && !counted && change === null && now >= lastFullLook && now - lastFullLook < FULL_LOOK_MS) return;
   lastFullLook = now;

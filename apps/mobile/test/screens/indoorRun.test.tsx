@@ -115,6 +115,9 @@ function going(): LiveRun {
   return run;
 }
 
+/** The Steps the run's screen shows. */
+const shownSteps = (run: LiveRun): number | null => (run.indoor == null ? null : runStepsOf(run.indoor));
+
 /** The counter's first reading in the run, `total` (the person's day before Start), taken at Go. */
 async function counterAtStart(total: number) {
   const run = going();
@@ -439,7 +442,7 @@ describe("steps the app could not see as they came, during an Auto-pause (the re
     await act(() => takeSteps(kept.startedAt + 4_210_000));
     const back = going();
     expect(back.phase).toBe("paused");
-    expect(runStepsOf(back.indoor ?? { steps: 0, pausedSteps: 0 } as never)).toBe(1200);
+    expect(shownSteps(back)).toBe(1200);
     const sums = indoorSumsAt(back, 4_210_000, 0, null);
     expect(sums.steps).toBe(1200);
     expect(sums.distanceM).toBe(before.distanceM);
@@ -451,7 +454,7 @@ describe("steps the app could not see as they came, during an Auto-pause (the re
     const going2 = going();
     expect(going2.phase).toBe("running");
     expect(going2.pauses).toEqual([[610_000, 4_215_000]]);
-    expect(runStepsOf(going2.indoor ?? ({} as never))).toBe(1204);
+    expect(shownSteps(going2)).toBe(1204);
     expect(indoorSumsAt(going2, 4_216_000, 0, null).steps).toBe(1204);
   });
 
@@ -471,7 +474,7 @@ describe("steps the app could not see as they came, during an Auto-pause (the re
     expect(back.pauses).toEqual([[610_000, 700_000]]);
     const sums = indoorSumsAt(back, 1_310_000, 0, null);
     expect(sums.steps).toBe(2400);
-    expect(runStepsOf(back.indoor ?? ({} as never))).toBe(2400);
+    expect(shownSteps(back)).toBe(2400);
     // A walk's speed, never a run's: 1.5 m/s or under over the moving time.
     expect(sums.distanceM / sums.movingS).toBeLessThan(1.5);
     // The counts kept at their own times through the ten minutes, at most one a second.
