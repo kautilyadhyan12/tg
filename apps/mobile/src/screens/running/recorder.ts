@@ -33,7 +33,7 @@ import {
 import { colours } from "../../look/colours";
 import { AUTO_START, RUN_GAP_MS, autoPausedFrom, autoRunning, feelAt, nextAutoPause, type AutoPauseState } from "./autoPause";
 import { clockAt, closeStill, closedPauses, elapsedMs, keepDatedBack, lastMarkAt, markAt, marksOf, movingMsOf, openStill, runToMark, sumsAt, undoDatedBack } from "./runLive";
-import { nextStepPause, stepsAt, tallyStep, type StepPause } from "./indoorSteps";
+import { STEP_PAUSE_MS, WAKE_STEP_MS, lastRiseAt, nextStepPause, stepsAt, tallyStep, type StepPause } from "./indoorSteps";
 import { beginLine, guideAdvance, guideDone, guideNextLook, guideSchedule, guideSkip, nowLine, skipLine } from "./runGuide";
 import { PAUSE_WORDS, START_HUSH_MS, VOICE_AFTER_LOAD, VOICE_START, heartLine, voiceCheck, type VoiceState } from "./runVoice";
 import { runVoiceNative } from "./runVoiceNative";
@@ -675,15 +675,36 @@ function takeRises(run: LiveRun, until: number = RUN_MAX_ELAPSED_MS): StepRise[]
 }
 
 /** One rise kept: shown at once, and kept as a count at its own time within a second (`flushSteps`), so readings handed
- *  over together after the screen was off keep the pace they were taken at. Paused, its steps are none of the run's. */
+ *  over together after the screen was off keep the pace they were taken at. Paused, its steps are none of the run's.
+ *  Running with Auto-pause on, a gap of ten seconds or more before it that no look saw as it came (the screen off) is
+ *  kept as the Auto-pause it would have been, wherever it falls (the third re-check, H5: a stand in the middle read as
+ *  moving time). */
 function keepRise(run: LiveRun, rise: StepRise): void {
   const indoor = run.indoor;
   if (indoor == null) return;
+  if (run.phase === "running") standBefore(run, rise);
   if (run.phase === "paused") indoor.pausedSteps += rise.gained;
   indoor.steps = rise.steps;
   indoor.pendingAt = rise.at;
   if (run.phase === "running") indoor.armed = true;
   flushSteps(run, rise.at, false);
+}
+
+/** A stand before `rise` kept as a closed Auto-pause: from ten seconds after the step before it (or the last pause's end)
+ *  to just before the steps `rise` holds, as `nextStepPause` would have kept it had a look seen it as it came. Nothing for
+ *  a gap too short to hold one, with Auto-pause off, before a step was counted (`armed`), or past the pauses a run holds. */
+function standBefore(run: LiveRun, rise: StepRise): void {
+  const indoor = run.indoor;
+  if (indoor == null || !run.autoPause || !indoor.armed || run.pauses.length >= RUN_MAX_PAUSES) return;
+  const lastRise = indoor.pendingAt ?? lastRiseAt(indoor.counts);
+  if (lastRise === null) return;
+  const from = Math.max(lastRise, lastOpenEnd(run)) + STEP_PAUSE_MS;
+  const to = rise.at - Math.min(rise.gained * WAKE_STEP_MS, STEP_PAUSE_MS);
+  if (to <= from) return;
+  fenceAt(run, from);
+  run.pauses.push([from, to]);
+  fenceAt(run, to, false);
+  writtenAt = 0;
 }
 
 /** The counter's readings taken into the run (`takeRises`, `keepRise`). True when the steps rose. */
