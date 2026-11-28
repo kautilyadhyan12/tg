@@ -83,7 +83,7 @@ describe("the worst thing: a treadmill's distance typed ten times too big, taken
     expect(recordSpeed(10_800)).toBeGreaterThan(5);
   });
 
-  it("the steps judge from 500 m, from a third to three times theirs", () => {
+  it("the steps judge from STEPS_JUDGE_FROM_M (200 m), from a third to three times theirs", () => {
     expect(treadmillTaken(5000, 1800, STEPS_JUDGE_FROM_M - 1)).toBe(true);
     expect(treadmillTaken(5000, 1800, STEPS_JUDGE_FROM_M)).toBe(false);
     expect(treadmillTaken(3000, 1800, 1000)).toBe(true);
