@@ -670,3 +670,89 @@ describe('Change size through Razorpay (1d-iii-a)', () => {
     expect(orgService.changeSize).not.toHaveBeenCalled();
   });
 });
+
+// V5-c, THE WORST THING: a gym asks for one size and is charged for another. The redesign keeps the list
+// of sizes on screen after one is chosen (the board `OverviewPlan`), so a press on another row, or a price
+// answered late for a row no longer chosen, must never change which size Confirm sends.
+describe('V5-c: every size button asks for its own row, and Confirm sends the one marked Chosen', () => {
+  it('each Subscribe and pay today asks for the plan of its own row', async () => {
+    orgService.getMine.mockResolvedValue(mineIs({ ...OWNER, subscription: freeTrial }));
+    orgService.startCheckout.mockRejectedValue(new Error('refused'));
+    renderOverview();
+    fireEvent.click(await screen.findByRole('button', { name: 'Choose a plan' }));
+    const dialog = await screen.findByRole('dialog');
+    const list = await within(dialog).findByTestId('plan-list');
+    const rows = within(list).getAllByRole('listitem');
+    expect(rows).toHaveLength(PLANS.length);
+    for (const [i, plan] of PLANS.entries()) {
+      const row = rows[i];
+      expect(within(row).getByText(`Up to ${plan.seatCap.toLocaleString()} members`)).toBeTruthy();
+      expect(within(row).getByText(`${plan.priceLabel} a month`)).toBeTruthy();
+      await waitFor(() => expect(within(row).getByRole('button', { name: 'Subscribe and pay today' }).disabled).toBe(false));
+      fireEvent.click(within(row).getByRole('button', { name: 'Subscribe and pay today' }));
+      await waitFor(() => expect(orgService.startCheckout).toHaveBeenCalledTimes(i + 1));
+      expect(orgService.startCheckout.mock.calls[i].slice(0, 2)).toEqual([GYM_ID, plan.code]);
+    }
+  });
+
+  it('a second row chosen before Confirm is the one sent, and a late price for the first never shows', async () => {
+    orgService.getMine.mockResolvedValue(mineIs({ ...OWNER, subscription: paying }));
+    const answers = {};
+    orgService.previewSizeChange.mockImplementation(
+      (_gym, code) =>
+        new Promise((resolve) => {
+          answers[code] = resolve;
+        }),
+    );
+    orgService.changeSize.mockResolvedValue({ data: { subscription: { ...paying, seatCap: 1000, priceLabel: '$199' } } });
+    renderOverview();
+    fireEvent.click(await screen.findByRole('button', { name: 'Change size' }));
+    const dialog = await screen.findByRole('dialog');
+    const list = await within(dialog).findByTestId('size-list');
+    const row = (text) => within(list).getByText(text).closest('li');
+
+    fireEvent.click(within(row('Up to 500 members')).getByRole('button', { name: 'Choose' }));
+    expect(within(row('Up to 500 members')).getByText('Chosen')).toBeTruthy();
+    // The list stays, and another size can still be chosen while the first one's price is worked out.
+    fireEvent.click(within(row('Up to 1,000 members')).getByRole('button', { name: 'Choose' }));
+    expect(within(row('Up to 1,000 members')).getByText('Chosen')).toBeTruthy();
+    expect(within(row('Up to 500 members')).queryByText('Chosen')).toBeNull();
+    expect(within(row('Up to 500 members')).getByRole('button', { name: 'Choose' })).toBeTruthy();
+
+    // The 500's price comes back after the 1,000 was chosen: it is not shown, and Confirm still waits.
+    answers.org_b2_us_m({ data: { planCode: 'org_b2_us_m', seatCap: 500, priceLabel: '$129', dueNow: { totalLabel: '$11.11', subtotalLabel: '$10.00', taxLabel: '$1.11' }, nextPaymentAt: NEXT_PAYMENT } });
+    await Promise.resolve();
+    expect(within(dialog).queryByText(/\$11\.11/)).toBeNull();
+    expect(within(dialog).getByRole('button', { name: 'Confirm' }).disabled).toBe(true);
+
+    answers.org_b3_us_m({ data: { planCode: 'org_b3_us_m', seatCap: 1000, priceLabel: '$199', dueNow: { totalLabel: '$66.00', subtotalLabel: '$60.00', taxLabel: '$6.00' }, nextPaymentAt: NEXT_PAYMENT } });
+    expect(await within(dialog).findByText(/You pay \$66\.00 now/)).toBeTruthy();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Confirm' }));
+    await waitFor(() => expect(orgService.changeSize).toHaveBeenCalledTimes(1));
+    expect(orgService.changeSize.mock.calls[0].slice(0, 2)).toEqual([GYM_ID, 'org_b3_us_m']);
+  });
+
+  it('while a size is being changed no other row can be chosen, and Back clears the choice', async () => {
+    orgService.getMine.mockResolvedValue(mineIs({ ...OWNER, subscription: paying }));
+    orgService.previewSizeChange.mockResolvedValue({ data: { planCode: 'org_b2_us_m', seatCap: 500, priceLabel: '$129', dueNow: { totalLabel: '$53.52', subtotalLabel: '$49.15', taxLabel: '$4.37' }, nextPaymentAt: NEXT_PAYMENT } });
+    orgService.changeSize.mockImplementation(() => new Promise(() => {}));
+    renderOverview();
+    fireEvent.click(await screen.findByRole('button', { name: 'Change size' }));
+    const dialog = await screen.findByRole('dialog');
+    const list = await within(dialog).findByTestId('size-list');
+    const row = (text) => within(list).getByText(text).closest('li');
+
+    fireEvent.click(within(row('Up to 500 members')).getByRole('button', { name: 'Choose' }));
+    await within(dialog).findByText(/You pay \$53\.52 now/);
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Back' }));
+    expect(within(row('Up to 500 members')).queryByText('Chosen')).toBeNull();
+    expect(within(dialog).queryByTestId('size-preview')).toBeNull();
+
+    fireEvent.click(within(row('Up to 500 members')).getByRole('button', { name: 'Choose' }));
+    await within(dialog).findByText(/You pay \$53\.52 now/);
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Confirm' }));
+    await waitFor(() => expect(within(row('Up to 1,000 members')).getByRole('button', { name: 'Choose' }).disabled).toBe(true));
+    expect(within(dialog).getByRole('button', { name: 'Back' }).disabled).toBe(true);
+    expect(within(dialog).getByRole('button', { name: 'Close' }).disabled).toBe(true);
+  });
+});

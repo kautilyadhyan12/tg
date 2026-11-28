@@ -1347,10 +1347,79 @@
   right: 8px;
 }
 
-/* The banner above every page (Part 3 §4.2): a problem, a deadline or a wall, news. */
-.c-banner-danger { background: var(--bad-bg); color: var(--bad); }
+/* The banner above every page (Part 3 §4.2): a problem, a deadline or a wall, news. A rounded
+   box at the top of the page (the board `Banners`, V5-c): its picture in the tone's colour, its
+   words in the darkest grey, Open Plan and Dismiss at its end; on a phone the buttons go under
+   the words. */
+.c-banner-at { padding: 12px 16px 0; }
+.c-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+  padding: 12px 16px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+}
+.c-banner-ic { flex: none; width: 20px; height: 20px; }
+.c-banner-text { flex: 1 1 260px; min-width: 0; overflow-wrap: anywhere; }
+.c-banner-acts { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+.c-banner-danger { background: var(--bad-bg); color: var(--bad); border-color: var(--bad-line); }
 .c-banner-warn { background: var(--warn-bg); color: var(--warn); }
 .c-banner-info { background: var(--raise); color: var(--t2); }
+@media (min-width: 768px) {
+  .c-banner-at { padding: 16px 32px 0; }
+  .c-banner { padding: 12px 18px; }
+}
+@media (pointer: coarse), (max-width: 767px) {
+  .c-banner .c-btn { height: auto; min-height: 44px; }
+  .c-banner .c-icon-btn { width: 44px; height: 44px; }
+}
+
+/* A plan's sizes (the board `OverviewPlan`, V5-c): each a row, the size at the left and its price
+   and button at the right; the gym's own grey, the one picked orange. On a narrow phone, or with
+   the largest text, the price and button go under the size, the button the whole width. */
+.c-plan-list { display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.c-plan-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 16px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  border: 1px solid var(--ctl-line);
+  min-width: 0;
+}
+.c-plan-row-own { background: var(--raise); }
+.c-plan-row-on { border-color: var(--accent); background: var(--soft); }
+.c-plan-row-words { display: flex; flex-direction: column; gap: 2px; flex: 1 1 180px; min-width: 0; overflow-wrap: anywhere; }
+.c-plan-row-end { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px 12px; flex: 0 1 auto; max-width: 100%; }
+.c-plan-row .c-btn { height: auto; min-height: 36px; white-space: normal; text-align: center; max-width: 100%; }
+@media (max-width: 479px) {
+  .c-plan-row-end { flex: 1 1 100%; justify-content: space-between; }
+  .c-plan-row-end .c-btn { flex: 1 1 100%; }
+}
+@media (pointer: coarse), (max-width: 767px) {
+  .c-plan-row .c-btn { min-height: 44px; }
+}
+
+/* The plan prompt a gym on no plan cannot skip: the box in the middle over a cover nearly the page's
+   own colour, so nothing behind it can be read; its parts split by a line; its two ways out pinned
+   at the foot. */
+.c-scrim-shut { background: var(--page); opacity: 0.96; }
+.c-plan-gate-part { padding-top: 16px; border-top: 1px solid var(--line); }
+.c-plan-gate-part:empty { display: none; }
+.c-plan-gate-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; }
+@media (pointer: coarse), (max-width: 767px) {
+  .c-plan-gate-foot .c-btn { min-height: 44px; }
+}
+/* A whole-width button with long words ("Move to 1,000 members instead ($199 a month)") wraps on the
+   narrowest folding phone and with the largest text, never past the box. */
+.c-btn-w { height: auto; min-height: 44px; padding-top: 8px; padding-bottom: 8px; white-space: normal; text-align: center; }
+.c-btn-lg.c-btn-w { min-height: 48px; }
+/* A box in the middle with nothing to put at its foot (a list of sizes before one is chosen). */
+.c-ask-foot:empty { display: none; }
 
 /* Rule 8: on a phone every button is at least 44 px, whatever size a drawing gave it. */
 @media (max-width: 767px) {

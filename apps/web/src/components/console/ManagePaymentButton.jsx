@@ -5,8 +5,9 @@ import { openPaddlePortal } from '../../utils/paddlePortal';
 
 /** Opens Paddle's own page for the gym's paid plan in a new tab: the card, cancelling
  *  and invoices, or straight to the card when a payment is owed (the server decides
- *  which). Drawn only for staff who manage billing; the server refuses anyone else. */
-export default function ManagePaymentButton({ gymId, label = 'Manage payment', onOpened, newLook = false }) {
+ *  which). Drawn only for staff who manage billing; the server refuses anyone else. `main`: the
+ *  one thing to do in the box it is in (the plan prompt of a gym whose payment is overdue). */
+export default function ManagePaymentButton({ gymId, label = 'Manage payment', onOpened, main = false }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
 
@@ -24,35 +25,13 @@ export default function ManagePaymentButton({ gymId, label = 'Manage payment', o
     }
   };
 
-  // The third look (V5-b), on Overview's plan box; the plan prompt keeps the old one until V5-c.
-  if (newLook) {
-    return (
-      <div className="flex flex-col gap-2">
-        <button type="button" onClick={open} disabled={busy} className="c-btn c-btn-s">
-          {busy ? <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" /> : <ExternalLink className="w-4 h-4" aria-hidden="true" />}
-          {label}
-        </button>
-        {error !== null ? <p className="c-err m-0">{error}</p> : null}
-      </div>
-    );
-  }
   return (
     <div className="flex flex-col gap-2">
-      <button
-        type="button"
-        onClick={open}
-        disabled={busy}
-        className="self-stretch sm:self-start rounded-xl px-4 py-2.5 text-sm font-semibold flex items-center justify-center gap-2 disabled:opacity-50"
-        style={{ background: 'rgba(255,138,31,0.15)', color: '#FF8A1F', minHeight: 44 }}
-      >
-        {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <ExternalLink className="w-4 h-4" />}
+      <button type="button" onClick={open} disabled={busy} className={`c-btn ${main ? 'c-btn-lg c-btn-p c-btn-w' : 'c-btn-s'}`}>
+        {busy ? <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" /> : <ExternalLink className="w-4 h-4" aria-hidden="true" />}
         {label}
       </button>
-      {error !== null ? (
-        <p className="text-sm" style={{ color: '#ef4444' }}>
-          {error}
-        </p>
-      ) : null}
+      {error !== null ? <p className="c-err m-0">{error}</p> : null}
     </div>
   );
 }

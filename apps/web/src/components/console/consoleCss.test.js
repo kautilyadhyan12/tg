@@ -408,6 +408,15 @@ describe('read without leaning in (Kd, 2026-11-19, V1-f): no words under 14 px',
     './AppCancelsCard.jsx',
     './ChargebacksCard.jsx',
     './TrialCard.jsx',
+    // V5-c: the banner above every page, the plan prompt, Choose a plan and Change size, the size question.
+    './ConsoleBanner.jsx',
+    './PlanModal.jsx',
+    './PlanChoiceDialog.jsx',
+    './SizeDecisionPrompt.jsx',
+    './ManagePaymentButton.jsx',
+    './RazorpayPlanActions.jsx',
+    './ListDownload.jsx',
+    './PaymentsDownloadAll.jsx',
   ];
   // V3a-ii: a member's page opened from Invite to app dims the box in the middle under it too.
   it("a cover drawn after a box in the middle is over that box, and a panel after it is over the cover", () => {

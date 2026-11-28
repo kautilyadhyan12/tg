@@ -500,3 +500,32 @@ describe('the seat meter', () => {
     expect((await screen.findByTestId('seat-meter')).textContent).toMatch(/42 of 300/);
   });
 });
+
+// V5-c: the banner in the third look (the board `Banners`): a rounded box in its tone, its picture, its
+// words in the darkest grey, and Open Plan a button at its end, never an underlined word in the sentence.
+describe('V5-c: the banner in the third look', () => {
+  it('a deadline is an amber box with a clock, its words and an Open Plan button, and no Dismiss', async () => {
+    orgService.getMine.mockResolvedValue(
+      mineIs(onTrial({ subscription: { status: 'trialing', trialEndsAt: daysFromNow(2), seatCap: 300 } })),
+    );
+    renderConsole(Overview);
+    const banner = await screen.findByTestId('console-banner');
+    expect([...banner.classList]).toEqual(['c-banner', 'c-banner-warn']);
+    expect(banner.querySelector('svg[aria-hidden="true"]')).not.toBeNull();
+    expect(banner.querySelector('.c-banner-text').className).toContain('c-t1');
+    const open = within(banner).getByRole('link', { name: 'Open Plan' });
+    expect(open.classList.contains('c-btn')).toBe(true);
+    expect(banner.querySelector('.c-banner-text').contains(open)).toBe(false);
+    expect(within(banner).queryByRole('button', { name: /dismiss until tomorrow/i })).toBeNull();
+  });
+
+  it('the trial count is a plain box whose Dismiss is a 44 px round button at its end', async () => {
+    orgService.getMine.mockResolvedValue(mineIs(onTrial()));
+    renderConsole(Overview);
+    const banner = await screen.findByTestId('console-banner');
+    expect(banner.classList.contains('c-banner-info')).toBe(true);
+    const dismiss = within(banner).getByRole('button', { name: /dismiss until tomorrow/i });
+    expect(dismiss.classList.contains('c-icon-btn')).toBe(true);
+    expect(banner.querySelector('.c-banner-acts').contains(dismiss)).toBe(true);
+  });
+});
