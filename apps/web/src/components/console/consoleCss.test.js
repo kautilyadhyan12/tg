@@ -470,6 +470,26 @@ describe('read without leaning in (Kd, 2026-11-19, V1-f): no words under 14 px',
     expect(z('.c-panel')).toBeGreaterThanOrEqual(z('.c-ask ~ .c-scrim'));
   });
 
+  // Kd at V7's click-through: a busy day never stretches the page (CLAUDE.md §4). jsdom draws no CSS, so the
+  // rules that keep Today's check-ins to the window are checked here, under their own screen widths.
+  it("Today's check-ins scrolls inside its box beside Check in, and shows the latest few one under the other", () => {
+    const under = (params, selector) => {
+      const found = {};
+      root.walkAtRules('media', (at) => {
+        if (at.params.replace(/\s+/g, ' ') !== params) return;
+        at.walkRules((r) => {
+          if (r.selectors.includes(selector)) r.walkDecls((d) => (found[d.prop] = d.value));
+        });
+      });
+      return found;
+    };
+    const beside = under('(min-width: 1180px)', '.c-attend-today');
+    expect(beside['overflow-y']).toBe('auto');
+    expect(beside['max-height']).toMatch(/100vh/);
+    expect(under('(min-width: 1180px)', '.c-attend-all').display).toBe('none');
+    expect(under('(max-width: 1179px)', '.c-attend-later').display).toBe('none');
+  });
+
   it.each(REDESIGNED)('%s has no 12 or 13 px words', (file) => {
     const text = readFileSync(fileURLToPath(new URL(file, import.meta.url)), 'utf8');
     expect(text.match(/\bc-s1[23]\b|fontSize: '?1[0-3](px)?'?\b/g) ?? []).toEqual([]);

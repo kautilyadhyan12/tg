@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { AlertTriangle, Building2, Camera, CheckCircle2, Loader2, LogOut, QrCode, RefreshCw, ScanLine, Volume2, VolumeX, XCircle } from 'lucide-react';
+import { AlertTriangle, Building2, Camera, CameraOff, CheckCircle2, Loader2, LogOut, QrCode, RefreshCw, ScanLine, Volume2, VolumeX, XCircle } from 'lucide-react';
 import { CHECKIN_WORDS } from '@app/shared';
 import { checkinService } from '../../api/checkinApi';
 import { useAuth } from '../../context/AuthContext';
@@ -366,12 +366,19 @@ function Desk({ look }) {
           {names?.gymName ? <p className="c-s14 c-t2 c-ell">{names.deviceName ? `Check-in · ${names.deviceName}` : 'Check-in'}</p> : null}
         </div>
         {/* On a phone or a narrow desk the words are kept for screen readers and the buttons show as icons. */}
-        <button type="button" className="c-btn c-btn-s" onClick={toggleMuted}>
+        <button type="button" className="c-btn c-btn-s" onClick={toggleMuted} title={muted ? 'Turn sound on' : 'Turn sound off'}>
           {muted ? <VolumeX aria-hidden="true" className="w-5 h-5" /> : <Volume2 aria-hidden="true" className="w-5 h-5" />}
           <span className="c-desk-bw">{muted ? 'Turn sound on' : 'Turn sound off'}</span>
         </button>
-        <button type="button" className="c-btn c-btn-s" onClick={() => setCamera((on) => !on)} aria-pressed={camera}>
-          <Camera aria-hidden="true" className="w-5 h-5" />
+        <button
+          type="button"
+          className="c-btn c-btn-s"
+          onClick={() => setCamera((on) => !on)}
+          aria-pressed={camera}
+          title={camera ? 'Close the camera' : 'Use the camera'}
+        >
+          {/* Its icon changes too, so a phone that shows only the icon still says whether the camera is on. */}
+          {camera ? <CameraOff aria-hidden="true" className="w-5 h-5" /> : <Camera aria-hidden="true" className="w-5 h-5" />}
           <span className="c-desk-bw">{camera ? 'Close the camera' : 'Use the camera'}</span>
         </button>
       </header>

@@ -688,6 +688,45 @@ describe('checked in today', () => {
 
   // Kd at V7's click-through: a busy day must not stretch the page. One under the other, the latest 10
   // show and View all shows the rest (beside Check in, console.css scrolls the list inside the box).
+  // At the server's page (50) the list is not the whole day: no count, no "all", and the line says where the rest are.
+  it('a day at the server’s page of 50 shows no count and never calls the 50 "all"', async () => {
+    const visits = Array.from({ length: 50 }, (_, i) =>
+      lv(`00000000-0000-4000-8000-${String(i).padStart(12, '0')}`, new Date(Date.UTC(2026, 9, 3, 9, 0) - i * 60_000).toISOString(), `Person ${String(i + 1)}`),
+    );
+    api.getCheckinLog.mockResolvedValueOnce(logAnswer(visits));
+    drawScreen();
+    await screen.findByText('Person 1');
+    const box = screen.getByRole('region', { name: "Today's check-ins" });
+    expect(box.querySelector('.c-tag-plain')).toBeNull();
+    expect(within(box).queryByRole('button', { name: /^View all/ })).toBeNull();
+    expect(within(box).getByRole('button', { name: 'View the latest 50' })).toBeTruthy();
+    expect(within(box).getByText('Showing the latest 50. Everyone who came today is in Check-in history for today.')).toBeTruthy();
+  });
+
+  // Kd at go: a button a person must press is never out of sight. A box that asks scrolls itself into the
+  // window when it opens (the walk measures where it lands; this proves it is asked to).
+  it('Remove and Add visit each bring their box into sight when it opens', async () => {
+    const asked = vi.fn();
+    const was = Element.prototype.scrollIntoView;
+    Element.prototype.scrollIntoView = function into(how) {
+      asked(this.getAttribute('aria-label'), how);
+    };
+    try {
+      const yesterday = addDays(gymToday('Europe/London'), -1);
+      api.getCheckinLog.mockResolvedValue(logAnswer([lv('v1', '2026-10-03T06:02:00.000Z', 'Asha App')]));
+      api.findCheckinPeople.mockResolvedValue({ data: { people: [ANIL] } });
+      drawScreen();
+      fireEvent.click(await screen.findByRole('button', { name: "Remove Asha App's 07:02 check-in" }));
+      expect(asked).toHaveBeenCalledWith("Remove Asha App's check-in", { block: 'nearest' });
+      fireEvent.change(screen.getByLabelText('Day they came'), { target: { value: yesterday } });
+      await typeSearch('Anil');
+      fireEvent.click(await screen.findByRole('button', { name: 'Add a visit for Anil Kumar' }));
+      expect(asked).toHaveBeenCalledWith('Add a visit for Anil Kumar', { block: 'nearest' });
+    } finally {
+      Element.prototype.scrollIntoView = was;
+    }
+  });
+
   it('a busy day lists the latest 10 until View all, and View fewer folds them again', async () => {
     const visits = Array.from({ length: 12 }, (_, i) => lv(`v${String(i + 10)}`, `2026-10-03T${String(8 - Math.floor(i / 2)).padStart(2, '0')}:${i % 2 === 0 ? '30' : '10'}:00.000Z`, `Person ${String(i + 1)}`));
     api.getCheckinLog.mockResolvedValueOnce(logAnswer(visits));

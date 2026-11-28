@@ -250,10 +250,13 @@ export function CheckSomeoneIn({ gymId, words, keepsList, timezone, clearSignal,
               className="c-input"
             />
           </div>
-          <span className="c-s14 c-t2 flex items-center gap-2">
-            {searching ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : null}
-            {keepsList ? 'Name, member number or email' : 'Name or member number'}
-          </span>
+          {/* The box itself says what can be typed; this line is there only while a search is on its way. */}
+          {searching ? (
+            <span className="c-s14 c-t2 flex items-center gap-2">
+              <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" />
+              Searching…
+            </span>
+          ) : null}
         </div>
         <div className="c-field min-w-0">
           <label className="c-label" htmlFor={dayId}>
@@ -652,7 +655,8 @@ export function CheckedInToday({ gymId, words, refreshSignal, canFix, onRemoved 
           tablet or a phone the latest few are shown, and this button shows the rest. */}
       {count > TODAY_SHOWN ? (
         <button type="button" className="c-btn c-btn-s c-btn-sm self-start c-attend-all" aria-expanded={all} onClick={() => setAll((was) => !was)}>
-          {all ? 'View fewer' : `View all ${String(count)}`}
+          {/* At the server's page the list is not the whole day: the button never calls 50 "all". */}
+          {all ? 'View fewer' : count >= CHECKIN_LOG_LIMIT ? `View the latest ${String(CHECKIN_LOG_LIMIT)}` : `View all ${String(count)}`}
         </button>
       ) : null}
       {count >= CHECKIN_LOG_LIMIT ? (
