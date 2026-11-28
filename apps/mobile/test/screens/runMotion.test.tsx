@@ -1,10 +1,12 @@
 import { randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react-native";
 import { AppState } from "react-native";
-import { runSums, saveRunRequestSchema, type SaveRunRequest } from "@app/shared";
+import { runSums, saveRunRequestSchema, type RunPoint, type SaveRunRequest } from "@app/shared";
 import { App } from "../../src/App";
 import { chooseAutoPause, finishRun, forgetRun, loadRun, movingMsOf, pauseRun, phoneRunFiles, resetRecorder, resumeRun, runNow, setAutoPause, startRun, takeLocations } from "../../src/screens/running/recorder";
-import { sumsAt } from "../../src/screens/running/runLive";
+import { currentPace, pacing, sentOf, sumsAt } from "../../src/screens/running/runLive";
 import type { Ask, AskInit } from "../../src/session/calls";
 import { RAVI, fakeServer, kept, memoryStore, profile, tokens, type Reply } from "../kit";
 
@@ -614,5 +616,64 @@ describe("still stretches, through the recorder", () => {
     await live(1, 30, (t) => 3 * t, MOVING_SD);
     expect(runNow()?.still).toEqual([]);
     expect(runNow()?.datedBack).toEqual([]);
+  });
+});
+
+// Kd's phone lying still indoors, 2026-11-28 (37r): the GPS, just found, went 36 m in 5 s and settled, and the screen
+// drew it from 8 s to 25 s with a pace of 2:17 to 50:12 a kilometre. His points and motion, handed over one at a time
+// as the phone handed them over, through the recorder and the running screen.
+describe("a phone lying still indoors as its GPS settles, through the recorder and the screen (37r)", () => {
+  const settle = JSON.parse(readFileSync(join(__dirname, "..", "fixtures", "still-indoors-settle.json"), "utf8")) as { points: RunPoint[]; motion: [number, number][] };
+
+  /** Each point at its own time, the motion of its seconds first; after each, what the screen would show. */
+  async function feedSettle(): Promise<{ at: number; metres: number; line: number; pace: string; shown: boolean }[]> {
+    const run = runNow();
+    if (run === null) throw new Error("no run going");
+    const seen: { at: number; metres: number; line: number; pace: string; shown: boolean }[] = [];
+    let m = 0;
+    for (const [at, lat, lng, accuracy] of settle.points) {
+      for (; m < settle.motion.length && (settle.motion[m]?.[0] ?? Infinity) <= at; m++) {
+        const [ms, sd] = settle.motion[m] ?? [0, 0];
+        motion.send(run.startedAt + ms, sd / 100);
+      }
+      const locations = [{ timestamp: run.startedAt + at, coords: { latitude: lat, longitude: lng, accuracy, speed: 0 } }];
+      await act(() => takeLocations({ locations }, run.startedAt + at));
+      const now = runNow();
+      if (now === null) throw new Error("no run");
+      const sums = sumsAt(now, at, 70);
+      seen.push({ at, metres: sums.distanceM, line: sums.track.length, pace: currentPace(now.points, pacing(now), "metric", at), shown: screen.queryByText("--:-- /km") !== null });
+    }
+    return seen;
+  }
+  const nothing = (seen: readonly { at: number; metres: number; line: number; pace: string; shown: boolean }[]) =>
+    seen.filter((s) => s.metres !== 0 || s.line !== 0 || s.pace !== "--:--" || !s.shown);
+
+  it("Auto-pause off: no metre, no line and no pace after any point, the stretch kept as on Kd's phone, and the saved run counts nothing", async () => {
+    await act(() => chooseAutoPause(false));
+    await openRunning(runServer());
+    await startRunning();
+    expect(nothing(await feedSettle())).toEqual([]);
+    const run = runNow();
+    expect(run?.still).toEqual([[4410, null]]);
+    expect(run?.phase).toBe("running");
+    const end = settle.points[settle.points.length - 1]?.[0] ?? 0;
+    const done = await finishRun((run?.startedAt ?? 0) + end + 1000);
+    if (done === null) throw new Error("no run");
+    const sent = sentOf(done);
+    expect(sent.still).toEqual([[4410, end + 1000]]);
+    const saved = runSums(sent.points, sent.pauses, sent.elapsedMs, 70, sent.still);
+    expect([saved.distanceM, saved.track.length]).toEqual([0, 0]);
+    expect(sumsAt(done, sent.elapsedMs, 70).distanceM).toBe(0);
+  });
+
+  it("Auto-pause on: paused at 8.5 s with the seconds back to 4.4 s standing; no metre, no line and no pace after any point", async () => {
+    await act(() => chooseAutoPause(true));
+    await openRunning(runServer());
+    await startRunning();
+    expect(nothing(await feedSettle())).toEqual([]);
+    const run = runNow();
+    expect(run?.phase).toBe("paused");
+    expect(run?.datedBack).toEqual([[4410, 8517]]);
+    expect(run?.pauses.map(([from]) => from)).toEqual([8517]);
   });
 });

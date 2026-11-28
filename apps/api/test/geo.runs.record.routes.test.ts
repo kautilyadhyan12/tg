@@ -312,7 +312,7 @@ d("record a run (real Postgres)", () => {
       expect(Math.abs(saved.run.distanceM - 1800)).toBeLessThanOrEqual(6);
       const row = (await sql<{ run_calc_version: number }[]>`SELECT run_calc_version FROM runs WHERE id = ${run.runId}`)[0];
       expect(row?.run_calc_version).toBe(RUN_CALC_VERSION);
-      expect(RUN_CALC_VERSION).toBe(4);
+      expect(RUN_CALC_VERSION).toBe(5);
       // No column keeps them: the row holds nothing that names them.
       const columns = await sql<{ column_name: string }[]>`SELECT column_name FROM information_schema.columns WHERE table_name = 'runs'`;
       expect(columns.map((c) => c.column_name).filter((c) => c.includes("still"))).toEqual([]);

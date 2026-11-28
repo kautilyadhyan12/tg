@@ -17,9 +17,32 @@ export function closedStill(run: LiveRun, nowMs: number): RunPause[] {
   return [...off, ...run.datedBack].sort((a, b) => a[0] - b[0]);
 }
 
+/** Where a new still stretch may begin: never inside a pause or a stretch already kept. */
+const stillFloor = (run: LiveRun): number =>
+  Math.max(run.pauses[run.pauses.length - 1]?.[1] ?? 0, run.still[run.still.length - 1]?.[1] ?? 0, run.datedBack[run.datedBack.length - 1]?.[1] ?? 0);
+
+/** The stretches the maths takes while the run is on screen (37r): `closedStill`, and while running the seconds since
+ *  the phone began to feel still, before Auto-pause has decided the stop (`LiveRun.feltStillFrom`), so a phone put
+ *  down shows no metres and no line from its first still second. Never sent: the saved run reads `closedStill`. */
+export function liveStill(run: LiveRun, nowMs: number): RunPause[] {
+  const kept = closedStill(run, nowMs);
+  const felt = run.phase === "running" ? (run.feltStillFrom ?? null) : null;
+  if (felt === null) return kept;
+  const from = Math.max(felt, stillFloor(run));
+  return nowMs > from ? [...kept, [from, nowMs]] : kept;
+}
+
+/** Whether Current pace is shown (37r): running, and the phone not feeling the person stand. A still stretch open,
+ *  or the seconds before Auto-pause decides one, show no pace, as a pause does: on a phone lying still, a GPS just
+ *  found read as 2:17 a kilometre. */
+export function pacing(run: LiveRun): boolean {
+  const open = run.still[run.still.length - 1];
+  return run.phase === "running" && !(open !== undefined && open[1] === null) && (run.feltStillFrom ?? null) === null;
+}
+
 /** The run's numbers at `at` ms into it, from its points, pauses and still stretches: the screen, the voice and
  *  the guide read them so, and the server works the saved run out from the same three. */
-export const sumsAt = (run: LiveRun, at: number, kg: number): RunSums => runSums(run.points, closedPauses(run, at), at, kg, closedStill(run, at));
+export const sumsAt = (run: LiveRun, at: number, kg: number): RunSums => runSums(run.points, closedPauses(run, at), at, kg, liveStill(run, at));
 
 /** What the server is sent of a finished run: asked for the climb (37b-ii), and saved with the same points. */
 export function sentOf(run: LiveRun): RunClimbRequest {
@@ -62,7 +85,7 @@ export const SLICE_MS = 12;
  *  coming while the work goes on. `done` is told the sums, the same as `sumsAt`'s; the answer is the stop. */
 export function sumsInSlices(run: LiveRun, at: number, kg: number, done: (sums: RunSums) => void, now: () => number = Date.now): () => void {
   const points = run.points.slice();
-  const still = closedStill(run, at).map(([a, b]): RunPause => [a, b]);
+  const still = liveStill(run, at).map(([a, b]): RunPause => [a, b]);
   const work = runSumsInSlices(points, closedPauses(run, at), at, kg, still);
   let stopped = false;
   let timer: ReturnType<typeof setTimeout> | null = null;
@@ -91,9 +114,6 @@ export function sumsInSlices(run: LiveRun, at: number, kg: number, done: (sums: 
 export const clockAt = (run: LiveRun, at: number): number =>
   Math.max(0, at - run.pauses.reduce((t, [from, to]) => t + Math.max(0, Math.min(to ?? at, at) - from), 0));
 
-/** Where a new still stretch may begin: never inside a pause or a stretch already kept. */
-const stillFloor = (run: LiveRun): number =>
-  Math.max(run.pauses[run.pauses.length - 1]?.[1] ?? 0, run.still[run.still.length - 1]?.[1] ?? 0, run.datedBack[run.datedBack.length - 1]?.[1] ?? 0);
 const keptStill = (run: LiveRun): number => run.still.length + run.datedBack.length;
 
 /** A stop the phone felt with Auto-pause off (37k): a still stretch opens from where it began, unless one is open
