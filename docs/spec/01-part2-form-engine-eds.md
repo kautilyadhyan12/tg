@@ -3400,6 +3400,38 @@ workout kept on a phone before it sent the field still saves, counting its sets 
 `packages/shared`). Workouts saved before it keep the length they were saved with: only the folders' own test accounts have any,
 as the testers' store version (17 November) has no Start workout.
 
+**As built in 64b-i (2026-11-28; `rulings/2026-11-28-64b-i.md`).** The save takes a set counted by the camera: `counted:
+"camera"` with `camera` (`cameraSetSchema` in `packages/shared`), present on a camera set and on no other, else 400.
+- **What it carries:** `done`, the camera's own count in the set's own unit (reps, or whole seconds held), whatever the person
+  changed by hand; `left`, "chosen" (Count this set myself) or "camera_stopped", null when the camera counted to the end;
+  `engineVersion`; and `summary`, the movement engine's §2.4 summary less the set's own fields (`definitionVersion`,
+  `repScores`, `faultCounts`, `watchedMs`, `tempoMsAvg`, `romStats`, `view`), null for an exercise the camera counts with no
+  camera file of its own (the squat's twins until job 54). A set done with Follow along is the person's count or a timer's,
+  never the camera's.
+- **Nothing of the body:** every object is strict, so a picture, body points, the old summary's free-form `calibration` or a
+  form score of the phone's own refuses the whole save, the reply naming the field, never its value. A mistake is named by
+  the camera file's own id rule and a count reading by its movement's rule-name rule, at most 32 mistakes and 8 readings, a
+  reading within ±1000: 33 body points cannot ride in as readings. Each counted rep at most one score (none for a hold), at
+  most 10,000 in one workout (`repScoresMost`), which job 64b-ii's phone keeps to.
+- **What the server works out:** each camera set's form score, the mean of its reps' scores rounded (`setFormScore`), null with
+  none, never a good one; the workout's, the mean of its camera sets' scores (`workoutFormScore`, the old route's rule), which
+  XP's form bonus and the badges read; the time watched kept no longer than the set lasted.
+- **Kept** (migration 0249): a camera set is `mode` 'engine' with its facts in the columns the old route fills; new
+  `camera_done` and `left_camera`. The database refuses, whoever writes it: the camera's facts on any other set, a camera set
+  that is not the engine's or has no count or engine of its own, a set by hand or by timer that is not 'log_only' (and so can
+  carry no score); the provenance check widened by one case only (a camera set with no camera file names its engine and
+  carries no score). The privacy download carries the new columns (`SELECT s.*`), the delete removes them with the workout, and
+  the policy's §3.6 names them.
+- **History** (`GET /v1/training/workouts/:id`) gives each set's `formScore` and the workout's; the web's old workout page reads a
+  camera set as the engine's, with its score.
+- **Cost, measured** (`tools/measure-workout-save.ts`, on the charger, the other folder working): a usual save (20 sets, 7 by the
+  camera, an hour of heart rate, 53 KB) holds the server 7.9 ms; the biggest the schema takes (200 camera sets at their most and
+  12 hours of heart rate, 1,134 KB) 88.6 ms to check, and written alone it answered nobody for at most 80.4 ms; 199 people saving
+  at once took 4.6 s, the server answering nobody for at most 24.1 ms at a time. The route's body limit is 1.5 MB for it (a
+  test builds the biggest save, 1.19 MB, and holds it under the body and list limits).
+- **Not in 64b-i:** the phone's side, Camera or Count myself in the workout (64b-ii); which exercises the camera may count is
+  not checked by the server until the Library's download carries the camera files (§13.3).
+
 ### 13.6 The phone (jobs 63 and 64)
 
 - **The list is kept on the phone** and searched there, so search answers at once and works
